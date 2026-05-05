@@ -220,13 +220,12 @@ body.player-view #renderer-canvas {
 
 /* Panel title doubles as the collapse toggle button */
 .panel-title {
-  font-size: var(--font-size-title);
-  font-weight: 600;
-  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.14em;
   text-transform: uppercase;
-  color: var(--text-dim);
-  /* button reset */
-  background: none;
+  color: var(--text-secondary);
+  background: rgba(30, 58, 95, 0.35);
   border: none;
   border-bottom: 1px solid var(--border);
   width: 100%;
@@ -238,7 +237,10 @@ body.player-view #renderer-canvas {
   padding: var(--space-sm) var(--space-md);
 }
 
-.panel-title:hover { color: var(--text-secondary); }
+.panel-title:hover {
+  color: var(--text-primary);
+  background: rgba(30, 58, 95, 0.55);
+}
 
 .panel-title::after {
   content: '▸';

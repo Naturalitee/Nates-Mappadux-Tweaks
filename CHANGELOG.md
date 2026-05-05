@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.4.0 — 2026-05-05
+
+### Changes
+- **Sidebar panel order** — Fog of War → Markers → Player View → Filter → Background Colour.
+- **Panel headings** — brighter text, bolder weight, subtle blue-tinted background; hover lifts to full white. Makes sections easier to scan.
+- **Auto-open Markers panel** — clicking any marker on the canvas opens the Markers sidebar panel if it is collapsed.
+- **Auto-open Fog panel** — entering fog draw mode or selecting a polygon opens the Fog of War panel if it is collapsed.
+
+---
+
 ## v2.3.5 — 2026-05-05
 
 ### Fixes

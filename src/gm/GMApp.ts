@@ -429,6 +429,15 @@ export class GMApp {
       // Restore marker interaction whenever draw mode ends (covers both the Draw
       // button and auto-exit after polygon completion via closePolygon).
       this.markerEditor?.setPointerCapture(!drawing);
+      // Auto-open the Fog panel when a polygon is selected or draw mode activates
+      if (drawing || hasSelection) {
+        const body  = document.querySelector<HTMLElement>('#fog-panel .panel-body');
+        const title = document.querySelector<HTMLElement>('#fog-panel .panel-title');
+        if (body?.hidden) {
+          body.hidden = false;
+          title?.setAttribute('aria-expanded', 'true');
+        }
+      }
     });
 
     // Draw button toggles draw / select mode
@@ -675,6 +684,14 @@ export class GMApp {
       (marker) => {
         this.selectedMarkerId = marker?.id ?? null;
         this.updateMarkerPanel();
+        if (marker) {
+          const body  = document.querySelector<HTMLElement>('#markers-panel .panel-body');
+          const title = document.querySelector<HTMLElement>('#markers-panel .panel-title');
+          if (body?.hidden) {
+            body.hidden = false;
+            title?.setAttribute('aria-expanded', 'true');
+          }
+        }
       },
       () => this.iconPicker.iconCache,
     );

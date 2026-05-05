@@ -66,42 +66,6 @@
       </div>
     </section>
 
-    <section class="panel" id="filter-panel-section">
-      <button type="button" class="panel-title" aria-expanded="true">Filter</button>
-      <div class="panel-body">
-        <select id="filter-select" class="select-full"></select>
-        <div id="filter-params" class="filter-params-container"></div>
-      </div>
-    </section>
-
-    <section class="panel" id="view-panel">
-      <button type="button" class="panel-title" aria-expanded="false">Player View</button>
-      <div class="panel-body" hidden>
-        <p class="view-hint">The orange outline on the map shows what players currently see.</p>
-        <div id="view-default-actions" class="viewport-actions">
-          <button id="edit-viewport-btn"  class="btn btn--primary btn--full">Edit Player View</button>
-          <button id="reset-viewport-btn" class="btn btn--ghost   btn--full">Reset to Full Map</button>
-        </div>
-        <div id="edit-viewport-actions" class="viewport-actions" hidden>
-          <p class="view-hint view-hint--editing">Drag the rectangle to move · Drag a corner to resize</p>
-          <div class="btn-row">
-            <button id="viewport-ok-btn"     class="btn btn--primary btn--sm">OK</button>
-            <button id="viewport-cancel-btn" class="btn btn--ghost   btn--sm">Cancel</button>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel" id="bg-colour-panel">
-      <button type="button" class="panel-title" aria-expanded="false">Background Colour</button>
-      <div class="panel-body" hidden>
-        <div class="param-row">
-          <label for="view-bg-colour">Colour</label>
-          <input type="color" id="view-bg-colour" value="#000000" title="Background colour behind the map" />
-        </div>
-      </div>
-    </section>
-
     <section class="panel" id="markers-panel">
       <button type="button" class="panel-title" aria-expanded="false">Markers</button>
       <div class="panel-body" hidden>
@@ -145,6 +109,42 @@
         </div>
 
         <button id="add-marker-btn" class="btn btn--primary btn--sm btn--full">+ Add Marker</button>
+      </div>
+    </section>
+
+    <section class="panel" id="view-panel">
+      <button type="button" class="panel-title" aria-expanded="false">Player View</button>
+      <div class="panel-body" hidden>
+        <p class="view-hint">The orange outline on the map shows what players currently see.</p>
+        <div id="view-default-actions" class="viewport-actions">
+          <button id="edit-viewport-btn"  class="btn btn--primary btn--full">Edit Player View</button>
+          <button id="reset-viewport-btn" class="btn btn--ghost   btn--full">Reset to Full Map</button>
+        </div>
+        <div id="edit-viewport-actions" class="viewport-actions" hidden>
+          <p class="view-hint view-hint--editing">Drag the rectangle to move · Drag a corner to resize</p>
+          <div class="btn-row">
+            <button id="viewport-ok-btn"     class="btn btn--primary btn--sm">OK</button>
+            <button id="viewport-cancel-btn" class="btn btn--ghost   btn--sm">Cancel</button>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <section class="panel" id="filter-panel-section">
+      <button type="button" class="panel-title" aria-expanded="true">Filter</button>
+      <div class="panel-body">
+        <select id="filter-select" class="select-full"></select>
+        <div id="filter-params" class="filter-params-container"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="bg-colour-panel">
+      <button type="button" class="panel-title" aria-expanded="false">Background Colour</button>
+      <div class="panel-body" hidden>
+        <div class="param-row">
+          <label for="view-bg-colour">Colour</label>
+          <input type="color" id="view-bg-colour" value="#000000" title="Background colour behind the map" />
+        </div>
       </div>
     </section>
 
