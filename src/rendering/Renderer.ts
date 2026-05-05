@@ -55,6 +55,11 @@ export class Renderer {
   private mapTexture:   THREE.Texture | null = null;
   private fogCompositor: FogCompositor;
 
+  // Marker layer (Plane 2) — CanvasTexture from an OffscreenCanvas
+  private markerCanvas: OffscreenCanvas | null = null;
+  private markerTex:    THREE.CanvasTexture | null = null;
+  private markerMesh:   THREE.Mesh | null = null;
+
   // GM overlay — map border line (inverted background colour)
   private mapBorderLine: THREE.Line | null = null;
   private mapBorderMat:  THREE.LineBasicMaterial | null = null;
@@ -425,10 +430,27 @@ export class Renderer {
     }
   }
 
+  /**
+   * Give the renderer an OffscreenCanvas whose contents should be composited
+   * as the marker layer (Plane 2), subject to filters. Pass null to remove.
+   */
+  setMarkerCanvas(canvas: OffscreenCanvas | null): void {
+    this.markerCanvas = canvas;
+    if (this.mapMesh) this._rebuildMarkerMesh();
+    else this.needsRender = true;
+  }
+
+  /** Call after re-rendering the marker canvas to upload new content to GPU. */
+  markMarkersDirty(): void {
+    if (this.markerTex) this.markerTex.needsUpdate = true;
+    this.needsRender = true;
+  }
+
   dispose(): void {
     this.stop();
     this.fogCompositor.dispose();
     this.mapTexture?.dispose();
+    this.markerTex?.dispose();
     this.mapBorderLine?.geometry.dispose();
     this.mapBorderMat?.dispose();
     this.outputPass.dispose();
@@ -527,8 +549,29 @@ export class Renderer {
     this.mapBorderLine = new THREE.Line(borderGeo, this.mapBorderMat);
     this.gmScene.add(this.mapBorderLine);
 
-    // Marker layer stub (Plane 2) — added here so render order is established
-    // Populated by MarkerLayer when that feature is built
+    // Marker layer (Plane 2) — CanvasTexture if a canvas has been provided
+    this._rebuildMarkerMesh();
+  }
+
+  private _rebuildMarkerMesh(): void {
+    if (this.markerMesh) { this.scene.remove(this.markerMesh); this.markerMesh = null; }
+    if (this.markerTex)  { this.markerTex.dispose(); this.markerTex = null; }
+    if (!this.markerCanvas) return;
+
+    this.markerTex = new THREE.CanvasTexture(this.markerCanvas as unknown as HTMLCanvasElement);
+    this.markerTex.colorSpace = THREE.SRGBColorSpace;
+    this.markerTex.minFilter  = THREE.LinearFilter;
+    this.markerTex.needsUpdate = true;
+
+    const geo = new THREE.PlaneGeometry(this.aspectRatio, 1);
+    const mat = new THREE.MeshBasicMaterial({
+      map: this.markerTex,
+      transparent: true,
+      depthWrite: false,
+    });
+    this.markerMesh = new THREE.Mesh(geo, mat);
+    this.markerMesh.position.z = 0.02;
+    this.scene.add(this.markerMesh);
   }
 
   private invertColour(hex: string): string {

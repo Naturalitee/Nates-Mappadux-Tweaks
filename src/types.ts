@@ -55,33 +55,65 @@ export interface FilterState {
   params: Record<string, FilterParamValues>;
 }
 
-// ─── Markers (stub — fully typed for future use) ──────────────────────────────
+// ─── Markers ──────────────────────────────────────────────────────────────────
 
-export type MarkerType = 'icon' | 'token' | 'note' | 'zone';
+export type MarkerRole = 'default' | 'listener' | 'audio_source';
 
 export interface Marker {
   id: string;
-  type: MarkerType;
-  position: { x: number; y: number }; // 0–1 normalised
-  label?: string;
-  /** Emoji, URL, or asset ID */
-  icon?: string;
-  /** Relative size; 1.0 = default */
-  size: number;
-  color: string;
-  /** If true, only the GM sees this marker */
-  gmOnly: boolean;
-  /** Audio asset ID to use as a motion-tracker source */
-  linkedAudioId?: string;
+  role: MarkerRole;
+  position: { x: number; y: number }; // 0–1 normalised map coords
+
+  // Visual
+  label: string;
+  icon:  string;   // emoji (1–2 chars)
+  color: string;   // hex
+  size:  number;   // 1.0 = default
+
+  // Visibility
+  hidden:            boolean; // hides from players; GM sees with ghost opacity
+  hiddenFromTracker: boolean; // Phase 4: suppress from tracker sonar pings
+  showLabel:         boolean; // show name text on the player map (default false)
+
+  // Audio source fields (Phase 3+)
+  audioTrackId:     string | null;
+  audioLoop:        boolean;
+  audioMuted:       boolean;
+  audioMaxDistance: number;   // normalised map units
+
+  // Listener fields (Phase 3+)
+  trackerEnabled: boolean;
+  trackerScale:   number;     // 0.2–2.0
 }
 
-// ─── Audio (stub — fully typed for future use) ───────────────────────────────
+export function defaultMarker(id: string, x = 0.5, y = 0.5): Marker {
+  return {
+    id,
+    role:     'default',
+    position: { x, y },
+    label:    'New Marker',
+    icon:     '◆',
+    color:    '#e03e3e',
+    size:     1.0,
+    hidden:            false,
+    hiddenFromTracker: false,
+    showLabel:         false,
+    audioTrackId:      null,
+    audioLoop:         true,
+    audioMuted:        false,
+    audioMaxDistance:  0.3,
+    trackerEnabled:    false,
+    trackerScale:      1.0,
+  };
+}
+
+// ─── Audio (stub — typed for Phase 2+) ───────────────────────────────────────
 
 export interface AudioState {
   activeAmbientId: string | null;
   volume: number;
   motionTracker: {
-    enabled: boolean;
+    enabled:        boolean;
     sourceMarkerId: string | null;
     playerMarkerId: string | null;
   } | null;
@@ -137,6 +169,8 @@ export interface MsgFullState {
   payload: SessionState;
   /** Raw map image included on initial connect */
   mapBlob?: ArrayBuffer;
+  /** Custom icon blobs for any asset: icons in the session's markers */
+  iconData?: MarkerIconData[];
 }
 
 export interface MsgViewUpdate {
@@ -168,20 +202,29 @@ export interface MsgMapChange {
   /** Fog state for the incoming map — applied atomically when texture finishes loading */
   fog?: FogState;
   /**
-   * Filter and view for the incoming map — carried here so the player can apply
-   * them at the transition midpoint rather than via separate filter_update /
-   * view_update messages that would corrupt the transition snapshot.
+   * Filter, view, markers, and icon data for the incoming map — all carried here
+   * so the player can apply them atomically at the transition midpoint.
    */
   filter?: FilterState;
   view?: ViewState;
+  markers?: Marker[];
+  iconData?: MarkerIconData[];
   mapBlob: ArrayBuffer;
   transition?: TransitionConfig;
 }
 
-/** Stub: wired in protocol but not yet acted on by player */
+export interface MarkerIconData {
+  /** Full 'asset:uuid' key matching the marker.icon field */
+  key: string;
+  /** data:image/png;base64,… blob encoded inline */
+  dataUrl: string;
+}
+
 export interface MsgMarkerUpdate {
   type: 'marker_update';
   payload: Marker[];
+  /** Custom icon blobs for any asset: icons referenced in payload */
+  iconData?: MarkerIconData[];
 }
 
 /** Stub: wired in protocol but not yet acted on by player */

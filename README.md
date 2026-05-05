@@ -29,10 +29,33 @@ Dynamic Map Renderer v2 is a browser-based tool for tabletop roleplaying game GM
   | Retro Sci-Fi Green | Classic green-phosphor CRT terminal |
   | Watercolour | Soft watercolour wash |
 
-- **Map transitions** — animated transitions when switching maps on the player view. Select per-map from the GM's Current Map panel. Available transitions: None (instant cut), Fade to black, CRT Collapse (old-TV phosphor dot effect). Transitions are extensible — each lives in its own folder under `src/transitions/definitions/` with its own configurable parameters.
+- **Map transitions** — animated transitions when switching maps on the player view. Select per-map from the GM's Current Map panel:
+
+  | Transition | Description |
+  |---|---|
+  | None | Instant cut (default) |
+  | Fade | Fades to black, swaps map, fades back in |
+  | CRT Collapse | Screen collapses to a phosphor dot then expands with the new map |
+  | Wipe | Directional wipe (6 directions) with a bright edge glow |
+  | Terminal Clear | 80×25 character-grid wipe with phosphor green flash |
+  | Static Dissolve | Randomised block-by-block dissolve with static noise |
+
+  Transitions are extensible — each lives in its own folder under `src/transitions/definitions/` with its own configurable parameters.
+
+- **Markers / tokens** — place and manage tokens on the map from the Markers panel:
+  - **Add** — click **+ Add Marker** in the sidebar or right-click the map.
+  - **Drag** — drag any marker to reposition it; position broadcasts to players on release.
+  - **Properties** — edit name, icon, colour, and size per marker.
+  - **Icon picker** — click the icon button to open a grid of 46 preset Unicode symbols (shapes, chess/card suits, circled numbers ①–⑳, check/cross marks). Upload your own custom icon (resized to 64×64 and saved to IndexedDB); custom icons are included in bundle export/import and transmitted to connected players automatically.
+  - **Show Name** — per-marker toggle to display the label on the player map (off by default — players see the icon only unless enabled).
+  - **Visibility** — toggle **Hide from players** to ghost the marker on the GM canvas while hiding it from players entirely.
+  - **GM badges** — each marker on the GM canvas shows clickable mini-badges for visibility and role (audio source / listener).
+  - **Filter passthrough** — player markers live inside the Three.js scene, so all active GLSL filters (parchment, retro sci-fi, watercolour, etc.) apply to them exactly as to the map.
+  - **Persistence** — markers are saved per-map in IndexedDB and restored on reload.
+
 - **Player view control** — interactive on-map viewport editor: an orange rectangle on the GM's canvas always shows what players see. Click **Edit Player View** to drag-move or freely corner-resize it. One-click **Reset to Full Map**. The player's screen is strictly clipped to the rectangle; background colour fills any bars caused by aspect-ratio differences.
 - **Background colour** — set the letterbox colour; auto-sampled from the map on first load.
-- **Real-time sync** — all GM changes (map, fog, filter, view, transition) push to connected players instantly.
+- **Real-time sync** — all GM changes (map, fog, filter, view, markers, transition) push to connected players instantly.
 - **Room code** — three-word memorable code persists across reloads so players can reconnect.
 - **QR code** — scan to open the player view on a phone or tablet instantly. When running locally, uses your LAN IP so other devices on the same network can connect.
 - **Bundle import/export** — save and restore your entire map library (images + fog + filter settings) as a single `.json` file.
@@ -83,7 +106,8 @@ For other hosts, ensure those two COOP/COEP headers are set on all responses, an
    - Upload maps with **Upload New Map**.
    - Share the room code or QR code with players, or click **Open Player Window** for a local second screen.
    - Draw fog polygons, choose a filter, set a transition, and adjust the player view.
-   - Use **Save to File** to back up your map library; **Load Maps File** to restore it.
+   - Add markers via the Markers panel or by right-clicking the map; drag to reposition.
+   - Use **Save to File** to back up your map library (including custom icons); **Load Maps File** to restore it.
 
 2. **Player view** — open `<your URL>/player`, enter the room code, and connect.
    - The player sees whatever the GM is showing, filtered, cropped, and transitioned as the GM sets it.
@@ -102,9 +126,9 @@ The app imports this bundle automatically the first time a user opens it with an
 
 ```
 src/
-  gm/           GM interface (GMApp, StateManager, FogEditor, MapManager)
+  gm/           GM interface (GMApp, StateManager, FogEditor, MapManager, MarkerEditor, IconPicker)
   player/       Player interface (PlayerApp)
-  rendering/    Three.js renderer + EffectComposer pipeline (Renderer, ShaderMaterial)
+  rendering/    Three.js renderer + EffectComposer pipeline (Renderer, MarkerLayer, MarkerTexture)
   filters/      Filter registry, panel UI, and per-filter definitions
     definitions/
       none/
@@ -120,8 +144,11 @@ src/
       none/
       fade/
       crt_collapse/
+      wipe/
+      scanline/
+      static_dissolve/
   p2p/          PeerJS host/guest session management + local BroadcastChannel fallback
-  storage/      IndexedDB wrapper, map manager, bundle import/export
+  storage/      IndexedDB wrapper (maps, configs, assets), bundle import/export
   styles/       CSS
 public/
   default-bundle.json   (optional — pre-loaded maps for first-time users)
@@ -137,9 +164,8 @@ player.html     Player entry point
 
 ## Future Plans
 
-1. **Markers / tokens** — place and manage visual tokens on the map.
-2. **Audio** — ambient sound tied to maps or locations (e.g. Aliens-style motion tracker).
-3. **Lighting** — dynamic light radius effects around tokens.
+1. **Audio** — ambient sound tied to maps or locations (e.g. Aliens-style motion tracker pings).
+2. **Lighting** — dynamic light radius effects around tokens.
 
 See [CHANGELOG.md](./CHANGELOG.md) for release history.
 

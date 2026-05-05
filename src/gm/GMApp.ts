@@ -2,6 +2,8 @@ import { StateManager } from './StateManager.ts';
 import { MapManager } from './MapManager.ts';
 import { FogEditor } from './FogEditor.ts';
 import { ViewportEditor } from './ViewportEditor.ts';
+import { MarkerEditor } from './MarkerEditor.ts';
+import { IconPicker } from './IconPicker.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { FilterPanel } from '../filters/FilterPanel.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
@@ -12,7 +14,7 @@ import { generateRoomCode } from '../p2p/roomCode.ts';
 import { saveSession, loadSession, getAllMaps, deleteMap } from '../storage/db.ts';
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { exportBundle, importBundle } from '../storage/bundleIO.ts';
-import type { SessionState, StoredMap, TransitionConfig } from '../types.ts';
+import type { SessionState, StoredMap, TransitionConfig, Marker, MarkerIconData } from '../types.ts';
 import QRCode from 'qrcode';
 
 
@@ -28,8 +30,14 @@ export class GMApp {
   private renderer!:       Renderer;
   private fogEditor!:      FogEditor;
   private viewportEditor!: ViewportEditor;
+  private markerEditor!:   MarkerEditor;
   private filterPanel!:     FilterPanel;
   private transitionPanel!: TransitionPanel;
+
+  private iconPicker!: IconPicker;
+
+  private selectedMarkerId: string | null = null;
+  private mapAspectRatio = 1;
 
   // DOM references (assigned in init)
   private mapSelect!:               HTMLSelectElement;
@@ -47,6 +55,14 @@ export class GMApp {
   private qrContainer!:            HTMLElement;
   private playerCountEl!:          HTMLElement;
   private statusEl!:               HTMLElement;
+  private markerSelect!:           HTMLSelectElement;
+  private markerLabelInput!:       HTMLInputElement;
+  private markerIconBtn!:          HTMLButtonElement;
+  private markerColorInput!:       HTMLInputElement;
+  private markerSizeInput!:        HTMLInputElement;
+  private markerSizeVal!:          HTMLElement;
+  private markerHiddenToggle!:     HTMLInputElement;
+  private markerShowLabelToggle!:  HTMLInputElement;
   private currentMapBlob:          ArrayBuffer | null = null;
   private fogDrawing            = false;
   private activeFilterId        = '';
@@ -72,6 +88,7 @@ export class GMApp {
     this.bindFilterPanel();
     this.bindTransitionPanel();
     this.bindUIControls();
+    this.bindMarkerEditor();
 
     // Register the state listener BEFORE loading maps so that the initial
     // populateMapList() → loadMap() → state.loadForMap() → _notify() chain
@@ -135,8 +152,23 @@ export class GMApp {
 
   // ─── State change → propagate to renderer + P2P ───────────────────────────
 
+  private _collectIconData(markers: Marker[]): MarkerIconData[] {
+    const seen: Set<string> = new Set();
+    const result: MarkerIconData[] = [];
+    for (const m of markers) {
+      if (m.icon.startsWith('asset:') && !seen.has(m.icon)) {
+        const dataUrl = this.iconPicker.iconDataUrls.get(m.icon);
+        if (dataUrl) result.push({ key: m.icon, dataUrl });
+        seen.add(m.icon);
+      }
+    }
+    return result;
+  }
+
   private onStateChange(state: SessionState, changed: (keyof SessionState)[]): void {
     // View state is player-only — GM always sees the full map unzoomed
+    const visibleMarkers = state.markers.filter((m) => !m.hidden);
+    const iconData       = this._collectIconData(visibleMarkers);
 
     // Only send fog_update for live edits (changed = ['fog']).
     // During a map switch, loadForMap fires _notify(['map','view','filter','fog']).
@@ -184,7 +216,17 @@ export class GMApp {
       }
     }
 
-    this.host.updateState(state, this.currentMapBlob ?? undefined);
+    if (changed.includes('markers')) {
+      this.markerEditor.update(state.markers, this.mapAspectRatio);
+      this.updateMarkerPanel();
+      this.host.broadcast({
+        type: 'marker_update',
+        payload: visibleMarkers,
+        ...(iconData.length > 0 ? { iconData } : {}),
+      });
+    }
+
+    this.host.updateState(state, this.currentMapBlob ?? undefined, iconData);
   }
 
   // ─── Map selection ────────────────────────────────────────────────────────
@@ -246,10 +288,13 @@ export class GMApp {
     // Capture fog state after loadForMap so the correct state is used everywhere
     const fog = this.state.getState().fog;
 
-    // Update fog + viewport aspect ratios once the texture dimensions are known
+    // Update fog + viewport + marker aspect ratios once the texture dimensions are known
     this.renderer.onMapLoaded = (aspect) => {
+      this.mapAspectRatio = aspect;
       this.fogEditor.setMapAspect(aspect);
       this.viewportEditor.setMapAspect(aspect);
+      this.markerEditor.update(this.state.getState().markers, aspect);
+      this.updateMarkerPanel();
     };
 
     // Pass fog explicitly so the texture-load callback always redraws the right
@@ -263,12 +308,16 @@ export class GMApp {
     // player can apply them together at the transition midpoint — preventing
     // the new filter/view from appearing on the old map before the transition runs.
     // Transition config tells the player which animation to play.
+    const visibleMarkers = this.state.getState().markers.filter((m) => !m.hidden);
+    const markerIconData = this._collectIconData(visibleMarkers);
     this.host.broadcast({
       type: 'map_change',
       payload:    { id: map.id, name: map.name },
       fog,
       filter:     this.state.getState().filter,
       view:       this.state.getState().view,
+      markers:    visibleMarkers,
+      ...(markerIconData.length > 0 ? { iconData: markerIconData } : {}),
       mapBlob:    blob,
       transition: this.buildTransitionConfig(),
     });
@@ -295,6 +344,14 @@ export class GMApp {
     this.qrContainer           = q('#qr-container');
     this.playerCountEl         = q('#player-count');
     this.statusEl              = q('#status');
+    this.markerSelect          = q<HTMLSelectElement>('#marker-select');
+    this.markerLabelInput      = q<HTMLInputElement>('#marker-label');
+    this.markerIconBtn         = q<HTMLButtonElement>('#marker-icon-btn');
+    this.markerColorInput      = q<HTMLInputElement>('#marker-color');
+    this.markerSizeInput       = q<HTMLInputElement>('#marker-size');
+    this.markerSizeVal         = q('#marker-size-val');
+    this.markerHiddenToggle    = q<HTMLInputElement>('#marker-hidden');
+    this.markerShowLabelToggle = q<HTMLInputElement>('#marker-show-label');
   }
 
   private bindRenderer(): void {
@@ -326,6 +383,7 @@ export class GMApp {
         this.fogEditor.disable();
         this.fogDrawBtn.classList.remove('active');
       }
+      this.markerEditor?.setPointerCapture(!editing);
     });
 
     this.editViewportBtn.addEventListener('click', () => {
@@ -374,8 +432,10 @@ export class GMApp {
     document.querySelector('#fog-draw-btn')?.addEventListener('click', () => {
       if (this.fogDrawing) {
         this.fogEditor.disable();
+        this.markerEditor?.setPointerCapture(true);
       } else {
         this.fogEditor.enable();
+        this.markerEditor?.setPointerCapture(false);
       }
     });
 
@@ -592,5 +652,149 @@ export class GMApp {
   private setStatus(msg: string, level: 'ok' | 'warn' | 'error'): void {
     this.statusEl.textContent = msg;
     this.statusEl.dataset['level'] = level;
+  }
+
+  // ─── Marker editor ────────────────────────────────────────────────────────
+
+  private bindMarkerEditor(): void {
+    const canvas    = document.querySelector<HTMLCanvasElement>('#gm-markers-canvas')!;
+    const hudEl     = document.querySelector<HTMLElement>('#marker-hud')!;
+    const ctxMenuEl = document.querySelector<HTMLElement>('#marker-context-menu')!;
+
+    this.iconPicker = new IconPicker();
+    void this.iconPicker.load();
+
+    this.markerEditor = new MarkerEditor(
+      canvas,
+      hudEl,
+      ctxMenuEl,
+      (markers) => this.state.setMarkers(markers),
+      (marker) => {
+        this.selectedMarkerId = marker?.id ?? null;
+        this.updateMarkerPanel();
+      },
+      () => this.iconPicker.iconCache,
+    );
+
+    document.querySelector('#add-marker-btn')?.addEventListener('click', () => {
+      this.markerEditor.addMarker(0.5, 0.5);
+    });
+
+    document.querySelector('#ctx-add-marker')?.addEventListener('click', () => {
+      const { x, y } = this.markerEditor.ctxPos;
+      this.markerEditor.addMarker(x, y);
+      ctxMenuEl.hidden = true;
+    });
+
+    document.querySelector('#delete-marker-btn')?.addEventListener('click', () => {
+      if (!this.selectedMarkerId) return;
+      const markers = this.state.getState().markers.filter((m) => m.id !== this.selectedMarkerId);
+      this.selectedMarkerId = null;
+      this.markerEditor.selectById(null);
+      this.state.setMarkers(markers);
+    });
+
+    document.querySelector('#marker-hud-hide')?.addEventListener('click', () => {
+      if (!this.selectedMarkerId) return;
+      this.updateSelectedMarker({ hidden: !this.state.getState().markers.find((m) => m.id === this.selectedMarkerId)?.hidden });
+    });
+
+    document.querySelector('#marker-hud-delete')?.addEventListener('click', () => {
+      if (!this.selectedMarkerId) return;
+      const markers = this.state.getState().markers.filter((m) => m.id !== this.selectedMarkerId);
+      this.selectedMarkerId = null;
+      this.markerEditor.selectById(null);
+      this.state.setMarkers(markers);
+    });
+
+    this.markerSelect.addEventListener('change', () => {
+      const id = this.markerSelect.value || null;
+      this.selectedMarkerId = id;
+      this.markerEditor.selectById(id);
+      this.updateMarkerPanel();
+    });
+
+    this.markerLabelInput.addEventListener('input', () => {
+      this.updateSelectedMarker({ label: this.markerLabelInput.value });
+    });
+
+    this.markerIconBtn.addEventListener('click', () => {
+      const currentIcon = this.state.getState().markers.find(
+        (m) => m.id === this.selectedMarkerId
+      )?.icon ?? '◆';
+      this.iconPicker.open(this.markerIconBtn, currentIcon, (icon) => {
+        this.updateSelectedMarker({ icon });
+      });
+    });
+
+    this.markerColorInput.addEventListener('input', () => {
+      this.updateSelectedMarker({ color: this.markerColorInput.value });
+    });
+
+    this.markerSizeInput.addEventListener('input', () => {
+      const val = parseFloat(this.markerSizeInput.value);
+      this.markerSizeVal.textContent = `${val.toFixed(1)}×`;
+      this.updateSelectedMarker({ size: val });
+    });
+
+    this.markerHiddenToggle.addEventListener('change', () => {
+      this.updateSelectedMarker({ hidden: this.markerHiddenToggle.checked });
+    });
+
+    this.markerShowLabelToggle.addEventListener('change', () => {
+      this.updateSelectedMarker({ showLabel: this.markerShowLabelToggle.checked });
+    });
+  }
+
+  private updateSelectedMarker(patch: Partial<Marker>): void {
+    if (!this.selectedMarkerId) return;
+    const markers = this.state.getState().markers.map((m) =>
+      m.id === this.selectedMarkerId ? { ...m, ...patch } : m
+    );
+    this.state.setMarkers(markers);
+  }
+
+  private updateMarkerPanel(): void {
+    const markers = this.state.getState().markers;
+    const sel     = markers.find((m) => m.id === this.selectedMarkerId) ?? null;
+
+    // Rebuild dropdown
+    this.markerSelect.innerHTML = '<option value="">— No markers —</option>';
+    for (const m of markers) {
+      const opt = document.createElement('option');
+      opt.value       = m.id;
+      opt.textContent = m.label || '(unnamed)';
+      this.markerSelect.appendChild(opt);
+    }
+    if (sel) this.markerSelect.value = sel.id;
+
+    const controlsEl = document.querySelector<HTMLElement>('#marker-controls');
+    if (controlsEl) controlsEl.hidden = !sel;
+
+    if (sel) {
+      this.markerLabelInput.value     = sel.label;
+      this.markerColorInput.value     = sel.color;
+      this.markerSizeInput.value      = String(sel.size);
+      this.markerSizeVal.textContent  = `${sel.size.toFixed(1)}×`;
+      this.markerHiddenToggle.checked    = sel.hidden;
+      this.markerShowLabelToggle.checked = sel.showLabel ?? false;
+
+      // Update icon button display
+      this.markerIconBtn.innerHTML = '';
+      if (sel.icon.startsWith('asset:') || sel.icon.startsWith('data:')) {
+        const bmp = this.iconPicker.iconCache.get(sel.icon);
+        const img = document.createElement('img');
+        if (bmp) {
+          // Use a temporary canvas to get a data URL for the img src
+          const cv = document.createElement('canvas');
+          cv.width = 20; cv.height = 20;
+          cv.getContext('2d')!.drawImage(bmp, 0, 0, 20, 20);
+          img.src = cv.toDataURL();
+        }
+        this.markerIconBtn.appendChild(img);
+      } else {
+        this.markerIconBtn.textContent = sel.icon;
+      }
+    }
   }
 }

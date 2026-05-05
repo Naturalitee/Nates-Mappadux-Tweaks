@@ -1,4 +1,4 @@
-import type { SessionState, MapState, FilterState, FogState, ViewState } from '../types.ts';
+import type { SessionState, MapState, FilterState, FogState, ViewState, Marker } from '../types.ts';
 import { defaultSessionState } from '../types.ts';
 import { saveConfig, loadConfig } from '../storage/db.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
@@ -82,6 +82,11 @@ export class StateManager {
   setFog(fog: FogState): void {
     this.state = { ...this.state, fog };
     this._notify(['fog']);
+  }
+
+  setMarkers(markers: Marker[]): void {
+    this.state = { ...this.state, markers };
+    this._notify(['markers']);
   }
 
   // ─── Listeners ────────────────────────────────────────────────────────────

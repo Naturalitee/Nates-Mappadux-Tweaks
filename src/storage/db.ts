@@ -1,6 +1,8 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
 import type { SessionState, StoredMap, StoredSession } from '../types.ts';
 
+export type StoredAsset = { id: string; name: string; type: string; blob: Blob; addedAt: number };
+
 interface DMRSchema extends DBSchema {
   maps: {
     key: string; // StoredMap.id
@@ -89,4 +91,28 @@ export async function saveSession(session: StoredSession): Promise<void> {
 export async function loadSession(): Promise<StoredSession | undefined> {
   const db = await getDB();
   return db.get('session', 'current');
+}
+
+// ─── Assets (icons and future binary assets) ──────────────────────────────────
+
+export async function saveAsset(asset: StoredAsset): Promise<void> {
+  const db = await getDB();
+  await db.put('assets', asset);
+}
+
+export async function getAsset(id: string): Promise<StoredAsset | undefined> {
+  const db = await getDB();
+  return db.get('assets', id);
+}
+
+export async function getAllAssets(type?: string): Promise<StoredAsset[]> {
+  const db = await getDB();
+  const all = await db.getAll('assets');
+  if (type === undefined) return all;
+  return all.filter((a) => a.type === type);
+}
+
+export async function deleteAsset(id: string): Promise<void> {
+  const db = await getDB();
+  await db.delete('assets', id);
 }

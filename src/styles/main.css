@@ -679,6 +679,178 @@ body.player-view #renderer-canvas {
   opacity: 0.5;
 }
 
+/* ── Markers canvas (GM) ────────────────────────────────────────────────── */
+#gm-markers-canvas {
+  pointer-events: auto; /* interactive by default; disabled via JS when fog/viewport active */
+}
+
+/* ── Marker HUD (floating above selected marker on GM canvas) ───────────── */
+.marker-hud {
+  position: absolute;
+  z-index: 15;
+  display: flex;
+  gap: var(--space-xs);
+  background: rgba(10, 14, 26, 0.85);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs);
+  backdrop-filter: blur(4px);
+  pointer-events: auto;
+}
+
+.marker-hud-btn {
+  width: 28px;
+  height: 28px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 14px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+
+.marker-hud-btn:hover { background: var(--bg-hover); }
+
+.marker-hud-btn--danger {
+  border-color: var(--danger);
+  color: var(--danger);
+}
+
+.marker-hud-btn--danger:hover {
+  background: var(--danger);
+  color: #fff;
+}
+
+/* ── Context menu ───────────────────────────────────────────────────────── */
+.context-menu {
+  position: absolute;
+  z-index: 20;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xs);
+  min-width: 150px;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.5);
+}
+
+.context-menu button {
+  display: block;
+  width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  background: none;
+  border: none;
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  text-align: left;
+  cursor: pointer;
+  border-radius: var(--radius-sm);
+}
+
+.context-menu button:hover { background: var(--bg-hover); }
+
+/* ── Marker sidebar inputs ──────────────────────────────────────────────── */
+.marker-text-input {
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+  padding: var(--space-xs) var(--space-sm);
+  outline: none;
+  grid-column: 2 / span 2;
+  width: 100%;
+}
+
+.marker-text-input:focus { border-color: var(--border-focus); }
+
+.marker-icon-input {
+  width: 48px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 1rem;
+  text-align: center;
+  padding: var(--space-xs);
+  outline: none;
+}
+
+.marker-icon-input:focus { border-color: var(--border-focus); }
+
+/* ── Marker icon button ─────────────────────────────────────────────────── */
+.marker-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 28px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  font-size: 1rem;
+  cursor: pointer;
+  color: var(--text-primary);
+  padding: 0;
+}
+.marker-icon-btn:hover { border-color: var(--border-focus); }
+.marker-icon-btn img { width: 20px; height: 20px; object-fit: contain; }
+
+/* ── Icon picker popover ────────────────────────────────────────────────── */
+.icon-picker {
+  position: fixed;
+  z-index: 1000;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-sm);
+  box-shadow: 0 4px 20px rgba(0,0,0,0.65);
+  width: 256px;
+}
+.icon-picker-section-label {
+  font-size: 0.65rem;
+  font-weight: 600;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+  padding: var(--space-xs) 0 2px;
+}
+.icon-picker-grid {
+  display: grid;
+  grid-template-columns: repeat(8, 1fr);
+  gap: 2px;
+}
+.icon-picker-btn {
+  display: flex; align-items: center; justify-content: center;
+  width: 28px; height: 28px;
+  background: var(--bg-input);
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  font-size: 14px;
+  cursor: pointer;
+  color: var(--text-primary);
+}
+.icon-picker-btn:hover { background: var(--bg-hover); border-color: var(--border); }
+.icon-picker-btn--active { border-color: var(--accent); background: var(--accent-dim); }
+.icon-picker-btn img { width: 18px; height: 18px; object-fit: contain; }
+.icon-picker-sep { height: 1px; background: var(--border); margin: var(--space-xs) 0; }
+.icon-picker-upload {
+  display: block; width: 100%;
+  padding: var(--space-xs) var(--space-sm);
+  margin-top: var(--space-xs);
+  background: none;
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  font-size: var(--font-size-sm);
+  text-align: center;
+  cursor: pointer;
+}
+.icon-picker-upload:hover { border-color: var(--accent); color: var(--accent); }
+
 /* ── Scrollbars ─────────────────────────────────────────────────────────── */
 ::-webkit-scrollbar { width: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }

@@ -1,9 +1,10 @@
 import { Guest } from '../p2p/Guest.ts';
 import { Renderer } from '../rendering/Renderer.ts';
+import { MarkerTexture } from '../rendering/MarkerTexture.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
 import { TransitionEngine } from '../transitions/TransitionEngine.ts';
 import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
-import type { GMMessage, TransitionConfig } from '../types.ts';
+import type { GMMessage, TransitionConfig, Marker, MarkerIconData } from '../types.ts';
 
 /**
  * PlayerApp — top-level orchestrator for the player view.
@@ -12,9 +13,13 @@ import type { GMMessage, TransitionConfig } from '../types.ts';
  * If the fragment is absent or empty, waits for a room code input.
  * Connects via P2P Guest (BroadcastChannel for local window, PeerJS for network).
  * Applies all incoming state updates to the Renderer.
+ *
+ * Markers are rendered as a CanvasTexture inside the Three.js scene (Plane 2)
+ * so they pass through the active GLSL filter pipeline.
  */
 export class PlayerApp {
   private renderer!: Renderer;
+  private markerTexture!: MarkerTexture;
   private transitionEngine!: TransitionEngine;
   private guest!: Guest;
   private statusEl!: HTMLElement;
@@ -22,6 +27,8 @@ export class PlayerApp {
   private roomInput!: HTMLInputElement;
   /** Tracks which map ID the player is currently showing (or loading). */
   private currentMapId: string | null = null;
+  private currentMarkers: Marker[]    = [];
+  private playerIconCache = new Map<string, ImageBitmap>();
   /**
    * Sequence numbers of messages already processed.
    * Local player windows receive every broadcast TWICE — once via BroadcastChannel
@@ -39,9 +46,17 @@ export class PlayerApp {
       document.querySelector<HTMLCanvasElement>('#renderer-canvas')!,
       { preserveDrawingBuffer: true },
     );
+    this.markerTexture = new MarkerTexture();
+    this.renderer.setMarkerCanvas(this.markerTexture.canvas);
+
     this.transitionEngine = new TransitionEngine(
       document.querySelector<HTMLCanvasElement>('#transition-canvas')!,
     );
+    this.renderer.onMapLoaded = (aspect) => {
+      this.markerTexture.setAspectRatio(aspect);
+      this.markerTexture.render(this.currentMarkers, this.playerIconCache);
+      this.renderer.markMarkersDirty();
+    };
     this.renderer.start();
 
     this.statusEl     = document.querySelector('#status')!;
@@ -101,37 +116,43 @@ export class PlayerApp {
 
     switch (msg.type) {
       case 'full_state': {
-        this.currentMapId = msg.payload.map?.id ?? null;
+        this.currentMapId   = msg.payload.map?.id ?? null;
+        this.currentMarkers = msg.payload.markers ?? [];
         if (mapBlob) {
-          // loadMap stores fog and redraws after texture decode — no separate updateFog needed.
           this.renderer.loadMap(mapBlob, msg.payload.fog);
         } else {
-          // No map blob (e.g. fresh session with no maps loaded yet) — still sync fog state.
           this.renderer.updateFog(msg.payload.fog);
         }
         this.renderer.setFilter(msg.payload.filter);
         this.renderer.setView(msg.payload.view);
+        void (async () => {
+          if (msg.iconData?.length) await this._decodeIconData(msg.iconData);
+          this.markerTexture.render(this.currentMarkers, this.playerIconCache);
+          this.renderer.markMarkersDirty();
+        })();
         this.setStatus('');
         break;
       }
 
       case 'map_change': {
-        // Update currentMapId immediately so any fog_update arriving before
-        // the texture finishes loading is evaluated against the new map.
         this.currentMapId = msg.payload.id;
+        // Update markers immediately so onMapLoaded renders the correct set.
+        if (msg.markers !== undefined) this.currentMarkers = msg.markers;
         if (mapBlob) {
-          // fog, filter, and view all travel atomically inside map_change.
-          // They are applied inside triggerChange() so the transition snapshot
-          // captures the OLD state and only the new state appears at the reveal.
           const fog    = msg.fog    ?? { polygons: [] };
           const filter = msg.filter;
           const view   = msg.view;
           const blob   = mapBlob;
-          void this.runTransition(msg.transition, async () => {
-            await this.renderer.loadMap(blob, fog);
-            if (filter) this.renderer.setFilter(filter);
-            if (view)   this.renderer.setView(view);
-          });
+          void (async () => {
+            // Decode any new custom icons before the transition so onMapLoaded
+            // has them ready in playerIconCache when it renders.
+            if (msg.iconData?.length) await this._decodeIconData(msg.iconData);
+            await this.runTransition(msg.transition, async () => {
+              await this.renderer.loadMap(blob, fog);
+              if (filter) this.renderer.setFilter(filter);
+              if (view)   this.renderer.setView(view);
+            });
+          })();
         }
         break;
       }
@@ -155,11 +176,35 @@ export class PlayerApp {
         break;
       }
 
-      // Stubs — logged but not yet acted on
-      case 'marker_update':
+      case 'marker_update': {
+        this.currentMarkers = msg.payload;
+        void (async () => {
+          if (msg.iconData?.length) await this._decodeIconData(msg.iconData);
+          this.markerTexture.render(this.currentMarkers, this.playerIconCache);
+          this.renderer.markMarkersDirty();
+        })();
+        break;
+      }
+
+      // Stub — not yet acted on
       case 'audio_update':
         break;
     }
+  }
+
+  // ─── Icon cache ───────────────────────────────────────────────────────────
+
+  private async _decodeIconData(iconData: MarkerIconData[]): Promise<void> {
+    await Promise.all(
+      iconData
+        .filter(({ key }) => !this.playerIconCache.has(key))
+        .map(async ({ key, dataUrl }) => {
+          const res  = await fetch(dataUrl);
+          const blob = await res.blob();
+          const bmp  = await createImageBitmap(blob);
+          this.playerIconCache.set(key, bmp);
+        }),
+    );
   }
 
   // ─── Transitions ──────────────────────────────────────────────────────────

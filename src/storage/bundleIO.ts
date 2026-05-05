@@ -1,4 +1,4 @@
-import { getAllMaps, getMap, saveMap, loadConfig, saveConfig } from './db.ts';
+import { getAllMaps, getMap, saveMap, loadConfig, saveConfig, getAllAssets, saveAsset } from './db.ts';
 import type { SessionState, StoredMap } from '../types.ts';
 
 const BUNDLE_VERSION = 1;
@@ -12,10 +12,18 @@ interface MapEntry {
   config:   SessionState | null;
 }
 
+interface IconEntry {
+  id:       string;
+  name:     string;
+  mimeType: string;
+  dataB64:  string;
+}
+
 export interface DMRBundle {
-  version:    typeof BUNDLE_VERSION;
-  exportedAt: number;
-  maps:       MapEntry[];
+  version:      typeof BUNDLE_VERSION;
+  exportedAt:   number;
+  maps:         MapEntry[];
+  customIcons?: IconEntry[];
 }
 
 // ─── Encoding helpers ─────────────────────────────────────────────────────────
@@ -60,7 +68,25 @@ export async function exportBundle(): Promise<void> {
     });
   }
 
-  const bundle: DMRBundle = { version: BUNDLE_VERSION, exportedAt: Date.now(), maps: entries };
+  // Export custom icon assets
+  const iconAssets = await getAllAssets('icon');
+  const iconEntries: IconEntry[] = [];
+  for (const asset of iconAssets) {
+    const ab = await asset.blob.arrayBuffer();
+    iconEntries.push({
+      id:       asset.id,
+      name:     asset.name,
+      mimeType: asset.blob.type || 'image/png',
+      dataB64:  ab2b64(ab),
+    });
+  }
+
+  const bundle: DMRBundle = {
+    version:    BUNDLE_VERSION,
+    exportedAt: Date.now(),
+    maps:       entries,
+    ...(iconEntries.length > 0 ? { customIcons: iconEntries } : {}),
+  };
 
   const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
   const url  = URL.createObjectURL(blob);
@@ -114,6 +140,14 @@ export async function importBundle(
     if (entry.config) await saveConfig(entry.id, entry.config);
 
     if (existing) updated++; else added++;
+  }
+
+  // Restore custom icons if present
+  if (Array.isArray(bundle.customIcons)) {
+    for (const icon of bundle.customIcons) {
+      const blob = b64ToBlob(icon.dataB64, icon.mimeType);
+      await saveAsset({ id: icon.id, name: icon.name, type: 'icon', blob, addedAt: Date.now() });
+    }
   }
 
   return { added, updated };

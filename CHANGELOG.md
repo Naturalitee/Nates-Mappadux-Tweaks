@@ -1,5 +1,60 @@
 # Changelog
 
+## v2.3.5 — 2026-05-05
+
+### Fixes
+- **Markers on map change** — switching maps now sends the new map's markers (and any custom icon blobs) atomically inside `map_change`, the same way fog/filter/view already travel. Previously `marker_update` was never broadcast on a map switch, so players kept the previous map's markers until a manual drag triggered a sync.
+
+---
+
+## v2.3.4 — 2026-05-05
+
+### Changes
+- **Custom icons sent to players** — custom uploaded icons are now transmitted over P2P. The GM encodes each referenced `asset:uuid` icon to a data URL and includes it in `marker_update` and `full_state` messages; the player decodes each entry to an `ImageBitmap` and caches it by key, skipping any already cached. This mirrors the pattern planned for audio asset delivery.
+
+---
+
+## v2.3.3 — 2026-05-05
+
+### Changes
+- **Show Name toggle** — each marker now has a "Show Name on player map" checkbox (default off). When off, the player map shows the icon only; the GM always sees the label regardless of this setting.
+
+---
+
+## v2.3.2 — 2026-05-05
+
+### Fixes
+- **Player marker Y-axis** — markers placed at the top of the GM map now appear at the top on the player screen. `MarkerTexture` was applying `(1 − y)` before drawing, which double-inverted the coordinate (Three.js `CanvasTexture` with `flipY=true` already handles the canvas→UV flip). Fixed to `cy = y * H`.
+
+---
+
+## v2.3.1 — 2026-05-05
+
+### Changes
+- **Markers subject to filters** — player marker layer moved from a 2D canvas DOM overlay into the Three.js scene as Plane 2 (CanvasTexture), so all GLSL post-processing filters (parchment, retro sci-fi, watercolor, etc.) are applied to markers the same as the map and fog layers.
+- **Icon picker** — replaced the free-text icon input with a click-to-open picker grid. Includes 46 preset Unicode symbols (shapes, chess/card suits, circled numbers ①–⑳, check/cross marks). Custom icons can be uploaded (resized to 64×64), are stored in IndexedDB, and are included in map bundle exports/imports for full portability.
+- **Icon visual redesign** — removed the filled circle background. Icons now render directly in the marker's chosen colour with a dark stroke outline for readability. Default icon changed from 📍 to ◆. Image icons (custom uploads) use `asset:<uuid>` keys and render as-is.
+- **Asset storage** — added `assets` store helpers (`saveAsset`, `getAllAssets`, `deleteAsset`) to the IndexedDB layer. Custom icons (`type: 'icon'`) are included in bundle export/import alongside maps.
+
+---
+
+## v2.3.0 — 2026-05-05
+
+### New Features
+- **Markers / tokens** — GMs can now place, move, and manage tokens on the map.
+  - **Add** — click "+ Add Marker" in the sidebar or right-click the map to place a marker at any position.
+  - **Drag** — click and drag any marker to reposition it; position is broadcast to players on release.
+  - **Select** — click a marker to select it; its properties appear in the Markers sidebar panel.
+  - **Sidebar controls** — edit name, icon (emoji), colour, and size. Toggle "Hide from players" to ghost the marker on the GM canvas while hiding it entirely from the player view.
+  - **GM status badges** — each marker shows two clickable mini-badges: visibility (green ✓ / red ✕) and a role badge for audio sources (♪) and listeners (◉). Clicking a badge toggles the property directly on the canvas.
+  - **HUD buttons** — a floating mini-toolbar above the selected marker offers one-click toggle-visibility and delete.
+  - **Marker dropdown** — the sidebar dropdown lists all markers; selecting from it highlights the marker on the canvas.
+  - **Player view** — players see all non-hidden markers rendered at their correct map-relative positions regardless of zoom or viewport offset. Markers re-project automatically on view changes.
+  - **Persistence** — markers are saved per-map in IndexedDB and restored on reload.
+  - **P2P broadcast** — marker changes are broadcast as `marker_update`; hidden markers are filtered out before transmission.
+
+---
+
 ## v2.2.4 — 2026-05-05
 
 ### Changes

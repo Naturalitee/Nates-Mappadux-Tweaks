@@ -1,5 +1,5 @@
 import Peer, { type DataConnection } from 'peerjs';
-import type { GMMessage, SessionState } from '../types.ts';
+import type { GMMessage, SessionState, MarkerIconData } from '../types.ts';
 import { LocalChannel } from './LocalChannel.ts';
 import { generateRoomCode } from './roomCode.ts';
 
@@ -27,6 +27,7 @@ export class Host {
   private events: HostEvents;
   private lastState: SessionState | null = null;
   private lastMapBlob: ArrayBuffer | null = null;
+  private lastIconData: MarkerIconData[] = [];
   /** Monotonically-increasing sequence number stamped on every broadcast.
    *  Players use this to deduplicate the same message arriving via both
    *  BroadcastChannel and PeerJS (local windows receive both). */
@@ -65,9 +66,12 @@ export class Host {
     // BroadcastChannel. Respond with full_state so it doesn't wait for PeerJS.
     this.local.onRequest(() => {
       if (this.lastState) {
-        const msg: GMMessage = this.lastMapBlob
-          ? { type: 'full_state', payload: this.lastState, mapBlob: this.lastMapBlob }
-          : { type: 'full_state', payload: this.lastState };
+        const msg: GMMessage = {
+          type: 'full_state',
+          payload: this.lastState,
+          ...(this.lastMapBlob                  ? { mapBlob:  this.lastMapBlob  } : {}),
+          ...(this.lastIconData.length > 0      ? { iconData: this.lastIconData } : {}),
+        };
         this.local.send(msg);
       }
     });
@@ -107,9 +111,10 @@ export class Host {
   }
 
   /** Update the cached state (call whenever GM state changes) */
-  updateState(state: SessionState, mapBlob?: ArrayBuffer): void {
+  updateState(state: SessionState, mapBlob?: ArrayBuffer, iconData?: MarkerIconData[]): void {
     this.lastState = state;
-    if (mapBlob) this.lastMapBlob = mapBlob;
+    if (mapBlob)    this.lastMapBlob  = mapBlob;
+    if (iconData)   this.lastIconData = iconData;
   }
 
   destroy(): void {
@@ -128,9 +133,12 @@ export class Host {
 
       // Send full state snapshot to new joiner
       if (this.lastState) {
-        const msg: GMMessage = this.lastMapBlob
-          ? { type: 'full_state', payload: this.lastState, mapBlob: this.lastMapBlob }
-          : { type: 'full_state', payload: this.lastState };
+        const msg: GMMessage = {
+          type: 'full_state',
+          payload: this.lastState,
+          ...(this.lastMapBlob             ? { mapBlob:  this.lastMapBlob  } : {}),
+          ...(this.lastIconData.length > 0 ? { iconData: this.lastIconData } : {}),
+        };
         this.sendTo(conn, msg);
       }
     });
