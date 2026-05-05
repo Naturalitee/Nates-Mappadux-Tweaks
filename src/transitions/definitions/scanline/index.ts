@@ -36,9 +36,12 @@ export default {
       ctx.clearRect(0, 0, w, h);
       ctx.drawImage(snapshot, 0, 0, w, h);
 
-      // Punch hole — reveals new Three.js frame (already loaded) underneath
+      // Punch hole — reveals new Three.js frame (already loaded) underneath.
+      // fillStyle must be opaque — glow gradient from the previous frame leaks
+      // into save() state and would make destination-out near-transparent.
       ctx.save();
       ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = '#000';
       if (fromTop) {
         ctx.fillRect(0, 0, w, t * h);
       } else {

@@ -66,9 +66,12 @@ export default {
       ctx.clearRect(0, 0, w, h);
       ctx.drawImage(snapshot, 0, 0, w, h);
 
-      // Clear revealed blocks — punches through to new Three.js frame underneath
+      // Clear revealed blocks — punches through to new Three.js frame underneath.
+      // fillStyle must be opaque — noise rgba from the previous frame leaks into
+      // save() state and would make destination-out partially transparent.
       ctx.save();
       ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = '#000';
       const clearCount = Math.floor(t * total);
       for (let i = 0; i < clearCount; i++) {
         const idx = order[i]!;

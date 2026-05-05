@@ -90,9 +90,12 @@ export default {
       ctx.clearRect(0, 0, w, h);
       ctx.drawImage(snapshot, 0, 0, w, h);
 
-      // Punch hole in overlay to reveal new Three.js frame underneath
+      // Punch hole in overlay to reveal new Three.js frame underneath.
+      // fillStyle must be opaque — destination-out uses alpha only, and the
+      // gradient left by drawEdge on the previous frame would make it transparent.
       ctx.save();
       ctx.globalCompositeOperation = 'destination-out';
+      ctx.fillStyle = '#000';
       switch (direction) {
         case 'left':
           ctx.fillRect(0, 0, t * w, h);
