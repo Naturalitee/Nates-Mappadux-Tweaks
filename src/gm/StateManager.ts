@@ -1,4 +1,4 @@
-import type { SessionState, MapState, FilterState, FogState, ViewState, Marker } from '../types.ts';
+import type { SessionState, MapState, FilterState, FogState, ViewState, Marker, AudioState } from '../types.ts';
 import { defaultSessionState } from '../types.ts';
 import { saveConfig, loadConfig } from '../storage/db.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
@@ -38,7 +38,10 @@ export class StateManager {
         view:    { ...base.view,    ...saved.view },
         // Ensure any new default fields added in later versions are present
         markers: saved.markers ?? base.markers,
-        audio:   saved.audio   ?? base.audio,
+        // Normalize audio: old saves had {activeAmbientId, volume} without slots
+        audio: saved.audio && Array.isArray((saved.audio as AudioState).slots)
+          ? saved.audio
+          : base.audio,
       };
     } else {
       this.state = { ...base, map };
@@ -87,6 +90,11 @@ export class StateManager {
   setMarkers(markers: Marker[]): void {
     this.state = { ...this.state, markers };
     this._notify(['markers']);
+  }
+
+  setAudio(audio: AudioState): void {
+    this.state = { ...this.state, audio };
+    this._notify(['audio']);
   }
 
   // ─── Listeners ────────────────────────────────────────────────────────────

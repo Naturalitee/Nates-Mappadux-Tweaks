@@ -1,5 +1,5 @@
-import { getAllMaps, getMap, saveMap, loadConfig, saveConfig, getAllAssets, saveAsset } from './db.ts';
-import type { SessionState, StoredMap } from '../types.ts';
+import { getAllMaps, getMap, saveMap, loadConfig, saveConfig, getAllAssets, saveAsset, getAllAudioAssets, saveAudioAsset, getAsset } from './db.ts';
+import type { SessionState, StoredMap, AudioAsset } from '../types.ts';
 
 const BUNDLE_VERSION = 1;
 
@@ -19,11 +19,21 @@ interface IconEntry {
   dataB64:  string;
 }
 
+interface AudioEntry {
+  id:       string;
+  name:     string;
+  mimeType: string;
+  dataB64:  string;
+  addedAt:  number;
+}
+
 export interface DMRBundle {
   version:      typeof BUNDLE_VERSION;
   exportedAt:   number;
   maps:         MapEntry[];
   customIcons?: IconEntry[];
+  /** Uploaded audio files — embedded because they have no remote source to re-download */
+  uploadedAudio?: AudioEntry[];
 }
 
 // ─── Encoding helpers ─────────────────────────────────────────────────────────
@@ -81,11 +91,28 @@ export async function exportBundle(): Promise<void> {
     });
   }
 
+  // Export uploaded audio (source='upload') — these have no remote URL to re-fetch
+  const allAudioMeta = await getAllAudioAssets();
+  const uploadedAudio: AudioEntry[] = [];
+  for (const meta of allAudioMeta.filter((a) => a.source === 'upload')) {
+    const stored = await getAsset(meta.id);
+    if (!stored) continue;
+    const ab = await stored.blob.arrayBuffer();
+    uploadedAudio.push({
+      id:       meta.id,
+      name:     meta.name,
+      mimeType: stored.blob.type || 'audio/mpeg',
+      dataB64:  ab2b64(ab),
+      addedAt:  meta.addedAt,
+    });
+  }
+
   const bundle: DMRBundle = {
     version:    BUNDLE_VERSION,
     exportedAt: Date.now(),
     maps:       entries,
-    ...(iconEntries.length > 0 ? { customIcons: iconEntries } : {}),
+    ...(iconEntries.length > 0    ? { customIcons:    iconEntries    } : {}),
+    ...(uploadedAudio.length > 0  ? { uploadedAudio:  uploadedAudio  } : {}),
   };
 
   const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
@@ -147,6 +174,22 @@ export async function importBundle(
     for (const icon of bundle.customIcons) {
       const blob = b64ToBlob(icon.dataB64, icon.mimeType);
       await saveAsset({ id: icon.id, name: icon.name, type: 'icon', blob, addedAt: Date.now() });
+    }
+  }
+
+  // Restore uploaded audio assets
+  if (Array.isArray(bundle.uploadedAudio)) {
+    for (const entry of bundle.uploadedAudio) {
+      const blob = b64ToBlob(entry.dataB64, entry.mimeType);
+      const asset: AudioAsset = {
+        id:      entry.id,
+        name:    entry.name,
+        source:  'upload',
+        license: 'Unknown / Manual import',
+        addedAt: entry.addedAt,
+      };
+      await saveAudioAsset(asset);
+      await saveAsset({ id: entry.id, name: entry.name, type: 'audio', blob, addedAt: entry.addedAt });
     }
   }
 

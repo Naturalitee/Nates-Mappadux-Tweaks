@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { SessionState, StoredMap, StoredSession } from '../types.ts';
+import type { SessionState, StoredMap, StoredSession, AudioAsset } from '../types.ts';
 
 export type StoredAsset = { id: string; name: string; type: string; blob: Blob; addedAt: number };
 
@@ -18,27 +18,36 @@ interface DMRSchema extends DBSchema {
     value: StoredSession;
   };
   assets: {
-    // Reserved for audio files and other future binary assets
+    // Binary blobs: icons (type='icon') and audio (type='audio')
     key: string;
     value: { id: string; name: string; type: string; blob: Blob; addedAt: number };
+  };
+  audioAssets: {
+    // Metadata for audio library — blobs live in 'assets' store under the same id
+    key: string; // AudioAsset.id
+    value: AudioAsset;
   };
 }
 
 const DB_NAME = 'dynamic-map-renderer';
-const DB_VERSION = 1;
+const DB_VERSION = 2;
 
 let _db: IDBPDatabase<DMRSchema> | null = null;
 
 async function getDB(): Promise<IDBPDatabase<DMRSchema>> {
   if (_db) return _db;
   _db = await openDB<DMRSchema>(DB_NAME, DB_VERSION, {
-    upgrade(db) {
-      const mapStore = db.createObjectStore('maps', { keyPath: 'id' });
-      mapStore.createIndex('by_name', 'name', { unique: false });
-
-      db.createObjectStore('configs', { keyPath: 'mapId' });
-      db.createObjectStore('session', { keyPath: 'key' });
-      db.createObjectStore('assets', { keyPath: 'id' });
+    upgrade(db, oldVersion) {
+      if (oldVersion < 1) {
+        const mapStore = db.createObjectStore('maps', { keyPath: 'id' });
+        mapStore.createIndex('by_name', 'name', { unique: false });
+        db.createObjectStore('configs', { keyPath: 'mapId' });
+        db.createObjectStore('session', { keyPath: 'key' });
+        db.createObjectStore('assets', { keyPath: 'id' });
+      }
+      if (oldVersion < 2) {
+        db.createObjectStore('audioAssets', { keyPath: 'id' });
+      }
     },
   });
   return _db;
@@ -115,4 +124,27 @@ export async function getAllAssets(type?: string): Promise<StoredAsset[]> {
 export async function deleteAsset(id: string): Promise<void> {
   const db = await getDB();
   await db.delete('assets', id);
+}
+
+// ─── Audio asset metadata ─────────────────────────────────────────────────────
+
+export async function saveAudioAsset(asset: AudioAsset): Promise<void> {
+  const db = await getDB();
+  await db.put('audioAssets', asset);
+}
+
+export async function getAudioAsset(id: string): Promise<AudioAsset | undefined> {
+  const db = await getDB();
+  return db.get('audioAssets', id);
+}
+
+export async function getAllAudioAssets(): Promise<AudioAsset[]> {
+  const db = await getDB();
+  return db.getAll('audioAssets');
+}
+
+export async function deleteAudioAsset(id: string): Promise<void> {
+  const db = await getDB();
+  await db.delete('audioAssets', id);
+  await db.delete('assets', id); // also remove the blob
 }

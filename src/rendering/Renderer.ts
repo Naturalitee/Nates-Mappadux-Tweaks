@@ -89,6 +89,10 @@ export class Renderer {
 
   /** Called once the map texture has loaded and aspectRatio is known. */
   onMapLoaded: ((aspectRatio: number) => void) | null = null;
+  /** Fired when the WebGL context is lost (GPU reclaimed by OS/browser). */
+  onContextLost: (() => void) | null = null;
+  /** Fired when the WebGL context has been restored and is ready to use again. */
+  onContextRestored: (() => void) | null = null;
 
   constructor(canvas: HTMLCanvasElement, options?: { preserveDrawingBuffer?: boolean }) {
     this.renderer = new THREE.WebGLRenderer({
@@ -101,6 +105,16 @@ export class Renderer {
     this.renderer.setPixelRatio(window.devicePixelRatio);
     this.renderer.autoClear = false;
     this.renderer.setClearColor(0x000000, 1);
+
+    // Allow the browser to auto-restore a lost context; fire callbacks so the
+    // player app can re-feed cached state rather than showing a black screen.
+    canvas.addEventListener('webglcontextlost', (e) => {
+      e.preventDefault();
+      this.onContextLost?.();
+    });
+    canvas.addEventListener('webglcontextrestored', () => {
+      this.onContextRestored?.();
+    });
 
     // Placeholder; handleResize() (called below) sets the correct physical-pixel value.
     this.resolution = new THREE.Vector2(

@@ -4,6 +4,8 @@ import { FogEditor } from './FogEditor.ts';
 import { ViewportEditor } from './ViewportEditor.ts';
 import { MarkerEditor } from './MarkerEditor.ts';
 import { IconPicker } from './IconPicker.ts';
+import { SoundboardPanel, type SoundboardBroadcast } from './SoundboardPanel.ts';
+import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { FilterPanel } from '../filters/FilterPanel.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
@@ -16,6 +18,8 @@ import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { exportBundle, importBundle } from '../storage/bundleIO.ts';
 import type { SessionState, StoredMap, TransitionConfig, Marker, MarkerIconData } from '../types.ts';
 import QRCode from 'qrcode';
+
+const REMOTE_AUDIO_KEY = 'dmr_remote_audio';
 
 
 /**
@@ -34,10 +38,13 @@ export class GMApp {
   private filterPanel!:     FilterPanel;
   private transitionPanel!: TransitionPanel;
 
-  private iconPicker!: IconPicker;
+  private iconPicker!:       IconPicker;
+  private soundboardEngine!: SoundboardEngine;
+  private soundboardPanel!:  SoundboardPanel;
 
   private selectedMarkerId: string | null = null;
   private mapAspectRatio = 1;
+  private remoteAudioEnabled = localStorage.getItem(REMOTE_AUDIO_KEY) !== 'false';
 
   // DOM references (assigned in init)
   private mapSelect!:               HTMLSelectElement;
@@ -89,6 +96,7 @@ export class GMApp {
     this.bindTransitionPanel();
     this.bindUIControls();
     this.bindMarkerEditor();
+    this.bindSoundboardPanel();
 
     // Register the state listener BEFORE loading maps so that the initial
     // populateMapList() → loadMap() → state.loadForMap() → _notify() chain
@@ -226,7 +234,14 @@ export class GMApp {
       });
     }
 
-    this.host.updateState(state, this.currentMapBlob ?? undefined, iconData);
+    if (changed.includes('audio') && !changed.includes('map')) {
+      this.soundboardPanel.update(state.audio.slots);
+      this.host.broadcast({ type: 'audio_update', payload: state.audio });
+    }
+
+    void this.soundboardPanel.getActiveSlots().then((active) => {
+      this.host.updateState(state, this.currentMapBlob ?? undefined, iconData, active);
+    });
   }
 
   // ─── Map selection ────────────────────────────────────────────────────────
@@ -303,13 +318,15 @@ export class GMApp {
 
     this.setStatus(map.name, 'ok');
 
+    // Stop soundboard audio from the previous map and reload slots for the new one
+    this.soundboardPanel.stopAll();
+    this.soundboardPanel.update(this.state.getState().audio.slots);
+
     // Broadcast new map to all connected players.
-    // fog, filter, and view all travel atomically inside map_change so the
-    // player can apply them together at the transition midpoint — preventing
-    // the new filter/view from appearing on the old map before the transition runs.
-    // Transition config tells the player which animation to play.
+    // fog, filter, view, markers, and audio all travel atomically inside map_change.
     const visibleMarkers = this.state.getState().markers.filter((m) => !m.hidden);
     const markerIconData = this._collectIconData(visibleMarkers);
+    const soundboardActive = await this.soundboardPanel.getActiveSlots();
     this.host.broadcast({
       type: 'map_change',
       payload:    { id: map.id, name: map.name },
@@ -317,7 +334,9 @@ export class GMApp {
       filter:     this.state.getState().filter,
       view:       this.state.getState().view,
       markers:    visibleMarkers,
-      ...(markerIconData.length > 0 ? { iconData: markerIconData } : {}),
+      audio:      this.state.getState().audio,
+      ...(markerIconData.length > 0    ? { iconData:         markerIconData    } : {}),
+      ...(soundboardActive.length > 0  ? { soundboardActive: soundboardActive } : {}),
       mapBlob:    blob,
       transition: this.buildTransitionConfig(),
     });
@@ -774,6 +793,60 @@ export class GMApp {
       m.id === this.selectedMarkerId ? { ...m, ...patch } : m
     );
     this.state.setMarkers(markers);
+  }
+
+  private bindSoundboardPanel(): void {
+    this.soundboardEngine = new SoundboardEngine();
+
+    this.soundboardPanel = new SoundboardPanel(
+      this.soundboardEngine,
+      // Slots changed: persist to state
+      (slots) => {
+        const audio = this.state.getState().audio;
+        this.state.setAudio({ ...audio, slots });
+      },
+      // Broadcast play/stop to players
+      (msg: SoundboardBroadcast) => {
+        if (!this.remoteAudioEnabled) return;
+        if (msg.type === 'play') {
+          this.host.broadcast({
+            type:    'soundboard_play',
+            slotId:  msg.data.slotId,
+            assetId: msg.data.assetId,
+            loop:    msg.data.loop,
+            volume:  msg.data.volume,
+            dataUrl: msg.data.dataUrl,
+          });
+        } else if (msg.type === 'stop') {
+          this.host.broadcast({ type: 'soundboard_stop', slotId: msg.slotId });
+        } else {
+          this.host.broadcast({ type: 'soundboard_mute_all', muted: msg.muted });
+        }
+      },
+    );
+
+    this.soundboardPanel.onAssetsLoaded = () => {
+      this.host.updateSoundboardAssets(this.soundboardPanel.getLoadedAssets());
+    };
+
+    // Remote audio toggle
+    const remoteToggle = document.querySelector<HTMLInputElement>('#remote-audio-toggle');
+    if (remoteToggle) {
+      remoteToggle.checked = this.remoteAudioEnabled;
+      remoteToggle.addEventListener('change', () => {
+        this.remoteAudioEnabled = remoteToggle.checked;
+        localStorage.setItem(REMOTE_AUDIO_KEY, String(this.remoteAudioEnabled));
+        if (!this.remoteAudioEnabled) {
+          // Stop all currently playing slots on remote players
+          const { slots } = this.state.getState().audio;
+          for (const slot of slots) {
+            if (this.soundboardEngine.isPlaying(slot.id)) {
+              this.host.broadcast({ type: 'soundboard_stop', slotId: slot.id });
+            }
+          }
+        }
+      });
+    }
   }
 
   private updateMarkerPanel(): void {

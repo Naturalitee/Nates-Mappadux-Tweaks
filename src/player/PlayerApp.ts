@@ -4,7 +4,7 @@ import { MarkerTexture } from '../rendering/MarkerTexture.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
 import { TransitionEngine } from '../transitions/TransitionEngine.ts';
 import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
-import type { GMMessage, TransitionConfig, Marker, MarkerIconData } from '../types.ts';
+import type { GMMessage, TransitionConfig, Marker, MarkerIconData, SoundboardAudioData, SoundboardSlot, FogState, FilterState, ViewState } from '../types.ts';
 
 /**
  * PlayerApp — top-level orchestrator for the player view.
@@ -29,6 +29,25 @@ export class PlayerApp {
   private currentMapId: string | null = null;
   private currentMarkers: Marker[]    = [];
   private playerIconCache = new Map<string, ImageBitmap>();
+  /** slotId → <audio> element for active soundboard slots */
+  private sbAudioEls  = new Map<string, HTMLAudioElement>();
+  /** assetId → data URL so re-plays don't need the URL resent */
+  private sbAssetUrls = new Map<string, string>();
+  /** Current slot configurations (for restoring on reconnect) */
+  private sbSlots: SoundboardSlot[] = [];
+  /** Master mute flag */
+  private sbMuted = false;
+  private _audioResumeScheduled = false;
+  private _muteIndicatorEl: HTMLElement | null = null;
+  // ── WebGL context-loss recovery ──────────────────────────────────────────
+  /** Room code retained so we can reconnect if cached state is unavailable. */
+  private roomCode = '';
+  /** Cached renderer inputs — replayed on WebGL context restore. */
+  private lastMapBlob:  ArrayBuffer | null = null;
+  private lastFog:      FogState           = { polygons: [] };
+  private lastFilter:   FilterState | null = null;
+  private lastView:     ViewState  | null  = null;
+  private _contextLost = false;
   /**
    * Sequence numbers of messages already processed.
    * Local player windows receive every broadcast TWICE — once via BroadcastChannel
@@ -59,6 +78,24 @@ export class PlayerApp {
     };
     this.renderer.start();
 
+    this.renderer.onContextLost = () => {
+      this._contextLost = true;
+      this.setStatus('Renderer lost — recovering…');
+    };
+    this.renderer.onContextRestored = () => {
+      this._contextLost = false;
+      this._recoverRenderer();
+    };
+
+    // visibilitychange fires when the user returns to the tab/app on mobile.
+    // If the context was lost while the page was hidden and the browser didn't
+    // fire webglcontextrestored yet, this is a fallback trigger.
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'visible' && this._contextLost) {
+        this._recoverRenderer();
+      }
+    });
+
     this.statusEl     = document.querySelector('#status')!;
     this.connectPanel = document.querySelector('#connect-panel')!;
     this.roomInput    = document.querySelector<HTMLInputElement>('#room-input')!;
@@ -78,11 +115,33 @@ export class PlayerApp {
         this.connect(code);
       }
     });
+
+    document.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this._toggleMute();
+    });
+  }
+
+  private _recoverRenderer(): void {
+    if (this.lastMapBlob) {
+      // Re-feed the cached state — recreates all GPU resources from scratch.
+      void this.renderer.loadMap(this.lastMapBlob, this.lastFog).then(() => {
+        if (this.lastFilter) this.renderer.setFilter(this.lastFilter);
+        if (this.lastView)   this.renderer.setView(this.lastView);
+        this.markerTexture.render(this.currentMarkers, this.playerIconCache);
+        this.renderer.markMarkersDirty();
+        this.setStatus('');
+      });
+    } else if (this.roomCode) {
+      // No cached blob yet (first load) — reconnect to get a fresh full_state.
+      this.connect(this.roomCode);
+    }
   }
 
   // ─── P2P ──────────────────────────────────────────────────────────────────
 
   private connect(roomCode: string): void {
+    this.roomCode = roomCode;
     this.setStatus('Connecting…');
 
     this.guest = new Guest({
@@ -118,15 +177,23 @@ export class PlayerApp {
       case 'full_state': {
         this.currentMapId   = msg.payload.map?.id ?? null;
         this.currentMarkers = msg.payload.markers ?? [];
+        this.sbSlots        = msg.payload.audio?.slots ?? [];
         if (mapBlob) {
+          this.lastMapBlob = mapBlob;
+          this.lastFog     = msg.payload.fog ?? { polygons: [] };
           this.renderer.loadMap(mapBlob, msg.payload.fog);
         } else {
           this.renderer.updateFog(msg.payload.fog);
+          this.lastFog = msg.payload.fog ?? { polygons: [] };
         }
+        if (msg.payload.filter) this.lastFilter = msg.payload.filter;
+        if (msg.payload.view)   this.lastView   = msg.payload.view;
         this.renderer.setFilter(msg.payload.filter);
         this.renderer.setView(msg.payload.view);
         void (async () => {
-          if (msg.iconData?.length) await this._decodeIconData(msg.iconData);
+          if (msg.iconData?.length)         await this._decodeIconData(msg.iconData);
+          if (msg.soundboardAssets?.length) this._cacheSoundboardAssets(msg.soundboardAssets);
+          if (msg.soundboardActive?.length) this._applySoundboardActive(msg.soundboardActive);
           this.markerTexture.render(this.currentMarkers, this.playerIconCache);
           this.renderer.markMarkersDirty();
         })();
@@ -136,17 +203,22 @@ export class PlayerApp {
 
       case 'map_change': {
         this.currentMapId = msg.payload.id;
-        // Update markers immediately so onMapLoaded renders the correct set.
         if (msg.markers !== undefined) this.currentMarkers = msg.markers;
+        if (msg.audio?.slots)          this.sbSlots = msg.audio.slots;
+        // Stop any playing audio from the previous map
+        this._stopAllSoundboard();
         if (mapBlob) {
           const fog    = msg.fog    ?? { polygons: [] };
           const filter = msg.filter;
           const view   = msg.view;
           const blob   = mapBlob;
+          this.lastMapBlob = blob;
+          this.lastFog     = fog;
+          if (filter) this.lastFilter = filter;
+          if (view)   this.lastView   = view;
           void (async () => {
-            // Decode any new custom icons before the transition so onMapLoaded
-            // has them ready in playerIconCache when it renders.
-            if (msg.iconData?.length) await this._decodeIconData(msg.iconData);
+            if (msg.iconData?.length)       await this._decodeIconData(msg.iconData);
+            if (msg.soundboardActive?.length) this._applySoundboardActive(msg.soundboardActive);
             await this.runTransition(msg.transition, async () => {
               await this.renderer.loadMap(blob, fog);
               if (filter) this.renderer.setFilter(filter);
@@ -158,6 +230,7 @@ export class PlayerApp {
       }
 
       case 'filter_update': {
+        this.lastFilter = msg.payload;
         this.renderer.setFilter(msg.payload);
         break;
       }
@@ -167,11 +240,13 @@ export class PlayerApp {
         // With seq deduplication the BC+PeerJS race is already prevented, but
         // this guard catches any edge case where mapId doesn't match.
         if (msg.mapId && msg.mapId !== this.currentMapId) break;
+        this.lastFog = msg.payload;
         this.renderer.updateFog(msg.payload);
         break;
       }
 
       case 'view_update': {
+        this.lastView = msg.payload;
         this.renderer.setView(msg.payload);
         break;
       }
@@ -186,9 +261,132 @@ export class PlayerApp {
         break;
       }
 
-      // Stub — not yet acted on
-      case 'audio_update':
+      case 'audio_update': {
+        // Slot configuration updated (assign/unassign, loop, volume)
+        this.sbSlots = msg.payload.slots ?? [];
+        // Stop any slots that are no longer assigned
+        for (const [slotId, el] of this.sbAudioEls.entries()) {
+          const slot = this.sbSlots.find((s) => s.id === slotId);
+          if (!slot?.assetId) { el.pause(); this.sbAudioEls.delete(slotId); }
+        }
         break;
+      }
+
+      case 'soundboard_play': {
+        if (mapBlob) {
+          // Audio delivered as binary chunks — create an object URL for it.
+          const objUrl = URL.createObjectURL(new Blob([mapBlob], { type: 'audio/mpeg' }));
+          this.sbAssetUrls.set(msg.assetId, objUrl);
+          this._sbPlay(msg.slotId, objUrl, msg.loop, msg.volume);
+        } else {
+          // Inline dataUrl (local BroadcastChannel) or cached replay.
+          if (msg.dataUrl) this.sbAssetUrls.set(msg.assetId, msg.dataUrl);
+          const url = this.sbAssetUrls.get(msg.assetId);
+          if (url) this._sbPlay(msg.slotId, url, msg.loop, msg.volume);
+        }
+        break;
+      }
+
+      case 'soundboard_stop': {
+        const el = this.sbAudioEls.get(msg.slotId);
+        if (el) { el.pause(); el.currentTime = 0; }
+        break;
+      }
+
+      case 'soundboard_asset': {
+        if (mapBlob) {
+          const objUrl = URL.createObjectURL(new Blob([mapBlob], { type: 'audio/mpeg' }));
+          this.sbAssetUrls.set(msg.assetId, objUrl);
+        } else if (msg.dataUrl) {
+          this.sbAssetUrls.set(msg.assetId, msg.dataUrl);
+        }
+        break;
+      }
+
+      case 'soundboard_mute_all': {
+        this.sbMuted = msg.muted;
+        for (const el of this.sbAudioEls.values()) el.muted = msg.muted;
+        break;
+      }
+    }
+  }
+
+  // ─── Soundboard ───────────────────────────────────────────────────────────
+
+  private _sbPlay(slotId: string, dataUrl: string, loop: boolean, volume: number): void {
+    let el = this.sbAudioEls.get(slotId);
+    if (!el) {
+      el = new Audio();
+      this.sbAudioEls.set(slotId, el);
+    }
+    if (el.src !== dataUrl) {
+      el.pause();
+      el.src = dataUrl;
+    }
+    el.currentTime = 0;
+    el.loop   = loop;
+    el.volume = Math.max(0, Math.min(1, volume));
+    el.muted  = this.sbMuted;
+    void el.play().catch(() => {
+      this._scheduleAudioResume();
+    });
+  }
+
+  private _stopAllSoundboard(): void {
+    for (const el of this.sbAudioEls.values()) { el.pause(); el.currentTime = 0; }
+  }
+
+  private _cacheSoundboardAssets(assets: { assetId: string; dataUrl?: string }[]): void {
+    for (const { assetId, dataUrl } of assets) {
+      if (dataUrl && !this.sbAssetUrls.has(assetId)) {
+        this.sbAssetUrls.set(assetId, dataUrl);
+      }
+      // Assets without a dataUrl here arrive via binary soundboard_asset messages below.
+    }
+  }
+
+  private _applySoundboardActive(active: SoundboardAudioData[]): void {
+    for (const item of active) {
+      // dataUrl may be absent (stripped for chunked binary delivery).
+      // Play from cache if available; individual soundboard_play messages follow.
+      if (item.dataUrl) this.sbAssetUrls.set(item.assetId, item.dataUrl);
+      const url = this.sbAssetUrls.get(item.assetId);
+      if (url) this._sbPlay(item.slotId, url, item.loop, item.volume);
+    }
+  }
+
+  private _scheduleAudioResume(): void {
+    if (this._audioResumeScheduled) return;
+    this._audioResumeScheduled = true;
+    const resume = () => {
+      this._audioResumeScheduled = false;
+      for (const el of this.sbAudioEls.values()) {
+        if (el.paused && el.src) void el.play().catch(() => {});
+      }
+    };
+    document.addEventListener('click',       resume, { once: true });
+    document.addEventListener('keydown',     resume, { once: true });
+    document.addEventListener('contextmenu', resume, { once: true });
+  }
+
+  private _toggleMute(): void {
+    this.sbMuted = !this.sbMuted;
+    for (const el of this.sbAudioEls.values()) el.muted = this.sbMuted;
+    this._showMuteIndicator();
+  }
+
+  private _showMuteIndicator(): void {
+    if (!this._muteIndicatorEl) {
+      const el = document.createElement('div');
+      el.className = 'mute-indicator';
+      document.body.appendChild(el);
+      this._muteIndicatorEl = el;
+    }
+    const el = this._muteIndicatorEl;
+    el.textContent = this.sbMuted ? '🔇 Muted' : '🔊 Audio on';
+    el.classList.remove('mute-indicator--hiding');
+    if (!this.sbMuted) {
+      setTimeout(() => { this._muteIndicatorEl?.classList.add('mute-indicator--hiding'); }, 1500);
     }
   }
 

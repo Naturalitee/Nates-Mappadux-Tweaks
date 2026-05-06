@@ -58,7 +58,24 @@ Dynamic Map Renderer v2 is a browser-based tool for tabletop roleplaying game GM
 - **Real-time sync** — all GM changes (map, fog, filter, view, markers, transition) push to connected players instantly.
 - **Room code** — three-word memorable code persists across reloads so players can reconnect.
 - **QR code** — scan to open the player view on a phone or tablet instantly. When running locally, uses your LAN IP so other devices on the same network can connect.
-- **Bundle import/export** — save and restore your entire map library (images + fog + filter settings) as a single `.json` file.
+- **Soundboard** — play ambient audio and sound effects to connected players from the Soundboard panel:
+  - Up to 8 configurable slots per page, with unlimited pages.
+  - **Assign sounds** — click any slot to open the sound picker:
+    - **My Library** — browse and manage previously saved sounds; filter by name.
+    - **Freesound Search** — search [freesound.org](https://freesound.org) by keyword with optional duration filter. Preview before importing. Requires a free Freesound API key (paste it into the search tab — it's saved to your browser).
+    - **Upload** — drag and drop any local audio file, or click to browse. Uploaded sounds are stored in IndexedDB and embedded in your bundle export.
+  - **Playback modes** — two toggles per slot, combinable:
+    - **Loop** 🔄 — plays continuously until stopped; auto-resumes when you return to the map.
+    - **Random** 🎲 — fires one-shot plays at randomised intervals. A frequency slider sets the target rate (1–100 plays per 10 minutes); the actual timing is randomised around that target so the soundscape never feels mechanical. Works like a simulated GM pressing play at the right moment. Both loop and random state persist across map switches.
+  - **Volume** — per-slot volume slider.
+  - **Per-map loop persistence** — looping sounds that were playing when you left a map auto-resume when you return to it.
+  - **Broadcast to players** — toggle whether audio is sent to connected players (on by default). Turning it off leaves your local preview unaffected.
+  - **Mute all** — silences all audio on the GM side instantly without stopping playback state.
+  - **Player mute** — players can right-click the player screen at any time to toggle their own audio mute. A badge indicator (🔇 / 🔊) confirms the action.
+  - **Attributions** — the ℹ Attributions button lists all CC-BY sounds currently in use, with full credit text ready to copy.
+  - **Preloading** — all sounds assigned to a map are cached on the player client when the map loads, so playback starts instantly with no buffering delay.
+
+- **Bundle import/export** — save and restore your entire map library (images, fog, filter settings, and uploaded audio files) as a single `.json` file.
 - **Auto-save** — all per-map settings (fog polygons, filter, view position, background colour) save automatically to browser IndexedDB.
 - **PWA support** — installable as an app on desktop and mobile.
 - **GPU-efficient rendering** — static filters render only on change; animated filters run at full frame rate only when needed.
@@ -107,7 +124,8 @@ For other hosts, ensure those two COOP/COEP headers are set on all responses, an
    - Share the room code or QR code with players, or click **Open Player Window** for a local second screen.
    - Draw fog polygons, choose a filter, set a transition, and adjust the player view.
    - Add markers via the Markers panel or by right-clicking the map; drag to reposition.
-   - Use **Save to File** to back up your map library (including custom icons); **Load Maps File** to restore it.
+   - Use the Soundboard panel to play ambient sound and effects to players.
+   - Use **Save to File** to back up your map library (including custom icons and uploaded audio); **Load Maps File** to restore it.
 
 2. **Player view** — open `<your URL>/player`, enter the room code, and connect.
    - The player sees whatever the GM is showing, filtered, cropped, and transitioned as the GM sets it.
@@ -126,8 +144,11 @@ The app imports this bundle automatically the first time a user opens it with an
 
 ```
 src/
-  gm/           GM interface (GMApp, StateManager, FogEditor, MapManager, MarkerEditor, IconPicker)
+  gm/           GM interface (GMApp, StateManager, FogEditor, MapManager, MarkerEditor,
+                              IconPicker, SoundboardPanel, FreesoundModal)
   player/       Player interface (PlayerApp)
+  audio/        Soundboard engine, asset store, and Freesound API client
+                (SoundboardEngine, AudioAssetStore, FreesoundClient)
   rendering/    Three.js renderer + EffectComposer pipeline (Renderer, MarkerLayer, MarkerTexture)
   filters/      Filter registry, panel UI, and per-filter definitions
     definitions/
@@ -148,7 +169,7 @@ src/
       scanline/
       static_dissolve/
   p2p/          PeerJS host/guest session management + local BroadcastChannel fallback
-  storage/      IndexedDB wrapper (maps, configs, assets), bundle import/export
+  storage/      IndexedDB wrapper (maps, configs, assets, audio), bundle import/export
   styles/       CSS
 public/
   default-bundle.json   (optional — pre-loaded maps for first-time users)
@@ -164,8 +185,7 @@ player.html     Player entry point
 
 ## Future Plans
 
-1. **Audio** — ambient sound tied to maps or locations (e.g. Aliens-style motion tracker pings).
-2. **Lighting** — dynamic light radius effects around tokens.
+1. **Lighting** — dynamic light radius effects around tokens.
 
 See [CHANGELOG.md](./CHANGELOG.md) for release history.
 

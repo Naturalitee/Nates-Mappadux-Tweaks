@@ -107,16 +107,56 @@ export function defaultMarker(id: string, x = 0.5, y = 0.5): Marker {
   };
 }
 
-// ─── Audio (stub — typed for Phase 2+) ───────────────────────────────────────
+// ─── Audio / Soundboard ──────────────────────────────────────────────────────
+
+export const SOUNDBOARD_PAGE_SIZE = 8;
+
+/** A single slot in the per-map soundboard (up to N per page). */
+export interface SoundboardSlot {
+  id:      string;
+  assetId: string | null; // references AudioAsset.id in global audioAssets store
+  label:   string;        // display name; defaults to asset name on assign
+  loop:    boolean;
+  volume:  number;        // 0–1
+  /** Random auto-play mode — fires one-shots at a randomised interval. */
+  random?:     boolean;
+  /** Target plays per 10 minutes (1–100) when random=true. */
+  randomFreq?: number;
+  /** Persisted active state — loop: should auto-resume on map load; random: scheduler should restart on map load. */
+  playing?: boolean;
+}
 
 export interface AudioState {
-  activeAmbientId: string | null;
-  volume: number;
+  slots: SoundboardSlot[];
   motionTracker: {
     enabled:        boolean;
     sourceMarkerId: string | null;
     playerMarkerId: string | null;
   } | null;
+}
+
+/** Global audio asset (lives in audioAssets IDB store — not per-map). */
+export interface AudioAsset {
+  id:                  string;
+  name:                string;
+  source:              'freesound' | 'upload';
+  freesoundId?:        number;
+  freesoundPreviewUrl?: string; // preview-hq-mp3 — used for re-download
+  freesoundPageUrl?:   string;  // canonical Freesound page
+  username?:           string;
+  license?:            string;  // human-readable, e.g. "CC0" or "CC-BY"
+  attribution?:        string;  // "Sound: [name] by [username] via Freesound"
+  durationSecs?:       number;
+  addedAt:             number;
+}
+
+/** Carries a playing slot's audio data over P2P for new joiners / map changes. */
+export interface SoundboardAudioData {
+  slotId:  string;
+  assetId: string;
+  loop:    boolean;
+  volume:  number;
+  dataUrl: string; // data:audio/mpeg;base64,…
 }
 
 // ─── Transitions ─────────────────────────────────────────────────────────────
@@ -154,8 +194,7 @@ export function defaultSessionState(): SessionState {
     fog: { polygons: [] },
     markers: [],
     audio: {
-      activeAmbientId: null,
-      volume: 1.0,
+      slots: [],
       motionTracker: null,
     },
   };
@@ -171,6 +210,10 @@ export interface MsgFullState {
   mapBlob?: ArrayBuffer;
   /** Custom icon blobs for any asset: icons in the session's markers */
   iconData?: MarkerIconData[];
+  /** Audio data for slots that are currently playing */
+  soundboardActive?: SoundboardAudioData[];
+  /** All loaded audio assets — preloaded so sounds start instantly on first play */
+  soundboardAssets?: { assetId: string; dataUrl?: string }[];
 }
 
 export interface MsgViewUpdate {
@@ -202,13 +245,19 @@ export interface MsgMapChange {
   /** Fog state for the incoming map — applied atomically when texture finishes loading */
   fog?: FogState;
   /**
-   * Filter, view, markers, and icon data for the incoming map — all carried here
+   * Filter, view, markers, icon data, and audio for the incoming map — all carried here
    * so the player can apply them atomically at the transition midpoint.
    */
   filter?: FilterState;
   view?: ViewState;
   markers?: Marker[];
   iconData?: MarkerIconData[];
+  /** Soundboard slot configuration for the incoming map */
+  audio?: AudioState;
+  /** Audio data for slots that are currently playing on the incoming map */
+  soundboardActive?: SoundboardAudioData[];
+  /** All loaded audio assets for the incoming map — preloaded for instant playback */
+  soundboardAssets?: { assetId: string; dataUrl?: string }[];
   mapBlob: ArrayBuffer;
   transition?: TransitionConfig;
 }
@@ -227,10 +276,41 @@ export interface MsgMarkerUpdate {
   iconData?: MarkerIconData[];
 }
 
-/** Stub: wired in protocol but not yet acted on by player */
+/** Slot configuration update (assign/unassign, loop/volume changes — not play/stop) */
 export interface MsgAudioUpdate {
   type: 'audio_update';
   payload: AudioState;
+}
+
+/** GM started playing a soundboard slot; players should start audio */
+export interface MsgSoundboardPlay {
+  type: 'soundboard_play';
+  slotId:  string;
+  assetId: string;
+  loop:    boolean;
+  volume:  number;
+  /** Data URL for the audio; omitted if player already has it cached by assetId */
+  dataUrl?: string;
+}
+
+/** GM stopped a soundboard slot */
+export interface MsgSoundboardStop {
+  type: 'soundboard_stop';
+  slotId: string;
+}
+
+/** GM toggled master mute — all player audio should pause/resume accordingly */
+export interface MsgSoundboardMuteAll {
+  type: 'soundboard_mute_all';
+  muted: boolean;
+}
+
+/** Preloads an audio asset on the player without starting playback */
+export interface MsgSoundboardAsset {
+  type: 'soundboard_asset';
+  assetId: string;
+  /** Data URL for audio; absent on PeerJS path where data arrives as binary */
+  dataUrl?: string;
 }
 
 export type GMMessage =
@@ -240,7 +320,11 @@ export type GMMessage =
   | MsgFilterUpdate
   | MsgMapChange
   | MsgMarkerUpdate
-  | MsgAudioUpdate;
+  | MsgAudioUpdate
+  | MsgSoundboardPlay
+  | MsgSoundboardStop
+  | MsgSoundboardMuteAll
+  | MsgSoundboardAsset;
 
 // ─── Storage types ───────────────────────────────────────────────────────────
 

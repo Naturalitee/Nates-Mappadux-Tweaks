@@ -1,5 +1,5 @@
 import Peer, { type DataConnection } from 'peerjs';
-import type { GMMessage, SessionState, MarkerIconData } from '../types.ts';
+import type { GMMessage, SessionState, MarkerIconData, SoundboardAudioData } from '../types.ts';
 import { LocalChannel } from './LocalChannel.ts';
 import { generateRoomCode } from './roomCode.ts';
 
@@ -25,9 +25,11 @@ export class Host {
   private connections = new Map<string, DataConnection>();
   private local: LocalChannel;
   private events: HostEvents;
-  private lastState: SessionState | null = null;
-  private lastMapBlob: ArrayBuffer | null = null;
-  private lastIconData: MarkerIconData[] = [];
+  private lastState:            SessionState | null = null;
+  private lastMapBlob:          ArrayBuffer | null = null;
+  private lastIconData:         MarkerIconData[] = [];
+  private lastSoundboardActive: SoundboardAudioData[] = [];
+  private lastSoundboardAssets: { assetId: string; dataUrl: string }[] = [];
   /** Monotonically-increasing sequence number stamped on every broadcast.
    *  Players use this to deduplicate the same message arriving via both
    *  BroadcastChannel and PeerJS (local windows receive both). */
@@ -69,8 +71,10 @@ export class Host {
         const msg: GMMessage = {
           type: 'full_state',
           payload: this.lastState,
-          ...(this.lastMapBlob                  ? { mapBlob:  this.lastMapBlob  } : {}),
-          ...(this.lastIconData.length > 0      ? { iconData: this.lastIconData } : {}),
+          ...(this.lastMapBlob                         ? { mapBlob:          this.lastMapBlob          } : {}),
+          ...(this.lastIconData.length > 0             ? { iconData:         this.lastIconData          } : {}),
+          ...(this.lastSoundboardActive.length > 0     ? { soundboardActive: this.lastSoundboardActive } : {}),
+          ...(this.lastSoundboardAssets.length > 0     ? { soundboardAssets: this.lastSoundboardAssets } : {}),
         };
         this.local.send(msg);
       }
@@ -96,13 +100,25 @@ export class Host {
 
     this.local.send(tagged);
 
-    // Cache latest state + blob for new joiners
+    // Keep cached state current for new joiners.
     if (msg.type === 'full_state') {
       this.lastState = msg.payload;
       if (msg.mapBlob) this.lastMapBlob = msg.mapBlob;
     }
     if (msg.type === 'map_change') {
       this.lastMapBlob = msg.mapBlob;
+      // Map change stops all previous sounds; new map's sounds arrive via soundboard_play below.
+      this.lastSoundboardActive = [];
+    }
+    // Track individual play/stop so late-joining players hear active sounds.
+    if (msg.type === 'soundboard_play' && msg.dataUrl) {
+      this.lastSoundboardActive = [
+        ...this.lastSoundboardActive.filter((s) => s.slotId !== msg.slotId),
+        { slotId: msg.slotId, assetId: msg.assetId, loop: msg.loop, volume: msg.volume, dataUrl: msg.dataUrl },
+      ];
+    }
+    if (msg.type === 'soundboard_stop') {
+      this.lastSoundboardActive = this.lastSoundboardActive.filter((s) => s.slotId !== msg.slotId);
     }
 
     for (const conn of this.connections.values()) {
@@ -111,10 +127,21 @@ export class Host {
   }
 
   /** Update the cached state (call whenever GM state changes) */
-  updateState(state: SessionState, mapBlob?: ArrayBuffer, iconData?: MarkerIconData[]): void {
+  updateState(
+    state: SessionState,
+    mapBlob?: ArrayBuffer,
+    iconData?: MarkerIconData[],
+    soundboardActive?: SoundboardAudioData[],
+  ): void {
     this.lastState = state;
-    if (mapBlob)    this.lastMapBlob  = mapBlob;
-    if (iconData)   this.lastIconData = iconData;
+    if (mapBlob !== undefined)          this.lastMapBlob          = mapBlob;
+    if (iconData !== undefined)         this.lastIconData          = iconData;
+    if (soundboardActive !== undefined) this.lastSoundboardActive  = soundboardActive;
+  }
+
+  /** Update the preload asset cache — called whenever blobs finish loading in SoundboardPanel */
+  updateSoundboardAssets(assets: { assetId: string; dataUrl: string }[]): void {
+    this.lastSoundboardAssets = assets;
   }
 
   destroy(): void {
@@ -136,8 +163,10 @@ export class Host {
         const msg: GMMessage = {
           type: 'full_state',
           payload: this.lastState,
-          ...(this.lastMapBlob             ? { mapBlob:  this.lastMapBlob  } : {}),
-          ...(this.lastIconData.length > 0 ? { iconData: this.lastIconData } : {}),
+          ...(this.lastMapBlob                         ? { mapBlob:          this.lastMapBlob          } : {}),
+          ...(this.lastIconData.length > 0             ? { iconData:         this.lastIconData          } : {}),
+          ...(this.lastSoundboardActive.length > 0     ? { soundboardActive: this.lastSoundboardActive } : {}),
+          ...(this.lastSoundboardAssets.length > 0     ? { soundboardAssets: this.lastSoundboardAssets } : {}),
         };
         this.sendTo(conn, msg);
       }
@@ -157,21 +186,90 @@ export class Host {
   private sendTo(conn: DataConnection, msg: GMMessage): void {
     const { mapBlob, ...rest } = msg as { mapBlob?: ArrayBuffer } & GMMessage;
 
-    // IMPORTANT: send __blob_start__ FIRST so the player sets blobTotal
-    // BEFORE receiving the JSON message that triggers waiting for the blob.
-    if (mapBlob && mapBlob.byteLength > 0) {
-      const total = Math.ceil(mapBlob.byteLength / CHUNK_SIZE);
-      conn.send(JSON.stringify({ type: '__blob_start__', total }));
+    // Audio data URLs are too large for a single data-channel JSON frame (> 16 KB).
+    // Strip them out and deliver as binary chunks, same pattern as map blobs.
+
+    // For soundboard_play: strip dataUrl, send binary after the JSON.
+    let audioBuffer: ArrayBuffer | undefined;
+    let jsonMsg: Record<string, unknown> = rest as Record<string, unknown>;
+    if (rest.type === 'soundboard_play' && rest.dataUrl) {
+      audioBuffer = this._dataUrlToBuffer(rest.dataUrl);
+      const { dataUrl: _d, ...noUrl } = rest;
+      void _d;
+      jsonMsg = noUrl as Record<string, unknown>;
     }
 
-    conn.send(JSON.stringify(rest));
+    // For full_state / map_change: strip dataUrls from soundboardActive and soundboardAssets;
+    // deliver them as binary chunks after the main JSON message.
+    let activeSounds:  Array<{ meta: Record<string, unknown>; buf: ArrayBuffer }> = [];
+    let assetMessages: Array<{ assetId: string; buf: ArrayBuffer }> = [];
+    if ((rest.type === 'full_state' || rest.type === 'map_change') && rest.soundboardActive?.length) {
+      activeSounds = rest.soundboardActive
+        .filter((item) => !!item.dataUrl)
+        .map((item) => ({
+          meta: { type: 'soundboard_play', slotId: item.slotId, assetId: item.assetId, loop: item.loop, volume: item.volume },
+          buf:  this._dataUrlToBuffer(item.dataUrl),
+        }));
+      jsonMsg = {
+        ...jsonMsg,
+        soundboardActive: rest.soundboardActive.map(({ dataUrl: _d, ...item }) => { void _d; return item; }),
+      };
+    }
+    if ((rest.type === 'full_state' || rest.type === 'map_change') && rest.soundboardAssets?.length) {
+      // Skip assets already being sent as soundboard_play (active sounds).
+      const activeIds = new Set(activeSounds.map((s) => (s.meta as Record<string, unknown>)['assetId'] as string));
+      assetMessages = rest.soundboardAssets
+        .filter((a) => !!a.dataUrl && !activeIds.has(a.assetId))
+        .map((a) => ({ assetId: a.assetId, buf: this._dataUrlToBuffer(a.dataUrl!) }));
+      // Strip dataUrls — data travels as binary.
+      jsonMsg = {
+        ...jsonMsg,
+        soundboardAssets: rest.soundboardAssets.map(({ dataUrl: _d, ...a }) => { void _d; return a; }),
+      };
+    }
+
+    // Send map blob header BEFORE JSON so the player sets blobTotal first.
+    if (mapBlob && mapBlob.byteLength > 0) {
+      conn.send(JSON.stringify({ type: '__blob_start__', total: Math.ceil(mapBlob.byteLength / CHUNK_SIZE) }));
+    } else if (audioBuffer && audioBuffer.byteLength > 0) {
+      conn.send(JSON.stringify({ type: '__blob_start__', total: Math.ceil(audioBuffer.byteLength / CHUNK_SIZE) }));
+    }
+
+    conn.send(JSON.stringify(jsonMsg));
 
     if (mapBlob && mapBlob.byteLength > 0) {
-      const total = Math.ceil(mapBlob.byteLength / CHUNK_SIZE);
-      for (let i = 0; i < total; i++) {
-        const chunk = mapBlob.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE);
-        conn.send(chunk);
-      }
+      this._sendChunks(conn, mapBlob);
+    } else if (audioBuffer && audioBuffer.byteLength > 0) {
+      this._sendChunks(conn, audioBuffer);
     }
+
+    // Send active sounds as separate chunked soundboard_play messages.
+    for (const { meta, buf } of activeSounds) {
+      conn.send(JSON.stringify({ type: '__blob_start__', total: Math.ceil(buf.byteLength / CHUNK_SIZE) }));
+      conn.send(JSON.stringify(meta));
+      this._sendChunks(conn, buf);
+    }
+
+    // Send non-playing assets as soundboard_asset messages for preloading.
+    for (const { assetId, buf } of assetMessages) {
+      conn.send(JSON.stringify({ type: '__blob_start__', total: Math.ceil(buf.byteLength / CHUNK_SIZE) }));
+      conn.send(JSON.stringify({ type: 'soundboard_asset', assetId }));
+      this._sendChunks(conn, buf);
+    }
+  }
+
+  private _sendChunks(conn: DataConnection, buf: ArrayBuffer): void {
+    const total = Math.ceil(buf.byteLength / CHUNK_SIZE);
+    for (let i = 0; i < total; i++) {
+      conn.send(buf.slice(i * CHUNK_SIZE, (i + 1) * CHUNK_SIZE));
+    }
+  }
+
+  private _dataUrlToBuffer(dataUrl: string): ArrayBuffer {
+    const base64 = dataUrl.split(',')[1] ?? '';
+    const binary = atob(base64);
+    const buf = new Uint8Array(binary.length);
+    for (let i = 0; i < binary.length; i++) buf[i] = binary.charCodeAt(i);
+    return buf.buffer;
   }
 }

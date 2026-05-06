@@ -66,6 +66,34 @@
       </div>
     </section>
 
+    <section class="panel" id="soundboard-panel">
+      <button type="button" class="panel-title" aria-expanded="false">Soundboard</button>
+      <div class="panel-body" hidden>
+        <div class="param-row param-row--toggle sb-mute-row">
+          <label for="mute-all-toggle">Mute all</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="mute-all-toggle" />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div class="param-row param-row--toggle sb-remote-row">
+          <label for="remote-audio-toggle">Broadcast to players</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="remote-audio-toggle" checked />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div id="soundboard-pagination" class="sb-pagination">
+          <button id="sb-prev-btn" class="btn btn--ghost btn--sm">←</button>
+          <span id="sb-page-label">Page 1 / 1</span>
+          <button id="sb-next-btn" class="btn btn--ghost btn--sm">→</button>
+        </div>
+        <div id="soundboard-slots"></div>
+        <button id="sb-add-slot-btn" class="btn btn--ghost btn--sm btn--full">+ Add Slot</button>
+        <button id="sb-attributions-btn" class="btn btn--ghost btn--xs btn--full sb-attr-btn">ℹ Attributions</button>
+      </div>
+    </section>
+
     <section class="panel" id="markers-panel">
       <button type="button" class="panel-title" aria-expanded="false">Markers</button>
       <div class="panel-body" hidden>
@@ -168,6 +196,78 @@
       <button id="ctx-add-marker">Add marker here</button>
     </div>
   </main>
+
+  <!-- Freesound / sound picker modal -->
+  <div id="freesound-modal" class="modal-overlay" hidden>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <span class="modal-title">Add Sound</span>
+        <button id="modal-close-btn" class="modal-close">×</button>
+      </div>
+      <div class="modal-tabs">
+        <button class="modal-tab active" data-tab="library">My Library</button>
+        <button class="modal-tab" data-tab="search">Freesound Search</button>
+        <button class="modal-tab" data-tab="upload">Upload</button>
+      </div>
+      <div class="modal-body">
+        <div id="tab-library" class="tab-content">
+          <div class="modal-search-row">
+            <input type="text" id="library-search" class="modal-search-input" placeholder="Filter library…" />
+          </div>
+          <div id="library-list" class="sound-list"></div>
+          <p id="library-empty" class="sound-list-empty" hidden>No sounds in library yet. Use Freesound Search to add some, or upload your own.</p>
+        </div>
+        <div id="tab-upload" class="tab-content" hidden>
+          <div id="upload-drop-zone" class="upload-drop-zone">
+            <p class="upload-drop-label">Drop an audio file here<br>or click to browse</p>
+            <input type="file" id="upload-file-input" accept="audio/*" hidden />
+          </div>
+          <div id="upload-file-info" class="upload-file-info" hidden>
+            <div class="modal-search-row">
+              <input type="text" id="upload-name-input" class="modal-search-input" placeholder="Sound name…" />
+            </div>
+            <p class="upload-license-note">License: Unknown / Manual import</p>
+            <div class="upload-actions">
+              <button id="upload-add-btn" class="btn btn--primary btn--sm">Add to Library</button>
+              <button id="upload-clear-btn" class="btn btn--ghost btn--sm">Clear</button>
+            </div>
+          </div>
+        </div>
+        <div id="tab-search" class="tab-content" hidden>
+          <div class="modal-search-row">
+            <input type="text" id="fs-search-input" class="modal-search-input" placeholder="Search Freesound…" />
+            <select id="fs-duration-select" class="modal-select"></select>
+            <button id="fs-search-btn" class="btn btn--primary btn--sm">Search</button>
+          </div>
+          <div id="fs-results" class="sound-list"></div>
+          <p id="fs-status" class="fs-status"></p>
+          <div class="fs-api-section">
+            <label class="fs-api-label">Freesound API Key</label>
+            <div class="fs-api-row">
+              <input type="password" id="fs-api-key" class="fs-api-input" placeholder="Paste your API key here…" autocomplete="off" />
+              <button id="fs-save-key-btn" class="btn btn--ghost btn--sm">Save</button>
+            </div>
+            <p class="fs-api-hint">Get a free key at <span class="fs-api-link">freesound.org/apiv2/apply</span></p>
+            <p class="fs-api-hint">Your API key is saved in this browser only — it is not included in bundle exports.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Attributions modal -->
+  <div id="attributions-modal" class="modal-overlay" hidden>
+    <div class="modal-dialog modal-dialog--sm">
+      <div class="modal-header">
+        <span class="modal-title">Sound Attributions</span>
+        <button id="attr-modal-close" class="modal-close">×</button>
+      </div>
+      <div class="modal-body">
+        <p class="attr-intro">These credits are required when sharing recordings that used CC-BY sounds.</p>
+        <div id="attr-list" class="attr-list"></div>
+      </div>
+    </div>
+  </div>
 
   <script type="module" src="/src/main.ts"></script>
 </body>
