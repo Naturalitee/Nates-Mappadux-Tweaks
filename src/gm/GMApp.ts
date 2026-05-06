@@ -16,7 +16,8 @@ import { generateRoomCode } from '../p2p/roomCode.ts';
 import { saveSession, loadSession, getAllMaps, deleteMap } from '../storage/db.ts';
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { exportBundle, importBundle } from '../storage/bundleIO.ts';
-import type { SessionState, StoredMap, TransitionConfig, Marker, MarkerIconData } from '../types.ts';
+import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
+import type { SessionState, StoredMap, TransitionConfig, Marker, MarkerIconData, AudioAsset, MarkerRole } from '../types.ts';
 import QRCode from 'qrcode';
 
 const REMOTE_AUDIO_KEY = 'dmr_remote_audio';
@@ -340,6 +341,10 @@ export class GMApp {
       mapBlob:    blob,
       transition: this.buildTransitionConfig(),
     });
+
+    // Preload and broadcast audio buffers for audio_source markers on this map.
+    // This populates the Host cache so late-joining players also receive the buffers.
+    void this._preloadMarkerAudio(this.state.getState().markers);
   }
 
   // ─── DOM binding ──────────────────────────────────────────────────────────
@@ -785,6 +790,42 @@ export class GMApp {
     this.markerShowLabelToggle.addEventListener('change', () => {
       this.updateSelectedMarker({ showLabel: this.markerShowLabelToggle.checked });
     });
+
+    // Role selector
+    document.querySelectorAll<HTMLElement>('.marker-role-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!this.selectedMarkerId) return;
+        const role = btn.dataset['role'] as MarkerRole;
+        // Enforce single listener — demote any other listener in the same pass
+        const markers = this.state.getState().markers.map((m) => {
+          if (m.id === this.selectedMarkerId) return { ...m, role };
+          if (role === 'listener' && m.role === 'listener') return { ...m, role: 'default' as MarkerRole };
+          return m;
+        });
+        this.state.setMarkers(markers);
+      });
+    });
+
+    // Sound assignment
+    document.querySelector('#marker-sound-btn')?.addEventListener('click', () => {
+      this.soundboardPanel.audioModal.open((asset) => {
+        void this._assignMarkerAudio(asset);
+      });
+    });
+
+    // Audio muted toggle
+    document.querySelector<HTMLInputElement>('#marker-audio-muted')?.addEventListener('change', (e) => {
+      this.updateSelectedMarker({ audioMuted: (e.target as HTMLInputElement).checked });
+    });
+
+    // Max range slider
+    const maxDistInput = document.querySelector<HTMLInputElement>('#marker-max-dist');
+    const maxDistVal   = document.querySelector<HTMLElement>('#marker-max-dist-val');
+    maxDistInput?.addEventListener('input', () => {
+      const val = parseFloat(maxDistInput.value);
+      if (maxDistVal) maxDistVal.textContent = val.toFixed(2);
+      this.updateSelectedMarker({ audioMaxDistance: val });
+    });
   }
 
   private updateSelectedMarker(patch: Partial<Marker>): void {
@@ -793,6 +834,46 @@ export class GMApp {
       m.id === this.selectedMarkerId ? { ...m, ...patch } : m
     );
     this.state.setMarkers(markers);
+  }
+
+  private async _assignMarkerAudio(asset: AudioAsset): Promise<void> {
+    if (!this.selectedMarkerId) return;
+    this.updateSelectedMarker({ audioTrackId: asset.id });
+    const blob = await AudioAssetStore.getBlob(asset);
+    if (!blob) return;
+    const dataUrl = await this._blobToDataUrl(blob);
+    this.host.broadcast({
+      type:     'marker_audio_asset',
+      markerId: this.selectedMarkerId,
+      assetId:  asset.id,
+      dataUrl,
+    });
+  }
+
+  private _blobToDataUrl(blob: Blob): Promise<string> {
+    return new Promise((resolve) => {
+      const reader = new FileReader();
+      reader.onload = () => resolve(reader.result as string);
+      reader.readAsDataURL(blob);
+    });
+  }
+
+  private async _preloadMarkerAudio(markers: Marker[]): Promise<void> {
+    const all = await AudioAssetStore.getAll();
+    for (const m of markers) {
+      if (m.role !== 'audio_source' || !m.audioTrackId) continue;
+      const asset = all.find((a) => a.id === m.audioTrackId);
+      if (!asset) continue;
+      const blob = await AudioAssetStore.getBlob(asset);
+      if (!blob) continue;
+      const dataUrl = await this._blobToDataUrl(blob);
+      this.host.broadcast({
+        type:     'marker_audio_asset',
+        markerId: m.id,
+        assetId:  m.audioTrackId,
+        dataUrl,
+      });
+    }
   }
 
   private bindSoundboardPanel(): void {
@@ -882,7 +963,6 @@ export class GMApp {
         const bmp = this.iconPicker.iconCache.get(sel.icon);
         const img = document.createElement('img');
         if (bmp) {
-          // Use a temporary canvas to get a data URL for the img src
           const cv = document.createElement('canvas');
           cv.width = 20; cv.height = 20;
           cv.getContext('2d')!.drawImage(bmp, 0, 0, 20, 20);
@@ -891,6 +971,26 @@ export class GMApp {
         this.markerIconBtn.appendChild(img);
       } else {
         this.markerIconBtn.textContent = sel.icon;
+      }
+
+      // Role buttons
+      document.querySelectorAll<HTMLElement>('.marker-role-btn').forEach((btn) => {
+        btn.classList.toggle('marker-role-btn--active', btn.dataset['role'] === sel.role);
+      });
+
+      // Audio controls — only visible for audio_source role
+      const audioControlsEl = document.querySelector<HTMLElement>('#marker-audio-controls');
+      if (audioControlsEl) audioControlsEl.hidden = sel.role !== 'audio_source';
+
+      if (sel.role === 'audio_source') {
+        const mutedToggle  = document.querySelector<HTMLInputElement>('#marker-audio-muted');
+        const maxDistInput = document.querySelector<HTMLInputElement>('#marker-max-dist');
+        const maxDistVal   = document.querySelector<HTMLElement>('#marker-max-dist-val');
+        const soundBtn     = document.querySelector<HTMLButtonElement>('#marker-sound-btn');
+        if (mutedToggle)  mutedToggle.checked     = sel.audioMuted;
+        if (maxDistInput) maxDistInput.value       = String(sel.audioMaxDistance);
+        if (maxDistVal)   maxDistVal.textContent   = sel.audioMaxDistance.toFixed(2);
+        if (soundBtn)     soundBtn.textContent     = sel.audioTrackId ? 'Change Sound' : 'Assign Sound';
       }
     }
   }

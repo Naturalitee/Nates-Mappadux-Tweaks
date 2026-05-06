@@ -30,6 +30,8 @@ export class Host {
   private lastIconData:         MarkerIconData[] = [];
   private lastSoundboardActive: SoundboardAudioData[] = [];
   private lastSoundboardAssets: { assetId: string; dataUrl: string }[] = [];
+  /** markerId → audio asset — delivered to new joiners after full_state */
+  private lastMarkerAudioAssets = new Map<string, { markerId: string; assetId: string; dataUrl: string }>();
   /** Monotonically-increasing sequence number stamped on every broadcast.
    *  Players use this to deduplicate the same message arriving via both
    *  BroadcastChannel and PeerJS (local windows receive both). */
@@ -77,6 +79,15 @@ export class Host {
           ...(this.lastSoundboardAssets.length > 0     ? { soundboardAssets: this.lastSoundboardAssets } : {}),
         };
         this.local.send(msg);
+        // Deliver cached marker audio assets inline (BroadcastChannel supports large payloads)
+        for (const asset of this.lastMarkerAudioAssets.values()) {
+          this.local.send({
+            type: 'marker_audio_asset',
+            markerId: asset.markerId,
+            assetId: asset.assetId,
+            dataUrl: asset.dataUrl,
+          });
+        }
       }
     });
   }
@@ -109,6 +120,13 @@ export class Host {
       this.lastMapBlob = msg.mapBlob;
       // Map change stops all previous sounds; new map's sounds arrive via soundboard_play below.
       this.lastSoundboardActive = [];
+      // Clear marker audio cache — new map may have different audio_source markers.
+      this.lastMarkerAudioAssets.clear();
+    }
+    if (msg.type === 'marker_audio_asset' && msg.dataUrl) {
+      this.lastMarkerAudioAssets.set(msg.markerId, {
+        markerId: msg.markerId, assetId: msg.assetId, dataUrl: msg.dataUrl,
+      });
     }
     // Track individual play/stop so late-joining players hear active sounds.
     if (msg.type === 'soundboard_play' && msg.dataUrl) {
@@ -169,6 +187,15 @@ export class Host {
           ...(this.lastSoundboardAssets.length > 0     ? { soundboardAssets: this.lastSoundboardAssets } : {}),
         };
         this.sendTo(conn, msg);
+        // Deliver cached marker audio assets as chunked binary messages
+        for (const asset of this.lastMarkerAudioAssets.values()) {
+          this.sendTo(conn, {
+            type: 'marker_audio_asset',
+            markerId: asset.markerId,
+            assetId: asset.assetId,
+            dataUrl: asset.dataUrl,
+          });
+        }
       }
     });
 
@@ -189,10 +216,15 @@ export class Host {
     // Audio data URLs are too large for a single data-channel JSON frame (> 16 KB).
     // Strip them out and deliver as binary chunks, same pattern as map blobs.
 
-    // For soundboard_play: strip dataUrl, send binary after the JSON.
+    // For soundboard_play / marker_audio_asset: strip dataUrl, send binary after the JSON.
     let audioBuffer: ArrayBuffer | undefined;
     let jsonMsg: Record<string, unknown> = rest as Record<string, unknown>;
     if (rest.type === 'soundboard_play' && rest.dataUrl) {
+      audioBuffer = this._dataUrlToBuffer(rest.dataUrl);
+      const { dataUrl: _d, ...noUrl } = rest;
+      void _d;
+      jsonMsg = noUrl as Record<string, unknown>;
+    } else if (rest.type === 'marker_audio_asset' && rest.dataUrl) {
       audioBuffer = this._dataUrlToBuffer(rest.dataUrl);
       const { dataUrl: _d, ...noUrl } = rest;
       void _d;

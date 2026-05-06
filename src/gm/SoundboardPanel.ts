@@ -36,6 +36,8 @@ export class SoundboardPanel {
   private onBroadcast:    (msg: SoundboardBroadcast) => void;
   /** Fired after _loadBlobs() finishes — lets GMApp update Host with current asset list */
   onAssetsLoaded: (() => void) | null = null;
+  /** Shared FreesoundModal instance — GMApp may open it with a custom callback for marker audio. */
+  get audioModal(): FreesoundModal { return this.modal; }
 
   constructor(
     engine: SoundboardEngine,

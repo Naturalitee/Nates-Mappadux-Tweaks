@@ -1,6 +1,7 @@
 import { Guest } from '../p2p/Guest.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { MarkerTexture } from '../rendering/MarkerTexture.ts';
+import { PositionalAudioEngine } from '../audio/PositionalAudioEngine.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
 import { TransitionEngine } from '../transitions/TransitionEngine.ts';
 import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
@@ -38,6 +39,7 @@ export class PlayerApp {
   /** Master mute flag */
   private sbMuted = false;
   private _audioResumeScheduled = false;
+  private positionalAudio = new PositionalAudioEngine();
   private _muteIndicatorEl: HTMLElement | null = null;
   // ── WebGL context-loss recovery ──────────────────────────────────────────
   /** Room code retained so we can reconnect if cached state is unavailable. */
@@ -190,6 +192,7 @@ export class PlayerApp {
         if (msg.payload.view)   this.lastView   = msg.payload.view;
         this.renderer.setFilter(msg.payload.filter);
         this.renderer.setView(msg.payload.view);
+        this._syncPositionalAudio(this.currentMarkers);
         void (async () => {
           if (msg.iconData?.length)         await this._decodeIconData(msg.iconData);
           if (msg.soundboardAssets?.length) this._cacheSoundboardAssets(msg.soundboardAssets);
@@ -207,6 +210,7 @@ export class PlayerApp {
         if (msg.audio?.slots)          this.sbSlots = msg.audio.slots;
         // Stop any playing audio from the previous map
         this._stopAllSoundboard();
+        this.positionalAudio.setSources([]); // stop all positional audio immediately
         if (mapBlob) {
           const fog    = msg.fog    ?? { polygons: [] };
           const filter = msg.filter;
@@ -224,6 +228,7 @@ export class PlayerApp {
               if (filter) this.renderer.setFilter(filter);
               if (view)   this.renderer.setView(view);
             });
+            this._syncPositionalAudio(this.currentMarkers);
           })();
         }
         break;
@@ -253,10 +258,28 @@ export class PlayerApp {
 
       case 'marker_update': {
         this.currentMarkers = msg.payload;
+        this._syncPositionalAudio(this.currentMarkers);
         void (async () => {
           if (msg.iconData?.length) await this._decodeIconData(msg.iconData);
           this.markerTexture.render(this.currentMarkers, this.playerIconCache);
           this.renderer.markMarkersDirty();
+        })();
+        break;
+      }
+
+      case 'marker_audio_asset': {
+        void (async () => {
+          let buf: ArrayBuffer | undefined;
+          if (mapBlob) {
+            buf = mapBlob;
+          } else if (msg.dataUrl) {
+            const res = await fetch(msg.dataUrl);
+            buf = await res.arrayBuffer();
+          }
+          if (buf) {
+            await this.positionalAudio.storeBuffer(msg.assetId, buf);
+            this.positionalAudio.onBufferReady(msg.assetId, this.currentMarkers);
+          }
         })();
         break;
       }
@@ -394,6 +417,18 @@ export class PlayerApp {
     if (!this.sbMuted) {
       setTimeout(() => { this._muteIndicatorEl?.classList.add('mute-indicator--hiding'); }, 1500);
     }
+  }
+
+  // ─── Positional audio ─────────────────────────────────────────────────────
+
+  private _syncPositionalAudio(markers: Marker[]): void {
+    const listener = markers.find((m) => m.role === 'listener');
+    if (listener) {
+      this.positionalAudio.setListenerPosition(listener.position.x, listener.position.y);
+    } else {
+      this.positionalAudio.clearListener();
+    }
+    this.positionalAudio.setSources(markers);
   }
 
   // ─── Icon cache ───────────────────────────────────────────────────────────

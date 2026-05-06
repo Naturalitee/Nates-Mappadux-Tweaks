@@ -299,6 +299,14 @@ export interface MsgSoundboardStop {
   slotId: string;
 }
 
+/** GM assigned audio to a marker — deliver the blob to players for preloading */
+export interface MsgMarkerAudioAsset {
+  type:     'marker_audio_asset';
+  markerId: string;
+  assetId:  string;
+  dataUrl?: string; // stripped for PeerJS binary delivery; inline for BroadcastChannel
+}
+
 /** GM toggled master mute — all player audio should pause/resume accordingly */
 export interface MsgSoundboardMuteAll {
   type: 'soundboard_mute_all';
@@ -332,7 +340,8 @@ export type GMMessage =
   | MsgSoundboardStop
   | MsgSoundboardMuteAll
   | MsgSoundboardVolume
-  | MsgSoundboardAsset;
+  | MsgSoundboardAsset
+  | MsgMarkerAudioAsset;
 
 // ─── Storage types ───────────────────────────────────────────────────────────
 

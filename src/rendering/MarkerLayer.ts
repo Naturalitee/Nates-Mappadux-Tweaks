@@ -194,6 +194,32 @@ export class MarkerLayer {
 
     const { _markers: markers, _view: view, _selectedId: sel, _isGM: isGM, _iconCache: iconCache } = this;
 
+    // dB range circle for the selected audio_source marker (GM only)
+    if (isGM && sel) {
+      const selM = markers.find((m) => m.id === sel);
+      if (selM?.role === 'audio_source' && selM.audioMaxDistance > 0) {
+        const pos = this.project(selM.position.x, selM.position.y, view);
+        if (pos) {
+          const f       = this._frustum(view);
+          const yScale  = H / (f.top - f.bottom);
+          const radiusPx = selM.audioMaxDistance * yScale;
+          ctx.save();
+          ctx.beginPath();
+          ctx.arc(pos.x, pos.y, radiusPx, 0, Math.PI * 2);
+          ctx.setLineDash([6, 4]);
+          ctx.lineWidth   = 1.5;
+          ctx.strokeStyle = 'rgba(13, 154, 219, 0.6)';
+          ctx.stroke();
+          ctx.font         = '10px system-ui,sans-serif';
+          ctx.fillStyle    = 'rgba(13, 154, 219, 0.85)';
+          ctx.textAlign    = 'center';
+          ctx.textBaseline = 'bottom';
+          ctx.fillText('max range', pos.x, pos.y - radiusPx - 2);
+          ctx.restore();
+        }
+      }
+    }
+
     for (const m of markers) {
       if (!isGM && m.hidden) continue;
       const pos = this.project(m.position.x, m.position.y, view);

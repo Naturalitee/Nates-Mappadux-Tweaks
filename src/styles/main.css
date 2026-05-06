@@ -805,6 +805,40 @@ body.player-view #renderer-canvas {
 .marker-icon-btn:hover { border-color: var(--border-focus); }
 .marker-icon-btn img { width: 20px; height: 20px; object-fit: contain; }
 
+/* ── Marker role buttons ─────────────────────────────────────────────────── */
+.marker-role-btns {
+  display: flex;
+  gap: 4px;
+  margin-bottom: 6px;
+}
+.marker-role-btn {
+  flex: 1;
+  padding: 4px 4px;
+  font-size: 11px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+  white-space: nowrap;
+}
+.marker-role-btn:hover {
+  border-color: var(--border-focus);
+  color: var(--text-primary);
+}
+.marker-role-btn--active {
+  border-color: var(--accent);
+  color: var(--accent);
+  background: var(--accent-dim);
+}
+.marker-sound-row {
+  align-items: center;
+}
+.marker-sound-row .btn {
+  margin-left: auto;
+}
+
 /* ── Icon picker popover ────────────────────────────────────────────────── */
 .icon-picker {
   position: fixed;

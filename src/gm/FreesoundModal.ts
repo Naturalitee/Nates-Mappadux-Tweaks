@@ -29,7 +29,8 @@ export class FreesoundModal {
     this._bindEvents();
   }
 
-  open(): void {
+  open(onAssign?: AssignCallback): void {
+    if (onAssign) this.onAssign = onAssign;
     this.el.hidden = false;
     this._renderLibrary();
   }

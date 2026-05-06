@@ -133,6 +133,33 @@
               <span class="toggle-slider"></span>
             </label>
           </div>
+
+          <p class="map-section-label map-section-label--gap">Role</p>
+          <div class="marker-role-btns">
+            <button class="marker-role-btn" data-role="default">Default</button>
+            <button class="marker-role-btn" data-role="listener">Listener</button>
+            <button class="marker-role-btn" data-role="audio_source">Audio Source</button>
+          </div>
+
+          <div id="marker-audio-controls" hidden>
+            <div class="param-row marker-sound-row">
+              <label>Sound</label>
+              <button id="marker-sound-btn" class="btn btn--ghost btn--sm">Assign Sound</button>
+            </div>
+            <div class="param-row param-row--toggle">
+              <label for="marker-audio-muted">Muted</label>
+              <label class="toggle-switch">
+                <input type="checkbox" id="marker-audio-muted" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+            <div class="param-row">
+              <label for="marker-max-dist">Max Range</label>
+              <input type="range" id="marker-max-dist" min="0.05" max="0.8" step="0.01" value="0.3" />
+              <span id="marker-max-dist-val" class="param-value">0.30</span>
+            </div>
+          </div>
+
           <button id="delete-marker-btn" class="btn btn--danger btn--sm btn--full">Delete Marker</button>
         </div>
 
