@@ -116,6 +116,7 @@ export class GMApp {
 
     this.positionalAudio.onSourceStart = (markerId, assetId, loop, gain) => {
       const dataUrl = this._assetDataUrls.get(assetId);
+      console.log(`[GM] onSourceStart markerId=${markerId} assetId=${assetId} loop=${loop} gain=${gain.toFixed(4)} hasUrl=${!!dataUrl}`);
       if (!dataUrl) return;
       this._activePositional.set(markerId, { loop, lastVolume: gain });
       this.host.broadcast({ type: 'positional_play', markerId, assetId, loop, volume: gain, dataUrl });

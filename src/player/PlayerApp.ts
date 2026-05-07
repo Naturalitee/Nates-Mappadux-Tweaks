@@ -35,8 +35,8 @@ export class PlayerApp {
   private sbAssetUrls = new Map<string, string>();
   /** Current slot configurations (for restoring on reconnect) */
   private sbSlots: SoundboardSlot[] = [];
-  /** Master mute flag */
-  private sbMuted = false;
+  /** Master mute flag — starts true so first click both satisfies autoplay policy and unmutes */
+  private sbMuted = true;
   private _audioResumeScheduled = false;
   /** markerId → <audio> element for active positional sources */
   private _posAudioEls  = new Map<string, HTMLAudioElement>();
@@ -120,10 +120,18 @@ export class PlayerApp {
       }
     });
 
-    document.addEventListener('contextmenu', (e) => {
-      e.preventDefault();
+    // Left-click toggles mute (first click also satisfies browser autoplay policy).
+    // Guard: don't toggle while the connect panel is visible.
+    document.addEventListener('click', () => {
+      if (!this.connectPanel.hidden) return;
       this._toggleMute();
     });
+
+    // Prevent the browser context menu on right-click (keep canvas clean)
+    document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // Show "Muted" indicator immediately — player starts muted
+    this._showMuteIndicator();
   }
 
   private _recoverRenderer(): void {
@@ -405,14 +413,14 @@ export class PlayerApp {
         if (el.paused && el.src) void el.play().catch(() => {});
       }
     };
-    document.addEventListener('click',       resume, { once: true });
-    document.addEventListener('keydown',     resume, { once: true });
-    document.addEventListener('contextmenu', resume, { once: true });
+    document.addEventListener('click',   resume, { once: true });
+    document.addEventListener('keydown', resume, { once: true });
   }
 
   private _toggleMute(): void {
     this.sbMuted = !this.sbMuted;
-    for (const el of this.sbAudioEls.values()) el.muted = this.sbMuted;
+    for (const el of this.sbAudioEls.values())   el.muted = this.sbMuted;
+    for (const el of this._posAudioEls.values()) el.muted = this.sbMuted;
     this._showMuteIndicator();
   }
 
@@ -434,6 +442,7 @@ export class PlayerApp {
   // ─── Positional audio ─────────────────────────────────────────────────────
 
   private _posPlay(markerId: string, url: string, loop: boolean, volume: number): void {
+    console.log(`[Player] _posPlay markerId=${markerId} loop=${loop} vol=${volume.toFixed(3)} muted=${this.sbMuted}`);
     let el = this._posAudioEls.get(markerId);
     if (!el) {
       el = new Audio();
@@ -443,6 +452,8 @@ export class PlayerApp {
     el.currentTime = 0;
     el.loop   = loop;
     el.volume = Math.max(0, Math.min(1, volume));
+    el.muted  = this.sbMuted;
+    // Muted autoplay is allowed by browsers — play() should succeed even before user gesture
     void el.play().catch(() => this._scheduleAudioResume());
   }
 
