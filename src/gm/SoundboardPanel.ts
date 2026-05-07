@@ -1,5 +1,16 @@
 import type { SoundboardSlot, AudioAsset, SoundboardAudioData } from '../types.ts';
 import { SOUNDBOARD_PAGE_SIZE } from '../types.ts';
+
+// ── Playback mode SVG icons (14×14, single currentColor) ─────────────────────
+
+/** Play-once: triangle + vertical stop bar */
+const ICON_ONCE = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><polygon points="1,2 10,8 1,14" fill="currentColor"/><rect x="12" y="2" width="2.5" height="12" rx="0.5" fill="currentColor"/></svg>`;
+
+/** Loop: 🔁-style rectangular two-arrow loop */
+const ICON_LOOP = `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 Q2 11 2 9 L2 7 Q2 5 4 5 L11 5"/><polyline points="9 3 11 5 9 7"/><path d="M13 5 Q14 5 14 7 L14 9 Q14 11 12 11 L5 11"/><polyline points="7 9 5 11 7 13"/></svg>`;
+
+/** Random: same loop with a ? mark overlaid in the centre */
+const ICON_RANDOM = `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 Q2 11 2 9 L2 7 Q2 5 4 5 L11 5"/><polyline points="9 3 11 5 9 7"/><path d="M13 5 Q14 5 14 7 L14 9 Q14 11 12 11 L5 11"/><polyline points="7 9 5 11 7 13"/><text x="8" y="8.5" text-anchor="middle" dominant-baseline="middle" font-size="7" font-weight="bold" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">?</text></svg>`;
 import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { FreesoundModal } from './FreesoundModal.ts';
@@ -174,6 +185,7 @@ export class SoundboardPanel {
       const btnTitle  = showStop ? 'Stop' : 'Play';
       const freq      = slot.randomFreq ?? 10;
 
+      const modeOnce  = !slot.loop && !slot.random;
       const modeLoop  = !!slot.loop;
       const modeRand  = !!slot.random;
 
@@ -185,8 +197,9 @@ export class SoundboardPanel {
         <div class="sb-slot-controls">
           <button class="sb-play-btn btn btn--sm ${btnActive ? 'btn--active' : 'btn--ghost'}${loadClass}" title="${btnTitle}">${btnIcon}</button>
           <div class="sb-mode-btns" title="Playback mode">
-            <button class="sb-mode-btn ${modeLoop ? 'sb-mode-btn--active' : ''}" data-mode="loop"   title="Loop">🔄</button>
-            <button class="sb-mode-btn ${modeRand ? 'sb-mode-btn--active' : ''}" data-mode="random" title="Random">🎲</button>
+            <button class="sb-mode-btn ${modeOnce ? 'sb-mode-btn--active' : ''}" data-mode="once"   title="Play once">${ICON_ONCE}</button>
+            <button class="sb-mode-btn ${modeLoop ? 'sb-mode-btn--active' : ''}" data-mode="loop"   title="Loop">${ICON_LOOP}</button>
+            <button class="sb-mode-btn ${modeRand ? 'sb-mode-btn--active' : ''}" data-mode="random" title="Random">${ICON_RANDOM}</button>
           </div>
           <input type="range" class="sb-volume" min="0" max="1" step="0.05" value="${slot.volume}" title="Volume" />
         </div>

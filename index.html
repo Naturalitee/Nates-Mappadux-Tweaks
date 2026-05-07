@@ -142,38 +142,39 @@
           </div>
 
           <div id="marker-audio-controls" hidden>
-            <div class="param-row marker-sound-row">
-              <label>Sound</label>
-              <button id="marker-sound-btn" class="btn btn--ghost btn--sm">Assign Sound</button>
+            <!-- Assign / name button — mirrors the soundboard empty/filled slot header -->
+            <div id="marker-sound-row" class="sb-slot-empty">
+              <button id="marker-sound-btn" class="sb-assign-btn btn btn--ghost btn--sm btn--full">+ Assign Sound</button>
             </div>
-            <div class="param-row">
-              <label for="marker-audio-volume">Volume</label>
-              <input type="range" id="marker-audio-volume" min="0" max="1" step="0.01" value="1" />
-              <span id="marker-audio-volume-val" class="param-value">100%</span>
-            </div>
-            <div class="param-row marker-playback-row">
-              <label>Playback</label>
-              <div class="marker-mode-btns">
-                <button id="marker-loop-btn" class="btn btn--ghost btn--sm" title="Loop">🔄 Loop</button>
-                <button id="marker-random-btn" class="btn btn--ghost btn--sm" title="Random">🎲 Random</button>
+            <!-- Controls shown only once a sound is assigned -->
+            <div id="marker-sound-controls" hidden>
+              <!-- Mode buttons + volume — mirrors sb-slot-controls -->
+              <div class="sb-slot-controls">
+                <div class="sb-mode-btns" title="Playback mode">
+                  <button id="marker-once-btn" class="sb-mode-btn" title="Play once"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><polygon points="1,2 10,8 1,14" fill="currentColor"/><rect x="12" y="2" width="2.5" height="12" rx="0.5" fill="currentColor"/></svg></button>
+                  <button id="marker-loop-btn" class="sb-mode-btn" title="Loop"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 Q2 11 2 9 L2 7 Q2 5 4 5 L11 5"/><polyline points="9 3 11 5 9 7"/><path d="M13 5 Q14 5 14 7 L14 9 Q14 11 12 11 L5 11"/><polyline points="7 9 5 11 7 13"/></svg></button>
+                  <button id="marker-random-btn" class="sb-mode-btn" title="Random"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 Q2 11 2 9 L2 7 Q2 5 4 5 L11 5"/><polyline points="9 3 11 5 9 7"/><path d="M13 5 Q14 5 14 7 L14 9 Q14 11 12 11 L5 11"/><polyline points="7 9 5 11 7 13"/><text x="8" y="8.5" text-anchor="middle" dominant-baseline="middle" font-size="7" font-weight="bold" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">?</text></svg></button>
+                </div>
+                <input type="range" id="marker-audio-volume" class="sb-volume" min="0" max="1" step="0.01" value="1" title="Volume" />
               </div>
-            </div>
-            <div id="marker-random-row" class="param-row" hidden>
-              <label for="marker-random-freq">Frequency</label>
-              <input type="range" id="marker-random-freq" min="1" max="100" step="1" value="10" />
-              <span id="marker-random-freq-val" class="param-value">10/10m</span>
-            </div>
-            <div class="param-row param-row--toggle">
-              <label for="marker-audio-muted">Muted</label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="marker-audio-muted" />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
-            <div class="param-row">
-              <label for="marker-max-dist">Max Range</label>
-              <input type="range" id="marker-max-dist" min="0.05" max="0.8" step="0.01" value="0.3" />
-              <span id="marker-max-dist-val" class="param-value">0.30</span>
+              <!-- Random frequency row — matches sb-random-row -->
+              <div id="marker-random-row" class="sb-random-row" hidden>
+                <input type="range" id="marker-random-freq" class="sb-random-freq" min="1" max="100" step="1" value="10" />
+                <span id="marker-random-freq-val" class="sb-random-label">~10 / 10 min</span>
+              </div>
+              <!-- Positional audio specific controls -->
+              <div class="param-row param-row--toggle">
+                <label for="marker-audio-muted">Muted</label>
+                <label class="toggle-switch">
+                  <input type="checkbox" id="marker-audio-muted" />
+                  <span class="toggle-slider"></span>
+                </label>
+              </div>
+              <div class="param-row">
+                <label for="marker-max-dist">Max Range</label>
+                <input type="range" id="marker-max-dist" min="0.05" max="0.8" step="0.01" value="0.3" />
+                <span id="marker-max-dist-val" class="param-value">0.30</span>
+              </div>
             </div>
           </div>
 

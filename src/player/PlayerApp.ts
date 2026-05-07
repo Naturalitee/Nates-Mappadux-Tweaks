@@ -118,6 +118,12 @@ export class PlayerApp {
       }
     });
 
+    // Resume positional AudioContext on any user gesture (browser autoplay policy)
+    const resumePositional = () => this.positionalAudio.tryResume();
+    document.addEventListener('click',      resumePositional);
+    document.addEventListener('keydown',    resumePositional);
+    document.addEventListener('touchstart', resumePositional, { passive: true });
+
     document.addEventListener('contextmenu', (e) => {
       e.preventDefault();
       this._toggleMute();

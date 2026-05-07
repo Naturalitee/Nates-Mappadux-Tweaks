@@ -131,6 +131,11 @@ export class PositionalAudioEngine {
     this._refreshGains();
   }
 
+  /** Call on any user gesture to unblock the browser's autoplay policy. */
+  tryResume(): void {
+    if (this.ctx && this.ctx.state === 'suspended') void this.ctx.resume();
+  }
+
   dispose(): void {
     for (const src of this.sources.values()) this._stopSource(src);
     this.sources.clear();

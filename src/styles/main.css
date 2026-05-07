@@ -860,8 +860,11 @@ body.player-view #renderer-canvas {
   margin-left: auto;
 }
 .marker-mode-btns .btn {
-  font-size: 11px;
-  padding: 3px 7px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 6px;
+  line-height: 1;
 }
 
 /* ── Icon picker popover ────────────────────────────────────────────────── */
@@ -979,11 +982,13 @@ body.player-view #renderer-canvas {
   overflow: hidden;
 }
 .sb-mode-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
   background: transparent;
   border: none;
   color: var(--text-muted);
-  font-size: 0.65rem;
-  padding: 2px 5px;
+  padding: 3px 6px;
   cursor: pointer;
   line-height: 1;
   transition: background 0.1s, color 0.1s;

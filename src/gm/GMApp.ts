@@ -177,7 +177,10 @@ export class GMApp {
   private onStateChange(state: SessionState, changed: (keyof SessionState)[]): void {
     // View state is player-only — GM always sees the full map unzoomed
     const visibleMarkers = state.markers.filter((m) => !m.hidden);
-    const iconData       = this._collectIconData(visibleMarkers);
+    // Audio-source markers must be broadcast even when hidden — a hidden marker
+    // can represent an invisible ambient sound source (e.g. attached to a room).
+    const broadcastMarkers = state.markers.filter((m) => !m.hidden || m.role === 'audio_source');
+    const iconData         = this._collectIconData(visibleMarkers); // icons only for visible
 
     // Only send fog_update for live edits (changed = ['fog']).
     // During a map switch, loadForMap fires _notify(['map','view','filter','fog']).
@@ -230,7 +233,7 @@ export class GMApp {
       this.updateMarkerPanel();
       this.host.broadcast({
         type: 'marker_update',
-        payload: visibleMarkers,
+        payload: broadcastMarkers,
         ...(iconData.length > 0 ? { iconData } : {}),
       });
     }
@@ -325,16 +328,18 @@ export class GMApp {
 
     // Broadcast new map to all connected players.
     // fog, filter, view, markers, and audio all travel atomically inside map_change.
-    const visibleMarkers = this.state.getState().markers.filter((m) => !m.hidden);
-    const markerIconData = this._collectIconData(visibleMarkers);
-    const soundboardActive = await this.soundboardPanel.getActiveSlots();
+    const allMarkers        = this.state.getState().markers;
+    const visibleMarkers    = allMarkers.filter((m) => !m.hidden);
+    const broadcastMarkers2 = allMarkers.filter((m) => !m.hidden || m.role === 'audio_source');
+    const markerIconData    = this._collectIconData(visibleMarkers);
+    const soundboardActive  = await this.soundboardPanel.getActiveSlots();
     this.host.broadcast({
       type: 'map_change',
       payload:    { id: map.id, name: map.name },
       fog,
       filter:     this.state.getState().filter,
       view:       this.state.getState().view,
-      markers:    visibleMarkers,
+      markers:    broadcastMarkers2,
       audio:      this.state.getState().audio,
       ...(markerIconData.length > 0    ? { iconData:         markerIconData    } : {}),
       ...(soundboardActive.length > 0  ? { soundboardActive: soundboardActive } : {}),
@@ -815,26 +820,20 @@ export class GMApp {
 
     // Volume slider
     const audioVolInput = document.querySelector<HTMLInputElement>('#marker-audio-volume');
-    const audioVolVal   = document.querySelector<HTMLElement>('#marker-audio-volume-val');
     audioVolInput?.addEventListener('input', () => {
       const val = parseFloat(audioVolInput!.value);
-      if (audioVolVal) audioVolVal.textContent = `${Math.round(val * 100)}%`;
       this.updateSelectedMarker({ audioVolume: val });
     });
 
-    // Loop / random mode buttons
-    document.querySelector('#marker-loop-btn')?.addEventListener('click', () => {
-      const m = this.state.getState().markers.find((mk) => mk.id === this.selectedMarkerId);
-      if (!m) return;
-      const newLoop = !m.audioLoop;
-      this.updateSelectedMarker({ audioLoop: newLoop, ...(newLoop ? { audioRandom: false } : {}) });
+    // Playback mode buttons — exclusive 3-way selection
+    document.querySelector('#marker-once-btn')?.addEventListener('click', () => {
+      this.updateSelectedMarker({ audioLoop: false, audioRandom: false });
     });
-
+    document.querySelector('#marker-loop-btn')?.addEventListener('click', () => {
+      this.updateSelectedMarker({ audioLoop: true, audioRandom: false });
+    });
     document.querySelector('#marker-random-btn')?.addEventListener('click', () => {
-      const m = this.state.getState().markers.find((mk) => mk.id === this.selectedMarkerId);
-      if (!m) return;
-      const newRandom = !(m.audioRandom ?? false);
-      this.updateSelectedMarker({ audioRandom: newRandom, ...(newRandom ? { audioLoop: false } : {}) });
+      this.updateSelectedMarker({ audioLoop: false, audioRandom: true });
     });
 
     // Random frequency slider
@@ -842,7 +841,7 @@ export class GMApp {
     const randomFreqVal   = document.querySelector<HTMLElement>('#marker-random-freq-val');
     randomFreqInput?.addEventListener('input', () => {
       const val = parseInt(randomFreqInput!.value);
-      if (randomFreqVal) randomFreqVal.textContent = `${val}/10m`;
+      if (randomFreqVal) randomFreqVal.textContent = `~${val} / 10 min`;
       this.updateSelectedMarker({ audioRandomFreq: val });
     });
 
@@ -1016,11 +1015,13 @@ export class GMApp {
       if (audioControlsEl) audioControlsEl.hidden = sel.role !== 'audio_source';
 
       if (sel.role === 'audio_source') {
+        const soundRow      = document.querySelector<HTMLElement>('#marker-sound-row');
         const soundBtn      = document.querySelector<HTMLButtonElement>('#marker-sound-btn');
-        const audioVolInput = document.querySelector<HTMLInputElement>('#marker-audio-volume');
-        const audioVolVal   = document.querySelector<HTMLElement>('#marker-audio-volume-val');
+        const soundControls = document.querySelector<HTMLElement>('#marker-sound-controls');
+        const onceBtn       = document.querySelector<HTMLButtonElement>('#marker-once-btn');
         const loopBtn       = document.querySelector<HTMLButtonElement>('#marker-loop-btn');
         const randomBtn     = document.querySelector<HTMLButtonElement>('#marker-random-btn');
+        const audioVolInput = document.querySelector<HTMLInputElement>('#marker-audio-volume');
         const randomRow     = document.querySelector<HTMLElement>('#marker-random-row');
         const randomFreqInput = document.querySelector<HTMLInputElement>('#marker-random-freq');
         const randomFreqVal   = document.querySelector<HTMLElement>('#marker-random-freq-val');
@@ -1028,17 +1029,38 @@ export class GMApp {
         const maxDistInput  = document.querySelector<HTMLInputElement>('#marker-max-dist');
         const maxDistVal    = document.querySelector<HTMLElement>('#marker-max-dist-val');
 
-        if (soundBtn)       soundBtn.textContent        = sel.audioTrackId ? 'Change Sound' : 'Assign Sound';
-        if (audioVolInput)  audioVolInput.value         = String(sel.audioVolume ?? 1);
-        if (audioVolVal)    audioVolVal.textContent      = `${Math.round((sel.audioVolume ?? 1) * 100)}%`;
-        if (loopBtn)        loopBtn.classList.toggle('btn--active', sel.audioLoop);
-        if (randomBtn)      randomBtn.classList.toggle('btn--active', !!(sel.audioRandom));
-        if (randomRow)      randomRow.hidden             = !(sel.audioRandom);
-        if (randomFreqInput) randomFreqInput.value       = String(sel.audioRandomFreq ?? 10);
-        if (randomFreqVal)  randomFreqVal.textContent    = `${sel.audioRandomFreq ?? 10}/10m`;
-        if (mutedToggle)    mutedToggle.checked          = sel.audioMuted;
-        if (maxDistInput)   maxDistInput.value           = String(sel.audioMaxDistance);
-        if (maxDistVal)     maxDistVal.textContent       = sel.audioMaxDistance.toFixed(2);
+        if (sel.audioTrackId) {
+          // Show name-button style (same as a filled soundboard slot)
+          if (soundRow)      soundRow.className = 'sb-slot-name-row';
+          if (soundBtn) {
+            soundBtn.className   = 'sb-name-btn';
+            soundBtn.textContent = '…';
+            void AudioAssetStore.get(sel.audioTrackId).then((asset) => {
+              const btn = document.querySelector<HTMLButtonElement>('#marker-sound-btn');
+              if (btn) btn.textContent = asset?.name ?? 'Unknown Sound';
+            });
+          }
+          if (soundControls) soundControls.hidden = false;
+        } else {
+          // Show assign-button style (same as an empty soundboard slot)
+          if (soundRow)      soundRow.className = 'sb-slot-empty';
+          if (soundBtn) {
+            soundBtn.className   = 'sb-assign-btn btn btn--ghost btn--sm btn--full';
+            soundBtn.textContent = '+ Assign Sound';
+          }
+          if (soundControls) soundControls.hidden = true;
+        }
+
+        if (audioVolInput)    audioVolInput.value         = String(sel.audioVolume ?? 1);
+        if (onceBtn)          onceBtn.classList.toggle('sb-mode-btn--active', !sel.audioLoop && !(sel.audioRandom ?? false));
+        if (loopBtn)          loopBtn.classList.toggle('sb-mode-btn--active', sel.audioLoop);
+        if (randomBtn)        randomBtn.classList.toggle('sb-mode-btn--active', !!(sel.audioRandom));
+        if (randomRow)        randomRow.hidden             = !(sel.audioRandom);
+        if (randomFreqInput)  randomFreqInput.value        = String(sel.audioRandomFreq ?? 10);
+        if (randomFreqVal)    randomFreqVal.textContent    = `~${sel.audioRandomFreq ?? 10} / 10 min`;
+        if (mutedToggle)      mutedToggle.checked          = sel.audioMuted;
+        if (maxDistInput)     maxDistInput.value           = String(sel.audioMaxDistance);
+        if (maxDistVal)       maxDistVal.textContent       = sel.audioMaxDistance.toFixed(2);
       }
     }
   }
