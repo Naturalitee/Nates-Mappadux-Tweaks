@@ -274,6 +274,7 @@ export class PlayerApp {
       }
 
       case 'marker_audio_asset': {
+        console.log(`[Player] marker_audio_asset: markerId=${msg.markerId} assetId=${msg.assetId} binary=${!!mapBlob} dataUrl=${!!msg.dataUrl}`);
         void (async () => {
           let buf: ArrayBuffer | undefined;
           if (mapBlob) {
@@ -285,6 +286,8 @@ export class PlayerApp {
           if (buf) {
             await this.positionalAudio.storeBuffer(msg.assetId, buf);
             this.positionalAudio.onBufferReady(msg.assetId, this.currentMarkers);
+          } else {
+            console.warn(`[Player] marker_audio_asset: no buffer available for assetId=${msg.assetId}`);
           }
         })();
         break;
@@ -429,6 +432,11 @@ export class PlayerApp {
 
   private _syncPositionalAudio(markers: Marker[]): void {
     const listener = markers.find((m) => m.role === 'listener');
+    const sources  = markers.filter((m) => m.role === 'audio_source');
+    console.log(
+      `[Player] _syncPositionalAudio: markers=${markers.length} sources=${sources.length} listener=${listener ? `(${listener.position.x.toFixed(3)},${listener.position.y.toFixed(3)})` : 'NONE'}` +
+      (sources.length ? ` sourceIds=[${sources.map((m) => `${m.id.slice(0,6)}:${m.audioTrackId ?? 'no-track'}`).join(', ')}]` : '')
+    );
     if (listener) {
       this.positionalAudio.setListenerPosition(listener.position.x, listener.position.y);
     } else {

@@ -17,6 +17,7 @@ import { saveSession, loadSession, getAllMaps, deleteMap } from '../storage/db.t
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { exportBundle, importBundle } from '../storage/bundleIO.ts';
 import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
+import { PositionalAudioEngine } from '../audio/PositionalAudioEngine.ts';
 import type { SessionState, StoredMap, TransitionConfig, Marker, MarkerIconData, AudioAsset, MarkerRole } from '../types.ts';
 import QRCode from 'qrcode';
 
@@ -43,6 +44,7 @@ export class GMApp {
   private soundboardEngine!: SoundboardEngine;
   private soundboardPanel!:  SoundboardPanel;
 
+  private positionalAudio = new PositionalAudioEngine();
   private selectedMarkerId: string | null = null;
   private mapAspectRatio = 1;
   private remoteAudioEnabled = localStorage.getItem(REMOTE_AUDIO_KEY) !== 'false';
@@ -112,6 +114,13 @@ export class GMApp {
     await this.startHost();
 
     this.renderer.start();
+
+    // Unblock Web Audio autoplay policy on any GM interaction
+    const resumePA = () => this.positionalAudio.tryResume();
+    document.addEventListener('click',      resumePA);
+    document.addEventListener('keydown',    resumePA);
+    document.addEventListener('touchstart', resumePA, { passive: true });
+
     this.setStatus('Ready', 'ok');
   }
 
@@ -231,6 +240,7 @@ export class GMApp {
     if (changed.includes('markers')) {
       this.markerEditor.update(state.markers, this.mapAspectRatio);
       this.updateMarkerPanel();
+      this._syncPositionalAudio();
       this.host.broadcast({
         type: 'marker_update',
         payload: broadcastMarkers,
@@ -322,7 +332,8 @@ export class GMApp {
 
     this.setStatus(map.name, 'ok');
 
-    // Stop soundboard audio from the previous map and reload slots for the new one
+    // Stop positional and soundboard audio from the previous map
+    this.positionalAudio.setSources([]);
     this.soundboardPanel.stopAll();
     this.soundboardPanel.update(this.state.getState().audio.slots);
 
@@ -873,7 +884,12 @@ export class GMApp {
     this.updateSelectedMarker({ audioTrackId: asset.id });
     const blob = await AudioAssetStore.getBlob(asset);
     if (!blob) return;
-    const dataUrl = await this._blobToDataUrl(blob);
+    const [arrayBuf, dataUrl] = await Promise.all([
+      blob.arrayBuffer(),
+      this._blobToDataUrl(blob),
+    ]);
+    await this.positionalAudio.storeBuffer(asset.id, arrayBuf);
+    this._syncPositionalAudio();
     this.host.broadcast({
       type:     'marker_audio_asset',
       markerId: this.selectedMarkerId,
@@ -898,7 +914,12 @@ export class GMApp {
       if (!asset) continue;
       const blob = await AudioAssetStore.getBlob(asset);
       if (!blob) continue;
-      const dataUrl = await this._blobToDataUrl(blob);
+      // Store in GM engine and broadcast to players in parallel
+      const [arrayBuf, dataUrl] = await Promise.all([
+        blob.arrayBuffer(),
+        this._blobToDataUrl(blob),
+      ]);
+      await this.positionalAudio.storeBuffer(m.audioTrackId, arrayBuf);
       this.host.broadcast({
         type:     'marker_audio_asset',
         markerId: m.id,
@@ -906,6 +927,8 @@ export class GMApp {
         dataUrl,
       });
     }
+    // All buffers now loaded — start playing any sources that have a listener
+    this._syncPositionalAudio();
   }
 
   private bindSoundboardPanel(): void {
@@ -962,6 +985,17 @@ export class GMApp {
         }
       });
     }
+  }
+
+  private _syncPositionalAudio(): void {
+    const markers = this.state.getState().markers;
+    const listener = markers.find((m) => m.role === 'listener');
+    if (listener) {
+      this.positionalAudio.setListenerPosition(listener.position.x, listener.position.y);
+    } else {
+      this.positionalAudio.clearListener();
+    }
+    this.positionalAudio.setSources(markers);
   }
 
   private updateMarkerPanel(): void {
