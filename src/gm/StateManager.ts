@@ -1,4 +1,4 @@
-import type { SessionState, MapState, FilterState, FogState, ViewState, Marker, AudioState } from '../types.ts';
+import type { SessionState, MapState, FilterState, FogState, ViewState, Marker, AudioState, TransitionConfig } from '../types.ts';
 import { defaultSessionState } from '../types.ts';
 import { saveConfig, loadConfig } from '../storage/db.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
@@ -95,6 +95,11 @@ export class StateManager {
   setAudio(audio: AudioState): void {
     this.state = { ...this.state, audio };
     this._notify(['audio']);
+  }
+
+  setTransition(config: TransitionConfig): void {
+    this.state = { ...this.state, transition: config };
+    this._notify(['transition']);
   }
 
   // ─── Listeners ────────────────────────────────────────────────────────────

@@ -197,6 +197,8 @@ export interface SessionState {
   markers: Marker[];
   /** Populated in future; null values signal "not yet configured" */
   audio: AudioState;
+  /** Persisted transition selection and parameters for this map */
+  transition?: TransitionConfig;
 }
 
 export function defaultSessionState(): SessionState {

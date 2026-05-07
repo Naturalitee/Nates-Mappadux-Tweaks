@@ -185,8 +185,6 @@ export class PlayerApp {
       }
     }
 
-    console.log(`[Player] msg type=${msg.type} hasBlob=${!!mapBlob}${mapBlob ? ` blobBytes=${mapBlob.byteLength}` : ''}`);
-
     switch (msg.type) {
       case 'full_state': {
         this.currentMapId   = msg.payload.map?.id ?? null;
@@ -279,14 +277,12 @@ export class PlayerApp {
       case 'positional_play': {
         // Reuse the same binary-or-dataUrl pattern as soundboard_play
         if (mapBlob) {
-          console.log(`[Player] positional_play markerId=${msg.markerId} assetId=${msg.assetId} loop=${msg.loop} vol=${msg.volume.toFixed(3)} via=binary blobBytes=${mapBlob.byteLength}`);
           const url = URL.createObjectURL(new Blob([mapBlob], { type: 'audio/mpeg' }));
           this._posAssetUrls.set(msg.assetId, url);
           this._posPlay(msg.markerId, url, msg.loop, msg.volume);
         } else {
           if (msg.dataUrl) this._posAssetUrls.set(msg.assetId, msg.dataUrl);
           const url = this._posAssetUrls.get(msg.assetId);
-          console.log(`[Player] positional_play markerId=${msg.markerId} assetId=${msg.assetId} loop=${msg.loop} vol=${msg.volume.toFixed(3)} via=${msg.dataUrl ? 'dataUrl' : 'cached'} urlFound=${!!url}`);
           if (url) this._posPlay(msg.markerId, url, msg.loop, msg.volume);
         }
         break;
@@ -294,14 +290,12 @@ export class PlayerApp {
 
       case 'positional_volume': {
         const el = this._posAudioEls.get(msg.markerId);
-        console.log(`[Player] positional_volume markerId=${msg.markerId} vol=${msg.volume.toFixed(3)} elFound=${!!el}`);
         if (el) el.volume = Math.max(0, Math.min(1, msg.volume));
         break;
       }
 
       case 'positional_stop': {
         const el = this._posAudioEls.get(msg.markerId);
-        console.log(`[Player] positional_stop markerId=${msg.markerId} elFound=${!!el}`);
         if (el) { el.pause(); el.currentTime = 0; }
         this._posAudioEls.delete(msg.markerId);
         break;
@@ -448,7 +442,6 @@ export class PlayerApp {
   // ─── Positional audio ─────────────────────────────────────────────────────
 
   private _posPlay(markerId: string, url: string, loop: boolean, volume: number): void {
-    console.log(`[Player] _posPlay markerId=${markerId} loop=${loop} vol=${volume.toFixed(3)} muted=${this.sbMuted} urlLen=${url.length}`);
     let el = this._posAudioEls.get(markerId);
     if (!el) {
       el = new Audio();
@@ -459,10 +452,9 @@ export class PlayerApp {
     el.loop   = loop;
     el.volume = Math.max(0, Math.min(1, volume));
     el.muted  = this.sbMuted;
-    // Muted autoplay is allowed by browsers — play() should succeed even before user gesture
     el.play().then(
-      () => console.log(`[Player] _posPlay play() resolved markerId=${markerId} paused=${el!.paused} muted=${el!.muted}`),
-      (err) => { console.warn(`[Player] _posPlay play() rejected markerId=${markerId}`, err); this._scheduleAudioResume(); },
+      () => { /* ok */ },
+      () => { this._scheduleAudioResume(); },
     );
   }
 

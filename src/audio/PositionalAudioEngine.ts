@@ -45,14 +45,12 @@ export class PositionalAudioEngine {
 
   async storeBuffer(assetId: string, raw: ArrayBuffer): Promise<void> {
     if (this.buffers.has(assetId)) return;
-    console.log(`[PAE] storeBuffer: decoding assetId=${assetId} (${raw.byteLength} bytes)`);
     try {
       const ctx = this._ctx();
       const buf = await ctx.decodeAudioData(raw.slice(0));
       this.buffers.set(assetId, buf);
-      console.log(`[PAE] storeBuffer: decoded OK assetId=${assetId} duration=${buf.duration.toFixed(2)}s`);
     } catch (err) {
-      console.error(`[PAE] storeBuffer: decode FAILED assetId=${assetId}`, err);
+      console.error(`[PAE] decode failed assetId=${assetId}`, err);
     }
   }
 
@@ -75,7 +73,6 @@ export class PositionalAudioEngine {
   }
 
   clearListener(): void {
-    console.warn('[PAE] clearListener: no listener marker — all positional audio silenced');
     this.hasListener = false;
     for (const src of this.sources.values()) src.gain.gain.value = 0;
   }
@@ -90,14 +87,6 @@ export class PositionalAudioEngine {
         .filter((m) => m.role === 'audio_source' && m.audioTrackId && !m.audioMuted)
         .map((m) => [m.id, m])
     );
-    const noBuffer = [...wanted.values()].filter((m) => !this.buffers.has(m.audioTrackId!));
-    console.log(
-      `[PAE] setSources: total=${markers.length} wanted=${wanted.size} noBuffer=${noBuffer.length}` +
-      (noBuffer.length ? ` missing=[${noBuffer.map((m) => m.audioTrackId).join(', ')}]` : '') +
-      ` ctxState=${this.ctx?.state ?? 'not created'} hasListener=${this.hasListener}` +
-      (this.hasListener ? ` listener=(${this.listenerX.toFixed(3)}, ${this.listenerY.toFixed(3)})` : '')
-    );
-
     // Stop and remove sources that are no longer wanted
     for (const [id, src] of this.sources.entries()) {
       if (!wanted.has(id)) {
@@ -167,10 +156,7 @@ export class PositionalAudioEngine {
   /** Call on any user gesture to unblock the browser's autoplay policy. */
   tryResume(): void {
     if (!this.ctx) return;
-    console.log(`[PAE] tryResume: ctx.state=${this.ctx.state}`);
-    if (this.ctx.state === 'suspended') void this.ctx.resume().then(() => {
-      console.log('[PAE] tryResume: context resumed OK');
-    });
+    if (this.ctx.state === 'suspended') void this.ctx.resume();
   }
 
   dispose(): void {
@@ -190,11 +176,6 @@ export class PositionalAudioEngine {
 
   private _startSource(markerId: string, marker: Marker, buf: AudioBuffer): void {
     const ctx  = this._ctx();
-    console.log(
-      `[PAE] _startSource: markerId=${markerId} assetId=${marker.audioTrackId} ` +
-      `loop=${marker.audioLoop} random=${marker.audioRandom} pos=(${marker.position.x.toFixed(3)},${marker.position.y.toFixed(3)}) ` +
-      `maxDist=${marker.audioMaxDistance} volume=${marker.audioVolume ?? 1} ctxState=${ctx.state}`
-    );
     const gain = ctx.createGain();
     gain.gain.value = 0; // _refreshGains sets real value
     gain.connect(ctx.destination);
@@ -276,29 +257,11 @@ export class PositionalAudioEngine {
     };
   }
 
-  private _lastGainLog = 0;
-
   private _refreshGains(): void {
     if (!this.hasListener) return;
-    const now = Date.now();
-    const doLog = now - this._lastGainLog > 2000;
-    if (doLog) this._lastGainLog = now;
-
-    for (const [id, src] of this.sources.entries()) {
+    for (const src of this.sources.values()) {
       if (src.node !== null) {
-        const g = this._calcGain(src.x, src.y, src.maxDist, src.volume);
-        src.gain.gain.value = g;
-        if (doLog) {
-          const dx = src.x - this.listenerX, dy = src.y - this.listenerY;
-          const dist = Math.sqrt(dx * dx + dy * dy);
-          console.log(
-            `[PAE] gain markerId=${id} gain=${g.toFixed(4)} dist=${dist.toFixed(4)} ` +
-            `maxDist=${src.maxDist} src=(${src.x.toFixed(3)},${src.y.toFixed(3)}) ` +
-            `listener=(${this.listenerX.toFixed(3)},${this.listenerY.toFixed(3)})`
-          );
-        }
-      } else if (doLog) {
-        console.log(`[PAE] gain markerId=${id} — node=null (between random firings or idle)`);
+        src.gain.gain.value = this._calcGain(src.x, src.y, src.maxDist, src.volume);
       }
     }
   }

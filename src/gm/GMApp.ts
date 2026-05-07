@@ -117,7 +117,6 @@ export class GMApp {
 
     this.positionalAudio.onSourceStart = (markerId, assetId, loop, gain) => {
       const dataUrl = this._assetDataUrls.get(assetId);
-      console.log(`[GM] onSourceStart markerId=${markerId} assetId=${assetId} loop=${loop} gain=${gain.toFixed(4)} hasUrl=${!!dataUrl}`);
       if (!dataUrl) return;
       this._activePositional.set(markerId, { loop, lastVolume: gain });
       this.host.broadcast({ type: 'positional_play', markerId, assetId, loop, volume: gain, dataUrl });
@@ -331,6 +330,18 @@ export class GMApp {
     this.fogEditor.loadState(this.state.getState().fog);
     this.syncView(this.state.getState());
     this.filterSelect.value = this.state.getState().filter.filterId;
+
+    // Restore persisted transition selection for this map
+    const savedTransition = this.state.getState().transition;
+    this.activeTransitionId = savedTransition?.transitionId ?? 'none';
+    if (savedTransition) {
+      this.allTransitionParams[savedTransition.transitionId] = savedTransition.params;
+    }
+    this.transitionSelect.value = this.activeTransitionId;
+    this.transitionPanel.render(
+      transitionRegistry.getOrFallback(this.activeTransitionId),
+      this.allTransitionParams[this.activeTransitionId] ?? transitionRegistry.defaultParams(this.activeTransitionId),
+    );
 
     // Capture fog state after loadForMap so the correct state is used everywhere
     const fog = this.state.getState().fog;
@@ -548,6 +559,7 @@ export class GMApp {
       this.transitionParamsContainer,
       (params) => {
         this.allTransitionParams[this.activeTransitionId] = params;
+        this.state.setTransition(this.buildTransitionConfig());
       },
     );
 
@@ -570,6 +582,7 @@ export class GMApp {
       const def    = transitionRegistry.getOrFallback(this.activeTransitionId);
       const saved  = this.allTransitionParams[this.activeTransitionId] ?? transitionRegistry.defaultParams(this.activeTransitionId);
       this.transitionPanel.render(def, saved);
+      this.state.setTransition(this.buildTransitionConfig());
     });
 
     // Render initial panel (none — no params)
