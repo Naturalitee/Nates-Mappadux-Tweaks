@@ -179,7 +179,8 @@ export class GMApp {
       );
     } catch { /* QR non-critical */ }
 
-    await saveSession({ key: 'current', peerId: roomCode, lastMapId: null });
+    const existing = await loadSession();
+    await saveSession({ key: 'current', peerId: roomCode, lastMapId: existing?.lastMapId ?? null });
   }
 
   private onPeerConnected(id: string): void {
@@ -304,7 +305,7 @@ export class GMApp {
   // ─── Map selection ────────────────────────────────────────────────────────
 
   private async populateMapList(): Promise<void> {
-    const maps = await this.maps.getAll();
+    const [maps, session] = await Promise.all([this.maps.getAll(), loadSession()]);
     this.mapSelect.innerHTML = '';
     if (maps.length === 0) {
       const placeholder = document.createElement('option');
@@ -319,8 +320,9 @@ export class GMApp {
       this.mapSelect.appendChild(opt);
     }
     if (maps.length > 0) {
-      this.mapSelect.value = maps[0]!.id;
-      await this.loadMap(maps[0]!);
+      const last = session?.lastMapId ? (maps.find((m) => m.id === session.lastMapId) ?? maps[0]!) : maps[0]!;
+      this.mapSelect.value = last.id;
+      await this.loadMap(last);
     }
   }
 
@@ -376,6 +378,11 @@ export class GMApp {
     this.renderer.loadMap(blob, fog);
 
     this.setStatus(map.name, 'ok');
+
+    // Persist last-opened map so it reopens on next page load
+    void loadSession().then((s) => {
+      if (s) void saveSession({ ...s, lastMapId: map.id });
+    });
 
     // Stop positional and soundboard audio from the previous map
     this.positionalAudio.setSources([]);
