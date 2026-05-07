@@ -9,8 +9,8 @@ const ICON_ONCE = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="
 /** Loop: 🔁-style rectangular two-arrow loop */
 const ICON_LOOP = `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 Q2 11 2 9 L2 7 Q2 5 4 5 L11 5"/><polyline points="9 3 11 5 9 7"/><path d="M13 5 Q14 5 14 7 L14 9 Q14 11 12 11 L5 11"/><polyline points="7 9 5 11 7 13"/></svg>`;
 
-/** Random: same loop with a ? mark overlaid in the centre */
-const ICON_RANDOM = `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 Q2 11 2 9 L2 7 Q2 5 4 5 L11 5"/><polyline points="9 3 11 5 9 7"/><path d="M13 5 Q14 5 14 7 L14 9 Q14 11 12 11 L5 11"/><polyline points="7 9 5 11 7 13"/><text x="8" y="8.5" text-anchor="middle" dominant-baseline="middle" font-size="7" font-weight="bold" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">?</text></svg>`;
+/** Random: shuffle icon — two crossing arrows (top-left→bottom-right, bottom-left→top-right) */
+const ICON_RANDOM = `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 4 Q5 4 8 8 Q11 12 14 12"/><polyline points="11 10 14 12 11 14"/><path d="M1 12 Q5 12 8 8 Q11 4 14 4"/><polyline points="11 2 14 4 11 6"/></svg>`;
 import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { FreesoundModal } from './FreesoundModal.ts';

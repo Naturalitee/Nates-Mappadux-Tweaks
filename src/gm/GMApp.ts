@@ -254,6 +254,23 @@ export class GMApp {
       }
     }
 
+    if (changed.includes('map')) {
+      // Restore the persisted transition for the newly loaded map.
+      // Runs synchronously inside loadForMap's _notify call — before any subsequent
+      // awaits in loadMap — so buildTransitionConfig() always sees the correct value.
+      const savedTransition = state.transition;
+      const newId = savedTransition?.transitionId ?? 'none';
+      this.activeTransitionId = newId;
+      if (savedTransition) {
+        this.allTransitionParams[savedTransition.transitionId] = savedTransition.params;
+      }
+      this.transitionSelect.value = newId;
+      this.transitionPanel.render(
+        transitionRegistry.getOrFallback(newId),
+        this.allTransitionParams[newId] ?? transitionRegistry.defaultParams(newId),
+      );
+    }
+
     if (changed.includes('markers')) {
       this.markerEditor.update(state.markers, this.mapAspectRatio);
       this.updateMarkerPanel();
@@ -330,18 +347,8 @@ export class GMApp {
     this.fogEditor.loadState(this.state.getState().fog);
     this.syncView(this.state.getState());
     this.filterSelect.value = this.state.getState().filter.filterId;
-
-    // Restore persisted transition selection for this map
-    const savedTransition = this.state.getState().transition;
-    this.activeTransitionId = savedTransition?.transitionId ?? 'none';
-    if (savedTransition) {
-      this.allTransitionParams[savedTransition.transitionId] = savedTransition.params;
-    }
-    this.transitionSelect.value = this.activeTransitionId;
-    this.transitionPanel.render(
-      transitionRegistry.getOrFallback(this.activeTransitionId),
-      this.allTransitionParams[this.activeTransitionId] ?? transitionRegistry.defaultParams(this.activeTransitionId),
-    );
+    // Transition UI is restored in onStateChange (changed.includes('map')) — synchronous
+    // within loadForMap's _notify call, so activeTransitionId is already correct here.
 
     // Capture fog state after loadForMap so the correct state is used everywhere
     const fog = this.state.getState().fog;

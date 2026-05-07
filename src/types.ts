@@ -108,7 +108,7 @@ export function defaultMarker(id: string, x = 0.5, y = 0.5): Marker {
     hiddenFromTracker: false,
     showLabel:         false,
     audioTrackId:      null,
-    audioLoop:         false,
+    audioLoop:         true,
     audioMuted:        false,
     audioMaxDistance:  0.3,
     audioVolume:       1.0,
