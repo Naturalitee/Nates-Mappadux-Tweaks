@@ -127,19 +127,13 @@ export class MarkerEditor {
       }
     }
 
-    const hit = this.layer.hitTestMarker(x, y, this.markers, null);
+    const hit = this.layer.hitTestMarker(x, y, this.markers.filter(m => !m.locked), null);
 
     if (hit) {
-      if (hit.locked) {
-        // Locked markers ignore canvas clicks entirely
-        this.selectedId = null;
-        this._onSelect(null);
-      } else {
-        this.selectedId = hit.id;
-        this._onSelect(hit);
-        this.dragging   = true;
-        (e.target as Element).setPointerCapture(e.pointerId);
-      }
+      this.selectedId = hit.id;
+      this._onSelect(hit);
+      this.dragging   = true;
+      (e.target as Element).setPointerCapture(e.pointerId);
     } else {
       this.selectedId = null;
       this._onSelect(null);
