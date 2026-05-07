@@ -21,9 +21,9 @@ export class SoundboardEngine {
     this.dataUrls.set(assetId, dataUrl);
   }
 
-  play(slotId: string, assetId: string, loop: boolean, volume: number): void {
+  play(slotId: string, assetId: string, loop: boolean, volume: number): Promise<void> {
     const blobUrl = this.blobUrls.get(assetId);
-    if (!blobUrl) return;
+    if (!blobUrl) return Promise.resolve();
 
     let el = this.audioEls.get(slotId);
     if (!el) {
@@ -45,7 +45,7 @@ export class SoundboardEngine {
     // Wire ended callback so one-shot sounds reset the play button
     el.onended = loop ? null : () => { this.onSlotEnded?.(slotId); };
 
-    void el.play().catch(() => { /* autoplay blocked — caller handles */ });
+    return el.play().catch(() => { /* autoplay blocked — caller handles */ });
   }
 
   stop(slotId: string): void {

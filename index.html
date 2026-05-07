@@ -31,13 +31,9 @@
     </section>
 
     <section class="panel" id="map-panel">
-      <button type="button" class="panel-title" aria-expanded="true">Map</button>
+      <button type="button" class="panel-title" aria-expanded="true">Map Selection</button>
       <div class="panel-body">
-        <p class="map-section-label">Current Map</p>
         <select id="map-select" class="select-full"></select>
-        <p class="map-section-label map-section-label--gap">Map Transition</p>
-        <select id="transition-select" class="select-full"></select>
-        <div id="transition-params" class="transition-params-container"></div>
         <label class="upload-label btn btn--ghost">
           Upload New Map
           <input type="file" id="map-upload" accept=".png,.jpg,.jpeg,.webp" hidden />
@@ -51,6 +47,14 @@
             <input type="file" id="bundle-import" accept=".json" hidden />
           </label>
         </div>
+      </div>
+    </section>
+
+    <section class="panel" id="transition-panel">
+      <button type="button" class="panel-title" aria-expanded="false">Map Transition</button>
+      <div class="panel-body" hidden>
+        <select id="transition-select" class="select-full"></select>
+        <div id="transition-params" class="transition-params-container"></div>
       </div>
     </section>
 

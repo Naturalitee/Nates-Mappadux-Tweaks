@@ -401,11 +401,13 @@ export class SoundboardPanel {
       await this._loadAssetIntoEngine(meta);
     }));
     // Auto-resume loops and random schedulers that were active on last map visit.
-    // Do this before _render() so the engine state is correct when building the DOM.
+    // Await all play() promises so el.paused is false by the time _render() runs —
+    // otherwise isPlaying() returns false during the async gap and the UI shows wrong state.
+    const resumePromises: Promise<void>[] = [];
     for (const slot of this.slots) {
       if (!slot.playing || !slot.assetId) continue;
       if (slot.loop && !this.engine.isPlaying(slot.id)) {
-        this.engine.play(slot.id, slot.assetId, true, slot.volume);
+        resumePromises.push(this.engine.play(slot.id, slot.assetId, true, slot.volume));
         const dataUrl = this.engine.getDataUrl(slot.assetId);
         if (dataUrl) {
           this.onBroadcast({ type: 'play', data: {
@@ -416,7 +418,9 @@ export class SoundboardPanel {
         this._scheduleRandom(slot);
       }
     }
+    await Promise.all(resumePromises);
     this._render();
+    this._startRaf(); // restart progress bar for any resumed loops
     this.onAssetsLoaded?.();
   }
 
