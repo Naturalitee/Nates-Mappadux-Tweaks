@@ -1,5 +1,5 @@
 import type { AudioAsset } from '../types.ts';
-import { FreesoundClient, type FreesoundResult } from '../audio/FreesoundClient.ts';
+import { FreesoundClient, type FreesoundResult, type FreesoundPage } from '../audio/FreesoundClient.ts';
 import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
 
 // Duration filter options shown in the dropdown
@@ -21,6 +21,8 @@ export class FreesoundModal {
   private onAssign:       AssignCallback;
   private selectedDuration: number | null = 30;
   private searchResults:  FreesoundResult[] = [];
+  private nextPageUrl:    string | null = null;
+  private totalCount:     number = 0;
   private uploadFile:     File | null = null;
 
   constructor(onAssign: AssignCallback) {
@@ -200,20 +202,69 @@ export class FreesoundModal {
     this._setSearchStatus('Searching…');
     const resultsEl = this.el.querySelector<HTMLElement>('#fs-results')!;
     resultsEl.innerHTML = '';
+    this.searchResults = [];
+    this.nextPageUrl   = null;
+    this.totalCount    = 0;
 
     try {
-      this.searchResults = await FreesoundClient.search(query, this.selectedDuration);
-      this._setSearchStatus('');
-      if (this.searchResults.length === 0) {
+      const page = await FreesoundClient.search(query, this.selectedDuration);
+      if (page.results.length === 0) {
         this._setSearchStatus('No results found.');
         return;
       }
-      for (const r of this.searchResults) {
-        resultsEl.appendChild(this._resultRow(r));
-      }
+      this._appendPage(page);
     } catch (err) {
       this._setSearchStatus(`Error: ${(err as Error).message}`);
     }
+  }
+
+  private async _loadMore(): Promise<void> {
+    if (!this.nextPageUrl) return;
+    const btn = this.el.querySelector<HTMLButtonElement>('#fs-more-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
+
+    try {
+      const page = await FreesoundClient.fetchPage(this.nextPageUrl);
+      this._appendPage(page);
+    } catch (err) {
+      this._setSearchStatus(`Error: ${(err as Error).message}`);
+      if (btn) { btn.disabled = false; btn.textContent = this._moreLabel(); }
+    }
+  }
+
+  private _appendPage(page: FreesoundPage): void {
+    const resultsEl = this.el.querySelector<HTMLElement>('#fs-results')!;
+
+    // Remove existing More button before appending new rows
+    resultsEl.querySelector('#fs-more-btn')?.remove();
+
+    this.searchResults.push(...page.results);
+    this.nextPageUrl = page.nextUrl;
+    this.totalCount  = page.count;
+
+    for (const r of page.results) {
+      resultsEl.appendChild(this._resultRow(r));
+    }
+
+    const shown = this.searchResults.length;
+    if (page.nextUrl) {
+      this._setSearchStatus(`Showing ${shown} of ${this.totalCount}`);
+      const btn = document.createElement('button');
+      btn.id        = 'fs-more-btn';
+      btn.className = 'btn btn--ghost btn--sm fs-more-btn';
+      btn.textContent = this._moreLabel();
+      btn.addEventListener('click', () => void this._loadMore());
+      resultsEl.appendChild(btn);
+    } else {
+      this._setSearchStatus(shown === this.totalCount
+        ? `${this.totalCount} result${this.totalCount !== 1 ? 's' : ''}`
+        : `Showing ${shown} of ${this.totalCount}`);
+    }
+  }
+
+  private _moreLabel(): string {
+    const remaining = this.totalCount - this.searchResults.length;
+    return `More results… (${remaining} remaining)`;
   }
 
   private _resultRow(result: FreesoundResult): HTMLElement {

@@ -46,23 +46,28 @@ Dynamic Map Renderer v2 is a browser-based tool for tabletop roleplaying game GM
   - **Add** — click **+ Add Marker** in the sidebar or right-click the map.
   - **Drag** — drag any marker to reposition it; position broadcasts to players on release.
   - **Properties** — edit name, icon, colour, and size per marker.
-  - **Icon picker** — click the icon button to open a grid of 46 preset Unicode symbols (shapes, chess/card suits, circled numbers ①–⑳, check/cross marks). Upload your own custom icon (resized to 64×64 and saved to IndexedDB); custom icons are included in bundle export/import and transmitted to connected players automatically.
+  - **Icon picker** — click the icon button to open a grid of 46 preset Unicode symbols (shapes, chess/card suits, circled numbers ①–⑳, check/cross marks). Upload your own custom icon (resized to 64×64 and saved to IndexedDB); custom icons are included in bundle export/import and transmitted to connected players automatically. Use **✕ Delete custom icon** to remove any uploaded icon from the picker.
+  - **Clone** — **Clone Marker** duplicates the selected marker (offset slightly, label gets " - copy"), useful for quickly placing groups of identical tokens.
   - **Show Name** — per-marker toggle to display the label on the player map (off by default — players see the icon only unless enabled).
   - **Visibility** — toggle **Hide from players** to ghost the marker on the GM canvas while hiding it from players entirely.
   - **GM badges** — each marker on the GM canvas shows clickable mini-badges for visibility and role (audio source / listener).
   - **Filter passthrough** — player markers live inside the Three.js scene, so all active GLSL filters (parchment, retro sci-fi, watercolour, etc.) apply to them exactly as to the map.
   - **Persistence** — markers are saved per-map in IndexedDB and restored on reload.
+  - **Marker audio (positional)** — assign an audio role to any marker:
+    - **Audio Source** — plays a sound (loop, random, or one-shot) whose volume attenuates with distance to the Listener. Assign a sound from your library, set volume, max-distance radius, and playback mode. Multiple sources are supported.
+    - **Listener** — represents the players' ears. Move the listener marker to change what the players hear from each source in real time.
+    - All positional audio is broadcast to connected players via P2P.
 
 - **Player view control** — interactive on-map viewport editor: an orange rectangle on the GM's canvas always shows what players see. Click **Edit Player View** to drag-move or freely corner-resize it. One-click **Reset to Full Map**. The player's screen is strictly clipped to the rectangle; background colour fills any bars caused by aspect-ratio differences.
 - **Background colour** — set the letterbox colour; auto-sampled from the map on first load.
-- **Real-time sync** — all GM changes (map, fog, filter, view, markers, transition) push to connected players instantly.
-- **Room code** — three-word memorable code persists across reloads so players can reconnect.
+- **Real-time sync** — all GM changes (map, fog, filter, view, markers, audio, transition) push to connected players instantly.
+- **Room code** — three-word memorable code persists across reloads so players can reconnect. If the connection drops, the player window auto-reconnects with exponential back-off.
 - **QR code** — scan to open the player view on a phone or tablet instantly. When running locally, uses your LAN IP so other devices on the same network can connect.
 - **Soundboard** — play ambient audio and sound effects to connected players from the Soundboard panel:
   - Up to 8 configurable slots per page, with unlimited pages.
   - **Assign sounds** — click any slot to open the sound picker:
     - **My Library** — browse and manage previously saved sounds; filter by name.
-    - **Freesound Search** — search [freesound.org](https://freesound.org) by keyword with optional duration filter. Preview before importing. Requires a free Freesound API key (paste it into the search tab — it's saved to your browser).
+    - **Freesound Search** — search [freesound.org](https://freesound.org) by keyword with optional duration filter. Preview before importing. Results paginate with a **More results…** button. Requires a free Freesound API key (paste it into the search tab — it's saved to your browser).
     - **Upload** — drag and drop any local audio file, or click to browse. Uploaded sounds are stored in IndexedDB and embedded in your bundle export.
   - **Playback modes** — two toggles per slot, combinable:
     - **Loop** 🔄 — plays continuously until stopped; auto-resumes when you return to the map.

@@ -5,7 +5,7 @@ import { filterRegistry } from '../filters/FilterRegistry.ts';
 
 type StateListener = (state: SessionState, changed: (keyof SessionState)[]) => void;
 
-const AUTOSAVE_DEBOUNCE_MS = 1500;
+const AUTOSAVE_DEBOUNCE_MS = 400;
 
 /**
  * StateManager — single source of truth for the GM session.
@@ -21,6 +21,16 @@ export class StateManager {
 
   getState(): SessionState {
     return this.state;
+  }
+
+  /** Call after wiping IDB (e.g. bundle import) to prevent a subsequent loadMap
+   *  from flushing the stale in-memory state back over the freshly written configs. */
+  resetForImport(): void {
+    if (this.saveTimer) {
+      clearTimeout(this.saveTimer);
+      this.saveTimer = null;
+    }
+    this.state = defaultSessionState();
   }
 
   // ─── Load ─────────────────────────────────────────────────────────────────
@@ -89,17 +99,17 @@ export class StateManager {
 
   setMarkers(markers: Marker[]): void {
     this.state = { ...this.state, markers };
-    this._notify(['markers']);
+    this._notify(['markers'], undefined, true);
   }
 
   setAudio(audio: AudioState): void {
     this.state = { ...this.state, audio };
-    this._notify(['audio']);
+    this._notify(['audio'], undefined, true);
   }
 
   setTransition(config: TransitionConfig): void {
     this.state = { ...this.state, transition: config };
-    this._notify(['transition']);
+    this._notify(['transition'], undefined, true);
   }
 
   // ─── Listeners ────────────────────────────────────────────────────────────
@@ -111,9 +121,12 @@ export class StateManager {
 
   // ─── Private ──────────────────────────────────────────────────────────────
 
-  private _notify(changed: (keyof SessionState)[], mapBlob?: ArrayBuffer): void {
+  private _notify(changed: (keyof SessionState)[], mapBlob?: ArrayBuffer, immediate = false): void {
     for (const fn of this.listeners) fn(this.state, changed);
-    this.scheduleAutosave();
+    // Discrete mutations (markers, audio, transition) pass immediate=true so the
+    // write goes to IDB right away rather than waiting for the debounce window.
+    if (immediate) void this.flushSave();
+    else this.scheduleAutosave();
     void mapBlob; // mapBlob is passed through to P2P layer via the listener; not saved here
   }
 

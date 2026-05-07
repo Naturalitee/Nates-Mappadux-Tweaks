@@ -1,4 +1,4 @@
-import { saveAsset, getAllAssets } from '../storage/db.ts';
+import { saveAsset, getAllAssets, deleteAsset } from '../storage/db.ts';
 
 const PRESET_ICONS = [
   '◆','◇','●','○','■','□','▲','△','▼','▽',
@@ -18,7 +18,9 @@ const PRESET_ICONS = [
 export class IconPicker {
   private readonly _el: HTMLElement;
   private readonly _fileInput: HTMLInputElement;
-  private _onSelect: ((icon: string) => void) | null = null;
+  private _onSelect:    ((icon: string) => void) | null = null;
+  private _deleteMode = false;
+  private _currentIcon = '◆';
   readonly iconCache    = new Map<string, ImageBitmap>();
   /** data URLs keyed by 'asset:uuid' — used when broadcasting markers over P2P */
   readonly iconDataUrls = new Map<string, string>();
@@ -68,7 +70,9 @@ export class IconPicker {
 
   /** Open the picker anchored below `anchor`. `currentIcon` is highlighted. */
   open(anchor: HTMLElement, currentIcon: string, onSelect: (icon: string) => void): void {
-    this._onSelect = onSelect;
+    this._onSelect    = onSelect;
+    this._currentIcon = currentIcon;
+    this._deleteMode  = false;
     void this._rebuild(currentIcon);
     const rect = anchor.getBoundingClientRect();
     this._el.style.left = `${Math.min(rect.left, window.innerWidth - 270)}px`;
@@ -77,8 +81,9 @@ export class IconPicker {
   }
 
   close(): void {
-    this._el.hidden = true;
-    this._onSelect = null;
+    this._el.hidden  = true;
+    this._onSelect   = null;
+    this._deleteMode = false;
   }
 
   private async _rebuild(current: string): Promise<void> {
@@ -114,7 +119,8 @@ export class IconPicker {
 
       const customLabel = document.createElement('div');
       customLabel.className = 'icon-picker-section-label';
-      customLabel.textContent = 'Custom';
+      customLabel.textContent = this._deleteMode ? 'Custom — click to delete' : 'Custom';
+      if (this._deleteMode) customLabel.style.color = 'var(--danger, #e05)';
       this._el.appendChild(customLabel);
 
       const customGrid = document.createElement('div');
@@ -123,7 +129,9 @@ export class IconPicker {
         const assetKey = 'asset:' + asset.id;
         const btn = document.createElement('button');
         btn.type = 'button';
-        btn.className = 'icon-picker-btn' + (current === assetKey ? ' icon-picker-btn--active' : '');
+        btn.className = 'icon-picker-btn'
+          + (current === assetKey ? ' icon-picker-btn--active' : '')
+          + (this._deleteMode ? ' icon-picker-btn--danger' : '');
 
         const img = document.createElement('img');
         img.src = URL.createObjectURL(asset.blob);
@@ -131,15 +139,25 @@ export class IconPicker {
         btn.appendChild(img);
 
         btn.addEventListener('click', () => {
-          this._onSelect?.(assetKey);
-          this.close();
+          if (this._deleteMode) {
+            void deleteAsset(asset.id).then(async () => {
+              this.iconCache.delete(assetKey);
+              this.iconDataUrls.delete(assetKey);
+              const remaining = await getAllAssets('icon');
+              if (remaining.length === 0) this._deleteMode = false;
+              void this._rebuild(this._currentIcon);
+            });
+          } else {
+            this._onSelect?.(assetKey);
+            this.close();
+          }
         });
         customGrid.appendChild(btn);
       }
       this._el.appendChild(customGrid);
     }
 
-    // ── Upload button ────────────────────────────────────────────────────────
+    // ── Upload / delete buttons ───────────────────────────────────────────────
     const sep2 = document.createElement('div');
     sep2.className = 'icon-picker-sep';
     this._el.appendChild(sep2);
@@ -152,6 +170,18 @@ export class IconPicker {
       this._fileInput.click();
     });
     this._el.appendChild(uploadBtn);
+
+    if (assets.length > 0) {
+      const deleteToggleBtn = document.createElement('button');
+      deleteToggleBtn.type = 'button';
+      deleteToggleBtn.className = 'icon-picker-upload icon-picker-upload--danger';
+      deleteToggleBtn.textContent = this._deleteMode ? '← Cancel delete' : '✕ Delete custom icon';
+      deleteToggleBtn.addEventListener('click', () => {
+        this._deleteMode = !this._deleteMode;
+        void this._rebuild(this._currentIcon);
+      });
+      this._el.appendChild(deleteToggleBtn);
+    }
   }
 
   private _bindClose(): void {

@@ -133,6 +133,15 @@ export class GMApp {
     // correctly populates host.lastState.
     this.state.onChange((s, changed) => this.onStateChange(s, changed));
 
+    // Flush any pending debounced autosave before the page disappears.
+    // Without this, a GM refresh within the 1500ms debounce window loses
+    // any changes made since the last actual IDB write.
+    const flushOnHide = () => { void this.state.flushSave(); };
+    window.addEventListener('pagehide',           flushOnHide);
+    document.addEventListener('visibilitychange', () => {
+      if (document.visibilityState === 'hidden') void this.state.flushSave();
+    });
+
     await seedDefaultMaps();
     await this.populateMapList();
     await this.startHost();
@@ -657,6 +666,7 @@ export class GMApp {
     document.querySelector('#export-btn')?.addEventListener('click', async () => {
       try {
         this.setStatus('Exporting…', 'ok');
+        await this.state.flushSave(); // write in-memory state before reading IDB
         await exportBundle();
         this.setStatus('Maps exported', 'ok');
       } catch (err) {
@@ -680,6 +690,7 @@ export class GMApp {
         const existing = await getAllMaps();
         for (const m of existing) await deleteMap(m.id);
         const { added } = await importBundle(file);
+        this.state.resetForImport();
         await this.populateMapList();
         this.setStatus(`Loaded — ${added} map${added !== 1 ? 's' : ''} imported`, 'ok');
       } catch (err) {
@@ -785,6 +796,25 @@ export class GMApp {
       const { x, y } = this.markerEditor.ctxPos;
       this.markerEditor.addMarker(x, y);
       ctxMenuEl.hidden = true;
+    });
+
+    document.querySelector('#clone-marker-btn')?.addEventListener('click', () => {
+      if (!this.selectedMarkerId) return;
+      const src = this.state.getState().markers.find((m) => m.id === this.selectedMarkerId);
+      if (!src) return;
+      const clone = {
+        ...src,
+        id:       crypto.randomUUID(),
+        label:    src.label.endsWith(' - copy') ? src.label : `${src.label} - copy`,
+        position: {
+          x: Math.min(1, src.position.x + 0.02),
+          y: Math.min(1, src.position.y + 0.02),
+        },
+      };
+      const markers = [...this.state.getState().markers, clone];
+      this.selectedMarkerId = clone.id;
+      this.markerEditor.selectById(clone.id);
+      this.state.setMarkers(markers);
     });
 
     document.querySelector('#delete-marker-btn')?.addEventListener('click', () => {

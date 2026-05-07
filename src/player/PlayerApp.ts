@@ -156,9 +156,17 @@ export class PlayerApp {
     this.roomCode = roomCode;
     this.setStatus('Connecting…');
 
+    // Destroy any existing guest (e.g. WebGL context-recovery reconnect) before
+    // creating a new one, so there are never two active P2P connections at once.
+    this.guest?.destroy();
+
     this.guest = new Guest({
-      onConnected:    () => this.setStatus('Connected'),
+      onConnected:    () => this.setStatus(''),
       onDisconnected: () => this.setStatus('Disconnected — waiting for GM…'),
+      onReconnecting: (attempt, delayMs) => {
+        const secs = Math.round(delayMs / 1000);
+        this.setStatus(`Reconnecting… (${secs}s, attempt ${attempt})`);
+      },
       onError: (err)  => this.setStatus(`Error: ${err.message}`),
       onMessage: (msg, blob) => this.handleMessage(msg, blob),
     });

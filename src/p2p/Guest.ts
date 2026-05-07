@@ -6,6 +6,8 @@ export interface GuestEvents {
   onMessage: (msg: GMMessage, mapBlob?: ArrayBuffer) => void;
   onConnected: () => void;
   onDisconnected: () => void;
+  /** Fired when a disconnect is detected and a reconnect attempt is scheduled. */
+  onReconnecting?: (attempt: number, delayMs: number) => void;
   onError: (err: Error) => void;
 }
 
@@ -26,6 +28,12 @@ export class Guest {
   private blobChunks: ArrayBuffer[] = [];
   private blobTotal = 0;
   private pendingMsg: GMMessage | null = null;
+
+  // Auto-reconnect state
+  private _destroyed = false;
+  private _reconnectCode: string | null = null;
+  private _reconnectAttempt = 0;
+  private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(events: GuestEvents) {
     this.events = events;
@@ -52,35 +60,84 @@ export class Guest {
 
   /** Connect to a GM via their room code (PeerJS peer ID) */
   connect(roomCode: string): void {
+    this._reconnectCode    = roomCode;
+    this._reconnectAttempt = 0;
+    this._doConnect(roomCode);
+  }
+
+  destroy(): void {
+    this._destroyed     = true;
+    this._reconnectCode = null;
+    if (this._reconnectTimer !== null) {
+      clearTimeout(this._reconnectTimer);
+      this._reconnectTimer = null;
+    }
+    this.local.destroy();
+    this._teardownPeer();
+  }
+
+  // ─── Private ───────────────────────────────────────────────────────────────
+
+  private _doConnect(roomCode: string): void {
+    this._teardownPeer();
+    this._resetBlobState();
+
     const peer = new Peer();
     this.peer = peer;
 
     peer.on('open', () => {
+      if (this._destroyed) return;
       const conn = peer.connect(roomCode, { reliable: true, serialization: 'raw' });
       this.conn = conn;
       this.setupConnection(conn);
     });
 
     peer.on('error', (err) => {
-      // Ignore background peer-level errors (broker reconnects, ICE noise, etc.)
-      // if a DataConnection is already open and working — the data link is fine.
+      if (this._destroyed) return;
+      // Ignore broker-level noise when the data link is already healthy.
       if (this.conn?.open) return;
-      this.events.onError(err as Error);
+      // In reconnect mode, retry on any peer-level error (peer-unavailable etc.)
+      if (this._reconnectCode) {
+        this._scheduleReconnect();
+      } else {
+        this.events.onError(err as Error);
+      }
     });
   }
 
-  destroy(): void {
-    this.local.destroy();
-    this.conn?.close();
-    this.peer?.destroy();
-    this.peer = null;
+  private _teardownPeer(): void {
+    try { this.conn?.close(); }   catch { /* ignore */ }
+    try { this.peer?.destroy(); } catch { /* ignore */ }
     this.conn = null;
+    this.peer = null;
   }
 
-  // ─── Private ───────────────────────────────────────────────────────────────
+  private _resetBlobState(): void {
+    this.blobChunks = [];
+    this.blobTotal  = 0;
+    this.pendingMsg = null;
+  }
+
+  private _scheduleReconnect(): void {
+    if (this._destroyed || !this._reconnectCode) return;
+    this._reconnectAttempt++;
+    // Exponential backoff: 2 s, 4 s, 8 s, 16 s, capped at 30 s
+    const delay = Math.min(2000 * Math.pow(2, this._reconnectAttempt - 1), 30_000);
+    this.events.onReconnecting?.(this._reconnectAttempt, delay);
+    this._reconnectTimer = setTimeout(() => {
+      if (this._destroyed || !this._reconnectCode) return;
+      this._doConnect(this._reconnectCode);
+    }, delay);
+  }
 
   private setupConnection(conn: DataConnection): void {
     conn.on('open', () => {
+      if (this._destroyed) return;
+      this._reconnectAttempt = 0; // reset backoff on successful connect
+      if (this._reconnectTimer !== null) {
+        clearTimeout(this._reconnectTimer);
+        this._reconnectTimer = null;
+      }
       this.events.onConnected();
     });
 
@@ -89,11 +146,21 @@ export class Guest {
     });
 
     conn.on('close', () => {
-      this.events.onDisconnected();
+      if (this._destroyed) return;
+      if (this._reconnectCode) {
+        this._scheduleReconnect();
+      } else {
+        this.events.onDisconnected();
+      }
     });
 
     conn.on('error', (err) => {
-      this.events.onError(err as Error);
+      if (this._destroyed) return;
+      if (this._reconnectCode) {
+        this._scheduleReconnect();
+      } else {
+        this.events.onError(err as Error);
+      }
     });
   }
 

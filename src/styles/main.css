@@ -905,6 +905,10 @@ body.player-view #renderer-canvas {
   cursor: pointer;
 }
 .icon-picker-upload:hover { border-color: var(--accent); color: var(--accent); }
+.icon-picker-upload--danger { color: var(--danger); border-color: transparent; }
+.icon-picker-upload--danger:hover { border-color: var(--danger); color: var(--danger); }
+.icon-picker-btn--danger { border-color: var(--danger) !important; opacity: 0.8; }
+.icon-picker-btn--danger:hover { opacity: 1; background: rgba(220,50,50,0.15) !important; }
 
 /* ── Soundboard panel ───────────────────────────────────────────────────── */
 .sb-mute-row   { margin-bottom: 2px; }
@@ -1172,6 +1176,8 @@ body.player-view #renderer-canvas {
   font-style: italic;
 }
 .sound-row-actions { display: flex; gap: var(--space-xs); align-items: center; flex-shrink: 0; }
+
+.fs-more-btn { width: 100%; margin-top: var(--space-xs); }
 
 /* xs button variant */
 .btn--xs { font-size: 0.7rem; padding: 2px 7px; }

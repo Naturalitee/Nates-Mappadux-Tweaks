@@ -56,6 +56,12 @@ interface RawResult {
   duration: number;
 }
 
+export interface FreesoundPage {
+  results: FreesoundResult[];
+  count:   number;
+  nextUrl: string | null;
+}
+
 // ─── Public API ───────────────────────────────────────────────────────────────
 
 export class FreesoundClient {
@@ -70,14 +76,14 @@ export class FreesoundClient {
   static async search(
     query: string,
     maxDurationSecs: number | null,
-  ): Promise<FreesoundResult[]> {
+  ): Promise<FreesoundPage> {
     const apiKey = FreesoundClient.getApiKey();
     if (!apiKey) throw new Error('No Freesound API key set');
 
     const params = new URLSearchParams({
       query,
-      token:  apiKey,
-      fields: FIELDS,
+      token:     apiKey,
+      fields:    FIELDS,
       page_size: '20',
     });
     if (maxDurationSecs !== null) {
@@ -90,8 +96,35 @@ export class FreesoundClient {
       throw new Error(`Freesound search failed: ${res.status}`);
     }
 
-    const data = await res.json() as { results: RawResult[] };
-    return (data.results ?? []).map(toResult);
+    const data = await res.json() as { results: RawResult[]; count: number; next: string | null };
+    return {
+      results: (data.results ?? []).map(toResult),
+      count:   data.count ?? 0,
+      nextUrl: data.next ?? null,
+    };
+  }
+
+  /** Fetch a subsequent page using the `next` URL returned by a previous search. */
+  static async fetchPage(nextUrl: string): Promise<FreesoundPage> {
+    const apiKey = FreesoundClient.getApiKey();
+    if (!apiKey) throw new Error('No Freesound API key set');
+
+    // Ensure the token param is present (Freesound includes it but re-add for safety)
+    const url = new URL(nextUrl);
+    if (!url.searchParams.has('token')) url.searchParams.set('token', apiKey);
+
+    const res = await fetch(url.toString());
+    if (!res.ok) {
+      if (res.status === 401) throw new Error('Invalid Freesound API key');
+      throw new Error(`Freesound fetch failed: ${res.status}`);
+    }
+
+    const data = await res.json() as { results: RawResult[]; count: number; next: string | null };
+    return {
+      results: (data.results ?? []).map(toResult),
+      count:   data.count ?? 0,
+      nextUrl: data.next ?? null,
+    };
   }
 
   /** Download a preview MP3 and return as a Blob. */

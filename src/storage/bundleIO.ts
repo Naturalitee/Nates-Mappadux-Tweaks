@@ -34,6 +34,11 @@ export interface DMRBundle {
   customIcons?: IconEntry[];
   /** Uploaded audio files — embedded because they have no remote source to re-download */
   uploadedAudio?: AudioEntry[];
+  /**
+   * Freesound asset metadata only — blobs are NOT embedded (too large; can be
+   * re-downloaded from freesoundPreviewUrl on demand via AudioAssetStore.getBlob).
+   */
+  freesoundAudio?: AudioAsset[];
 }
 
 // ─── Encoding helpers ─────────────────────────────────────────────────────────
@@ -107,12 +112,16 @@ export async function exportBundle(): Promise<void> {
     });
   }
 
+  // Export Freesound metadata only — no blob (re-downloaded on demand via freesoundPreviewUrl)
+  const freesoundAudio = allAudioMeta.filter((a) => a.source === 'freesound');
+
   const bundle: DMRBundle = {
     version:    BUNDLE_VERSION,
     exportedAt: Date.now(),
     maps:       entries,
-    ...(iconEntries.length > 0    ? { customIcons:    iconEntries    } : {}),
-    ...(uploadedAudio.length > 0  ? { uploadedAudio:  uploadedAudio  } : {}),
+    ...(iconEntries.length > 0      ? { customIcons:    iconEntries    } : {}),
+    ...(uploadedAudio.length > 0    ? { uploadedAudio:  uploadedAudio  } : {}),
+    ...(freesoundAudio.length > 0   ? { freesoundAudio: freesoundAudio } : {}),
   };
 
   const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
@@ -177,7 +186,7 @@ export async function importBundle(
     }
   }
 
-  // Restore uploaded audio assets
+  // Restore uploaded audio assets (with embedded blob)
   if (Array.isArray(bundle.uploadedAudio)) {
     for (const entry of bundle.uploadedAudio) {
       const blob = b64ToBlob(entry.dataB64, entry.mimeType);
@@ -190,6 +199,15 @@ export async function importBundle(
       };
       await saveAudioAsset(asset);
       await saveAsset({ id: entry.id, name: entry.name, type: 'audio', blob, addedAt: entry.addedAt });
+    }
+  }
+
+  // Restore Freesound metadata — blob is not bundled; AudioAssetStore.getBlob()
+  // will re-download from freesoundPreviewUrl on first access if API key is set.
+  if (Array.isArray(bundle.freesoundAudio)) {
+    for (const asset of bundle.freesoundAudio) {
+      await saveAudioAsset(asset as AudioAsset);
+      // Don't overwrite the blob if it was already cached locally
     }
   }
 
