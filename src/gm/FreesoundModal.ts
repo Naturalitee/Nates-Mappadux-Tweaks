@@ -1,5 +1,7 @@
 import type { AudioAsset } from '../types.ts';
-import { FreesoundClient, type FreesoundResult, type FreesoundPage } from '../audio/FreesoundClient.ts';
+import { FreesoundClient } from '../audio/FreesoundClient.ts';
+import { freesoundConnector } from '../audio/connectors/FreesoundConnector.ts';
+import type { AssetSourceConnector, AssetSearchPage } from '../audio/connectors/AssetSourceConnector.ts';
 import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
 
 // Duration filter options shown in the dropdown
@@ -15,15 +17,17 @@ const DURATION_OPTIONS: Array<{ label: string; value: number | null }> = [
 type AssignCallback = (asset: AudioAsset) => void;
 
 export class FreesoundModal {
-  private el!:            HTMLElement;
-  private previewEl:      HTMLAudioElement | null = null;
-  private previewingUrl:  string | null = null;
-  private onAssign:       AssignCallback;
+  private el!:              HTMLElement;
+  private previewEl:        HTMLAudioElement | null = null;
+  private previewingUrl:    string | null = null;
+  private onAssign:         AssignCallback;
   private selectedDuration: number | null = 30;
-  private searchResults:  FreesoundResult[] = [];
-  private nextPageUrl:    string | null = null;
-  private totalCount:     number = 0;
-  private uploadFile:     File | null = null;
+  /** Active search connector. v2.8 will let the modal switch between several. */
+  private searchConnector:  AssetSourceConnector<any> = freesoundConnector;
+  private searchResults:    any[] = [];
+  private nextPageUrl:      string | null = null;
+  private totalCount:       number = 0;
+  private uploadFile:       File | null = null;
 
   constructor(onAssign: AssignCallback) {
     this.onAssign = onAssign;
@@ -199,6 +203,11 @@ export class FreesoundModal {
     const query = this.el.querySelector<HTMLInputElement>('#fs-search-input')!.value.trim();
     if (!query) return;
 
+    if (this.searchConnector.requiresConfig && !this.searchConnector.isConfigured()) {
+      this._setSearchStatus('No API key set — paste one below first.');
+      return;
+    }
+
     this._setSearchStatus('Searching…');
     const resultsEl = this.el.querySelector<HTMLElement>('#fs-results')!;
     resultsEl.innerHTML = '';
@@ -207,7 +216,7 @@ export class FreesoundModal {
     this.totalCount    = 0;
 
     try {
-      const page = await FreesoundClient.search(query, this.selectedDuration);
+      const page = await this.searchConnector.search(query, { maxDurationSecs: this.selectedDuration });
       if (page.results.length === 0) {
         this._setSearchStatus('No results found.');
         return;
@@ -224,7 +233,7 @@ export class FreesoundModal {
     if (btn) { btn.disabled = true; btn.textContent = 'Loading…'; }
 
     try {
-      const page = await FreesoundClient.fetchPage(this.nextPageUrl);
+      const page = await this.searchConnector.fetchPage(this.nextPageUrl);
       this._appendPage(page);
     } catch (err) {
       this._setSearchStatus(`Error: ${(err as Error).message}`);
@@ -232,7 +241,7 @@ export class FreesoundModal {
     }
   }
 
-  private _appendPage(page: FreesoundPage): void {
+  private _appendPage(page: AssetSearchPage<any>): void {
     const resultsEl = this.el.querySelector<HTMLElement>('#fs-results')!;
 
     // Remove existing More button before appending new rows
@@ -267,17 +276,19 @@ export class FreesoundModal {
     return `More results… (${remaining} remaining)`;
   }
 
-  private _resultRow(result: FreesoundResult): HTMLElement {
-    const needsAttrib = !result.license.startsWith('CC0');
+  private _resultRow(result: any): HTMLElement {
+    const data = this.searchConnector.resultRow(result);
     const row = document.createElement('div');
     row.className = 'sound-row';
     row.innerHTML = `
       <div class="sound-row-info">
-        <span class="sound-name">${this._esc(result.name)}</span>
-        <span class="sound-meta">${this._esc(result.username)} · ${result.durationSecs}s ·
-          <span class="sound-license ${needsAttrib ? 'sound-license--attrib' : ''}">${this._esc(result.license)}</span>
+        <span class="sound-name">${this._esc(data.name)}</span>
+        <span class="sound-meta">${this._esc(data.meta)} ·
+          <span class="sound-license ${data.needsAttribution ? 'sound-license--attrib' : ''}">${this._esc(data.license)}</span>
         </span>
-        ${needsAttrib ? `<span class="sound-attrib-hint">Attribution required: "${this._esc(result.attribution)}"</span>` : ''}
+        ${data.needsAttribution && data.attribution
+          ? `<span class="sound-attrib-hint">Attribution required: "${this._esc(data.attribution)}"</span>`
+          : ''}
       </div>
       <div class="sound-row-actions">
         <button class="btn btn--ghost btn--xs sound-preview-btn">▶ Preview</button>
@@ -289,16 +300,16 @@ export class FreesoundModal {
     const importBtn  = row.querySelector<HTMLButtonElement>('.sound-import-btn')!;
 
     previewBtn.addEventListener('click', () => {
-      this._previewAudio(result.previewUrl, previewBtn);
+      this._previewAudio(data.previewUrl, previewBtn);
     });
 
     importBtn.addEventListener('click', async () => {
       importBtn.disabled = true;
       importBtn.textContent = 'Importing…';
       try {
-        const id   = crypto.randomUUID();
-        const blob = await FreesoundClient.downloadPreview(result.previewUrl);
-        const asset = FreesoundClient.resultToAsset(result, id);
+        const id    = crypto.randomUUID();
+        const blob  = await this.searchConnector.download(result);
+        const asset = this.searchConnector.toAudioAsset(result, id);
         await AudioAssetStore.save(asset, blob);
         this.onAssign(asset);
         this.close();
