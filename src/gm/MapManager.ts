@@ -1,8 +1,8 @@
 import type { StoredMap, MapAsset } from '../types.ts';
 import {
   saveMap, getAllMaps, deleteMap, getMap,
-  saveMapAsset, getMapAsset, deleteMapAsset,
 } from '../storage/db.ts';
+import { MapAssetStore } from '../maps/MapAssetStore.ts';
 
 function generateId(): string {
   return crypto.randomUUID();
@@ -37,6 +37,10 @@ export class MapManager {
     const mapId   = generateId();
     const now     = Date.now();
 
+    // Read intrinsic pixel dimensions now so the missing-asset placeholder (C10)
+    // can match the original geometry later without re-decoding.
+    const dims = await MapAssetStore.readDimensions(blob);
+
     const asset: MapAsset = {
       id:            assetId,
       filename:      file.name,
@@ -44,8 +48,9 @@ export class MapManager {
       locallyStored: true,
       blob,
       addedAt:       now,
+      ...(dims ? { imageWidth: dims.width, imageHeight: dims.height } : {}),
     };
-    await saveMapAsset(asset);
+    await MapAssetStore.save(asset);
 
     const map: StoredMap = {
       id:         mapId,
@@ -80,23 +85,30 @@ export class MapManager {
     const legacyBlob = (map as unknown as { blob?: Blob }).blob;
     if (legacyBlob) return legacyBlob.arrayBuffer();
 
-    const asset = await getMapAsset(map.mapAssetId);
-    if (!asset?.blob) return null;
-    return asset.blob.arrayBuffer();
+    const asset = await MapAssetStore.get(map.mapAssetId);
+    if (!asset) return null;
+    const blob = await MapAssetStore.getBlob(asset);
+    if (!blob) return null;
+
+    // Backfill image dimensions if we never recorded them — used by the
+    // missing-asset placeholder (C10) so fog/marker geometry stays sensible.
+    if (asset.imageWidth === undefined || asset.imageHeight === undefined) {
+      const dims = await MapAssetStore.readDimensions(blob);
+      if (dims) await MapAssetStore.update(asset.id, { imageWidth: dims.width, imageHeight: dims.height });
+    }
+
+    return blob.arrayBuffer();
   }
 
   /**
-   * Resolve the underlying MapAsset for a map instance. Useful for callers
-   * that need the original blob/mime/dimensions without going through ArrayBuffer.
-   *
-   * Synthesises a minimal MapAsset from the legacy inline blob when the map
-   * hasn't been migrated yet, so callers don't have to special-case.
+   * Resolve the underlying MapAsset for a map instance. Synthesises a minimal
+   * MapAsset from the legacy inline blob when the map hasn't been migrated yet.
    */
   async getAsset(id: string): Promise<MapAsset | null> {
     const map = await getMap(id);
     if (!map) return null;
 
-    const asset = await getMapAsset(map.mapAssetId);
+    const asset = await MapAssetStore.get(map.mapAssetId);
     if (asset) return asset;
 
     const legacyBlob = (map as unknown as { blob?: Blob }).blob;
@@ -115,7 +127,7 @@ export class MapManager {
 
   /**
    * Delete a map instance. Leaves the MapAsset in place — it might be in use
-   * by another map. C12 trash tracking will surface unused assets later.
+   * by another map. C12 trash tracking surfaces unused assets.
    */
   async delete(id: string): Promise<void> {
     await deleteMap(id);
@@ -127,6 +139,6 @@ export class MapManager {
     for (const m of all.filter((m) => m.mapAssetId === assetId)) {
       await deleteMap(m.id);
     }
-    await deleteMapAsset(assetId);
+    await MapAssetStore.delete(assetId);
   }
 }
