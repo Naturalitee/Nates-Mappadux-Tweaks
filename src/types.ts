@@ -57,25 +57,35 @@ export interface FilterState {
 
 // ─── Markers ──────────────────────────────────────────────────────────────────
 
-export type MarkerRole = 'default' | 'listener' | 'audio_source';
+export type AudioRole  = 'source' | 'listener';
+export type MotionRole = 'source' | 'tracker';
+
+/**
+ * A marker can hold a role in any number of independent interaction systems.
+ * Each system enforces its own constraints (e.g. one listener, one tracker per map).
+ * Adding a new system is a new key here — markers carry every role they participate in.
+ */
+export interface MarkerRoles {
+  audio?:  AudioRole;
+  motion?: MotionRole;
+}
 
 export interface Marker {
   id: string;
-  role: MarkerRole;
+  roles: MarkerRoles;
   position: { x: number; y: number }; // 0–1 normalised map coords
 
   // Visual
   label: string;
-  icon:  string;   // emoji (1–2 chars)
+  icon:  string;   // emoji or 'asset:<uuid>' / 'data:...' for image icons
   color: string;   // hex
   size:  number;   // 1.0 = default
 
   // Visibility
-  hidden:            boolean; // hides from players; GM sees with ghost opacity
-  hiddenFromTracker: boolean; // Phase 4: suppress from tracker sonar pings
-  showLabel:         boolean; // show name text on the player map (default false)
+  hidden:    boolean; // hides from players; GM sees with ghost opacity
+  showLabel: boolean; // show name text on the player map (default false)
 
-  // Audio source fields (Phase 3+)
+  // Audio fields (used when roles.audio is set)
   audioTrackId:     string | null;
   audioLoop:        boolean;
   audioMuted:       boolean;
@@ -84,13 +94,6 @@ export interface Marker {
   audioRandom:      boolean;  // random play mode — fires one-shots at randomised intervals
   audioRandomFreq:  number;   // target plays per 10 minutes (1–100) when audioRandom is true
 
-  // Listener fields (Phase 3+)
-  trackerEnabled: boolean;
-  trackerScale:   number;     // 0.2–2.0
-
-  // Motion source (Phase 4 — tracker)
-  motionSource: boolean;      // emits movement events for the tracker
-
   // Interaction lock — side-panel only; dims icon, blocks canvas selection
   locked: boolean;
 }
@@ -98,26 +101,22 @@ export interface Marker {
 export function defaultMarker(id: string, x = 0.5, y = 0.5): Marker {
   return {
     id,
-    role:     'default',
+    roles:    {},
     position: { x, y },
     label:    'New Marker',
     icon:     '◆',
     color:    '#e03e3e',
     size:     1.0,
-    hidden:            false,
-    hiddenFromTracker: false,
-    showLabel:         false,
-    audioTrackId:      null,
-    audioLoop:         true,
-    audioMuted:        false,
-    audioMaxDistance:  0.3,
-    audioVolume:       1.0,
-    audioRandom:       false,
-    audioRandomFreq:   10,
-    trackerEnabled:    false,
-    trackerScale:      1.0,
-    motionSource:      false,
-    locked:            false,
+    hidden:           false,
+    showLabel:        false,
+    audioTrackId:     null,
+    audioLoop:        true,
+    audioMuted:       false,
+    audioMaxDistance: 0.3,
+    audioVolume:      1.0,
+    audioRandom:      false,
+    audioRandomFreq:  10,
+    locked:           false,
   };
 }
 
@@ -184,8 +183,8 @@ export interface TransitionConfig {
 
 // ─── Full Session State ───────────────────────────────────────────────────────
 
-/** Increment when breaking changes are made to the schema */
-export const STATE_VERSION = 1;
+/** Increment when breaking changes are made to the schema. Add a migrator in storage/migrations.ts. */
+export const STATE_VERSION = 2;
 
 export interface SessionState {
   version: typeof STATE_VERSION;

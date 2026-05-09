@@ -1,6 +1,7 @@
 import type { SessionState, MapState, FilterState, FogState, ViewState, Marker, AudioState, TransitionConfig } from '../types.ts';
 import { defaultSessionState } from '../types.ts';
 import { saveConfig, loadConfig } from '../storage/db.ts';
+import { migrateSessionState } from '../storage/migrations.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
 
 type StateListener = (state: SessionState, changed: (keyof SessionState)[]) => void;
@@ -36,26 +37,13 @@ export class StateManager {
   // ─── Load ─────────────────────────────────────────────────────────────────
 
   async loadForMap(map: MapState, mapBlob: ArrayBuffer): Promise<void> {
-    const saved = await loadConfig(map.id);
-    const base  = defaultSessionState();
+    const saved     = await loadConfig(map.id);
+    const migrated  = saved ? migrateSessionState(saved) : null;
+    const base      = defaultSessionState();
 
-    if (saved && saved.version === base.version) {
-      this.state = {
-        ...saved,
-        map,
-        // Merge view so new fields (e.g. backgroundColor) fall back to defaults
-        // when loading a save written before those fields existed.
-        view:    { ...base.view,    ...saved.view },
-        // Ensure any new default fields added in later versions are present
-        markers: saved.markers ?? base.markers,
-        // Normalize audio: old saves had {activeAmbientId, volume} without slots
-        audio: saved.audio && Array.isArray((saved.audio as AudioState).slots)
-          ? saved.audio
-          : base.audio,
-      };
-    } else {
-      this.state = { ...base, map };
-    }
+    this.state = migrated
+      ? { ...migrated, map }
+      : { ...base, map };
 
     // Ensure filter defaults are seeded for filters that have no saved params
     this.seedFilterDefaults();

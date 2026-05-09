@@ -84,7 +84,7 @@ export class PositionalAudioEngine {
   setSources(markers: Marker[]): void {
     const wanted = new Map<string, Marker>(
       markers
-        .filter((m) => m.role === 'audio_source' && m.audioTrackId && !m.audioMuted)
+        .filter((m) => m.roles.audio === 'source' && m.audioTrackId && !m.audioMuted)
         .map((m) => [m.id, m])
     );
     // Stop and remove sources that are no longer wanted
@@ -135,7 +135,7 @@ export class PositionalAudioEngine {
   onBufferReady(assetId: string, markers: Marker[]): void {
     for (const m of markers) {
       if (
-        m.role === 'audio_source' &&
+        m.roles.audio === 'source' &&
         m.audioTrackId === assetId &&
         !m.audioMuted &&
         !this.sources.has(m.id)

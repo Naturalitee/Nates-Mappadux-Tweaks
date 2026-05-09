@@ -157,18 +157,21 @@ function _visibilityBadge(ctx: Ctx2D, m: Marker, bx: number, by: number): void {
 }
 
 function _audioBadge(ctx: Ctx2D, m: Marker, bx: number, by: number): void {
-  if (m.role === 'audio_source') {
+  if (m.roles.audio === 'source') {
     _badge(ctx, bx, by, m.audioMuted ? '#dc2626' : '#22c55e',
       m.audioMuted ? _iconSpeakerMuted : _iconSpeaker);
-  } else if (m.role === 'listener') {
+  } else if (m.roles.audio === 'listener') {
     _badge(ctx, bx, by, m.audioMuted ? '#dc2626' : '#22c55e',
       m.audioMuted ? _iconEarMuted : _iconEar);
   }
-  // default role: no audio badge
+  // no audio role: no audio badge
 }
 
 function _motionBadge(ctx: Ctx2D, m: Marker, bx: number, by: number): void {
-  _badge(ctx, bx, by, m.motionSource ? '#22c55e' : '#44475a', _iconMotion);
+  if (m.roles.motion === 'source') {
+    _badge(ctx, bx, by, '#22c55e', _iconMotion);
+  }
+  // no motion role: no motion badge (tracker badge added in B1)
 }
 
 /**
@@ -239,9 +242,9 @@ export function drawMarkerShape(
   }
 
   // 5. Status badges — GM only
-  //    top-left:    visibility (eye)
-  //    top-right:   audio (speaker / ear) — only for audio_source or listener
-  //    bottom-right: motion source (arrow) — always shown
+  //    top-left:    visibility (eye) — always shown
+  //    top-right:   audio (speaker / ear) — only when roles.audio is set
+  //    bottom-right: motion (arrow) — only when roles.motion is set
   if (isGM) {
     const bOff = Math.max(BADGE_R + 2, r * 0.78);
     _visibilityBadge(ctx, m, cx - bOff, cy - bOff);
@@ -326,7 +329,7 @@ export class MarkerLayer {
     // dB range circle for the selected audio_source marker (GM only)
     if (isGM && sel) {
       const selM = markers.find((m) => m.id === sel);
-      if (selM?.role === 'audio_source' && selM.audioMaxDistance > 0) {
+      if (selM?.roles.audio === 'source' && selM.audioMaxDistance > 0) {
         const pos = this.project(selM.position.x, selM.position.y, view);
         if (pos) {
           const f       = this._frustum(view);
@@ -429,13 +432,15 @@ export class MarkerLayer {
     // Top-left: visibility
     if (Math.hypot(px - (pos.x - bOff), py - (pos.y - bOff)) <= BADGE_HIT) return 'hidden';
 
-    // Top-right: audio (source or listener only)
-    if (marker.role === 'audio_source' || marker.role === 'listener') {
+    // Top-right: audio (only when a marker has an audio role)
+    if (marker.roles.audio) {
       if (Math.hypot(px - (pos.x + bOff), py - (pos.y - bOff)) <= BADGE_HIT) return 'audio';
     }
 
-    // Bottom-right: motion source (all markers)
-    if (Math.hypot(px - (pos.x + bOff), py - (pos.y + bOff)) <= BADGE_HIT) return 'motion';
+    // Bottom-right: motion (only when a marker has a motion role)
+    if (marker.roles.motion) {
+      if (Math.hypot(px - (pos.x + bOff), py - (pos.y + bOff)) <= BADGE_HIT) return 'motion';
+    }
 
     return null;
   }

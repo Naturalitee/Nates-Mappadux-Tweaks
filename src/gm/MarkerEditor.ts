@@ -7,7 +7,7 @@ import { MarkerLayer } from '../rendering/MarkerLayer.ts';
  *
  * Handles:
  *   - Click to select a marker
- *   - Badge clicks (toggle hidden / audioMuted / trackerEnabled)
+ *   - Badge clicks (toggle hidden / audioMuted; motion badge wired in B1)
  *   - Pointer drag to move selected marker (broadcasts on pointerup)
  *   - Right-click context menu ("Add marker here")
  *   - "Add Marker" button (centres on map)
@@ -189,10 +189,13 @@ export class MarkerEditor {
   private _badgeLabel(m: Marker, badge: 'hidden' | 'audio' | 'motion'): string {
     if (badge === 'hidden') return m.hidden ? 'Hidden' : 'Visible';
     if (badge === 'audio') {
-      if (m.role === 'audio_source') return m.audioMuted ? 'Muted Sound Source' : 'Sound Source';
-      if (m.role === 'listener')     return m.audioMuted ? 'Deaf Listener'       : 'Listener';
+      if (m.roles.audio === 'source')   return m.audioMuted ? 'Muted Sound Source' : 'Sound Source';
+      if (m.roles.audio === 'listener') return m.audioMuted ? 'Deaf Listener'       : 'Listener';
+      return '';
     }
-    return m.motionSource ? 'Motion Source' : 'Stationary';
+    if (m.roles.motion === 'source')  return 'Motion Source';
+    if (m.roles.motion === 'tracker') return 'Motion Tracker';
+    return '';
   }
 
   private _onUp(_e: PointerEvent): void {
@@ -217,12 +220,13 @@ export class MarkerEditor {
   private _handleBadge(marker: Marker, badge: 'hidden' | 'audio' | 'motion'): void {
     if (marker.locked) return; // locked markers: badges are display-only
 
-    let updated: Marker;
-    if      (badge === 'hidden') updated = { ...marker, hidden:       !marker.hidden       };
-    else if (badge === 'audio')  updated = { ...marker, audioMuted:   !marker.audioMuted   };
-    else                         updated = { ...marker, motionSource: !marker.motionSource };
+    let updated: Marker | null = null;
+    if (badge === 'hidden')      updated = { ...marker, hidden:     !marker.hidden     };
+    else if (badge === 'audio')  updated = { ...marker, audioMuted: !marker.audioMuted };
+    // Motion badge click is reserved for B1 (motion mute toggle); for now no-op.
+    if (!updated) return;
 
-    this.markers = this.markers.map((m) => m.id === marker.id ? updated : m);
+    this.markers = this.markers.map((m) => m.id === marker.id ? updated! : m);
     this._onChange([...this.markers]);
     if (this.selectedId === marker.id) this._onSelect(updated);
     this._redraw();

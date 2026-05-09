@@ -18,7 +18,7 @@ import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { exportBundle, importBundle } from '../storage/bundleIO.ts';
 import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
 import { PositionalAudioEngine } from '../audio/PositionalAudioEngine.ts';
-import type { SessionState, StoredMap, TransitionConfig, Marker, MarkerIconData, AudioAsset, MarkerRole } from '../types.ts';
+import type { SessionState, StoredMap, TransitionConfig, Marker, MarkerIconData, AudioAsset, AudioRole } from '../types.ts';
 import QRCode from 'qrcode';
 
 const REMOTE_AUDIO_KEY = 'dmr_remote_audio';
@@ -215,7 +215,7 @@ export class GMApp {
     const visibleMarkers = state.markers.filter((m) => !m.hidden);
     // Audio-source markers must be broadcast even when hidden — a hidden marker
     // can represent an invisible ambient sound source (e.g. attached to a room).
-    const broadcastMarkers = state.markers.filter((m) => !m.hidden || m.role === 'audio_source');
+    const broadcastMarkers = state.markers.filter((m) => !m.hidden || m.roles.audio === 'source');
     const iconData         = this._collectIconData(visibleMarkers); // icons only for visible
 
     // Only send fog_update for live edits (changed = ['fog']).
@@ -395,7 +395,7 @@ export class GMApp {
     // fog, filter, view, markers, and audio all travel atomically inside map_change.
     const allMarkers        = this.state.getState().markers;
     const visibleMarkers    = allMarkers.filter((m) => !m.hidden);
-    const broadcastMarkers2 = allMarkers.filter((m) => !m.hidden || m.role === 'audio_source');
+    const broadcastMarkers2 = allMarkers.filter((m) => !m.hidden || m.roles.audio === 'source');
     const markerIconData    = this._collectIconData(visibleMarkers);
     const soundboardActive  = await this.soundboardPanel.getActiveSlots();
     this.host.broadcast({
@@ -875,15 +875,30 @@ export class GMApp {
       this.updateSelectedMarker({ locked: this.markerLockedToggle.checked });
     });
 
-    // Role selector
+    // Audio role selector — buttons carry legacy data-role values:
+    //   'default' → clear audio role; 'audio_source' → source; 'listener' → listener
     document.querySelectorAll<HTMLElement>('.marker-role-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (!this.selectedMarkerId) return;
-        const role = btn.dataset['role'] as MarkerRole;
-        // Enforce single listener — demote any other listener in the same pass
+        const raw = btn.dataset['role'];
+        const next: AudioRole | undefined =
+          raw === 'audio_source' ? 'source' :
+          raw === 'listener'     ? 'listener' :
+          undefined;
+
         const markers = this.state.getState().markers.map((m) => {
-          if (m.id === this.selectedMarkerId) return { ...m, role };
-          if (role === 'listener' && m.role === 'listener') return { ...m, role: 'default' as MarkerRole };
+          if (m.id === this.selectedMarkerId) {
+            const roles = { ...m.roles };
+            if (next) roles.audio = next;
+            else delete roles.audio;
+            return { ...m, roles };
+          }
+          // Single-listener constraint: demote any other listener in the same pass
+          if (next === 'listener' && m.roles.audio === 'listener') {
+            const roles = { ...m.roles };
+            delete roles.audio;
+            return { ...m, roles };
+          }
           return m;
         });
         this.state.setMarkers(markers);
@@ -972,7 +987,7 @@ export class GMApp {
   private async _preloadMarkerAudio(markers: Marker[]): Promise<void> {
     const all = await AudioAssetStore.getAll();
     for (const m of markers) {
-      if (m.role !== 'audio_source' || !m.audioTrackId) continue;
+      if (m.roles.audio !== 'source' || !m.audioTrackId) continue;
       const asset = all.find((a) => a.id === m.audioTrackId);
       if (!asset) continue;
       const blob = await AudioAssetStore.getBlob(asset);
@@ -1046,7 +1061,7 @@ export class GMApp {
 
   private _syncPositionalAudio(): void {
     const markers = this.state.getState().markers;
-    const listener = markers.find((m) => m.role === 'listener');
+    const listener = markers.find((m) => m.roles.audio === 'listener');
 
     if (!listener || listener.audioMuted) {
       // Stop all active positional sources on players
@@ -1118,20 +1133,25 @@ export class GMApp {
         this.markerIconBtn.textContent = sel.icon;
       }
 
-      // Role buttons
+      // Role buttons — translate legacy data-role values to the current audio role
       document.querySelectorAll<HTMLElement>('.marker-role-btn').forEach((btn) => {
-        btn.classList.toggle('marker-role-btn--active', btn.dataset['role'] === sel.role);
+        const raw = btn.dataset['role'];
+        const matches =
+          (raw === 'default'      && !sel.roles.audio) ||
+          (raw === 'audio_source' && sel.roles.audio === 'source') ||
+          (raw === 'listener'     && sel.roles.audio === 'listener');
+        btn.classList.toggle('marker-role-btn--active', matches);
       });
 
-      // Audio controls — visible for audio_source and listener
+      // Audio controls — visible whenever the marker has an audio role
       const audioControlsEl  = document.querySelector<HTMLElement>('#marker-audio-controls');
       const sourceControlsEl = document.querySelector<HTMLElement>('#marker-source-controls');
-      const mutedToggle       = document.querySelector<HTMLInputElement>('#marker-audio-muted');
-      if (audioControlsEl)  audioControlsEl.hidden  = sel.role === 'default';
-      if (sourceControlsEl) sourceControlsEl.hidden = sel.role !== 'audio_source';
+      const mutedToggle      = document.querySelector<HTMLInputElement>('#marker-audio-muted');
+      if (audioControlsEl)  audioControlsEl.hidden  = !sel.roles.audio;
+      if (sourceControlsEl) sourceControlsEl.hidden = sel.roles.audio !== 'source';
       if (mutedToggle)      mutedToggle.checked      = sel.audioMuted;
 
-      if (sel.role === 'audio_source') {
+      if (sel.roles.audio === 'source') {
         const soundRow        = document.querySelector<HTMLElement>('#marker-sound-row');
         const soundBtn        = document.querySelector<HTMLButtonElement>('#marker-sound-btn');
         const soundControls   = document.querySelector<HTMLElement>('#marker-sound-controls');
