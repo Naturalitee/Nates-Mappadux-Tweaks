@@ -875,7 +875,7 @@ export class GMApp {
           raw === 'listener'     ? 'listener' :
           undefined;
 
-        const markers = this.state.getState().markers.map((m) => {
+        this.state.updateMarkers((markers) => markers.map((m) => {
           if (m.id === this.selectedMarkerId) {
             const roles = { ...m.roles };
             if (next) roles.audio = next;
@@ -889,8 +889,7 @@ export class GMApp {
             return { ...m, roles };
           }
           return m;
-        });
-        this.state.setMarkers(markers);
+        }));
       });
     });
 
@@ -945,10 +944,7 @@ export class GMApp {
 
   private updateSelectedMarker(patch: Partial<Marker>): void {
     if (!this.selectedMarkerId) return;
-    const markers = this.state.getState().markers.map((m) =>
-      m.id === this.selectedMarkerId ? { ...m, ...patch } : m
-    );
-    this.state.setMarkers(markers);
+    this.state.updateMarker(this.selectedMarkerId, patch);
   }
 
   private async _assignMarkerAudio(asset: AudioAsset): Promise<void> {

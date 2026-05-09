@@ -90,6 +90,16 @@ export class StateManager {
     this._notify(['markers'], undefined, true);
   }
 
+  /** Apply a partial patch to a single marker by id. */
+  updateMarker(id: string, patch: Partial<Marker>): void {
+    this.setMarkers(this.state.markers.map((m) => (m.id === id ? { ...m, ...patch } : m)));
+  }
+
+  /** Atomically transform the marker array — useful for multi-marker passes (e.g. role mutex). */
+  updateMarkers(updater: (markers: Marker[]) => Marker[]): void {
+    this.setMarkers(updater(this.state.markers));
+  }
+
   setAudio(audio: AudioState): void {
     this.state = { ...this.state, audio };
     this._notify(['audio'], undefined, true);
