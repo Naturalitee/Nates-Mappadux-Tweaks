@@ -191,11 +191,12 @@ export async function importBundle(
     for (const entry of bundle.uploadedAudio) {
       const blob = b64ToBlob(entry.dataB64, entry.mimeType);
       const asset: AudioAsset = {
-        id:      entry.id,
-        name:    entry.name,
-        source:  'upload',
-        license: 'Unknown / Manual import',
-        addedAt: entry.addedAt,
+        id:            entry.id,
+        name:          entry.name,
+        source:        'upload',
+        locallyStored: true,
+        license:       'Unknown / Manual import',
+        addedAt:       entry.addedAt,
       };
       await saveAudioAsset(asset);
       await saveAsset({ id: entry.id, name: entry.name, type: 'audio', blob, addedAt: entry.addedAt });
@@ -206,8 +207,9 @@ export async function importBundle(
   // will re-download from freesoundPreviewUrl on first access if API key is set.
   if (Array.isArray(bundle.freesoundAudio)) {
     for (const asset of bundle.freesoundAudio) {
-      await saveAudioAsset(asset as AudioAsset);
-      // Don't overwrite the blob if it was already cached locally
+      // The blob isn't in the bundle, so locallyStored is false on the
+      // importing side until something re-downloads + caches it.
+      await saveAudioAsset({ ...asset, locallyStored: false } as AudioAsset);
     }
   }
 

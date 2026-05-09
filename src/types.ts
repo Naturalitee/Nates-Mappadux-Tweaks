@@ -198,7 +198,23 @@ export function defaultMotionTrackerConfig(): MotionTrackerConfig {
 export interface AudioAsset {
   id:                  string;
   name:                string;
-  source:              'freesound' | 'upload';
+  /**
+   * Where the asset originated. Drives the tag pill shown in My Library and
+   * which playback path is used.
+   *   • upload    — user uploaded a local file; blob stored in IDB
+   *   • freesound — imported via the Freesound API; blob stored after import
+   *   • web-link  — user pasted a URL; streamed at runtime, blob NOT stored
+   *                 unless `locallyStored` becomes true via the Store button
+   */
+  source:              'freesound' | 'upload' | 'web-link';
+  /** True when the asset's blob is persisted in the local `assets` IDB store.
+   *  Always true for upload + freesound (after import). True for web-link only
+   *  after the user explicitly clicks Store. */
+  locallyStored:       boolean;
+  /** Original URL for web-link assets (and reserved for any future API
+   *  connector that returns a stable URL). Used both for runtime streaming
+   *  and for re-fetching when the user later clicks Store. */
+  sourceUrl?:          string;
   freesoundId?:        number;
   freesoundPreviewUrl?: string; // preview-hq-mp3 — used for re-download
   freesoundPageUrl?:   string;  // canonical Freesound page

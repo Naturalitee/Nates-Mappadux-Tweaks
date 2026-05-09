@@ -15,6 +15,10 @@ function blobToDataUrl(blob: Blob): Promise<string> {
 }
 
 export class AudioAssetStore {
+  /** Runtime-only cache of fetched blobs for assets that aren't locally stored
+   *  (web-link sources). Lives until page reload — does NOT touch IDB. */
+  private static runtimeBlobs = new Map<string, Blob>();
+
   static async getAll(): Promise<AudioAsset[]> {
     const all = await getAllAudioAssets();
     return all.sort((a, b) => b.addedAt - a.addedAt);
@@ -25,19 +29,44 @@ export class AudioAssetStore {
     await saveAsset({ id: asset.id, name: asset.name, type: 'audio', blob, addedAt: asset.addedAt });
   }
 
+  /** Save metadata only (no blob) — for web-link assets that stream at runtime. */
+  static async saveMetadataOnly(asset: AudioAsset): Promise<void> {
+    await saveAudioAsset(asset);
+  }
+
   static async delete(id: string): Promise<void> {
     await deleteAudioAsset(id); // removes both audioAssets record and assets blob
+    AudioAssetStore.runtimeBlobs.delete(id);
   }
 
   /**
-   * Retrieve the raw Blob for an asset.
-   * If the blob is missing from local storage (e.g. cleared cache, different machine),
-   * attempts to re-download the Freesound preview and caches it.
-   * Returns null if unavailable and re-download fails or is not possible.
+   * Retrieve the raw Blob for an asset, in priority order:
+   *   1. The local IDB blob (`locallyStored` assets always have this).
+   *   2. A runtime-cached blob fetched earlier this session.
+   *   3. Re-fetched from the asset's remote source:
+   *        • web-link  → fetched from `sourceUrl` and held in runtime cache.
+   *        • freesound → re-downloaded via FreesoundClient and persisted to IDB
+   *                      (flips `locallyStored` to true so we don't re-fetch later).
+   * Returns null if nothing works.
    */
   static async getBlob(asset: AudioAsset): Promise<Blob | null> {
     const stored = await getAsset(asset.id);
     if (stored) return stored.blob;
+
+    const cached = AudioAssetStore.runtimeBlobs.get(asset.id);
+    if (cached) return cached;
+
+    if (asset.source === 'web-link' && asset.sourceUrl) {
+      try {
+        const res = await fetch(asset.sourceUrl);
+        if (!res.ok) return null;
+        const blob = await res.blob();
+        AudioAssetStore.runtimeBlobs.set(asset.id, blob);
+        return blob;
+      } catch {
+        return null;
+      }
+    }
 
     if (asset.source === 'freesound' && asset.freesoundPreviewUrl) {
       const apiKey = FreesoundClient.getApiKey();
@@ -45,6 +74,8 @@ export class AudioAssetStore {
         try {
           const blob = await FreesoundClient.downloadPreview(asset.freesoundPreviewUrl);
           await saveAsset({ id: asset.id, name: asset.name, type: 'audio', blob, addedAt: asset.addedAt });
+          // Persist locallyStored=true so subsequent calls skip the re-download
+          await saveAudioAsset({ ...asset, locallyStored: true });
           return blob;
         } catch {
           // Fall through to return null

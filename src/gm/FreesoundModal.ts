@@ -137,6 +137,10 @@ export class FreesoundModal {
 
     this.el.querySelector('#upload-add-btn')?.addEventListener('click',   () => void this._addUpload());
     this.el.querySelector('#upload-clear-btn')?.addEventListener('click', () => this._clearUpload());
+
+    // Web Links tab
+    this.el.querySelector('#weblinks-add-btn')?.addEventListener('click',   () => void this._addWebLinks());
+    this.el.querySelector('#weblinks-clear-btn')?.addEventListener('click', () => this._clearWebLinks());
   }
 
   // ─── Library tab ──────────────────────────────────────────────────────────
@@ -397,11 +401,12 @@ export class FreesoundModal {
     addBtn.textContent = 'Saving…';
     try {
       const asset: AudioAsset = {
-        id:      crypto.randomUUID(),
+        id:            crypto.randomUUID(),
         name,
-        source:  'upload',
-        license: 'Unknown / Manual import',
-        addedAt: Date.now(),
+        source:        'upload',
+        locallyStored: true,
+        license:       'Unknown / Manual import',
+        addedAt:       Date.now(),
       };
       await AudioAssetStore.save(asset, this.uploadFile);
       this.onAssign(asset);
@@ -412,7 +417,117 @@ export class FreesoundModal {
     }
   }
 
+  // ─── Web Links tab ────────────────────────────────────────────────────────
+
+  private _clearWebLinks(): void {
+    const ta = this.el.querySelector<HTMLTextAreaElement>('#weblinks-input');
+    const results = this.el.querySelector<HTMLElement>('#weblinks-results');
+    if (ta) ta.value = '';
+    if (results) results.innerHTML = '';
+  }
+
+  private async _addWebLinks(): Promise<void> {
+    const ta      = this.el.querySelector<HTMLTextAreaElement>('#weblinks-input');
+    const results = this.el.querySelector<HTMLElement>('#weblinks-results');
+    const addBtn  = this.el.querySelector<HTMLButtonElement>('#weblinks-add-btn');
+    if (!ta || !results || !addBtn) return;
+
+    const urls = ta.value.split(/[\s,]+/).map((u) => u.trim()).filter(Boolean);
+    if (urls.length === 0) return;
+
+    results.innerHTML = '';
+    addBtn.disabled    = true;
+    addBtn.textContent = 'Validating…';
+
+    let added = 0;
+    for (const url of urls) {
+      const row = document.createElement('div');
+      row.className = 'weblinks-result weblinks-result--busy';
+      row.textContent = `… ${url}`;
+      results.appendChild(row);
+
+      const probe = await _probeAudioUrl(url);
+      if (!probe.ok) {
+        row.className   = 'weblinks-result weblinks-result--fail';
+        row.textContent = `✗ ${url} — ${probe.error}`;
+        continue;
+      }
+
+      const name = _nameFromUrl(url);
+      const asset: AudioAsset = {
+        id:            crypto.randomUUID(),
+        name,
+        source:        'web-link',
+        locallyStored: false,
+        sourceUrl:     url,
+        license:       'Unknown — provide attribution in your library',
+        durationSecs:  probe.durationSecs,
+        addedAt:       Date.now(),
+      };
+      try {
+        await AudioAssetStore.saveMetadataOnly(asset);
+        row.className   = 'weblinks-result weblinks-result--ok';
+        row.textContent = `✓ ${name} — added`;
+        added++;
+      } catch (err) {
+        row.className   = 'weblinks-result weblinks-result--fail';
+        row.textContent = `✗ ${url} — could not save: ${(err as Error).message}`;
+      }
+    }
+
+    addBtn.disabled    = false;
+    addBtn.textContent = 'Validate & Add';
+    if (added > 0) ta.value = '';
+  }
+
   private _esc(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+  }
+}
+
+// ── Web-link helpers ──────────────────────────────────────────────────────────
+
+/**
+ * Probe a URL by asking an Audio element to load its metadata. Resolves with
+ * the duration (in whole seconds) on success, or an error message on failure.
+ * Times out after 15s.
+ */
+function _probeAudioUrl(url: string): Promise<{ ok: true; durationSecs: number } | { ok: false; error: string }> {
+  return new Promise((resolve) => {
+    let settled = false;
+    const finish = (r: { ok: true; durationSecs: number } | { ok: false; error: string }) => {
+      if (settled) return;
+      settled = true;
+      resolve(r);
+    };
+    try {
+      const a = new Audio();
+      a.preload = 'metadata';
+      a.crossOrigin = 'anonymous';
+      const timeout = setTimeout(() => finish({ ok: false, error: 'Timed out' }), 15_000);
+      a.onloadedmetadata = () => {
+        clearTimeout(timeout);
+        finish({ ok: true, durationSecs: Math.round(a.duration || 0) });
+      };
+      a.onerror = () => {
+        clearTimeout(timeout);
+        finish({ ok: false, error: 'Could not load audio (CORS, 404, or wrong file type)' });
+      };
+      a.src = url;
+    } catch (err) {
+      finish({ ok: false, error: (err as Error).message });
+    }
+  });
+}
+
+/** Best-effort display name from a URL — last path segment, decoded, ext stripped. */
+function _nameFromUrl(url: string): string {
+  try {
+    const u = new URL(url);
+    const last = u.pathname.split('/').filter(Boolean).pop() ?? '';
+    const decoded = decodeURIComponent(last).replace(/\.[^.]+$/, '').trim();
+    return decoded || u.hostname || 'Web Link Audio';
+  } catch {
+    return 'Web Link Audio';
   }
 }

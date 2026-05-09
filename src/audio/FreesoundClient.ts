@@ -148,6 +148,7 @@ export class FreesoundClient {
       id,
       name:                result.name,
       source:              'freesound',
+      locallyStored:       true,         // blob is downloaded immediately on import
       freesoundId:         result.id,
       freesoundPreviewUrl: result.previewUrl,
       freesoundPageUrl:    result.pageUrl,
