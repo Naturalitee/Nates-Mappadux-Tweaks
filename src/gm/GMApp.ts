@@ -17,7 +17,8 @@ import { saveSession, loadSession, getAllMaps, deleteMap } from '../storage/db.t
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { exportBundle, importBundle } from '../storage/bundleIO.ts';
 import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
-import { PositionalAudioEngine } from '../audio/PositionalAudioEngine.ts';
+import { MarkerInteractionRegistry, type InteractionContext } from './markerInteractions/MarkerInteraction.ts';
+import { PositionalAudioInteraction } from './markerInteractions/PositionalAudioInteraction.ts';
 import type { SessionState, StoredMap, TransitionConfig, Marker, MarkerIconData, AudioAsset, AudioRole } from '../types.ts';
 import QRCode from 'qrcode';
 
@@ -44,11 +45,8 @@ export class GMApp {
   private soundboardEngine!: SoundboardEngine;
   private soundboardPanel!:  SoundboardPanel;
 
-  private positionalAudio  = new PositionalAudioEngine();
-  /** assetId → dataUrl — cached for inclusion in positional_play broadcasts */
-  private _assetDataUrls   = new Map<string, string>();
-  /** markerId → last-broadcast state for active positional sources */
-  private _activePositional = new Map<string, { loop: boolean; lastVolume: number }>();
+  private interactions = new MarkerInteractionRegistry();
+  private audio        = this.interactions.register(new PositionalAudioInteraction());
   private selectedMarkerId: string | null = null;
   private mapAspectRatio = 1;
   private remoteAudioEnabled = localStorage.getItem(REMOTE_AUDIO_KEY) !== 'false';
@@ -106,27 +104,11 @@ export class GMApp {
     this.bindMarkerEditor();
     this.bindSoundboardPanel();
 
-    // Wire positional audio callbacks BEFORE loading maps — onSourceStart fires
-    // during _preloadMarkerAudio which is called inside populateMapList/loadMap.
-    // If the callbacks were set after that, the initial positional_play broadcasts
-    // would never happen and lastPositionalActive would stay empty forever.
-    const resumePA = () => this.positionalAudio.tryResume();
+    // Resume positional audio context on first user gesture (autoplay policy)
+    const resumePA = () => this.audio.tryResume();
     document.addEventListener('click',      resumePA);
     document.addEventListener('keydown',    resumePA);
     document.addEventListener('touchstart', resumePA, { passive: true });
-
-    this.positionalAudio.onSourceStart = (markerId, assetId, loop, gain) => {
-      const dataUrl = this._assetDataUrls.get(assetId);
-      if (!dataUrl) return;
-      this._activePositional.set(markerId, { loop, lastVolume: gain });
-      this.host.broadcast({ type: 'positional_play', markerId, assetId, loop, volume: gain, dataUrl });
-    };
-    this.positionalAudio.onSourceStop = (markerId) => {
-      if (this._activePositional.has(markerId)) {
-        this._activePositional.delete(markerId);
-        this.host.broadcast({ type: 'positional_stop', markerId });
-      }
-    };
 
     // Register the state listener BEFORE loading maps so that the initial
     // populateMapList() → loadMap() → state.loadForMap() → _notify() chain
@@ -210,6 +192,14 @@ export class GMApp {
     return result;
   }
 
+  /** Builds the per-call context handed to every MarkerInteraction. */
+  private _interactionCtx(): InteractionContext {
+    return {
+      markers:   this.state.getState().markers,
+      broadcast: (msg) => this.host.broadcast(msg),
+    };
+  }
+
   private onStateChange(state: SessionState, changed: (keyof SessionState)[]): void {
     // View state is player-only — GM always sees the full map unzoomed
     const visibleMarkers = state.markers.filter((m) => !m.hidden);
@@ -284,7 +274,7 @@ export class GMApp {
     if (changed.includes('markers')) {
       this.markerEditor.update(state.markers, this.mapAspectRatio);
       this.updateMarkerPanel();
-      this._syncPositionalAudio();
+      this.interactions.notifyMarkersChanged(this._interactionCtx());
       this.host.broadcast({
         type: 'marker_update',
         payload: broadcastMarkers,
@@ -384,10 +374,8 @@ export class GMApp {
       if (s) void saveSession({ ...s, lastMapId: map.id });
     });
 
-    // Stop positional and soundboard audio from the previous map
-    this.positionalAudio.setSources([]);
-    this._activePositional.clear();
-    this._assetDataUrls.clear();
+    // Reset every marker interaction's per-map state (positional audio engine, etc.)
+    this.interactions.reset();
     this.soundboardPanel.stopAll();
     this.soundboardPanel.update(this.state.getState().audio.slots);
 
@@ -412,9 +400,8 @@ export class GMApp {
       transition: this.buildTransitionConfig(),
     });
 
-    // Preload and broadcast audio buffers for audio_source markers on this map.
-    // This populates the Host cache so late-joining players also receive the buffers.
-    void this._preloadMarkerAudio(this.state.getState().markers);
+    // Run each interaction's onMapLoaded hook (preload positional audio buffers, etc.)
+    void this.interactions.notifyMapLoaded(this._interactionCtx());
   }
 
   // ─── DOM binding ──────────────────────────────────────────────────────────
@@ -965,42 +952,7 @@ export class GMApp {
   private async _assignMarkerAudio(asset: AudioAsset): Promise<void> {
     if (!this.selectedMarkerId) return;
     this.updateSelectedMarker({ audioTrackId: asset.id });
-    const blob = await AudioAssetStore.getBlob(asset);
-    if (!blob) return;
-    const [arrayBuf, dataUrl] = await Promise.all([
-      blob.arrayBuffer(),
-      this._blobToDataUrl(blob),
-    ]);
-    this._assetDataUrls.set(asset.id, dataUrl);
-    await this.positionalAudio.storeBuffer(asset.id, arrayBuf);
-    this._syncPositionalAudio();
-  }
-
-  private _blobToDataUrl(blob: Blob): Promise<string> {
-    return new Promise((resolve) => {
-      const reader = new FileReader();
-      reader.onload = () => resolve(reader.result as string);
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  private async _preloadMarkerAudio(markers: Marker[]): Promise<void> {
-    const all = await AudioAssetStore.getAll();
-    for (const m of markers) {
-      if (m.roles.audio !== 'source' || !m.audioTrackId) continue;
-      const asset = all.find((a) => a.id === m.audioTrackId);
-      if (!asset) continue;
-      const blob = await AudioAssetStore.getBlob(asset);
-      if (!blob) continue;
-      const [arrayBuf, dataUrl] = await Promise.all([
-        blob.arrayBuffer(),
-        this._blobToDataUrl(blob),
-      ]);
-      this._assetDataUrls.set(m.audioTrackId, dataUrl);
-      await this.positionalAudio.storeBuffer(m.audioTrackId, arrayBuf);
-    }
-    // All buffers loaded — engine starts sources; onSourceStart fires positional_play
-    this._syncPositionalAudio();
+    await this.audio.loadAsset(asset, this._interactionCtx());
   }
 
   private bindSoundboardPanel(): void {
@@ -1056,38 +1008,6 @@ export class GMApp {
           }
         }
       });
-    }
-  }
-
-  private _syncPositionalAudio(): void {
-    const markers = this.state.getState().markers;
-    const listener = markers.find((m) => m.roles.audio === 'listener');
-
-    if (!listener || listener.audioMuted) {
-      // Stop all active positional sources on players
-      for (const markerId of this._activePositional.keys()) {
-        this.host.broadcast({ type: 'positional_stop', markerId });
-      }
-      this._activePositional.clear();
-      this.positionalAudio.clearListener();
-    } else {
-      this.positionalAudio.setListenerPosition(listener.position.x, listener.position.y);
-    }
-
-    this.positionalAudio.setSources(markers);
-
-    // Send volume updates for active loop sources as listener moves
-    if (listener) {
-      for (const [markerId, state] of this._activePositional.entries()) {
-        if (!state.loop) continue;
-        const marker = markers.find((m) => m.id === markerId);
-        if (!marker) continue;
-        const gain = this.positionalAudio.calcGainForMarker(marker);
-        if (Math.abs(gain - state.lastVolume) > 0.01) {
-          state.lastVolume = gain;
-          this.host.broadcast({ type: 'positional_volume', markerId, volume: gain });
-        }
-      }
     }
   }
 
