@@ -60,28 +60,71 @@ async function backfillLocallyStored(): Promise<void> {
   }
 }
 
+/**
+ * One-shot semantics fix: the original C1 default for Freesound items was
+ * `locallyStored: true` because they had blobs in IDB. The model has since
+ * been clarified — Freesound items are URL-style by default, and Stored is
+ * the user's explicit choice via the Store button. Flip existing
+ * non-builtin Freesound rows to false so they pick up Store buttons.
+ * Guarded by a localStorage flag so it runs exactly once.
+ */
+const FREESOUND_RESET_FLAG = 'dmr_freesound_locallystored_reset_v1';
+const BUILTIN_IDS = new Set([BUILTIN_TRACKER_PING_OUT_ID, BUILTIN_TRACKER_PING_IN_ID]);
+async function resetFreesoundStoredFlag(): Promise<void> {
+  if (localStorage.getItem(FREESOUND_RESET_FLAG)) return;
+  const all = await AudioAssetStore.getAll();
+  for (const asset of all) {
+    if (asset.source !== 'freesound') continue;
+    if (BUILTIN_IDS.has(asset.id))    continue;
+    if (asset.locallyStored !== true) continue;
+    await saveAudioAsset({ ...asset, locallyStored: false });
+  }
+  localStorage.setItem(FREESOUND_RESET_FLAG, '1');
+}
+
 /** Build the canonical attribution string for a built-in sound. */
 function _builtinAttribution(spec: BuiltinSpec): string {
   return `Sound: "${spec.name}" edited from "${spec.sourceTitle}" by ${spec.sourceAuthor} via Freesound — CC0`;
 }
 
 /**
- * Refresh the attribution + name on already-seeded built-in rows so format
- * changes propagate without forcing the user to delete and re-seed. The
- * built-in IDs are stable, so this is a safe overwrite for those rows only.
+ * Refresh the canonical metadata on already-seeded built-in rows so format
+ * changes (and any drift introduced by old bundle import paths) propagate
+ * without forcing the user to delete and re-seed. The built-in IDs are
+ * stable, so this is a safe full overwrite of the source/license/etc fields.
+ * `addedAt` is preserved so library sort order doesn't jump around.
  */
 async function refreshBuiltinMetadata(): Promise<void> {
   for (const spec of BUILTINS) {
     const existing = await AudioAssetStore.get(spec.id);
     if (!existing) continue;
-    const wantedAttribution = _builtinAttribution(spec);
-    if (existing.attribution === wantedAttribution && existing.name === spec.name) continue;
-    await saveAudioAsset({ ...existing, name: spec.name, attribution: wantedAttribution });
+    const wanted: AudioAsset = {
+      id:               spec.id,
+      name:             spec.name,
+      source:           'freesound',
+      locallyStored:    existing.locallyStored ?? true, // assume stored unless we know otherwise
+      username:         spec.sourceAuthor,
+      license:          'CC0 (Public Domain)',
+      attribution:      _builtinAttribution(spec),
+      freesoundPageUrl: spec.sourceUrl,
+      addedAt:          existing.addedAt,
+    };
+    // Skip the write if the row is already canonical
+    if (
+      existing.source           === wanted.source &&
+      existing.name             === wanted.name &&
+      existing.license          === wanted.license &&
+      existing.attribution      === wanted.attribution &&
+      existing.freesoundPageUrl === wanted.freesoundPageUrl &&
+      existing.username         === wanted.username
+    ) continue;
+    await saveAudioAsset(wanted);
   }
 }
 
 export async function seedAudioAssets(): Promise<void> {
   await backfillLocallyStored();
+  await resetFreesoundStoredFlag();
   await refreshBuiltinMetadata();
 
   for (const spec of BUILTINS) {

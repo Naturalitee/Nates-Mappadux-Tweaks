@@ -34,6 +34,21 @@ export class AudioAssetStore {
     await saveAudioAsset(asset);
   }
 
+  /**
+   * Promote a non-stored asset to locally-stored: fetch its blob (via getBlob,
+   * which handles web-link fetching + freesound re-download), persist it to the
+   * `assets` store, and flip `locallyStored` to true on the audioAssets row.
+   * Returns true on success, false if the blob couldn't be obtained.
+   */
+  static async store(asset: AudioAsset): Promise<boolean> {
+    if (asset.locallyStored) return true;
+    const blob = await AudioAssetStore.getBlob(asset);
+    if (!blob) return false;
+    await saveAsset({ id: asset.id, name: asset.name, type: 'audio', blob, addedAt: asset.addedAt });
+    await saveAudioAsset({ ...asset, locallyStored: true });
+    return true;
+  }
+
   static async delete(id: string): Promise<void> {
     await deleteAudioAsset(id); // removes both audioAssets record and assets blob
     AudioAssetStore.runtimeBlobs.delete(id);
@@ -73,9 +88,9 @@ export class AudioAssetStore {
       if (apiKey) {
         try {
           const blob = await FreesoundClient.downloadPreview(asset.freesoundPreviewUrl);
-          await saveAsset({ id: asset.id, name: asset.name, type: 'audio', blob, addedAt: asset.addedAt });
-          // Persist locallyStored=true so subsequent calls skip the re-download
-          await saveAudioAsset({ ...asset, locallyStored: true });
+          // Runtime cache only — Freesound is a URL-style source. The user must
+          // click Store explicitly to persist to IDB and mark for bundle export.
+          AudioAssetStore.runtimeBlobs.set(asset.id, blob);
           return blob;
         } catch {
           // Fall through to return null

@@ -93,6 +93,9 @@ export class FreesoundModal {
     // Library search filter
     this.el.querySelector('#library-search')?.addEventListener('input', () => this._renderLibrary());
 
+    // Library 'Store All' — fetch + persist every non-stored Freesound / URL asset
+    this.el.querySelector('#library-store-all-btn')?.addEventListener('click', () => void this._storeAllInLibrary());
+
     // Freesound search
     this.el.querySelector('#fs-search-btn')?.addEventListener('click', () => void this._doSearch());
     this.el.querySelector<HTMLInputElement>('#fs-search-input')?.addEventListener('keydown', (e) => {
@@ -159,18 +162,77 @@ export class FreesoundModal {
     for (const asset of filtered) {
       listEl.appendChild(this._libraryRow(asset));
     }
+
+    // Footer: 'Store All' button. Visible only when there are non-stored assets.
+    const footer    = this.el.querySelector<HTMLElement>('#library-footer');
+    const countEl   = this.el.querySelector<HTMLElement>('#library-store-all-count');
+    const status    = this.el.querySelector<HTMLElement>('#library-store-all-status');
+    const nonStored = all.filter((a) => !a.locallyStored && (a.source === 'freesound' || a.source === 'web-link'));
+    if (footer) footer.hidden = nonStored.length === 0;
+    if (countEl) countEl.textContent = nonStored.length > 0 ? `(${nonStored.length})` : '';
+    if (status) status.textContent = '';
+  }
+
+  private async _storeAllInLibrary(): Promise<void> {
+    const btn    = this.el.querySelector<HTMLButtonElement>('#library-store-all-btn');
+    const status = this.el.querySelector<HTMLElement>('#library-store-all-status');
+    if (!btn || !status) return;
+
+    const all       = await AudioAssetStore.getAll();
+    const nonStored = all.filter((a) => !a.locallyStored && (a.source === 'freesound' || a.source === 'web-link'));
+    if (nonStored.length === 0) return;
+
+    btn.disabled = true;
+    let ok = 0;
+    let fail = 0;
+    for (let i = 0; i < nonStored.length; i++) {
+      const asset = nonStored[i]!;
+      status.textContent = `Storing ${i + 1} of ${nonStored.length}: ${asset.name}…`;
+      const success = await AudioAssetStore.store(asset);
+      if (success) ok++; else fail++;
+    }
+    btn.disabled = false;
+
+    if (fail === 0) status.textContent = `Stored ${ok} asset${ok !== 1 ? 's' : ''}.`;
+    else            status.textContent = `Stored ${ok}; ${fail} failed (likely missing API key or broken URL).`;
+
+    await this._renderLibrary();
+    // Re-render clears the status — keep it for a few seconds so the user sees the result
+    if (status) {
+      const msg = fail === 0
+        ? `Stored ${ok} asset${ok !== 1 ? 's' : ''}.`
+        : `Stored ${ok}; ${fail} failed (likely missing API key or broken URL).`;
+      status.textContent = msg;
+    }
   }
 
   private _libraryRow(asset: AudioAsset): HTMLElement {
+    const tags: string[] = [];
+    if (asset.source === 'freesound') tags.push('<span class="sound-tag sound-tag--freesound">Freesound</span>');
+    if (asset.source === 'web-link')  tags.push('<span class="sound-tag sound-tag--url">URL</span>');
+    // 'Stored' = "this asset travels in bundle exports". Shown on any
+    // locallyStored asset — Uploads (always stored), Freesound/URL items
+    // promoted via Store, and the built-in tracker pings.
+    if (asset.locallyStored) {
+      tags.push('<span class="sound-tag sound-tag--local">Stored</span>');
+    }
+    const tagsHtml = tags.join('');
+
+    // Show a Store button only when the asset isn't yet locally stored.
+    const storeBtnHtml = asset.locallyStored
+      ? ''
+      : `<button class="btn btn--ghost btn--xs sound-store-btn" title="Download and keep a local copy">Store</button>`;
+
     const row = document.createElement('div');
     row.className = 'sound-row';
     row.innerHTML = `
       <div class="sound-row-info">
-        <span class="sound-name">${this._esc(asset.name)}</span>
+        <span class="sound-name">${tagsHtml}${this._esc(asset.name)}</span>
         <span class="sound-meta">${this._esc(asset.license ?? asset.source)}</span>
       </div>
       <div class="sound-row-actions">
         <button class="btn btn--ghost btn--xs sound-preview-btn" data-url="">▶ Preview</button>
+        ${storeBtnHtml}
         <button class="btn btn--primary btn--xs sound-use-btn">Use</button>
         <button class="btn btn--danger btn--xs sound-del-btn" title="Remove from library">✕</button>
       </div>
@@ -179,6 +241,7 @@ export class FreesoundModal {
     const previewBtn = row.querySelector<HTMLButtonElement>('.sound-preview-btn')!;
     const useBtn     = row.querySelector<HTMLButtonElement>('.sound-use-btn')!;
     const delBtn     = row.querySelector<HTMLButtonElement>('.sound-del-btn')!;
+    const storeBtn   = row.querySelector<HTMLButtonElement>('.sound-store-btn');
 
     previewBtn.addEventListener('click', async () => {
       const blob = await AudioAssetStore.getBlob(asset);
@@ -190,6 +253,19 @@ export class FreesoundModal {
     useBtn.addEventListener('click', () => {
       this.onAssign(asset);
       this.close();
+    });
+
+    storeBtn?.addEventListener('click', async () => {
+      storeBtn.disabled    = true;
+      storeBtn.textContent = 'Storing…';
+      const ok = await AudioAssetStore.store(asset);
+      if (ok) {
+        await this._renderLibrary(); // re-render so the row refreshes with Local tag, no Store button
+      } else {
+        storeBtn.disabled    = false;
+        storeBtn.textContent = '⚠ Failed';
+        setTimeout(() => { storeBtn.textContent = 'Store'; }, 2000);
+      }
     });
 
     delBtn.addEventListener('click', async () => {
@@ -312,9 +388,11 @@ export class FreesoundModal {
       importBtn.textContent = 'Importing…';
       try {
         const id    = crypto.randomUUID();
-        const blob  = await this.searchConnector.download(result);
         const asset = this.searchConnector.toAudioAsset(result, id);
-        await AudioAssetStore.save(asset, blob);
+        // Save metadata only — Freesound assets are URL-like by default. Blob
+        // is fetched on demand into the runtime cache; click Store in My
+        // Library to make the asset offline-usable + portable in bundle exports.
+        await AudioAssetStore.saveMetadataOnly(asset);
         this.onAssign(asset);
         this.close();
       } catch (err) {

@@ -148,7 +148,9 @@ export class FreesoundClient {
       id,
       name:                result.name,
       source:              'freesound',
-      locallyStored:       true,         // blob is downloaded immediately on import
+      // Default to NOT-stored — the blob is cached in IDB for runtime playback,
+      // but the asset is omitted from bundle exports until the user clicks Store.
+      locallyStored:       false,
       freesoundId:         result.id,
       freesoundPreviewUrl: result.previewUrl,
       freesoundPageUrl:    result.pageUrl,

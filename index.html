@@ -354,6 +354,10 @@
           </div>
           <div id="library-list" class="sound-list"></div>
           <p id="library-empty" class="sound-list-empty" hidden>No sounds in library yet. Use Freesound Search to add some, or upload your own.</p>
+          <div id="library-footer" class="library-footer" hidden>
+            <button id="library-store-all-btn" class="btn btn--ghost btn--sm btn--full" title="Download every non-stored asset and persist it locally — useful for going offline">Store All <span id="library-store-all-count"></span></button>
+            <p id="library-store-all-status" class="library-store-status"></p>
+          </div>
         </div>
         <div id="tab-weblinks" class="tab-content" hidden>
           <p class="weblinks-hint">Paste one or more URLs to audio files (mp3, wav, ogg…). Each is validated and added to your library tagged <strong>URL</strong> — the file streams from the source at runtime and is <em>not</em> stored locally until you click <strong>Store</strong> in the library.</p>

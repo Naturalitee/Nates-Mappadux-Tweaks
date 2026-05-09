@@ -1297,6 +1297,40 @@ body.player-view #renderer-canvas {
 .weblinks-result--fail  { border-left-color: #dc2626; color: var(--text-dim); }
 .weblinks-result--busy  { border-left-color: var(--accent); color: var(--text-dim); }
 
+/* My Library tag pills shown next to each asset's name. */
+.sound-tag {
+  display: inline-block;
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 1px 6px;
+  border-radius: 9px;
+  border: 1px solid;
+  margin-right: 4px;
+  vertical-align: middle;
+  line-height: 1.3;
+}
+.sound-tag--freesound { color: #22c55e; border-color: rgba(34, 197, 94, 0.4); }
+.sound-tag--url       { color: #3b82f6; border-color: rgba(59, 130, 246, 0.4); }
+.sound-tag--local     { color: #94a3b8; border-color: rgba(148, 163, 184, 0.4); }
+
+.library-footer {
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.library-store-status {
+  font-size: 0.7rem;
+  color: var(--text-dim);
+  margin: 0;
+  text-align: center;
+  min-height: 1em;
+}
+
 .upload-file-info {
   display: flex;
   flex-direction: column;

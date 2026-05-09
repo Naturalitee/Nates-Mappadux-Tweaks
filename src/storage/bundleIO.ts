@@ -27,17 +27,49 @@ interface AudioEntry {
   addedAt:  number;
 }
 
+/**
+ * Audio with its blob embedded — this is what travels when the user has clicked
+ * Store on the asset (or it's an Upload, which is implicitly stored). Carries
+ * the full asset metadata so import can recreate the row accurately, regardless
+ * of the original source.
+ */
+interface StoredAudioEntry {
+  id:       string;
+  name:     string;
+  mimeType: string;
+  dataB64:  string;
+  addedAt:  number;
+  source:   AudioAsset['source'];
+  license?:             string;
+  attribution?:         string;
+  username?:            string;
+  durationSecs?:        number;
+  sourceUrl?:           string;
+  freesoundId?:         number;
+  freesoundPreviewUrl?: string;
+  freesoundPageUrl?:    string;
+}
+
+/**
+ * Audio known only by URL/API — metadata travels in the bundle, blob does not.
+ * Recipient fetches at runtime (and may need an API key for Freesound).
+ */
+type RemoteAudioEntry = AudioAsset;
+
 export interface DMRBundle {
   version:      typeof BUNDLE_VERSION;
   exportedAt:   number;
   maps:         MapEntry[];
   customIcons?: IconEntry[];
-  /** Uploaded audio files — embedded because they have no remote source to re-download */
+  /** Audio with embedded blob — any `locallyStored=true` asset goes here. */
+  storedAudio?:  StoredAudioEntry[];
+  /** Metadata-only audio — Freesound + Web Link items the user hasn't Stored. */
+  remoteAudio?:  RemoteAudioEntry[];
+
+  // ── Legacy fields (read on import, no longer written on export) ──
+  /** @deprecated read-only, replaced by `storedAudio`. */
   uploadedAudio?: AudioEntry[];
-  /**
-   * Freesound asset metadata only — blobs are NOT embedded (too large; can be
-   * re-downloaded from freesoundPreviewUrl on demand via AudioAssetStore.getBlob).
-   */
+  /** @deprecated read-only, replaced by `remoteAudio`. */
   freesoundAudio?: AudioAsset[];
 }
 
@@ -51,6 +83,15 @@ function ab2b64(buffer: ArrayBuffer): string {
     str += String.fromCharCode(...bytes.subarray(i, Math.min(i + 65536, bytes.length)));
   }
   return btoa(str);
+}
+
+/** Strip keys whose values are `undefined` so optional fields aren't set explicitly. */
+function _omitUndefined<T extends Record<string, unknown>>(obj: T): T {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(obj)) {
+    if (v !== undefined) out[k] = v;
+  }
+  return out as T;
 }
 
 /** base64 string → Blob */
@@ -96,32 +137,48 @@ export async function exportBundle(): Promise<void> {
     });
   }
 
-  // Export uploaded audio (source='upload') — these have no remote URL to re-fetch
+  // Audio: split into stored (with blob) vs remote (metadata only) by the
+  // user's Store decisions. Stored items become offline-usable for the
+  // recipient; remote items still need the API key / network at runtime.
   const allAudioMeta = await getAllAudioAssets();
-  const uploadedAudio: AudioEntry[] = [];
-  for (const meta of allAudioMeta.filter((a) => a.source === 'upload')) {
-    const stored = await getAsset(meta.id);
-    if (!stored) continue;
-    const ab = await stored.blob.arrayBuffer();
-    uploadedAudio.push({
-      id:       meta.id,
-      name:     meta.name,
-      mimeType: stored.blob.type || 'audio/mpeg',
-      dataB64:  ab2b64(ab),
-      addedAt:  meta.addedAt,
-    });
-  }
+  const storedAudio: StoredAudioEntry[] = [];
+  const remoteAudio: RemoteAudioEntry[] = [];
 
-  // Export Freesound metadata only — no blob (re-downloaded on demand via freesoundPreviewUrl)
-  const freesoundAudio = allAudioMeta.filter((a) => a.source === 'freesound');
+  for (const meta of allAudioMeta) {
+    if (meta.locallyStored) {
+      const stored = await getAsset(meta.id);
+      if (!stored) continue;
+      const ab = await stored.blob.arrayBuffer();
+      storedAudio.push(_omitUndefined({
+        id:       meta.id,
+        name:     meta.name,
+        mimeType: stored.blob.type || 'audio/mpeg',
+        dataB64:  ab2b64(ab),
+        addedAt:  meta.addedAt,
+        source:   meta.source,
+        license:             meta.license,
+        attribution:         meta.attribution,
+        username:            meta.username,
+        durationSecs:        meta.durationSecs,
+        sourceUrl:           meta.sourceUrl,
+        freesoundId:         meta.freesoundId,
+        freesoundPreviewUrl: meta.freesoundPreviewUrl,
+        freesoundPageUrl:    meta.freesoundPageUrl,
+      }) as StoredAudioEntry);
+    } else if (meta.source === 'freesound' || meta.source === 'web-link') {
+      // Skip uploads with locallyStored=false — that's an inconsistent state and
+      // we have nothing to fall back on for them.
+      remoteAudio.push(meta);
+    }
+  }
 
   const bundle: DMRBundle = {
     version:    BUNDLE_VERSION,
     exportedAt: Date.now(),
     maps:       entries,
-    ...(iconEntries.length > 0      ? { customIcons:    iconEntries    } : {}),
-    ...(uploadedAudio.length > 0    ? { uploadedAudio:  uploadedAudio  } : {}),
-    ...(freesoundAudio.length > 0   ? { freesoundAudio: freesoundAudio } : {}),
+    ...(iconEntries.length > 0   ? { customIcons:  iconEntries }  : {}),
+    ...(storedAudio.length > 0   ? { storedAudio:  storedAudio }  : {}),
+    ...(remoteAudio.length > 0   ? { remoteAudio:  remoteAudio }  : {}),
   };
 
   const blob = new Blob([JSON.stringify(bundle)], { type: 'application/json' });
@@ -186,7 +243,38 @@ export async function importBundle(
     }
   }
 
-  // Restore uploaded audio assets (with embedded blob)
+  // Restore Stored audio assets (blob embedded — full metadata preserved)
+  if (Array.isArray(bundle.storedAudio)) {
+    for (const entry of bundle.storedAudio) {
+      const blob = b64ToBlob(entry.dataB64, entry.mimeType);
+      const asset = _omitUndefined({
+        id:                  entry.id,
+        name:                entry.name,
+        source:              entry.source,
+        locallyStored:       true,
+        license:             entry.license,
+        attribution:         entry.attribution,
+        username:            entry.username,
+        durationSecs:        entry.durationSecs,
+        sourceUrl:           entry.sourceUrl,
+        freesoundId:         entry.freesoundId,
+        freesoundPreviewUrl: entry.freesoundPreviewUrl,
+        freesoundPageUrl:    entry.freesoundPageUrl,
+        addedAt:             entry.addedAt,
+      }) as AudioAsset;
+      await saveAudioAsset(asset);
+      await saveAsset({ id: entry.id, name: entry.name, type: 'audio', blob, addedAt: entry.addedAt });
+    }
+  }
+
+  // Restore Remote audio metadata (no blob — recipient fetches at runtime)
+  if (Array.isArray(bundle.remoteAudio)) {
+    for (const asset of bundle.remoteAudio) {
+      await saveAudioAsset({ ...asset, locallyStored: false } as AudioAsset);
+    }
+  }
+
+  // ── Legacy fields (bundles exported before v2.7.7) ──────────────────────────
   if (Array.isArray(bundle.uploadedAudio)) {
     for (const entry of bundle.uploadedAudio) {
       const blob = b64ToBlob(entry.dataB64, entry.mimeType);
@@ -202,13 +290,8 @@ export async function importBundle(
       await saveAsset({ id: entry.id, name: entry.name, type: 'audio', blob, addedAt: entry.addedAt });
     }
   }
-
-  // Restore Freesound metadata — blob is not bundled; AudioAssetStore.getBlob()
-  // will re-download from freesoundPreviewUrl on first access if API key is set.
   if (Array.isArray(bundle.freesoundAudio)) {
     for (const asset of bundle.freesoundAudio) {
-      // The blob isn't in the bundle, so locallyStored is false on the
-      // importing side until something re-downloads + caches it.
       await saveAudioAsset({ ...asset, locallyStored: false } as AudioAsset);
     }
   }
