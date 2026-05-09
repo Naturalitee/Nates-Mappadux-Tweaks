@@ -832,6 +832,19 @@ body.player-view #renderer-canvas {
   color: #48d1cc;
   background: rgba(72, 209, 204, 0.1);
 }
+.marker-role-btn--tracker {
+  border-color: rgba(245, 158, 11, 0.3);
+  color: rgba(245, 158, 11, 0.7);
+}
+.marker-role-btn--tracker:hover {
+  border-color: #f59e0b;
+  color: #f59e0b;
+}
+.marker-role-btn--tracker.marker-role-btn--active {
+  border-color: #f59e0b;
+  color: #f59e0b;
+  background: rgba(245, 158, 11, 0.1);
+}
 .marker-sound-row {
   align-items: center;
 }
@@ -892,6 +905,7 @@ body.player-view #renderer-canvas {
 .icon-picker-btn--active { border-color: var(--accent); background: var(--accent-dim); }
 .icon-picker-btn img { width: 18px; height: 18px; object-fit: contain; }
 .icon-picker-sep { height: 1px; background: var(--border); margin: var(--space-xs) 0; }
+.panel-sep      { height: 1px; background: var(--border); margin: var(--space-sm) 0; border: 0; }
 .icon-picker-upload {
   display: block; width: 100%;
   padding: var(--space-xs) var(--space-sm);

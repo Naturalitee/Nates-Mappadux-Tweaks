@@ -34,7 +34,12 @@ function _migrateMarker_v1_v2(m: any): any {
   } = m;
   void _r; void _ms; void _te; void _ts; void _hft;
 
-  return { ...rest, roles };
+  // New v2 fields with sensible defaults
+  return {
+    ...rest,
+    roles,
+    motionMuted: typeof m.motionMuted === 'boolean' ? m.motionMuted : false,
+  };
 }
 
 /**

@@ -190,11 +190,11 @@ export class MarkerEditor {
     if (badge === 'hidden') return m.hidden ? 'Hidden' : 'Visible';
     if (badge === 'audio') {
       if (m.roles.audio === 'source')   return m.audioMuted ? 'Muted Sound Source' : 'Sound Source';
-      if (m.roles.audio === 'listener') return m.audioMuted ? 'Deaf Listener'       : 'Listener';
+      if (m.roles.audio === 'listener') return m.audioMuted ? 'Deaf Listener'      : 'Listener';
       return '';
     }
-    if (m.roles.motion === 'source')  return 'Motion Source';
-    if (m.roles.motion === 'tracker') return 'Motion Tracker';
+    if (m.roles.motion === 'source')  return m.motionMuted ? 'Muted Motion Source' : 'Motion Source';
+    if (m.roles.motion === 'tracker') return m.motionMuted ? 'Motion Tracker Off' : 'Motion Tracker';
     return '';
   }
 
@@ -220,13 +220,12 @@ export class MarkerEditor {
   private _handleBadge(marker: Marker, badge: 'hidden' | 'audio' | 'motion'): void {
     if (marker.locked) return; // locked markers: badges are display-only
 
-    let updated: Marker | null = null;
-    if (badge === 'hidden')      updated = { ...marker, hidden:     !marker.hidden     };
-    else if (badge === 'audio')  updated = { ...marker, audioMuted: !marker.audioMuted };
-    // Motion badge click is reserved for B1 (motion mute toggle); for now no-op.
-    if (!updated) return;
+    let updated: Marker;
+    if (badge === 'hidden')      updated = { ...marker, hidden:      !marker.hidden      };
+    else if (badge === 'audio')  updated = { ...marker, audioMuted:  !marker.audioMuted  };
+    else                         updated = { ...marker, motionMuted: !marker.motionMuted };
 
-    this.markers = this.markers.map((m) => m.id === marker.id ? updated! : m);
+    this.markers = this.markers.map((m) => m.id === marker.id ? updated : m);
     this._onChange([...this.markers]);
     if (this.selectedId === marker.id) this._onSelect(updated);
     this._redraw();

@@ -146,6 +146,35 @@ function _iconMotion(ctx: Ctx2D, cx: number, cy: number, r: number): void {
   ctx.fill();
 }
 
+/** Radar-screen style: concentric arcs in the upper-right quadrant + centre dot. */
+function _iconRadar(ctx: Ctx2D, cx: number, cy: number, r: number): void {
+  ctx.strokeStyle = 'white';
+  ctx.fillStyle   = 'white';
+  ctx.lineWidth   = r * 0.18;
+  ctx.lineCap     = 'round';
+  // Centre dot
+  ctx.beginPath();
+  ctx.arc(cx, cy, r * 0.18, 0, Math.PI * 2);
+  ctx.fill();
+  // Two outward arcs (upper-right quadrant ≈ 45°-arc swept from -PI/4 to 0)
+  for (const radius of [r * 0.45, r * 0.7]) {
+    ctx.beginPath();
+    ctx.arc(cx, cy, radius, -Math.PI * 0.4, -Math.PI * 0.05);
+    ctx.stroke();
+  }
+}
+
+/** Diagonal slash overlay used to mark a muted icon. */
+function _slash(ctx: Ctx2D, cx: number, cy: number, r: number): void {
+  ctx.strokeStyle = 'white';
+  ctx.lineWidth   = r * 0.22;
+  ctx.lineCap     = 'round';
+  ctx.beginPath();
+  ctx.moveTo(cx - r * 0.62, cy + r * 0.62);
+  ctx.lineTo(cx + r * 0.62, cy - r * 0.62);
+  ctx.stroke();
+}
+
 // ── Composite badge renderers ─────────────────────────────────────────────────
 
 function _visibilityBadge(ctx: Ctx2D, m: Marker, bx: number, by: number): void {
@@ -168,10 +197,20 @@ function _audioBadge(ctx: Ctx2D, m: Marker, bx: number, by: number): void {
 }
 
 function _motionBadge(ctx: Ctx2D, m: Marker, bx: number, by: number): void {
+  const muted = m.motionMuted;
+  const colour = muted ? '#dc2626' : '#22c55e';
   if (m.roles.motion === 'source') {
-    _badge(ctx, bx, by, '#22c55e', _iconMotion);
+    _badge(ctx, bx, by, colour, (c, x, y, r) => {
+      _iconMotion(c, x, y, r);
+      if (muted) _slash(c, x, y, r);
+    });
+  } else if (m.roles.motion === 'tracker') {
+    _badge(ctx, bx, by, colour, (c, x, y, r) => {
+      _iconRadar(c, x, y, r);
+      if (muted) _slash(c, x, y, r);
+    });
   }
-  // no motion role: no motion badge (tracker badge added in B1)
+  // no motion role: no badge
 }
 
 /**

@@ -110,6 +110,22 @@
             <label for="marker-label">Name</label>
             <input type="text" id="marker-label" class="marker-text-input" placeholder="Label" />
           </div>
+          <div class="param-row param-row--toggle">
+            <label for="marker-locked">Locked <span class="param-hint">(panel access only)</span></label>
+            <label class="toggle-switch toggle-switch--warning">
+              <input type="checkbox" id="marker-locked" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+          <div class="param-row param-row--toggle">
+            <label for="marker-hidden">Hide from players</label>
+            <label class="toggle-switch">
+              <input type="checkbox" id="marker-hidden" />
+              <span class="toggle-slider"></span>
+            </label>
+          </div>
+
+          <p class="map-section-label map-section-label--gap">Marker Icon</p>
           <div class="param-row">
             <label>Icon</label>
             <button type="button" id="marker-icon-btn" class="marker-icon-btn">&#9670;</button>
@@ -124,13 +140,6 @@
             <span id="marker-size-val" class="param-value">1.0×</span>
           </div>
           <div class="param-row param-row--toggle">
-            <label for="marker-hidden">Hide from players</label>
-            <label class="toggle-switch">
-              <input type="checkbox" id="marker-hidden" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div class="param-row param-row--toggle">
             <label for="marker-show-label">Show Name on player map</label>
             <label class="toggle-switch">
               <input type="checkbox" id="marker-show-label" />
@@ -139,7 +148,7 @@
           </div>
 
           <p class="map-section-label map-section-label--gap">Marker Sounds</p>
-          <div class="marker-role-btns">
+          <div class="marker-role-btns marker-audio-role-btns">
             <button class="marker-role-btn" data-role="default">None</button>
             <button class="marker-role-btn" data-role="audio_source">Sound Source</button>
             <button class="marker-role-btn marker-role-btn--listener" data-role="listener">Listener</button>
@@ -183,20 +192,31 @@
             </div>
           </div>
 
-          <div class="param-row param-row--toggle">
-            <label for="marker-locked">Locked <span class="param-hint">(panel access only)</span></label>
-            <label class="toggle-switch toggle-switch--warning">
-              <input type="checkbox" id="marker-locked" />
-              <span class="toggle-slider"></span>
-            </label>
+          <p class="map-section-label map-section-label--gap">Marker Motion</p>
+          <div class="marker-role-btns marker-motion-role-btns">
+            <button class="marker-role-btn" data-motion-role="default">None</button>
+            <button class="marker-role-btn" data-motion-role="source">Motion Source</button>
+            <button class="marker-role-btn marker-role-btn--tracker" data-motion-role="tracker">Motion Tracker</button>
           </div>
 
+          <div id="marker-motion-controls" hidden>
+            <div class="param-row param-row--toggle">
+              <label for="marker-motion-muted">Muted</label>
+              <label class="toggle-switch">
+                <input type="checkbox" id="marker-motion-muted" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <hr class="panel-sep" />
           <div class="btn-row">
             <button id="clone-marker-btn"  class="btn btn--ghost   btn--sm">Clone Marker</button>
             <button id="delete-marker-btn" class="btn btn--danger  btn--sm">Delete Marker</button>
           </div>
         </div>
 
+        <hr class="panel-sep" />
         <button id="add-marker-btn" class="btn btn--primary btn--sm btn--full">+ Add Marker</button>
       </div>
     </section>

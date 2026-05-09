@@ -19,7 +19,7 @@ import { exportBundle, importBundle } from '../storage/bundleIO.ts';
 import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
 import { MarkerInteractionRegistry, type InteractionContext } from './markerInteractions/MarkerInteraction.ts';
 import { PositionalAudioInteraction } from './markerInteractions/PositionalAudioInteraction.ts';
-import type { SessionState, StoredMap, TransitionConfig, Marker, MarkerIconData, AudioAsset, AudioRole } from '../types.ts';
+import type { SessionState, StoredMap, TransitionConfig, Marker, MarkerIconData, AudioAsset, AudioRole, MotionRole } from '../types.ts';
 import QRCode from 'qrcode';
 
 const REMOTE_AUDIO_KEY = 'dmr_remote_audio';
@@ -866,7 +866,7 @@ export class GMApp {
 
     // Audio role selector — buttons carry legacy data-role values:
     //   'default' → clear audio role; 'audio_source' → source; 'listener' → listener
-    document.querySelectorAll<HTMLElement>('.marker-role-btn').forEach((btn) => {
+    document.querySelectorAll<HTMLElement>('.marker-audio-role-btns .marker-role-btn').forEach((btn) => {
       btn.addEventListener('click', () => {
         if (!this.selectedMarkerId) return;
         const raw = btn.dataset['role'];
@@ -891,6 +891,39 @@ export class GMApp {
           return m;
         }));
       });
+    });
+
+    // Motion role selector — data-motion-role on each button
+    document.querySelectorAll<HTMLElement>('.marker-motion-role-btns .marker-role-btn').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        if (!this.selectedMarkerId) return;
+        const raw = btn.dataset['motionRole'];
+        const next: MotionRole | undefined =
+          raw === 'source'  ? 'source'  :
+          raw === 'tracker' ? 'tracker' :
+          undefined;
+
+        this.state.updateMarkers((markers) => markers.map((m) => {
+          if (m.id === this.selectedMarkerId) {
+            const roles = { ...m.roles };
+            if (next) roles.motion = next;
+            else delete roles.motion;
+            return { ...m, roles };
+          }
+          // Single-tracker constraint: demote any other tracker in the same pass
+          if (next === 'tracker' && m.roles.motion === 'tracker') {
+            const roles = { ...m.roles };
+            delete roles.motion;
+            return { ...m, roles };
+          }
+          return m;
+        }));
+      });
+    });
+
+    // Motion muted toggle
+    document.querySelector<HTMLInputElement>('#marker-motion-muted')?.addEventListener('change', (e) => {
+      this.updateSelectedMarker({ motionMuted: (e.target as HTMLInputElement).checked });
     });
 
     // Sound assignment
@@ -1051,13 +1084,23 @@ export class GMApp {
         this.markerIconBtn.textContent = sel.icon;
       }
 
-      // Role buttons — translate legacy data-role values to the current audio role
-      document.querySelectorAll<HTMLElement>('.marker-role-btn').forEach((btn) => {
+      // Audio role buttons — translate legacy data-role values to the current audio role
+      document.querySelectorAll<HTMLElement>('.marker-audio-role-btns .marker-role-btn').forEach((btn) => {
         const raw = btn.dataset['role'];
         const matches =
           (raw === 'default'      && !sel.roles.audio) ||
           (raw === 'audio_source' && sel.roles.audio === 'source') ||
           (raw === 'listener'     && sel.roles.audio === 'listener');
+        btn.classList.toggle('marker-role-btn--active', matches);
+      });
+
+      // Motion role buttons
+      document.querySelectorAll<HTMLElement>('.marker-motion-role-btns .marker-role-btn').forEach((btn) => {
+        const raw = btn.dataset['motionRole'];
+        const matches =
+          (raw === 'default' && !sel.roles.motion) ||
+          (raw === 'source'  && sel.roles.motion === 'source') ||
+          (raw === 'tracker' && sel.roles.motion === 'tracker');
         btn.classList.toggle('marker-role-btn--active', matches);
       });
 
@@ -1068,6 +1111,12 @@ export class GMApp {
       if (audioControlsEl)  audioControlsEl.hidden  = !sel.roles.audio;
       if (sourceControlsEl) sourceControlsEl.hidden = sel.roles.audio !== 'source';
       if (mutedToggle)      mutedToggle.checked      = sel.audioMuted;
+
+      // Motion controls — visible whenever the marker has a motion role
+      const motionControlsEl   = document.querySelector<HTMLElement>('#marker-motion-controls');
+      const motionMutedToggle  = document.querySelector<HTMLInputElement>('#marker-motion-muted');
+      if (motionControlsEl)  motionControlsEl.hidden  = !sel.roles.motion;
+      if (motionMutedToggle) motionMutedToggle.checked = sel.motionMuted;
 
       if (sel.roles.audio === 'source') {
         const soundRow        = document.querySelector<HTMLElement>('#marker-sound-row');

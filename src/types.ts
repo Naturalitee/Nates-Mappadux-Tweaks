@@ -94,6 +94,9 @@ export interface Marker {
   audioRandom:      boolean;  // random play mode — fires one-shots at randomised intervals
   audioRandomFreq:  number;   // target plays per 10 minutes (1–100) when audioRandom is true
 
+  // Motion fields (used when roles.motion is set)
+  motionMuted: boolean; // source: tracker ignores it; tracker: scanner is silent
+
   // Interaction lock — side-panel only; dims icon, blocks canvas selection
   locked: boolean;
 }
@@ -116,6 +119,7 @@ export function defaultMarker(id: string, x = 0.5, y = 0.5): Marker {
     audioVolume:      1.0,
     audioRandom:      false,
     audioRandomFreq:  10,
+    motionMuted:      false,
     locked:           false,
   };
 }
