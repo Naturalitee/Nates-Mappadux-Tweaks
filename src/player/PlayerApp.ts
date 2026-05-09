@@ -48,6 +48,9 @@ export class PlayerApp {
   private _trackerScans: MotionOverlayScan[] = [];
   private _trackerBlobs: MotionOverlayBlob[] = [];
   private _trackerRafId: number | null       = null;
+  /** Cached tracker ping audio data URLs, keyed by assetId. Populated by the
+   *  first tracker_scan/tracker_blob carrying that asset's dataUrl. */
+  private _trackerAudioUrls = new Map<string, string>();
   // ── WebGL context-loss recovery ──────────────────────────────────────────
   /** Room code retained so we can reconnect if cached state is unavailable. */
   private roomCode = '';
@@ -391,23 +394,40 @@ export class PlayerApp {
           speedSecs: msg.speedSecs,
           colour:    msg.colour,
         });
+        this._playTrackerPing(msg.audioAssetId, msg.audioDataUrl, msg.audioVolume);
         this._kickTrackerRaf();
         break;
       }
 
       case 'tracker_blob': {
-        this._trackerBlobs.push({
-          startTime: performance.now(),
-          sourceId:  msg.sourceId,
-          position:  msg.position,
-          fadeMs:    msg.fadeMs,
-          mode:      msg.mode,
-          colour:    msg.colour,
-        });
-        this._kickTrackerRaf();
+        // fadeMs=0 is the GM's "audio-only return" sentinel — skip the visual blob.
+        if (msg.fadeMs > 0) {
+          this._trackerBlobs.push({
+            startTime: performance.now(),
+            sourceId:  msg.sourceId,
+            position:  msg.position,
+            fadeMs:    msg.fadeMs,
+            mode:      msg.mode,
+            colour:    msg.colour,
+          });
+          this._kickTrackerRaf();
+        }
+        this._playTrackerPing(msg.audioAssetId, msg.audioDataUrl, msg.audioVolume);
         break;
       }
     }
+  }
+
+  /** Cache the tracker ping audio if a fresh dataUrl arrived, and fire a one-shot. */
+  private _playTrackerPing(assetId: string | undefined, dataUrl: string | undefined, volume: number | undefined): void {
+    if (!assetId) return;
+    if (dataUrl) this._trackerAudioUrls.set(assetId, dataUrl);
+    const url = this._trackerAudioUrls.get(assetId);
+    if (!url) return;
+    if (this.sbMuted) return; // respect the player's master mute toggle
+    const a = new Audio(url);
+    a.volume = Math.max(0, Math.min(1, volume ?? 0.8));
+    void a.play().catch(() => { /* autoplay-policy ignore */ });
   }
 
   // ─── Motion-tracker overlay ───────────────────────────────────────────────

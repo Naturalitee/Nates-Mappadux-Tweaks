@@ -15,11 +15,14 @@ import { Host } from '../p2p/Host.ts';
 import { generateRoomCode } from '../p2p/roomCode.ts';
 import { saveSession, loadSession, getAllMaps, deleteMap, clearAssetLibraries } from '../storage/db.ts';
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
+import { seedAudioAssets } from '../storage/seedAudioAssets.ts';
 import { exportBundle, importBundle } from '../storage/bundleIO.ts';
 import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
 import { MarkerInteractionRegistry, type InteractionContext } from './markerInteractions/MarkerInteraction.ts';
 import { PositionalAudioInteraction } from './markerInteractions/PositionalAudioInteraction.ts';
 import { MotionTrackerInteraction } from './markerInteractions/MotionTrackerInteraction.ts';
+import { TrackerAudioPlayer } from '../audio/TrackerAudioPlayer.ts';
+import { blobToDataUrl } from '../utils/blob.ts';
 import type { MotionOverlay } from '../rendering/MarkerLayer.ts';
 import type { SessionState, StoredMap, TransitionConfig, Marker, MarkerIconData, AudioAsset, AudioRole, MotionRole } from '../types.ts';
 import QRCode from 'qrcode';
@@ -61,6 +64,12 @@ export class GMApp {
   private interactions   = new MarkerInteractionRegistry();
   private audio          = this.interactions.register(new PositionalAudioInteraction());
   private motionTracker  = this.interactions.register(new MotionTrackerInteraction());
+  private trackerAudio   = new TrackerAudioPlayer();
+  /** Cached data URLs for the currently-assigned tracker audio assets. Always
+   *  embedded in tracker_scan / tracker_blob broadcasts so late-joining players
+   *  can play immediately without a separate handshake. */
+  private _outgoingDataUrl: string | null = null;
+  private _returnDataUrl:   string | null = null;
   private _motionRafId:    number | null = null;
   private selectedMarkerId: string | null = null;
   private mapAspectRatio = 1;
@@ -128,27 +137,43 @@ export class GMApp {
     // Motion-tracker rendering: redraw the GM marker layer every frame while
     // a scan ring is expanding or any return blob is still fading.
     this.motionTracker.onChange = () => this._kickMotionRaf();
-    // Broadcast scan events so connected players can mirror the visuals.
+    // Broadcast scan events so connected players can mirror the visuals + audio.
     this.motionTracker.onScanStart = (scan) => {
+      // Play the outgoing ping locally
+      this.trackerAudio.playOutgoing();
+      const cfg          = this.motionTracker.getConfig();
+      const audioAssetId = this.trackerAudio.getOutgoingAssetId() ?? undefined;
+      const audioFields  = this._buildTrackerAudioFields(audioAssetId, this._outgoingDataUrl, cfg.outgoingPingVolume);
       this.host.broadcast({
         type:      'tracker_scan',
         centre:    scan.centre,
         range:     scan.range,
         speedSecs: scan.speedSecs,
         colour:    scan.colour,
+        ...audioFields,
       });
     };
     this.motionTracker.onSourceHit = (source) => {
       const cfg = this.motionTracker.getConfig();
-      // Players don't render blobs when the GM has hidden them
-      if (cfg.hideBlobs) return;
+      // Play the return ping locally — fires even when blobs are hidden
+      this.trackerAudio.playReturn();
+      // Players don't render blobs when the GM has hidden them, but they still
+      // get the audio so the "audio return only" mode works remotely too.
+      const audioAssetId = this.trackerAudio.getReturnAssetId() ?? undefined;
+      const audioFields  = this._buildTrackerAudioFields(audioAssetId, this._returnDataUrl, cfg.returnPingVolume);
+      if (cfg.hideBlobs) {
+        // Audio-only broadcast: send a blob message with no visible blob (use a sentinel
+        // by skipping the message entirely if there's no audio either).
+        if (!audioAssetId) return;
+      }
       this.host.broadcast({
         type:     'tracker_blob',
         position: { ...source.position },
-        fadeMs:   cfg.rate * 1000,
+        fadeMs:   cfg.hideBlobs ? 0 : cfg.rate * 1000, // fadeMs=0 → player doesn't draw blob
         mode:     source.motionBlobMode,
         sourceId: source.id,
         colour:   cfg.colour,
+        ...audioFields,
       });
     };
 
@@ -166,6 +191,7 @@ export class GMApp {
       if (document.visibilityState === 'hidden') void this.state.flushSave();
     });
 
+    await seedAudioAssets();
     await seedDefaultMaps();
     await this.populateMapList();
     await this.startHost();
@@ -278,6 +304,72 @@ export class GMApp {
     };
   }
 
+  /** Compose the optional audio fields for tracker_scan / tracker_blob messages.
+   *  Drops fields entirely when remote audio is disabled. Always includes the
+   *  dataUrl so that late-joining / refreshed players can play immediately —
+   *  per-message overhead is small relative to the ping rate. */
+  private _buildTrackerAudioFields(
+    assetId: string | undefined,
+    dataUrl: string | null,
+    volume:  number,
+  ): { audioAssetId?: string; audioDataUrl?: string; audioVolume?: number } {
+    if (!assetId || !this.remoteAudioEnabled) return {};
+    const out: { audioAssetId?: string; audioDataUrl?: string; audioVolume?: number } = {
+      audioAssetId: assetId,
+      audioVolume:  volume,
+    };
+    if (dataUrl) out.audioDataUrl = dataUrl;
+    return out;
+  }
+
+  /** Load tracker ping audio from IDB, generate cached data URLs for broadcast,
+   *  and feed them to the local TrackerAudioPlayer. Idempotent. */
+  private async _loadTrackerAudio(): Promise<void> {
+    const cfg = this.state.getState().motionTracker;
+    const load = async (assetId: string | null): Promise<{ id: string | null; url: string | null }> => {
+      if (!assetId) return { id: null, url: null };
+      const asset = await AudioAssetStore.get(assetId);
+      if (!asset) return { id: null, url: null };
+      const blob = await AudioAssetStore.getBlob(asset);
+      if (!blob) return { id: null, url: null };
+      const url = await blobToDataUrl(blob);
+      return { id: assetId, url };
+    };
+    const [outgoing, ret] = await Promise.all([
+      load(cfg.outgoingPingAssetId),
+      load(cfg.returnPingAssetId),
+    ]);
+    this._outgoingDataUrl = outgoing.url;
+    this._returnDataUrl   = ret.url;
+    this.trackerAudio.setOutgoing(outgoing.id, outgoing.url);
+    this.trackerAudio.setReturn(ret.id, ret.url);
+    this.trackerAudio.setOutgoingVolume(cfg.outgoingPingVolume);
+    this.trackerAudio.setReturnVolume(cfg.returnPingVolume);
+  }
+
+  /** Update an Outgoing/Return ping assign button to reflect the current config. */
+  private _refreshTrackerPingButton(rowSel: string, btnSel: string, assetId: string | null): void {
+    const row = document.querySelector<HTMLElement>(rowSel);
+    const btn = document.querySelector<HTMLButtonElement>(btnSel);
+    if (!row || !btn) return;
+    if (assetId) {
+      row.className   = 'sb-slot-name-row';
+      btn.className   = 'sb-name-btn';
+      btn.textContent = '…';
+      void AudioAssetStore.get(assetId).then((asset) => {
+        if (btn.dataset['assetId'] === assetId || btn.textContent === '…') {
+          btn.textContent = asset?.name ?? 'Unknown Sound';
+        }
+      });
+      btn.dataset['assetId'] = assetId;
+    } else {
+      row.className   = 'sb-slot-empty';
+      btn.className   = 'sb-assign-btn btn btn--ghost btn--sm btn--full';
+      btn.textContent = '+ Assign Sound';
+      delete btn.dataset['assetId'];
+    }
+  }
+
   /** One-shot overlay refresh — call when selection or tracker config changes. */
   private _pushMotionOverlay(): void {
     this.markerEditor.motionOverlay = this._buildMotionOverlay(performance.now());
@@ -313,7 +405,10 @@ export class GMApp {
     const visibleMarkers = state.markers.filter((m) => !m.hidden);
     // Audio-source markers must be broadcast even when hidden — a hidden marker
     // can represent an invisible ambient sound source (e.g. attached to a room).
-    const broadcastMarkers = state.markers.filter((m) => !m.hidden || m.roles.audio === 'source');
+    // Hidden audio sources still need to broadcast (they emit positional sound) and hidden
+    // motion sources do too (the player needs the source's icon size to draw return blobs).
+    const broadcastMarkers = state.markers.filter((m) =>
+      !m.hidden || m.roles.audio === 'source' || m.roles.motion === 'source');
     const iconData         = this._collectIconData(visibleMarkers); // icons only for visible
 
     // Only send fog_update for live edits (changed = ['fog']).
@@ -397,6 +492,7 @@ export class GMApp {
 
     if (changed.includes('motionTracker') || changed.includes('map')) {
       this.motionTracker.setConfig(state.motionTracker);
+      void this._loadTrackerAudio();
       this._pushMotionOverlay();
     }
 
@@ -497,7 +593,8 @@ export class GMApp {
     // fog, filter, view, markers, and audio all travel atomically inside map_change.
     const allMarkers        = this.state.getState().markers;
     const visibleMarkers    = allMarkers.filter((m) => !m.hidden);
-    const broadcastMarkers2 = allMarkers.filter((m) => !m.hidden || m.roles.audio === 'source');
+    const broadcastMarkers2 = allMarkers.filter((m) =>
+      !m.hidden || m.roles.audio === 'source' || m.roles.motion === 'source');
     const markerIconData    = this._collectIconData(visibleMarkers);
     const soundboardActive  = await this.soundboardPanel.getActiveSlots();
     this.host.broadcast({
@@ -799,6 +896,7 @@ export class GMApp {
         for (const m of existing) await deleteMap(m.id);
         await clearAssetLibraries(); // wipe audio + icon libraries
         const { added } = await importBundle(file);
+        await seedAudioAssets(); // re-seed built-in tracker pings (CC0)
         this.state.resetForImport();
         await this.iconPicker.reload();
         await this.populateMapList();
@@ -1058,7 +1156,7 @@ export class GMApp {
     const rateVal   = document.querySelector<HTMLElement>('#tracker-rate-val');
     rateInput?.addEventListener('input', () => {
       const v = parseFloat(rateInput.value);
-      if (rateVal) rateVal.textContent = `${v.toFixed(1)}s`;
+      if (rateVal) rateVal.textContent = `${v.toFixed(2)}s`;
       patchTrackerCfg({ rate: v });
     });
 
@@ -1078,10 +1176,32 @@ export class GMApp {
       patchTrackerCfg({ hideBlobs: (e.target as HTMLInputElement).checked });
     });
 
-    // Per-motion-source: blob mode (single / cluster)
+    // Per-motion-source: blob mode (single / multi-few / multi-many)
     document.querySelector<HTMLSelectElement>('#source-blob-mode')?.addEventListener('change', (e) => {
       const v = (e.target as HTMLSelectElement).value;
-      this.updateSelectedMarker({ motionBlobMode: v === 'cluster' ? 'cluster' : 'single' });
+      const mode =
+        v === 'multi-few'  ? 'multi-few'  :
+        v === 'multi-many' ? 'multi-many' :
+                             'single';
+      this.updateSelectedMarker({ motionBlobMode: mode });
+    });
+
+    // Tracker outgoing/return ping sound assignment
+    document.querySelector('#tracker-outgoing-btn')?.addEventListener('click', () => {
+      this.soundboardPanel.audioModal.open((asset) => {
+        patchTrackerCfg({ outgoingPingAssetId: asset.id });
+      });
+    });
+    document.querySelector('#tracker-return-btn')?.addEventListener('click', () => {
+      this.soundboardPanel.audioModal.open((asset) => {
+        patchTrackerCfg({ returnPingAssetId: asset.id });
+      });
+    });
+    document.querySelector<HTMLInputElement>('#tracker-outgoing-vol')?.addEventListener('input', (e) => {
+      patchTrackerCfg({ outgoingPingVolume: parseFloat((e.target as HTMLInputElement).value) });
+    });
+    document.querySelector<HTMLInputElement>('#tracker-return-vol')?.addEventListener('input', (e) => {
+      patchTrackerCfg({ returnPingVolume: parseFloat((e.target as HTMLInputElement).value) });
     });
 
     // Sound assignment
@@ -1292,8 +1412,13 @@ export class GMApp {
         set<HTMLInputElement>('#tracker-colour',     cfg.colour);
         set<HTMLInputElement>('#tracker-hide-blobs', cfg.hideBlobs);
         const rv = document.querySelector<HTMLElement>('#tracker-range-val'); if (rv) rv.textContent = cfg.range.toFixed(2);
-        const ra = document.querySelector<HTMLElement>('#tracker-rate-val');  if (ra) ra.textContent = `${cfg.rate.toFixed(1)}s`;
+        const ra = document.querySelector<HTMLElement>('#tracker-rate-val');  if (ra) ra.textContent = `${cfg.rate.toFixed(2)}s`;
         const sp = document.querySelector<HTMLElement>('#tracker-speed-val'); if (sp) sp.textContent = `${cfg.speed.toFixed(1)}s`;
+        // Outgoing/return ping button labels + volume sliders
+        this._refreshTrackerPingButton('#tracker-outgoing-row', '#tracker-outgoing-btn', cfg.outgoingPingAssetId);
+        this._refreshTrackerPingButton('#tracker-return-row',   '#tracker-return-btn',   cfg.returnPingAssetId);
+        set<HTMLInputElement>('#tracker-outgoing-vol', String(cfg.outgoingPingVolume));
+        set<HTMLInputElement>('#tracker-return-vol',   String(cfg.returnPingVolume));
       }
 
       // Motion source controls — only when this marker is a Motion Source

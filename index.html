@@ -218,8 +218,8 @@
               </div>
               <div class="param-row">
                 <label for="tracker-rate">Ping rate</label>
-                <input type="range" id="tracker-rate" min="1" max="15" step="0.5" value="4" />
-                <span id="tracker-rate-val" class="param-value">4.0s</span>
+                <input type="range" id="tracker-rate" min="0.25" max="15" step="0.05" value="4" />
+                <span id="tracker-rate-val" class="param-value">4.00s</span>
               </div>
               <div class="param-row">
                 <label for="tracker-speed">Scan speed</label>
@@ -237,6 +237,22 @@
                   <span class="toggle-slider"></span>
                 </label>
               </div>
+              <div id="tracker-outgoing-row" class="sb-slot-empty">
+                <label class="param-hint">Outgoing ping</label>
+                <button id="tracker-outgoing-btn" class="sb-assign-btn btn btn--ghost btn--sm btn--full">+ Assign Sound</button>
+              </div>
+              <div class="param-row">
+                <label for="tracker-outgoing-vol">Volume</label>
+                <input type="range" id="tracker-outgoing-vol" min="0" max="1" step="0.01" value="0.8" />
+              </div>
+              <div id="tracker-return-row" class="sb-slot-empty">
+                <label class="param-hint">Return ping</label>
+                <button id="tracker-return-btn" class="sb-assign-btn btn btn--ghost btn--sm btn--full">+ Assign Sound</button>
+              </div>
+              <div class="param-row">
+                <label for="tracker-return-vol">Volume</label>
+                <input type="range" id="tracker-return-vol" min="0" max="1" step="0.01" value="0.8" />
+              </div>
             </div>
 
             <!-- Source-only configuration. Hidden unless the marker is a Motion Source. -->
@@ -245,7 +261,8 @@
                 <label for="source-blob-mode">Tracker view</label>
                 <select id="source-blob-mode" class="select-full">
                   <option value="single">Single blob</option>
-                  <option value="cluster">Cluster of blobs</option>
+                  <option value="multi-few">Multi-blob (few)</option>
+                  <option value="multi-many">Multi-blob (many)</option>
                 </select>
               </div>
             </div>

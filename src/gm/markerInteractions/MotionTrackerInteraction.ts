@@ -24,8 +24,8 @@ export interface ActiveBlob {
   position:  { x: number; y: number };
   /** Fade duration — equals the tracker rate so blobs are gone before the next scan. */
   fadeMs:    number;
-  /** 'single' or 'cluster' mode at hit time. */
-  mode:      'single' | 'cluster';
+  /** Blob render style snapshotted at hit time. */
+  mode:      'single' | 'multi-few' | 'multi-many';
 }
 
 /**

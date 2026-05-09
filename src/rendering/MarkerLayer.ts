@@ -21,7 +21,7 @@ export interface MotionOverlayBlob {
   sourceId:  string;
   position:  { x: number; y: number };
   fadeMs:    number;
-  mode:      'single' | 'cluster';
+  mode:      'single' | 'multi-few' | 'multi-many';
   colour:    string;
 }
 export interface MotionOverlay {
@@ -464,6 +464,10 @@ export class MarkerLayer {
       }
     }
 
+    // Return blobs are drawn FIRST so the marker icons sit on top of them —
+    // a contact splash beneath the token rather than a blob obscuring it.
+    if (this._motion) this._drawMotionBlobs(ctx, this._motion, W, H);
+
     for (const m of markers) {
       if (!isGM && m.hidden) continue;
       const pos = this.project(m.position.x, m.position.y, view);
@@ -472,8 +476,45 @@ export class MarkerLayer {
       this._drawMarker(ctx, m, pos.x, pos.y, baseR, m.id === sel, isGM, iconCache);
     }
 
-    // Motion-tracker overlay sits on top of markers
+    // Scan rings + the static range preview live ABOVE markers — they're
+    // transparent strokes so they don't obscure tokens.
     if (this._motion) this._drawMotionOverlay(ctx, this._motion, W, H);
+  }
+
+  private _drawMotionBlobs(ctx: CanvasRenderingContext2D, m: MotionOverlay, W: number, H: number): void {
+    void W;
+    const view = this._view;
+    for (const b of m.blobs) {
+      const elapsed = m.now - b.startTime;
+      const alpha   = Math.max(0, 1 - elapsed / b.fadeMs) * 0.85;
+      if (alpha <= 0) continue;
+      const pos = this.project(b.position.x, b.position.y, view);
+      if (!pos) continue;
+      const marker = this._markers.find((mm) => mm.id === b.sourceId);
+      const r = Math.min(W, H) * 0.025 * (marker?.size ?? 1);
+      ctx.save();
+      ctx.fillStyle = _hexWithAlpha(b.colour, alpha);
+      if (b.mode === 'multi-few' || b.mode === 'multi-many') {
+        const rng      = _seededRandom(_blobSeed(b.startTime, b.sourceId));
+        const isMany   = b.mode === 'multi-many';
+        const count    = isMany ? (7  + Math.floor(rng() * 7)) : (3 + Math.floor(rng() * 3));
+        const sizeBase = isMany ? 0.16 : 0.28;
+        const sizeVar  = isMany ? 0.10 : 0.18;
+        for (let i = 0; i < count; i++) {
+          const ang     = rng() * Math.PI * 2;
+          const dist    = rng() * r * 0.85;
+          const blobR   = r * (sizeBase + rng() * sizeVar);
+          ctx.beginPath();
+          ctx.arc(pos.x + Math.cos(ang) * dist, pos.y + Math.sin(ang) * dist, blobR, 0, Math.PI * 2);
+          ctx.fill();
+        }
+      } else {
+        ctx.beginPath();
+        ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      ctx.restore();
+    }
   }
 
   private _drawMotionOverlay(ctx: CanvasRenderingContext2D, m: MotionOverlay, W: number, H: number): void {
@@ -527,39 +568,7 @@ export class MarkerLayer {
       ctx.stroke();
       ctx.restore();
     }
-
-    // Return blobs — fade alpha over fadeMs
-    for (const b of m.blobs) {
-      const elapsed = m.now - b.startTime;
-      const alpha   = Math.max(0, 1 - elapsed / b.fadeMs) * 0.85;
-      if (alpha <= 0) continue;
-      const pos = this.project(b.position.x, b.position.y, view);
-      if (!pos) continue;
-
-      const marker = this._markers.find((mm) => mm.id === b.sourceId);
-      // Blob occupies the area normally taken by the source marker's icon
-      const r = Math.min(W, H) * 0.025 * (marker?.size ?? 1);
-      ctx.save();
-      ctx.fillStyle = _hexWithAlpha(b.colour, alpha);
-      if (b.mode === 'cluster') {
-        // 3–5 blobs scattered randomly within the icon footprint. Overlap fine.
-        const rng   = _seededRandom(_blobSeed(b.startTime, b.sourceId));
-        const count = 3 + Math.floor(rng() * 3); // 3, 4 or 5
-        for (let i = 0; i < count; i++) {
-          const ang     = rng() * Math.PI * 2;
-          const dist    = rng() * r * 0.85;            // anywhere from centre to near edge
-          const blobR   = r * (0.28 + rng() * 0.18);   // each blob 28–46% of icon radius
-          ctx.beginPath();
-          ctx.arc(pos.x + Math.cos(ang) * dist, pos.y + Math.sin(ang) * dist, blobR, 0, Math.PI * 2);
-          ctx.fill();
-        }
-      } else {
-        ctx.beginPath();
-        ctx.arc(pos.x, pos.y, r, 0, Math.PI * 2);
-        ctx.fill();
-      }
-      ctx.restore();
-    }
+    // (Return blobs are drawn separately in _drawMotionBlobs, beneath the markers.)
   }
 
   private _drawMarker(

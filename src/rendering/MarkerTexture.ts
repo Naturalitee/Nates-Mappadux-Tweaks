@@ -58,10 +58,10 @@ export class MarkerTexture {
       drawMarkerShape(ctx, m, 0, 0, r, false, false, iconCache);
       ctx.restore();
     }
-    if (motion) this._drawMotionOverlay(ctx, motion, W, H);
+    if (motion) this._drawMotionOverlay(ctx, motion, W, H, markers);
   }
 
-  private _drawMotionOverlay(ctx: CanvasRenderingContext2D, m: MotionOverlay, W: number, H: number): void {
+  private _drawMotionOverlay(ctx: CanvasRenderingContext2D, m: MotionOverlay, W: number, H: number, markers: Marker[]): void {
     const aspect = this.aspect;
     const yScale = H; // the texture spans 0–1 in y over its full pixel height
 
@@ -96,18 +96,23 @@ export class MarkerTexture {
       if (alpha <= 0) continue;
       const cx = b.position.x * W;
       const cy = b.position.y * H;
-      // Source marker icon size — cluster blobs scatter inside this area.
-      // Match the marker scaling so the blob area tracks the marker on screen.
-      const r = H * 0.025 * this.viewNH;
+      // Match the source marker's icon footprint so blobs cover the same area.
+      // Use the live size from the player's marker list (broadcast keeps it current).
+      const src = markers.find((mm) => mm.id === b.sourceId);
+      const sizeMul = src?.size ?? 1;
+      const r = H * 0.025 * sizeMul * this.viewNH;
       ctx.save();
       ctx.fillStyle = _hexA(b.colour, alpha);
-      if (b.mode === 'cluster') {
-        const rng   = _seeded(_blobSeed(b.startTime, b.sourceId));
-        const count = 3 + Math.floor(rng() * 3);
+      if (b.mode === 'multi-few' || b.mode === 'multi-many') {
+        const rng      = _seeded(_blobSeed(b.startTime, b.sourceId));
+        const isMany   = b.mode === 'multi-many';
+        const count    = isMany ? (7  + Math.floor(rng() * 7)) : (3 + Math.floor(rng() * 3));
+        const sizeBase = isMany ? 0.16 : 0.28;
+        const sizeVar  = isMany ? 0.10 : 0.18;
         for (let i = 0; i < count; i++) {
           const ang   = rng() * Math.PI * 2;
           const dist  = rng() * r * 0.85;
-          const blobR = r * (0.28 + rng() * 0.18);
+          const blobR = r * (sizeBase + rng() * sizeVar);
           ctx.beginPath();
           ctx.ellipse(
             cx + (Math.cos(ang) * dist) / aspect,

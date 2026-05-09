@@ -39,7 +39,10 @@ function _migrateMarker_v1_v2(m: any): any {
     ...rest,
     roles,
     motionMuted:    typeof m.motionMuted === 'boolean' ? m.motionMuted : false,
-    motionBlobMode: m.motionBlobMode === 'cluster' ? 'cluster' : 'single',
+    motionBlobMode: m.motionBlobMode === 'cluster'    ? 'multi-few' :
+                    m.motionBlobMode === 'multi-few'  ? 'multi-few' :
+                    m.motionBlobMode === 'multi-many' ? 'multi-many' :
+                                                       'single',
   };
 }
 
@@ -71,12 +74,24 @@ export function migrateSessionState(saved: any): SessionState | null {
     ? { slots: cur.audio.slots }   // strip dead audio.motionTracker stub if present
     : base.audio;
 
+  // Backfill null ping IDs with the new builtin defaults so existing tracker
+  // configs (saved before B5) auto-pick-up the seeded CC0 sounds.
+  const baseTracker  = defaultMotionTrackerConfig();
+  const savedTracker = cur.motionTracker ?? baseTracker;
+  const motionTracker = {
+    ...savedTracker,
+    outgoingPingAssetId: savedTracker.outgoingPingAssetId ?? baseTracker.outgoingPingAssetId,
+    returnPingAssetId:   savedTracker.returnPingAssetId   ?? baseTracker.returnPingAssetId,
+    outgoingPingVolume:  typeof savedTracker.outgoingPingVolume === 'number' ? savedTracker.outgoingPingVolume : baseTracker.outgoingPingVolume,
+    returnPingVolume:    typeof savedTracker.returnPingVolume   === 'number' ? savedTracker.returnPingVolume   : baseTracker.returnPingVolume,
+  };
+
   return {
     ...cur,
     // Merge view so newly-added fields (e.g. backgroundColor) fall back to defaults.
     view:    { ...base.view, ...(cur.view ?? {}) },
     markers: Array.isArray(cur.markers) ? cur.markers : base.markers,
     audio,
-    motionTracker: cur.motionTracker ?? defaultMotionTrackerConfig(),
+    motionTracker,
   } as SessionState;
 }

@@ -96,8 +96,11 @@ export interface Marker {
 
   // Motion fields (used when roles.motion is set)
   motionMuted: boolean; // source: tracker ignores it; tracker: scanner is silent
-  /** Per-source: how blobs are drawn when this source is detected. */
-  motionBlobMode: 'single' | 'cluster';
+  /** Per-source: how blobs are drawn when this source is detected.
+   *   - 'single':         one blob the size of the marker icon
+   *   - 'multi-few':      3–5 medium blobs scattered within the icon area
+   *   - 'multi-many':     7–13 small blobs scattered, similar overall footprint */
+  motionBlobMode: 'single' | 'multi-few' | 'multi-many';
 
   // Interaction lock — side-panel only; dims icon, blocks canvas selection
   locked: boolean;
@@ -170,6 +173,10 @@ export interface MotionTrackerConfig {
   outgoingPingAssetId: string | null;
   /** Audio asset played when a source is detected. */
   returnPingAssetId:   string | null;
+  /** 0–1 volume for the outgoing ping. */
+  outgoingPingVolume:  number;
+  /** 0–1 volume for the return ping. */
+  returnPingVolume:    number;
 }
 
 export function defaultMotionTrackerConfig(): MotionTrackerConfig {
@@ -179,8 +186,11 @@ export function defaultMotionTrackerConfig(): MotionTrackerConfig {
     speed:    3,
     hideBlobs: false,
     colour:   '#f59e0b', // amber, matches the tracker role accent
-    outgoingPingAssetId: null,
-    returnPingAssetId:   null,
+    // Bundled CC0 sounds seeded by storage/seedAudioAssets.ts on first run.
+    outgoingPingAssetId: 'builtin-mt-ping',
+    returnPingAssetId:   'builtin-mt-return',
+    outgoingPingVolume:  0.8,
+    returnPingVolume:    0.8,
   };
 }
 
@@ -401,6 +411,9 @@ export interface MsgTrackerScan {
   range:     number;
   speedSecs: number;
   colour:    string;
+  audioAssetId?:  string;
+  audioDataUrl?:  string;
+  audioVolume?:   number;
 }
 
 /** Sent when the expanding ring has crossed a source marker — player draws a return blob. */
@@ -408,9 +421,12 @@ export interface MsgTrackerBlob {
   type:     'tracker_blob';
   position: { x: number; y: number };
   fadeMs:   number;
-  mode:     'single' | 'cluster';
+  mode:     'single' | 'multi-few' | 'multi-many';
   sourceId: string;
   colour:   string;
+  audioAssetId?:  string;
+  audioDataUrl?:  string;
+  audioVolume?:   number;
 }
 
 export type GMMessage =
