@@ -7,6 +7,7 @@ import { IconPicker } from './IconPicker.ts';
 import { MapAssetModal } from './MapAssetModal.ts';
 import { MapCalibrationModal } from './MapCalibrationModal.ts';
 import { ProjectorViewportEditor } from './ProjectorViewportEditor.ts';
+import { getAllSetups, getActiveSetupId, setActiveSetupId } from '../projector/calibrationStorage.ts';
 import { SoundboardPanel, type SoundboardBroadcast } from './SoundboardPanel.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { Renderer } from '../rendering/Renderer.ts';
@@ -787,15 +788,55 @@ export class GMApp {
       void this.refreshProjectorMapInfo();
     });
 
-    // Open Projector Screen — popup + URL fragment carries setup id (if known)
-    // so the projector window can pre-select. v1: just opens with the room
-    // code; the projector picks up its localStorage active setup. D10 will
-    // surface a setup-picker if the user wants to override.
+    // Calibration setup picker — when GM and projector are on the same device
+    // they share localStorage, so the GM can list all known setups and let
+    // the user pick which one the next projector window should boot with.
+    // Selecting a setup just updates the localStorage active id; the projector
+    // reads getActiveSetup() on load. Refresh the dropdown whenever a peer
+    // connects (a calibration may have just been saved on another tab) and
+    // when the panel is opened.
+    const setupSelect = document.getElementById('projection-setup-select') as HTMLSelectElement | null;
+    setupSelect?.addEventListener('change', () => {
+      setActiveSetupId(setupSelect.value || null);
+    });
+    this.refreshProjectorSetupSelect();
+
+    // Open Projector Screen — popup; the projector reads getActiveSetup() on
+    // load. The picker above governs which setup is active.
     document.getElementById('projector-launch-btn')?.addEventListener('click', () => {
       const room = this.host.roomCode;
       if (!room) { this.setStatus('Waiting for P2P… try again in a moment.', 'warn'); return; }
       window.open(`/projector.html#${room}`, '_blank', 'noopener,popup,width=1280,height=800');
     });
+  }
+
+  /**
+   * Populate the setup picker from localStorage. The list is read fresh each
+   * call so a calibration saved on another tab shows up immediately when
+   * the user re-opens the Projection View panel or a projector reconnects.
+   */
+  private refreshProjectorSetupSelect(): void {
+    const sel = document.getElementById('projection-setup-select') as HTMLSelectElement | null;
+    if (!sel) return;
+    const setups   = getAllSetups();
+    const activeId = getActiveSetupId();
+    sel.innerHTML = '';
+    if (setups.length === 0) {
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'No setups — projector will prompt to calibrate';
+      sel.appendChild(opt);
+      sel.disabled = true;
+      return;
+    }
+    sel.disabled = false;
+    for (const s of setups) {
+      const opt = document.createElement('option');
+      opt.value = s.id;
+      opt.textContent = `${s.name} · ${s.pixelsPerSquare.toFixed(1)} px/sq`;
+      if (s.id === activeId) opt.selected = true;
+      sel.appendChild(opt);
+    }
   }
 
   private refreshRotationButtons(): void {
@@ -854,6 +895,9 @@ export class GMApp {
       const primary = this._primaryProjector();
       if (primary) this.projectorEditor?.setConnection(primary);
       this.refreshProjectorStatus();
+      // A new projector might have just calibrated — re-read the setup list
+      // so the picker reflects what's now in localStorage.
+      this.refreshProjectorSetupSelect();
 
       // If the active map has no projectorViewport yet, seed a default one.
       if (!this.state.snapshot().projectorViewport) {
