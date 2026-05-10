@@ -760,17 +760,20 @@ export class GMApp {
       });
     });
 
-    // 1" grid overlay — toggle + colour. Updates sync to projector via projector_viewport_update.
-    const gridToggle = document.getElementById('projection-grid-toggle') as HTMLInputElement | null;
-    const gridColour = document.getElementById('projection-grid-colour') as HTMLInputElement | null;
-    const broadcastGrid = (patch: Partial<Pick<ProjectorViewport, 'gridEnabled' | 'gridColor'>>) => {
+    // Projector view sub-toggles (grid overlay, filter passthrough). All travel
+    // inside the same projector_viewport_update message that already syncs.
+    const gridToggle   = document.getElementById('projection-grid-toggle')   as HTMLInputElement | null;
+    const gridColour   = document.getElementById('projection-grid-colour')   as HTMLInputElement | null;
+    const filterToggle = document.getElementById('projection-filter-toggle') as HTMLInputElement | null;
+    const broadcastVp = (patch: Partial<Pick<ProjectorViewport, 'gridEnabled' | 'gridColor' | 'filterEnabled'>>) => {
       const current = this.state.snapshot().projectorViewport ?? defaultProjectorViewport();
       const next: ProjectorViewport = { ...current, ...patch };
       this.state.setProjectorViewport(next);
       this.host.broadcast({ type: 'projector_viewport_update', payload: next });
     };
-    gridToggle?.addEventListener('change', () => broadcastGrid({ gridEnabled: gridToggle.checked }));
-    gridColour?.addEventListener('input',  () => broadcastGrid({ gridColor:   gridColour.value }));
+    gridToggle?.addEventListener  ('change', () => broadcastVp({ gridEnabled:   gridToggle.checked   }));
+    gridColour?.addEventListener  ('input',  () => broadcastVp({ gridColor:     gridColour.value     }));
+    filterToggle?.addEventListener('change', () => broadcastVp({ filterEnabled: filterToggle.checked }));
 
     // Recalibrate this Map — opens the calibration modal for the active map's asset.
     document.getElementById('projection-recal-map-btn')?.addEventListener('click', async () => {
@@ -1297,10 +1300,12 @@ export class GMApp {
     this.refreshRotationButtons();
     this.refreshProjectionModeButtons();
     const vp = state.projectorViewport ?? defaultProjectorViewport();
-    const gridToggle = document.getElementById('projection-grid-toggle') as HTMLInputElement | null;
-    const gridColour = document.getElementById('projection-grid-colour') as HTMLInputElement | null;
-    if (gridToggle) gridToggle.checked = vp.gridEnabled;
-    if (gridColour) gridColour.value   = vp.gridColor;
+    const gridToggle   = document.getElementById('projection-grid-toggle')   as HTMLInputElement | null;
+    const gridColour   = document.getElementById('projection-grid-colour')   as HTMLInputElement | null;
+    const filterToggle = document.getElementById('projection-filter-toggle') as HTMLInputElement | null;
+    if (gridToggle)   gridToggle.checked   = vp.gridEnabled;
+    if (gridColour)   gridColour.value     = vp.gridColor;
+    if (filterToggle) filterToggle.checked = vp.filterEnabled;
   }
 
   /**

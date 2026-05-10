@@ -279,12 +279,17 @@ export interface ProjectorViewport {
   gridEnabled: boolean;
   /** CSS hex colour for the grid lines. */
   gridColor: string;
+  /** When true, the projector applies the GM's active visual filter to its
+   *  output. Off by default — table projection usually wants the unfiltered
+   *  image regardless of what mood filter the GM is showing players. */
+  filterEnabled: boolean;
 }
 
 export function defaultProjectorViewport(): ProjectorViewport {
   return {
     centerX: 0.5, centerY: 0.5, rotation: 0, mode: 'scaled',
     gridEnabled: false, gridColor: '#ffffff',
+    filterEnabled: false,
   };
 }
 

@@ -10,7 +10,7 @@ import { bindFullscreenButton } from '../utils/fullscreen.ts';
 import { generateId } from '../utils/id.ts';
 import {
   type GMMessage, type ViewState, type FogState, type Marker, type MarkerIconData,
-  type ProjectorViewport,
+  type FilterState, type ProjectorViewport,
   defaultProjectorViewport,
 } from '../types.ts';
 
@@ -70,6 +70,7 @@ export class ProjectorApp {
   private projectorViewport: ProjectorViewport  = defaultProjectorViewport();
   private currentFog:        FogState           = { polygons: [] };
   private currentMarkers:    Marker[]           = [];
+  private currentFilter:     FilterState | null = null;
   private playerIconCache    = new Map<string, ImageBitmap>();
 
   async init(): Promise<void> {
@@ -275,6 +276,7 @@ export class ProjectorApp {
         const s = msg.payload;
         this.currentMarkers = s.markers ?? [];
         this.currentFog     = s.fog ?? { polygons: [] };
+        this.currentFilter  = s.filter ?? null;
         if (s.projectorViewport) this.projectorViewport = s.projectorViewport;
         if (msg.mapPixelsPerSquare !== undefined) this.mapPixelsPerSquare = msg.mapPixelsPerSquare;
         if (msg.mapImageWidth      !== undefined) this.mapImageWidth      = msg.mapImageWidth;
@@ -286,6 +288,7 @@ export class ProjectorApp {
         if (msg.iconData?.length) void this._decodeIconData(msg.iconData);
         this._renderMarkers();
         this._applyView();
+        this._applyFilter();
         break;
       }
       case 'map_change': {
@@ -315,11 +318,20 @@ export class ProjectorApp {
       }
       case 'projector_viewport_update': {
         const prevRot = this.projectorViewport.rotation;
+        const prevFilterEnabled = this.projectorViewport.filterEnabled;
         this.projectorViewport = msg.payload;
         this._applyView();
         // Rotation flips effective dims, so the GM needs an updated hello to
         // resize the orange/green rectangle correctly.
         if (prevRot !== this.projectorViewport.rotation) this._sendHello();
+        // Filter on/off changed → re-apply (or strip) filter.
+        if (prevFilterEnabled !== this.projectorViewport.filterEnabled) this._applyFilter();
+        break;
+      }
+      case 'filter_update': {
+        // Track latest filter even when disabled so toggling on uses current.
+        this.currentFilter = msg.payload;
+        this._applyFilter();
         break;
       }
       case 'projector_role': {
@@ -341,10 +353,24 @@ export class ProjectorApp {
         window.close();
         break;
       }
-      // view_update / filter_update / audio messages: intentionally ignored
-      // by the projector. View comes from our own calibration. Filters are
-      // off (D8 will toggle). Audio plays on the player / GM device only.
+      // view_update / audio messages: intentionally ignored by the projector.
+      // View comes from our own calibration; audio plays on player / GM only.
     }
+  }
+
+  /**
+   * Apply (or skip) the current filter on the renderer based on the
+   * projectorViewport.filterEnabled toggle. The renderer's setFilterEnabled
+   * is a master gate — when off, the filter pass is bypassed regardless of
+   * which filter is set, which matches our "default off" stance.
+   */
+  private _applyFilter(): void {
+    if (!this.projectorViewport.filterEnabled) {
+      this.renderer.setFilterEnabled(false);
+      return;
+    }
+    this.renderer.setFilterEnabled(true);
+    if (this.currentFilter) this.renderer.setFilter(this.currentFilter);
   }
 
   private _renderMarkers(): void {
