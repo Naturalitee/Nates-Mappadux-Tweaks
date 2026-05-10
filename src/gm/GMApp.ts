@@ -706,13 +706,27 @@ export class GMApp {
     const editActions    = document.getElementById('edit-projection-actions')!;
     let preEditViewport: ProjectorViewport | null = null;
 
+    // Click outside the edit canvas / OK-Cancel buttons implicitly commits —
+    // matches the user's mental model that touching any other control means
+    // "I'm done with the move". Attached on enter, detached on exit.
+    const autoCommit = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('#projector-viewport-canvas')) return; // dragging the rect
+      if (t.closest('#edit-projection-actions'))   return; // OK / Cancel
+      exitEdit(true);
+    };
+
     const enterEdit = () => {
       preEditViewport = this.state.snapshot().projectorViewport ?? null;
       defaultActions.hidden = true;
       editActions.hidden    = false;
       this.projectorEditor.setEditMode(true);
+      // Defer one tick so the click that triggered enterEdit doesn't itself
+      // bubble up and immediately satisfy the auto-commit predicate.
+      setTimeout(() => document.addEventListener('click', autoCommit, true), 0);
     };
     const exitEdit = (commit: boolean) => {
+      document.removeEventListener('click', autoCommit, true);
       if (!commit && preEditViewport) {
         this.state.setProjectorViewport(preEditViewport);
         this.projectorEditor.setViewport(preEditViewport);
@@ -1066,6 +1080,15 @@ export class GMApp {
       this.state.setView(view);
     });
 
+    // Click outside the viewport canvas / OK-Cancel buttons implicitly
+    // commits the player viewport edit — same UX as the projection editor.
+    const autoCommitView = (e: MouseEvent) => {
+      const t = e.target as HTMLElement;
+      if (t.closest('#viewport-canvas'))       return; // dragging the rect
+      if (t.closest('#edit-viewport-actions')) return; // OK / Cancel
+      this.viewportEditor.commitEdit();
+    };
+
     // Toggle edit-mode UI
     this.viewportEditor.onEditMode((editing) => {
       this.viewDefaultActions.hidden  =  editing;
@@ -1079,6 +1102,14 @@ export class GMApp {
         this.fogDrawBtn.classList.remove('active');
       }
       this.markerEditor?.setPointerCapture(!editing);
+      // Wire / unwire the auto-commit listener as edit-mode flips. Defer
+      // attaching by a tick so the click that started the edit doesn't
+      // itself trigger an immediate commit.
+      if (editing) {
+        setTimeout(() => document.addEventListener('click', autoCommitView, true), 0);
+      } else {
+        document.removeEventListener('click', autoCommitView, true);
+      }
     });
 
     this.editViewportBtn.addEventListener('click', () => {
