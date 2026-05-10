@@ -1,4 +1,4 @@
-# Dynamic Map Renderer — GM Help
+# Mappadux — GM Help
 
 The sidebar controls everything players see. Click any panel title to expand or collapse it.
 
@@ -69,11 +69,45 @@ Choose from None, Parchment Fantasy, Retro Sci-Fi Green/Amber, Ballpoint Pen, Ha
 
 **Orange rectangle** — Always visible on the GM's map; shows exactly what players can see right now.
 
-**Edit Player View** — Drag inside the rectangle to move it; drag any corner to resize it freely. Click **OK** to confirm or **Cancel** to revert.
+**Edit Player View** — Drag inside the rectangle to move it; drag any corner to resize it freely. Click **OK** to confirm or **Cancel** to revert. Touching any other sidebar control while editing implicitly commits the move.
 
 **Reset to Full Map** — Snaps the view back to the full map instantly.
 
 **Background Colour** — The fill colour shown around the map if the player's screen has a different shape. Auto-sampled from the map's top-left corner on first load.
+
+---
+
+## Projection View
+
+A second on-table mode that renders the active map at **true table scale** — for use with an under-table screen, a down-projector, or any other surface where a 1″ creature on the map needs to physically project as 1″. Miniatures occupy real-world inches.
+
+**Projector dropdown** — single control that runs the whole flow:
+
+- **No Projection** *(default)* — nothing is being projected. Selecting this while a projector is open closes it and any monitor windows that were attached.
+- **&lt;saved calibration name&gt;** — opens a primary projector window using that calibration. The first projector to connect is the **primary**; further windows you open join as **monitors** (see below).
+- **+ Calibrate New Projector…** — opens the calibration wizard in its own window. Drag that window onto your projector or under-table screen, click the bottom-right ⛶ Fullscreen, then walk through the 3 steps: pick the display type, dial in the grid (LFD diagonal/resolution **or** projector live-grid + ruler), name and save. The window closes itself; the new calibration appears in the dropdown immediately.
+
+When no projector is active, the panel shows just the dropdown and a brief intro paragraph. Once a primary connects, the full controls appear:
+
+**Move Projection View** — Drag the **orange + green** marching-ants rectangle on the GM's map to pan the projection. Size is locked to your projector calibration so you can't accidentally rescale at the table. Touching any other control implicitly commits the move (matching Player View).
+
+**Black Out** — Mute the projector to solid black without closing it. Useful for transitions, breaks, or "the lights go out" moments.
+
+**Full Map** — Show the entire map fit-to-window on the projector, ignoring calibration. Handy for showing scope before zooming into a calibrated battlemap.
+
+**Disable Filters** — When ticked, the GM's active visual filter does **not** apply to the projector — useful for projecting a clean battlemap while players still get a Parchment / Sci-Fi Green / etc. filter on their own screens. Off by default.
+
+**Rotation (0° / 90° / 180° / 270°)** — Rotate the rendered output to fit a portrait map onto a landscape projector (or vice versa). There's no inherent "up" on a table display, so use whichever angle lines up with how the projector is mounted.
+
+**1″ Grid Overlay** — Toggle a calibrated 1″ / 25 mm grid over the projection in any colour you pick. The grid is anchored to your projector calibration (not the map's), so it always projects as 1″ squares regardless of how you've cropped the map. Use it for ranges, movement, area-of-effect templates.
+
+**+ Open Projector Monitor…** — Opens an additional window that **mirrors** the primary's exact crop, fit-to-window with a TV-bezel frame and a red **PROJECTOR MONITOR N** badge in the corner. Monitors don't use their own calibration — they're "what the table sees" repeaters for an off-table viewer (e.g. a player at the far end of the room, or the GM glancing at a second screen). Closing the primary window automatically closes all attached monitors.
+
+**Recalibrate this Map…** — Re-runs map calibration without leaving the panel. Live changes propagate immediately to the projector and any monitors.
+
+**Calibrate this Map** *(at the asset level, in the Map Library)* — Drag two endpoints across a known distance on the map and tell it how many 1″ / 25 mm squares it represents. Saves both the calculated `pixelsPerSquare` and the original endpoints so re-editing picks up where you left off.
+
+> Tip: the projector window's setup label and fullscreen icon fade out after 10 s of mouse inactivity so they don't intrude during play. Move the mouse to bring them back.
 
 ---
 

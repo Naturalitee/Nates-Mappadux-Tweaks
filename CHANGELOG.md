@@ -1,5 +1,151 @@
 # Changelog
 
+## v2.9.0 — 2026-05-10
+
+### Mappadux brand + Projector / Battlemap mode
+
+The big rebrand and the v2.9 projector feature land together. The product
+name is now **Mappadux** ("VTT@Home"); the package, repo folder, and
+default Vercel slug stay as `dynamic-map-renderer-v2` for now (custom
+domain `mappadux.com` is purchased and queued for setup). Page titles,
+GM sidebar brand block, player connect heading, and PWA manifest all
+carry the new name.
+
+The much larger story is **Projector / Battlemap mode** — render a
+calibrated crop of the active map at true table scale on an under-table
+screen or down-projector, so a 1″ creature on the map actually projects
+as 1″ on the surface and miniatures occupy real-world inches.
+
+#### Map calibration
+
+- Per-asset `pixelsPerSquare`, expressed as **1″ / 25 mm** grid squares
+  (not 5'/D&D-square — that's a separate concept).
+- New **Map Calibration Modal**: drag two endpoint crosshairs across a
+  known-distance line on the map, type how many squares it represents.
+  Saves both the resulting `pixelsPerSquare` AND the original endpoints
+  so re-editing picks up where you left off.
+- Fullscreen SVG editor with scroll-zoom (zoom-toward-cursor) and
+  drag-pan; uses `getScreenCTM()` so endpoint pointer math is correct
+  regardless of `preserveAspectRatio` letterboxing.
+- Orange-base + green marching-ants visual on the calibration line, with
+  oversize crosshairs that grab where the cursor actually clicks.
+
+#### Projector calibration
+
+- Per-device setup persisted in `localStorage`
+  (`dmr_projector_setups`, `dmr_projector_active`). One device can hold
+  multiple named setups — Game Room TV, Garage Projector, etc.
+- Two calibration paths in a guided 3-step wizard:
+    - **Large Format Display** — pick diagonal inches + resolution from
+      dropdowns, the math computes pixels-per-inch automatically.
+    - **Projector** — full-bleed live grid + coarse/fine sliders.
+      Hold a ruler against the projection surface and dial it in.
+- **Standalone calibration window** (`/calibrate.html`) — calibration
+  is meaningless unless it physically projects at scale, so the modal
+  opens as its own popup with a hint banner: *"Drag this window onto
+  your projector or under-table screen, then toggle Fullscreen — the
+  grid you'll see in the next step needs to be physically projected
+  at scale before you can ruler it."*
+- Saved → window auto-closes; the GM's Projector dropdown picks up
+  the new setup via a `storage` event.
+
+#### Projector window (`/projector.html`)
+
+- Joins the GM as a P2P Guest (BroadcastChannel for same-browser, PeerJS
+  for remote). Receives the active map and renders a
+  `setup.pixelsPerSquare × map.pixelsPerSquare` crop centred on
+  `projectorViewport.centerX/Y`.
+- Three render modes (mutually exclusive): **scaled** (calibrated crop
+  at table scale), **full** (fit-to-window, ignore calibration), or
+  **black** (mute the surface during a transition).
+- **0° / 90° / 180° / 270° rotation** of the rendered output via CSS
+  transform — for fitting a portrait map onto a landscape projector.
+  Effective dimensions swap for 90 / 270, used by the calibration math
+  so the crop math stays right at any rotation.
+- **1″ grid overlay** (toggle + colour picker) — anchored to projector
+  calibration only, ignores map scale. Lines spaced at the projector's
+  `pixelsPerSquare` CSS pixels, centred on the window so the middle of
+  the projection is always a grid intersection.
+- **Disable Filters** switch — defaults to off (filters apply by
+  default, so the projector mirrors the player view). Toggle on for
+  battlemap-pure unfiltered output. Master gate via
+  `Renderer.setFilterEnabled` so the filter pass is bypassed entirely.
+- **Auto-fade controls** — the setup label / fullscreen / recalibrate
+  panel fades to opacity 0 after 10 s of mouse inactivity. Movement
+  brings it back to 0.3; hover raises it to full. Table players don't
+  see lingering UI chrome.
+- **Markers are MAP-fixed** on the projector (not screen-fixed) — a
+  token sized for one grid square stays one grid square physically,
+  regardless of how zoomed the projector crop is.
+
+#### Multi-projector (primary + monitors)
+
+- First projector to connect = **primary**. Drives the GM's orange/green
+  rectangle and uses its own calibration to render at table scale.
+- Subsequent projectors = **monitors**. Mirror the primary's exact crop
+  fit-to-window. Skip their own calibration. The monitor's canvas is
+  constrained to the primary's aspect ratio via a CSS variable, white
+  pad fills the bars, and a TV-bezel frame welds to the canvas (not
+  the window) so what's *inside* the bezel matches the primary 1:1.
+- Big red bottom-left **PROJECTOR MONITOR N** badge always at full
+  opacity; fullscreen icon stays bottom-right and forced to icon-only.
+- Closing the primary tears down the whole projection — a
+  `projector_shutdown` message is broadcast to every monitor, which
+  call `window.close()` themselves. No auto-promotion.
+- Each window picks a `clientId` uuid and sends it in `projector_hello`;
+  the GM addresses per-projector state via `projector_role` messages
+  (broadcast, filtered by `targetId`). Monitors get fresh
+  `primaryViewNW/NH/Aspect` whenever the primary's situation changes.
+
+#### Projection View panel — single-control workflow
+
+- Replaces the multi-button launch UI with one **Projector** dropdown:
+    - **No Projection** (default — selecting again closes all)
+    - One option per saved calibration setup
+    - **+ Calibrate New Projector…** (opens the calibration popup)
+- Default state shows just the dropdown + an intro paragraph
+  explaining the feature. The full controls (Move Projection View,
+  Black Out / Full Map, Disable Filters, Rotation, 1″ Grid, Open
+  Projector Monitor, Recalibrate this Map) only appear when a primary
+  is live.
+- All toggles use the same iOS-style switches as the rest of the app.
+- The launch button switches from primary blue to ghost style once a
+  primary is connected, signalling its purpose has shifted from "open
+  projection" to "open monitor".
+- Touching any other control while moving the projection rectangle
+  implicitly commits — matches the user's mental model that going
+  somewhere else means *I'm done*. (Same auto-commit applied to the
+  Player View edit mode for consistency.)
+
+#### Calibration sync + error states
+
+- Live recalibration of an in-use map fires `map_meta_update` so the
+  primary projector re-crops at the new scale; monitors get a fresh
+  `primaryView*` via `projector_role`.
+- GM warning banner when the active map has no `pixelsPerSquare`.
+- Projector "Waiting for GM to load a map…" overlay when no map yet.
+- Projector top banner *"Map not calibrated — projection is
+  fit-to-window, not at table scale"* when scaled mode lacks
+  calibration.
+
+#### Cosmetic alignment
+
+- Fullscreen toggle is at **bottom-right** across player / projector /
+  calibration windows. One spot to learn for the whole app.
+- Calibration modal dropped its top-right "Saved picker / + New /
+  Delete" actions — the GM dropdown now manages saved setups.
+- Calibration name input capped to 28ch to nudge users toward short,
+  memorable names that fit comfortably in the dropdown.
+
+### Backlog seeded for later
+
+- `.md`-as-map "text handouts" (calligraphic parchment / line printer /
+  green-screen terminal renderings of markdown).
+- Animated volumetric fog of war — keep the polygon system, swap the
+  flat alpha for drifting noise.
+- GM canvas zoom/pan + workspace overlay model (queued alongside the
+  eventual map-mosaicing work).
+
 ## v2.8.0 — 2026-05-10
 
 ### Asset Management Refresh

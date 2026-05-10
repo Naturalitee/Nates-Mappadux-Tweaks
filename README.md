@@ -1,20 +1,22 @@
-# Dynamic Map Renderer v2
+# Mappadux — VTT@Home
+
+> Latin _mappa_ (cloth / signal banner / map) + _dux_ (leader / guide). Map guide. Also a duck on a map.
 
 ## Try It Now
 
-**[https://dynamic-map-renderer-v2.vercel.app/](https://dynamic-map-renderer-v2.vercel.app/)**
+**[https://dynamic-map-renderer-v2.vercel.app/](https://dynamic-map-renderer-v2.vercel.app/)** &nbsp;(custom domain `mappadux.com` coming online soon)
 
 No account needed. No server. Everything stays on your device — maps you upload are stored in your browser's local storage and never sent anywhere. Just open the link and go.
 
 ## Description
 
-Dynamic Map Renderer v2 is a free, browser-based tool that brings the tools people love about online VTTs into in-person tabletop play. **VTT@Home** in spirit: all the dynamic map, fog, lighting, and audio capabilities you'd use in Roll20 or Foundry, but designed to sit beside the table — on a laptop, second screen, or projected onto the gaming surface — without dragging the GM out of the moment.
+Mappadux is a free, browser-based tool that brings the tools people love about online VTTs into in-person tabletop play. **VTT@Home** in spirit: all the dynamic map, fog, lighting, marker, audio, and projection capabilities you'd use in Roll20 or Foundry, but designed to sit beside the table — on a laptop, second screen, or projected onto the gaming surface as a true 1″ / 25 mm battlemap — without dragging the GM out of the moment.
 
 The design principles are **immersive, lightweight, and simple**. Setup takes minutes. Using it during a session is non-invasive: you're not navigating menus while your players wait, you're flicking a switch and turning back to the table. It is also designed as a **free community distribution platform** — map creators can package an entire session (maps, fog, markers, audio, transitions) into a single bundle file and share it with their group, their Patreon backers, or the wider community.
 
 Players connect via a peer-to-peer link; no server infrastructure is required beyond static file hosting. Everything stays on your device — maps you upload are stored in your browser's local storage and never sent anywhere.
 
-![Dynamic Map Renderer v2 — GM interface showing filter panel](./screenshot.png)
+![Mappadux — GM interface showing filter panel](./screenshot.png)
 
 ## Features
 
@@ -64,7 +66,15 @@ Players connect via a peer-to-peer link; no server infrastructure is required be
     - All positional audio is broadcast to connected players via P2P.
   - **Motion Tracker** — periodic radar / sonar / sensor sweep. Pick one marker as **Motion Tracker** and one or more as **Motion Source**. Every few seconds the tracker fires an outgoing ping; an expanding ring sweeps from the tracker, and as it crosses each source it fires a return blob + return ping at that exact moment. Configure range (logarithmic slider, 0.05–4.0 of map height), ping rate (0.25–15 s), scan speed, colour, and per-source blob style (single / multi-few / multi-many). Works for _Aliens_-style motion sensors, submarine sonar, sci-fi sensor sweeps, magical scrying — any "I'm here" pulse mechanic. Two CC0 ping sounds are bundled by default. Works through visual filters on the player view.
 
-- **Player view control** — interactive on-map viewport editor: an orange rectangle on the GM's canvas always shows what players see. Click **Edit Player View** to drag-move or freely corner-resize it. One-click **Reset to Full Map**. The player's screen is strictly clipped to the rectangle; background colour fills any bars caused by aspect-ratio differences.
+- **Player view control** — interactive on-map viewport editor: an orange rectangle on the GM's canvas always shows what players see. Click **Edit Player View** to drag-move or freely corner-resize it. One-click **Reset to Full Map**. The player's screen is strictly clipped to the rectangle; background colour fills any bars caused by aspect-ratio differences. Touching any other control while editing implicitly commits the move.
+- **Projector view (battlemap mode)** — render a calibrated crop of the map at true table scale on an under-table screen or down-projector, so miniatures occupy real-world inches:
+  - **Map calibration** — per-asset `pixelsPerSquare` for 1″ / 25 mm grid squares. Drag two endpoints across a known distance on the map and tell it how many squares it spans; round-trips on re-edit.
+  - **Projector calibration** — per-device setup stored in `localStorage`. Two paths: **Large Format Display** (diagonal + resolution → auto-compute) or **Projector** (live ruler grid with coarse/fine sliders). The calibration screen opens in its own window so you can drag it onto the projector display, fullscreen it, and dial the grid in physically with a ruler.
+  - **Projection View panel** — a single `Projector` dropdown drives everything: `No Projection` / each saved calibration / `+ Calibrate New Projector…`. Picking a calibration opens a primary projector window; picking `No Projection` shuts it down.
+  - **Multi-projector** — first connection is the **primary** (drives the GM rectangle, uses its own calibration). Subsequent connections become **monitors**: bezel-framed, fit-to-window, mirror the primary's exact crop, big red `Projector Monitor N` badge in the corner. Closing the primary window tears down all monitors automatically.
+  - **Live controls**: pan the projection (drag the orange/green rectangle), Black Out / Full Map, **Disable Filters** toggle (filters apply by default), 0/90/180/270° rotation (for fitting portrait maps onto landscape projectors), 1″ grid overlay with colour picker, recalibrate map.
+  - **Auto-fade chrome** — the projector's setup label and fullscreen icon fade out after 10 s of inactivity so they don't intrude on table play. Mouse movement brings them back.
+  - **Live recalibration** — re-running map calibration on a currently-projected map propagates immediately; primary and monitors both re-crop at the new scale.
 - **Background colour** — set the letterbox colour; auto-sampled from the map on first load.
 - **Real-time sync** — all GM changes (map, fog, filter, view, markers, audio, transition) push to connected players instantly.
 - **Room code** — three-word memorable code persists across reloads so players can reconnect. If the connection drops, the player window auto-reconnects with exponential back-off.
@@ -142,6 +152,11 @@ For other hosts, ensure those two COOP/COEP headers are set on all responses, an
 2. **Player view** — open `<your URL>/player`, enter the room code, and connect.
    - The player sees whatever the GM is showing, filtered, cropped, and transitioned as the GM sets it.
 
+3. **Projector view (battlemap mode, optional)** — for in-person play with an under-table screen or down projector:
+   - In the GM's **Projection View** panel, pick **+ Calibrate New Projector…** the first time. Drag the calibration window onto the projector display, full-screen it, and ruler in 1″ on the projection surface.
+   - Pick the saved calibration from the dropdown to launch the **primary projector window** at true table scale. Drag the orange/green rectangle on the GM's map to pan; rotate, black out, full-map, or overlay a calibrated 1″ grid as you go.
+   - Open additional projector windows (e.g. for an off-table monitor at the far end of the room) — they auto-detect as **monitors** and mirror the primary's crop fit-to-window with a TV-bezel frame.
+
 ## Default Maps
 
 To pre-load maps for first-time users, export your map library from the GM view (**Save to File**) and save the resulting file as:
@@ -157,8 +172,11 @@ The app imports this bundle automatically the first time a user opens it with an
 ```
 src/
   gm/           GM interface (GMApp, StateManager, FogEditor, MapManager, MarkerEditor,
-                              IconPicker, SoundboardPanel, FreesoundModal)
+                              IconPicker, SoundboardPanel, FreesoundModal,
+                              MapCalibrationModal, ProjectorCalibrationModal,
+                              ProjectorViewportEditor)
   player/       Player interface (PlayerApp)
+  projector/    Projector interface (ProjectorApp, calibrationStorage)
   audio/        Soundboard engine, asset store, and Freesound API client
                 (SoundboardEngine, AudioAssetStore, FreesoundClient)
   rendering/    Three.js renderer + EffectComposer pipeline (Renderer, MarkerLayer, MarkerTexture)
@@ -187,6 +205,8 @@ public/
   default-bundle.json   (optional — pre-loaded maps for first-time users)
 index.html      GM entry point
 player.html     Player entry point
+projector.html  Projector entry point (calibrated table-scale battlemap view)
+calibrate.html  Standalone projector-calibration window
 ```
 
 ## Known Limitations
