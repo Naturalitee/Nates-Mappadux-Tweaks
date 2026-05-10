@@ -1906,8 +1906,10 @@ body.player-view #renderer-canvas {
   white-space: nowrap;
 }
 .pcal-name-input {
-  flex: 1;
-  min-width: 220px;
+  /* Single-line, capped width — guides users toward short, memorable
+     names that fit comfortably in the GM's projector dropdown. */
+  width: 100%;
+  max-width: 28ch;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
