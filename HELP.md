@@ -1,31 +1,58 @@
 # Mappadux — GM Help
 
-The sidebar controls everything players see. Click any panel title to expand or collapse it.
+The sidebar controls everything players see. Click any panel title to expand or collapse it. The **☰** icon at the top-right of the sidebar opens the app-level menu — Save/Load Pack, Customise, Settings, About.
+
+---
+
+## App Menu (☰)
+
+Pack-level actions live behind the hamburger.
+
+**Save Map Pack…** — Exports your current workspace (all maps, audio, icons, fog, markers, splash, theme) as a single `.mappadux` file. The default filename derives from your Map Pack name + today's date; the OS save dialog lets you rename or pick a location.
+
+**Save Encrypted Pack…** — Same export, but first prompts for a password. The bundle is wrapped in AES-GCM encryption with a PBKDF2-derived key. The recipient needs the password to open it. **If you forget it, the pack cannot be recovered — Mappadux has no recovery.**
+
+**Load Map Pack** — Picks a `.mappadux` (or legacy `.json`) file from your disk and replaces your workspace with it. Encrypted packs prompt for their password before any destructive action, so a wrong-password cancel leaves your current pack intact. Auto-opens the About dialog on success.
+
+**Customise pack…** — Opens the About dialog in edit mode. Set a **title**, **banner image** (with drag-to-pan crop picker for off-aspect images), **rich-text description** (bold / italic / underline, alignment, bullets, font, colour), **creator links** (Patreon, Discord, etc.), and the pack's **theme** (Dark / Light + accent colour). All of this travels with the bundle.
+
+**New Map Pack…** *(red)* — Wipes the current workspace and starts a fresh, empty pack with a name you choose. Save first if you want to keep your current work.
+
+**Settings…** — Three sections:
+- **Storage** — How much of your browser's IndexedDB quota Mappadux is using. **Request persistent storage** asks the browser not to evict data under pressure.
+- **API Keys (this browser only)** — Lists any external-service credentials stored locally (e.g. Freesound). Keys never travel in Map Pack exports. Bulk delete available.
+- **Danger Zone** — **Delete DB** wipes IndexedDB but keeps API keys + projector calibration. **Delete All Data** wipes everything including local settings — acts like a fresh install.
+
+**About…** — Shows the pack's splash content (title, banner, body, creator links) and the always-on Mappadux footer (Discord, Ko-fi, GitHub, mappadux.com, MIT licence). Auto-opens on first run and after any **Load Map Pack** so you land on context.
+
+> **Sharing a pack via URL** — Append `?bundle=<URL>` to the Mappadux URL
+> (e.g. `https://www.mappadux.com/?bundle=https://example.com/my-pack.mappadux`)
+> and Mappadux will fetch and load that pack on startup. If you already have content, you're asked **Save current, then load** / **Discard and load** / **Cancel**. Encrypted packs prompt for their password as usual.
 
 ---
 
 ## Session
 
-**Room Code** — The three-word code your players use to connect (e.g. `silent-raven-forge`). It stays the same across page reloads. If a player's connection drops, their window will automatically try to reconnect.
+**QR Code** — Scan to open the player view on a phone or tablet at the table. **Hover** the QR for a tooltip showing the three-word room code; **click** the QR (or the small light bar to its left) to copy the player URL to your clipboard.
 
-**QR Code** — Scan to open the player view on a phone or tablet at the table.
+**Players connected** — Live count below the QR. Updates as players join or drop.
 
 **Open Player Window** — Opens a local player window on this machine — handy for a second screen or projector.
 
-**Copy Player URL** — Copies the full link (with the room code) to share with remote players.
-
-**Players** — Shows how many player windows are connected right now.
+Room codes stay the same across page reloads. If a player's connection drops, their window will automatically try to reconnect.
 
 ---
 
 ## Map
 
-**Map selector** — Switch between your maps. Switching instantly updates all connected players.
+**Map Pack** — A name for your whole collection of maps. Travels with bundle exports and is used as the default filename when you **Save Map Pack…** from the menu. The default starter pack lands with the name "Getting Started" — edit it here once you start customising. You can also edit it inside the Save dialog.
+
+**Map selector** — Switch between your maps. Switching instantly updates all connected players. The dropdown has a bold-green **+ Add New Map…** option at the bottom — picking it opens the Add Map dialog (see below).
 
 **Name** — Live-rename the selected map; the dropdown label updates as you type. The underlying image keeps its own filename — this is just the display name in your pack.
 
-**+ Add New Map** — Opens the Add Map dialog with three tabs:
-- **My Library** — every map image already in your pack. Hover for a thumbnail preview. Click **Use** to spin up a new map instance pointing at it (one image can back many maps with their own fog / markers / tracker config). Per-row Store / pen-edit / delete + footer bulk buttons (Store All Used / Store All / Delete All Unused), plus **ℹ Attributions & Licences**.
+**+ Add New Map…** *(dropdown sentinel)* — Opens the Add Map dialog with three tabs:
+- **My Library** — every map image already in your pack. Hover for a thumbnail preview. Click **Use** to spin up a new map instance pointing at it (one image can back many maps with their own fog / markers / tracker config). Per-row **Store** / pen-edit / **⬇ download** / delete + footer bulk buttons (Store All Used / Store All / Delete All Unused), plus **ℹ Attributions & Licences**.
 - **Web Links** — paste image URLs (PNG / JPG / WebP). Each is validated; valid ones land in your library tagged `URL` and stream from the source at runtime.
 - **Upload** — drop a local image, name it, add. Uploaded images are always stored.
 
@@ -37,9 +64,7 @@ The sidebar controls everything players see. Click any panel title to expand or 
 
 **Transition** — Choose an animated effect to play on the player screen when you switch maps (Fade, CRT Collapse, Wipe, etc.). Parameters for the selected transition appear below the dropdown.
 
-**Save to File** — Exports the entire pack (maps, image assets, audio assets, fog, markers, tracker config) as a single `.json` backup file. **Stored** assets travel with their blobs; **URL** assets travel as references and re-fetch on the recipient.
-
-**Load Maps File** — Replaces everything with a previously saved bundle. You'll be asked to confirm — back up first.
+> Saving the whole pack — including all map / audio assets, fog, markers, splash, and theme — is now in the **☰ menu** (Save Map Pack… / Save Encrypted Pack…). See **App Menu** above.
 
 ---
 
@@ -85,7 +110,7 @@ A second on-table mode that renders the active map at **true table scale** — f
 
 - **No Projection** *(default)* — nothing is being projected. Selecting this while a projector is open closes it and any monitor windows that were attached.
 - **&lt;saved calibration name&gt;** — opens a primary projector window using that calibration. The first projector to connect is the **primary**; further windows you open join as **monitors** (see below).
-- **+ Calibrate New Projector…** — opens the calibration wizard in its own window. Drag that window onto your projector or under-table screen, click the bottom-right ⛶ Fullscreen, then walk through the 3 steps: pick the display type, dial in the grid (LFD diagonal/resolution **or** projector live-grid + ruler), name and save. The window closes itself; the new calibration appears in the dropdown immediately.
+- **+ Calibrate New Projector…** *(bold-green dropdown sentinel)* — opens the calibration wizard in its own window. Drag that window onto your projector or under-table screen, click the bottom-right ⛶ Fullscreen, then walk through the 3 steps: pick the display type, dial in the grid (LFD diagonal/resolution **or** projector live-grid + ruler), name and save. The window closes itself; the new calibration appears in the dropdown immediately. *If your screen size or resolution isn't in the LFD lists, switch to the Projector option and use the live ruler-on-screen calibration instead.*
 
 When no projector is active, the panel shows just the dropdown and a brief intro paragraph. Once a primary connects, the full controls appear:
 
@@ -115,7 +140,7 @@ When no projector is active, the panel shows just the dropdown and a brief intro
 
 Place icons on the map to represent characters, objects, or points of interest.
 
-**Add Marker** — Click **+ Add Marker** in the sidebar or right-click the map to place one at that position.
+**Add Marker** — Pick **+ Add Marker** (the bold-green option at the bottom of the marker dropdown) to drop one at map centre, or right-click anywhere on the map to place one at that point.
 
 **Drag** — Click and drag any marker to reposition it. Moves are broadcast to players immediately on release.
 
@@ -171,7 +196,7 @@ The visuals and audio are mirrored to connected players, with the rings and blob
 Play ambient music and sound effects to your players.
 
 **Slots** — Each slot holds one sound. Click **+ Assign Sound** to open the sound picker:
-- **My Library** — your saved sounds. Each row shows source pills (`Freesound`, `URL`) and a `Stored` pill if it's been kept locally. **`[!]`** marks rows no map references — safe to delete. The pen icon lets you edit licence + attribution + link on user-added rows. Footer buttons: **Store All Used** / **Store All** / **Delete All Unused**, plus **ℹ Attributions & Licences** which opens a unified credits modal (audio + map assets) with **Copy All** to clipboard.
+- **My Library** — your saved sounds. Each row shows source pills (`Freesound`, `URL`) and a `Stored` pill if it's been kept locally. **`[!]`** marks rows no map references — safe to delete. The pen icon lets you edit licence + attribution + link on user-added rows. **⬇** pulls the asset back to disk as a file. Footer buttons: **Store All Used** / **Store All** / **Delete All Unused**, plus **ℹ Attributions & Licences** which opens a unified credits modal (audio + map assets) with **Copy All** to clipboard.
 - **Freesound Search** — search [freesound.org](https://freesound.org) by keyword. Imported sounds work like URL assets by default — click **Store** in the library to take a permanent local copy.
 - **Web Links** — paste one or more URLs to audio files. Each is validated; valid ones land in your library tagged `URL` and stream from the source at runtime.
 - **Upload** — drag and drop a local audio file. Uploads are always stored.

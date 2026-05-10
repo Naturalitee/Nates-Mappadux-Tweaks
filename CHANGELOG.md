@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.10.3 — 2026-05-10
+
+Docs:
+- **HELP.md** brought up to v2.10. New **App Menu (☰)** section covers
+  Save / Save Encrypted / Load Map Pack, Customise pack…, New Map
+  Pack…, Settings…, About…, and `?bundle=<URL>` sharing. Session,
+  Map, Markers, and Soundboard entries updated for the v2.10 UI
+  (Map Pack name field, dropdown-sentinel + Add patterns, ⬇ download
+  buttons, QR-click-to-copy, "X players connected" line, hamburger
+  as the home for pack-level actions). Projector section unchanged
+  bar a small note that the LFD calibration step now points users at
+  the Projector path when their screen isn't listed.
+
 ## v2.10.2 — 2026-05-10
 
 Docs:
