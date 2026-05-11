@@ -1,6 +1,7 @@
 import type { MapAsset, TextMapConfig } from '../types.ts';
 import { SYSTEM_CATEGORY_IDS } from '../types.ts';
 import { MapAssetStore } from '../maps/MapAssetStore.ts';
+import { predictTextMapPixelDimensions } from '../maps/rasterizeTextMap.ts';
 import { ImageAssetStore } from '../images/ImageAssetStore.ts';
 import { ImageAssetModal } from '../images/ImageAssetModal.ts';
 import { ensureFontsLoaded } from '../images/fontCatalog.ts';
@@ -447,18 +448,29 @@ export class TextMapEditor {
   private async _onSave(): Promise<void> {
     const name = this.name.trim() || 'New Handout';
     const sanitized = sanitizeSplashHtml(this.draft.bodyHtml);
+    // Asset metadata stores pixel-accurate dimensions — the dimensions
+    // the rasteriser will actually produce at the default long-side. The
+    // raw ratio (e.g. 210 / 297) stays inside textMap so the editor can
+    // round-trip the user's chosen shape on re-open. Downstream code
+    // (marker placement, calibration, fog) reads imageWidth/imageHeight
+    // as pixels.
+    const { pxW, pxH } = predictTextMapPixelDimensions(this.draft);
     const asset: MapAsset = {
       id:            'textmap-' + generateId(),
       filename:      name,
       source:        'text-map',
       locallyStored: true,
-      imageWidth:    this.draft.width,
-      imageHeight:   this.draft.height,
+      imageWidth:    pxW,
+      imageHeight:   pxH,
       noGrid:        true, // text-maps never carry a grid
       textMap:       { ...this.draft, bodyHtml: sanitized },
       addedAt:       Date.now(),
     };
     await MapAssetStore.save(asset);
+    // If this id has been rendered before in this session (e.g. user
+    // re-saved the same handout), drop the cached rasterisation so the
+    // next load picks up the edits.
+    MapAssetStore.invalidateRuntimeCache(asset.id);
     this._resolve({ asset });
   }
 }

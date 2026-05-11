@@ -2,6 +2,7 @@ import type { MapAsset } from '../types.ts';
 import {
   saveMapAsset, getMapAsset, getAllMapAssets, deleteMapAsset,
 } from '../storage/db.ts';
+import { rasterizeTextMap } from './rasterizeTextMap.ts';
 
 /**
  * MapAssetStore — facade over the mapAssets IDB store, mirroring the shape of
@@ -67,14 +68,31 @@ export class MapAssetStore {
   /**
    * Resolve the image bytes for an asset.
    *   1. The blob persisted on the record (locallyStored=true).
-   *   2. A runtime-cached blob from an earlier this-session fetch.
-   *   3. Fetched from `sourceUrl` (web-link) and runtime-cached only — no IDB
+   *   2. A runtime-cached blob from an earlier this-session fetch /
+   *      text-map rasterisation.
+   *   3. Text-map handouts: rasterise the textMap config to a PNG.
+   *   4. Fetched from `sourceUrl` (web-link) and runtime-cached only — no IDB
    *      write unless the user clicks Store.
    */
   static async getBlob(asset: MapAsset): Promise<Blob | null> {
     if (asset.blob) return asset.blob;
     const cached = MapAssetStore.runtimeBlobs.get(asset.id);
     if (cached) return cached;
+
+    if (asset.source === 'text-map' && asset.textMap) {
+      // On-demand rasterisation: the editor stores only the config
+      // (bodyHtml + colours + ratio + font). Cache the resulting PNG in
+      // the runtime map so repeat loads within the session are cheap.
+      // The cache is keyed by asset id so editing the handout (which
+      // currently mints a new id) doesn't show a stale render.
+      try {
+        const blob = await rasterizeTextMap(asset.textMap);
+        MapAssetStore.runtimeBlobs.set(asset.id, blob);
+        return blob;
+      } catch {
+        return null;
+      }
+    }
 
     if (asset.source === 'web-link' && asset.sourceUrl) {
       try {
@@ -88,6 +106,13 @@ export class MapAssetStore {
       }
     }
     return null;
+  }
+
+  /** Drop the cached rasterisation for a text-map (or any asset). Call
+   *  this when a handout's textMap config has been edited in-place so the
+   *  next render goes through the rasteriser again. */
+  static invalidateRuntimeCache(id: string): void {
+    MapAssetStore.runtimeBlobs.delete(id);
   }
 
   /**
