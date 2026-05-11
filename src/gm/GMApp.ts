@@ -2044,11 +2044,11 @@ export class GMApp {
     // ── Asset Libraries group ── all three first-class libraries open here.
     // Each one lands on the library's "My Library" view.
     this.hamburger.addItem({
-      label: 'Map Library…',
+      label: 'Map Asset Library…',
       onSelect: () => { this.mapAssetModal.open(() => { /* browse-only */ }); },
     });
     this.hamburger.addItem({
-      label: 'Sound Library…',
+      label: 'Audio Asset Library…',
       onSelect: () => { void this.openSoundLibrary(); },
     });
     this.hamburger.addItem({
