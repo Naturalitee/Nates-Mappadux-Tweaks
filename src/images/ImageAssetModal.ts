@@ -25,6 +25,7 @@ export class ImageAssetModal {
   private categories: ImageCategory[] = [];
   private assets: ImageAsset[]        = [];
   private blobUrls: string[]          = []; // collected for revocation on close
+  private previewPopover: HTMLElement | null = null;
 
   async open(opts: ImageAssetModalOptions = {}): Promise<void> {
     if (opts.initialCategoryId) this.selectedCategoryId = opts.initialCategoryId;
@@ -42,6 +43,10 @@ export class ImageAssetModal {
     document.removeEventListener('keydown', this._onKey);
     for (const url of this.blobUrls) URL.revokeObjectURL(url);
     this.blobUrls = [];
+    if (this.previewPopover) {
+      this.previewPopover.remove();
+      this.previewPopover = null;
+    }
   }
 
   private _onKey = (e: KeyboardEvent): void => {
@@ -354,6 +359,12 @@ export class ImageAssetModal {
     this._renderIconVisual(visual, asset);
     cell.appendChild(visual);
 
+    // Hover preview — bigger version of the icon plus its name, mirroring the
+    // map library's thumbnail preview behaviour.
+    cell.addEventListener('mouseenter', (e) => this._showPreview(asset, e));
+    cell.addEventListener('mousemove',  (e) => this._movePreview(e));
+    cell.addEventListener('mouseleave', () => this._hidePreview());
+
     const label = document.createElement('div');
     label.className = 'img-modal-label';
     label.textContent = asset.name;
@@ -420,6 +431,56 @@ export class ImageAssetModal {
     broken.className = 'img-modal-broken';
     broken.textContent = '?';
     container.appendChild(broken);
+  }
+
+  // ─── Hover preview popover ───────────────────────────────────────────────
+
+  private _showPreview(asset: ImageAsset, e: MouseEvent): void {
+    if (!this.previewPopover) {
+      this.previewPopover = document.createElement('div');
+      this.previewPopover.className = 'img-modal-preview-popover';
+      document.body.appendChild(this.previewPopover);
+    }
+    this.previewPopover.innerHTML = '';
+
+    const big = document.createElement('div');
+    big.className = 'img-modal-preview-visual';
+    this._renderIconVisual(big, asset);
+    this.previewPopover.appendChild(big);
+
+    const label = document.createElement('div');
+    label.className = 'img-modal-preview-label';
+    label.textContent = asset.name;
+    this.previewPopover.appendChild(label);
+
+    if (asset.attribution || asset.license) {
+      const meta = document.createElement('div');
+      meta.className = 'img-modal-preview-meta';
+      const bits: string[] = [];
+      if (asset.attribution) bits.push(asset.attribution);
+      if (asset.license)     bits.push(asset.license);
+      meta.textContent = bits.join(' · ');
+      this.previewPopover.appendChild(meta);
+    }
+
+    this.previewPopover.hidden = false;
+    this._movePreview(e);
+  }
+
+  private _movePreview(e: MouseEvent): void {
+    if (!this.previewPopover || this.previewPopover.hidden) return;
+    const popW = this.previewPopover.offsetWidth  || 220;
+    const popH = this.previewPopover.offsetHeight || 240;
+    let x = e.clientX + 16;
+    let y = e.clientY + 16;
+    if (x + popW > window.innerWidth - 8)  x = e.clientX - popW - 16;
+    if (y + popH > window.innerHeight - 8) y = e.clientY - popH - 16;
+    this.previewPopover.style.left = `${Math.max(8, x)}px`;
+    this.previewPopover.style.top  = `${Math.max(8, y)}px`;
+  }
+
+  private _hidePreview(): void {
+    if (this.previewPopover) this.previewPopover.hidden = true;
   }
 
   private _esc(s: string): string {

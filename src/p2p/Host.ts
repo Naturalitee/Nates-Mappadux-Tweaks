@@ -125,6 +125,13 @@ export class Host {
     return this.connections.size;
   }
 
+  /** All peer ids currently connected via PeerJS — includes both players and
+   *  remote projectors. Callers that want just players should filter out the
+   *  ones they've identified as projectors. */
+  get connectedPeerIds(): string[] {
+    return [...this.connections.keys()];
+  }
+
   /** Broadcast a message to all network peers AND the local window channel.
    *  Every broadcast is stamped with a monotonically-increasing _seq so that
    *  players receiving the same message via BOTH BroadcastChannel and PeerJS

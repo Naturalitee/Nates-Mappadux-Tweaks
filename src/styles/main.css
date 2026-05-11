@@ -1503,6 +1503,43 @@ option.select-option--add {
 .img-modal-cell:hover .img-modal-del { opacity: 1; }
 .img-modal-del:hover { background: var(--danger, #c0392b); }
 
+/* Hover preview — mirror of .map-preview-popover. Larger icon + name + attribution. */
+.img-modal-preview-popover {
+  position: fixed;
+  z-index: 1100;
+  pointer-events: none;
+  background: var(--bg-panel);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: var(--space-md);
+  max-width: 280px;
+  box-shadow: 0 4px 16px rgba(0,0,0,0.6);
+}
+.img-modal-preview-visual {
+  width: 192px;
+  height: 192px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text);
+  margin: 0 auto var(--space-sm);
+}
+.img-modal-preview-visual .img-modal-unicode { font-size: 128px; }
+.img-modal-preview-visual .img-modal-svg     { width: 192px; height: 192px; }
+.img-modal-preview-visual .img-modal-img     { max-width: 192px; max-height: 192px; }
+.img-modal-preview-label {
+  font-size: 0.95rem;
+  font-weight: 600;
+  text-align: center;
+  margin-bottom: 2px;
+}
+.img-modal-preview-meta {
+  font-size: 0.8rem;
+  color: var(--text-dim);
+  text-align: center;
+  line-height: 1.3;
+}
+
 /* ── About / Splash dialog ─────────────────────────────────────────────── */
 .about-dialog { width: 600px; }
 

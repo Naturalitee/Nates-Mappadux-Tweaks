@@ -356,9 +356,9 @@ export class GMApp {
   private _updatePlayerCount(): void {
     // Total raw PeerJS connections includes both players and remote projectors.
     // Subtract the projector subset so the count reflects actual players.
-    const total      = this.host.connectedCount;
-    const remoteProj = new Set(this._projectorPeerByClientId.values()).size;
-    const players    = Math.max(0, total - remoteProj);
+    const total            = this.host.connectedCount;
+    const projectorPeerIds = new Set(this._projectorPeerByClientId.values());
+    const players          = Math.max(0, total - projectorPeerIds.size);
     this.playerCountEl.textContent = String(players);
     const plural = document.querySelector('#player-count-plural');
     if (plural) plural.textContent = players === 1 ? '' : 's';
@@ -372,6 +372,27 @@ export class GMApp {
       suffix.textContent = projCount > 0
         ? ` (+${projCount} projector${projCount !== 1 ? 's' : ''})`
         : '';
+    }
+
+    // Hover tooltip on the session-meta line listing what we know about each
+    // connected peer. Players are anonymous PeerJS peers today (real names
+    // arrive in v2.13 with User ID); projectors carry their setup name from
+    // projector_hello, which is more identifiable.
+    const meta = document.querySelector<HTMLElement>('.session-meta');
+    if (meta) {
+      const playerLines: string[] = [];
+      for (const peerId of this.host.connectedPeerIds) {
+        if (projectorPeerIds.has(peerId)) continue;
+        playerLines.push(`• Player ${peerId.slice(0, 8)}…`);
+      }
+      const projLines: string[] = [];
+      for (const conn of this.projectorConnections.values()) {
+        projLines.push(`• ${conn.setupName || '(uncalibrated projector)'}`);
+      }
+      const sections: string[] = [];
+      if (playerLines.length > 0) sections.push('Players:\n' + playerLines.join('\n'));
+      if (projLines.length > 0)   sections.push('Projectors:\n' + projLines.join('\n'));
+      meta.title = sections.length > 0 ? sections.join('\n\n') : 'No peers connected';
     }
   }
 
