@@ -653,21 +653,25 @@ export interface StoredMap {
 }
 
 /**
- * A reusable map image. Multiple StoredMap instances can share one MapAsset
- * (e.g. the same dungeon image used for two different encounters with their
- * own fog, markers, and tracker configs).
+ * A reusable map image — or a text-only handout. Multiple StoredMap instances
+ * can share one MapAsset (e.g. the same dungeon image used for two different
+ * encounters with their own fog, markers, and tracker configs).
  *
- * Mirrors AudioAsset's tag model:
+ * Source values:
  *   • upload    — user uploaded a local file; blob present in IDB
  *   • web-link  — user pasted a URL; blob fetched at runtime; blob in IDB
  *                 only after the user clicks Store
+ *   • text-map  — Stream C text handout. No blob — `textMap` carries the
+ *                 body HTML + aspect + font; renderer rasterises it to a
+ *                 canvas at display time. Always locallyStored.
  */
 export interface MapAsset {
   id:            string;
   /** Display name — derived from the original file or URL, user-renameable. */
   filename:      string;
-  source:        'upload' | 'web-link';
-  /** True when the blob is in IDB (and travels in bundle exports). */
+  source:        'upload' | 'web-link' | 'text-map';
+  /** True when the blob is in IDB (and travels in bundle exports). For
+   *  text-map assets this is always true (the body lives in `textMap`). */
   locallyStored: boolean;
   /** Set for web-link assets; the URL the blob is fetched from. */
   sourceUrl?:    string;
@@ -718,7 +722,48 @@ export interface MapAsset {
    * prompting for calibration.
    */
   noGrid?: boolean;
+  /**
+   * Stream C text-map payload. Present iff source='text-map'. The renderer
+   * combines the body HTML, font family, font-size scale, aspect, and
+   * background colour to produce a canvas-rendered image at display time.
+   */
+  textMap?:      TextMapConfig;
   addedAt:       number;
+}
+
+/** Stream C handout configuration — the body and presentation settings for
+ *  a text-map. Animation runs on the player side using the same body. */
+export interface TextMapConfig {
+  /** Sanitised HTML body. Same whitelist as the splash editor, plus inline
+   *  `<img src="asset:…">` references resolved from the Image Library. */
+  bodyHtml:     string;
+  /** Render aspect ratio — e.g. 1080×1527 for A4 portrait, 1920×1080 for
+   *  16:9. The renderer rasterises at these intrinsic pixel dimensions and
+   *  the projector / player scales to fit. */
+  width:        number;
+  height:       number;
+  /** CSS font-family for body text. Loaded via the Image Library's font
+   *  registry — bundled defaults or user-added Google Fonts. */
+  fontFamily:   string;
+  /** Multiplier on the base font-size (16px). 0.5–4.0 typical. */
+  fontScale:    number;
+  /** CSS hex colour for the page background. Defaults to parchment-ish. */
+  backgroundColor: string;
+  /** Body text colour. Defaults to readable dark on the background. */
+  textColor:    string;
+  /** Animation behaviour. */
+  animation?:   TextMapAnimation;
+}
+
+export interface TextMapAnimation {
+  /** When true, the player reveals the body one character at a time. */
+  typewriter:    boolean;
+  /** Total reveal duration in seconds (1–30). Ignored when typewriter is off. */
+  durationSecs:  number;
+  /** When true, the typewriter pauses at the end of each visual line — the
+   *  classic teletypewriter feel. When false, characters reveal at constant
+   *  rate across line breaks for a continuous flow. */
+  linePause:     boolean;
 }
 
 /* ── Image Assets ────────────────────────────────────────────────────────────

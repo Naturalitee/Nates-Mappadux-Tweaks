@@ -7,6 +7,8 @@ import { getUsedMapAssetIds } from '../storage/assetUsage.ts';
 import { detectMapScale, autoApplyPatch } from '../utils/detectMapScale.ts';
 import { ScaleCandidateDialog } from './ScaleCandidateDialog.ts';
 import { generateId } from '../utils/id.ts';
+import { TextMapEditor } from './TextMapEditor.ts';
+import { saveMap as _saveMap } from '../storage/db.ts';
 
 /** Standard licence options shared with the audio editor. */
 const LICENSE_OPTIONS: string[] = [
@@ -145,6 +147,30 @@ export class MapAssetModal {
     });
     this.el.querySelector('#map-upload-add-btn')?.addEventListener('click', () => void this._addUpload());
     this.el.querySelector('#map-upload-clear-btn')?.addEventListener('click', () => this._clearUpload());
+
+    // ── Create New Handout (Stream C) ─────────────────────────────────
+    // Bottom-of-library entry point. Opens the TextMapEditor; on save we
+    // create a fresh StoredMap pointing at the new asset and run the
+    // onPick callback so the rest of the GM behaves like it would for any
+    // newly-added map.
+    this.el.querySelector('#map-library-create-handout-btn')?.addEventListener(
+      'click',
+      () => void this._createHandout(),
+    );
+  }
+
+  private async _createHandout(): Promise<void> {
+    const result = await new TextMapEditor().open();
+    if (!result) return;
+    const map: StoredMap = {
+      id:         generateId(),
+      name:       result.asset.filename,
+      mapAssetId: result.asset.id,
+      addedAt:    Date.now(),
+    };
+    await _saveMap(map);
+    this.onPick(map);
+    this.close();
   }
 
   // ─── Library tab ──────────────────────────────────────────────────────────
@@ -250,34 +276,44 @@ export class MapAssetModal {
       ? `<span class="sound-unused" title="Not referenced by any map — safe to delete">[!]</span>`
       : '';
 
+    const isTextMap = asset.source === 'text-map';
+
     const tags: string[] = [];
+    if (isTextMap)                   tags.push('<span class="sound-tag sound-tag--textmap" title="Text-based handout — not an image">Text</span>');
     if (asset.source === 'web-link') tags.push('<span class="sound-tag sound-tag--url">URL</span>');
     if (asset.locallyStored)         tags.push('<span class="sound-tag sound-tag--local">Stored</span>');
     // Scale badge — driven by scaleConfidence + noGrid, in priority order.
-    if (asset.noGrid) {
-      tags.push('<span class="sound-tag sound-tag--no-grid map-nogrid-pill" title="Marked as having no grid — click to clear and calibrate" role="button" tabindex="0">No grid</span>');
-    } else if (asset.pixelsPerSquare && asset.scaleConfidence === 'auto-scaled') {
-      tags.push('<span class="sound-tag sound-tag--auto-scaled map-autoscaled-pill" title="Auto-detected best-guess — click to re-calibrate" role="button" tabindex="0">AutoScaled</span>');
-    } else if (asset.pixelsPerSquare) {
-      // 'manual', 'scaled', or undefined (legacy) — all treated as high confidence.
-      tags.push('<span class="sound-tag sound-tag--scaled map-recal-pill" title="Click to re-calibrate" role="button" tabindex="0">Scaled</span>');
+    // Text maps never have a scale by design, so the scale pills are skipped.
+    if (!isTextMap) {
+      if (asset.noGrid) {
+        tags.push('<span class="sound-tag sound-tag--no-grid map-nogrid-pill" title="Marked as having no grid — click to clear and calibrate" role="button" tabindex="0">No grid</span>');
+      } else if (asset.pixelsPerSquare && asset.scaleConfidence === 'auto-scaled') {
+        tags.push('<span class="sound-tag sound-tag--auto-scaled map-autoscaled-pill" title="Auto-detected best-guess — click to re-calibrate" role="button" tabindex="0">AutoScaled</span>');
+      } else if (asset.pixelsPerSquare) {
+        tags.push('<span class="sound-tag sound-tag--scaled map-recal-pill" title="Click to re-calibrate" role="button" tabindex="0">Scaled</span>');
+      }
     }
     const tagsHtml = tags.join('');
 
-    const storeBtnHtml = asset.locallyStored
+    const storeBtnHtml = (asset.locallyStored || isTextMap)
       ? ''
       : `<button class="btn btn--ghost btn--xs map-store-btn" title="Download and keep a local copy">Store</button>`;
-    const downloadBtnHtml = asset.locallyStored
+    const downloadBtnHtml = (asset.locallyStored && !isTextMap)
       ? `<button class="btn btn--ghost btn--xs map-download-btn" title="Download this map image">⬇</button>`
       : '';
-    // Scale button hidden when calibrated OR explicitly opted out of grids.
-    const scaleBtnHtml = (asset.pixelsPerSquare || asset.noGrid)
-      ? ''
-      : `<button class="btn btn--ghost btn--xs map-scale-btn" title="Calibrate map scale (pixels per 5' square)">Scale</button>`;
+    // Text maps get an Edit button; image maps get the Scale button (when
+    // not yet calibrated and not opted out of grids).
+    const scaleOrEditBtnHtml = isTextMap
+      ? `<button class="btn btn--ghost btn--xs map-edit-textmap-btn" title="Edit this handout's body, font, and layout">Edit</button>`
+      : (asset.pixelsPerSquare || asset.noGrid)
+        ? ''
+        : `<button class="btn btn--ghost btn--xs map-scale-btn" title="Calibrate map scale (pixels per 5' square)">Scale</button>`;
 
-    const dimText = asset.imageWidth && asset.imageHeight
-      ? `${asset.imageWidth} × ${asset.imageHeight}`
-      : asset.source;
+    const dimText = isTextMap
+      ? `${asset.imageWidth ?? '?'} × ${asset.imageHeight ?? '?'} handout`
+      : asset.imageWidth && asset.imageHeight
+        ? `${asset.imageWidth} × ${asset.imageHeight}`
+        : asset.source;
 
     const licenceText = asset.license ?? 'Edit ▸';
 
@@ -293,7 +329,7 @@ export class MapAssetModal {
           </span>
         </div>
         <div class="sound-row-actions">
-          ${scaleBtnHtml}
+          ${scaleOrEditBtnHtml}
           ${storeBtnHtml}
           ${downloadBtnHtml}
           <button class="btn btn--primary btn--xs map-use-btn">Use</button>
@@ -390,6 +426,22 @@ export class MapAssetModal {
     };
     row.querySelector<HTMLButtonElement>('.map-scale-btn')?.addEventListener('click', openCalibration);
     row.querySelector<HTMLButtonElement>('.map-edit-calibrate')?.addEventListener('click', openCalibration);
+    // Text-map Edit button — opens the TextMapEditor with the existing
+    // asset. On save the asset record updates in place; library re-renders.
+    row.querySelector<HTMLButtonElement>('.map-edit-textmap-btn')?.addEventListener('click', async () => {
+      const result = await new TextMapEditor().open({ existing: asset });
+      if (!result) return;
+      // Carry the original asset id forward (TextMapEditor created a new
+      // one on save — we want the in-place update, not a duplicate).
+      const patch: Partial<MapAsset> = { filename: result.asset.filename };
+      if (result.asset.textMap)     patch.textMap     = result.asset.textMap;
+      if (result.asset.imageWidth)  patch.imageWidth  = result.asset.imageWidth;
+      if (result.asset.imageHeight) patch.imageHeight = result.asset.imageHeight;
+      await MapAssetStore.update(asset.id, patch);
+      // Drop the duplicate the editor created.
+      await MapAssetStore.delete(result.asset.id);
+      await this._renderLibrary();
+    });
     // Click any of the scale pills to re-calibrate without opening the pen editor.
     row.querySelector<HTMLElement>('.map-recal-pill')?.addEventListener('click', (e) => { e.stopPropagation(); void openCalibration(); });
     row.querySelector<HTMLElement>('.map-autoscaled-pill')?.addEventListener('click', (e) => { e.stopPropagation(); void openCalibration(); });

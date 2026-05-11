@@ -31,14 +31,16 @@ interface MapInstanceEntry {
   config:     SessionState | null;
 }
 
-/** Map asset with embedded blob — any locallyStored MapAsset travels here. */
+/** Map asset with embedded blob — any locallyStored MapAsset travels here.
+ *  Text-map assets also use this entry but with mimeType / dataB64 empty
+ *  (the body lives in `textMap` instead). */
 interface StoredMapAssetEntry {
   id:               string;
   filename:         string;
   source:           MapAsset['source'];
   addedAt:          number;
-  mimeType:         string;
-  dataB64:          string;
+  mimeType?:        string;
+  dataB64?:         string;
   imageWidth?:      number;
   imageHeight?:     number;
   sourceUrl?:       string;
@@ -55,6 +57,8 @@ interface StoredMapAssetEntry {
   scaleConfidence?: MapAsset['scaleConfidence'];
   /** User opted this map out of grid calibration (handout, world map, etc.). */
   noGrid?: boolean;
+  /** Stream C text-map payload — only present for source='text-map'. */
+  textMap?: MapAsset['textMap'];
 }
 
 /** Map asset known only by URL — metadata travels, blob does not. */
@@ -263,17 +267,21 @@ export async function exportBundle(opts?: { password?: string }): Promise<Export
     }
   }
 
-  // Stored vs Remote map assets
+  // Stored vs Remote map assets — text-map assets have no blob but still
+  // belong in storedMapAssets (their body travels via textMap).
   for (const asset of mapAssetsAll) {
-    if (asset.locallyStored && asset.blob) {
-      const ab = await asset.blob.arrayBuffer();
+    const isTextMap = asset.source === 'text-map';
+    if (isTextMap || (asset.locallyStored && asset.blob)) {
+      const blobBits = isTextMap || !asset.blob
+        ? { mimeType: undefined, dataB64: undefined }
+        : { mimeType: asset.blob.type || 'image/png', dataB64: ab2b64(await asset.blob.arrayBuffer()) };
       storedMapAssets.push(_omitUndefined({
         id:               asset.id,
         filename:         asset.filename,
         source:           asset.source,
         addedAt:          asset.addedAt,
-        mimeType:         asset.blob.type || 'image/png',
-        dataB64:          ab2b64(ab),
+        mimeType:         blobBits.mimeType,
+        dataB64:          blobBits.dataB64,
         imageWidth:       asset.imageWidth,
         imageHeight:      asset.imageHeight,
         sourceUrl:        asset.sourceUrl,
@@ -284,6 +292,7 @@ export async function exportBundle(opts?: { password?: string }): Promise<Export
         calibrationLine:  asset.calibrationLine,
         scaleConfidence:  asset.scaleConfidence,
         noGrid:           asset.noGrid,
+        textMap:          asset.textMap,
       }) as StoredMapAssetEntry);
     } else if (asset.source === 'web-link') {
       const { blob: _b, ...metaOnly } = asset;
@@ -486,7 +495,12 @@ export async function importBundleText(
     // New format — split asset / instance shape.
     if (Array.isArray(bundle.storedMapAssets)) {
       for (const e of bundle.storedMapAssets) {
-        const blob = b64ToBlob(e.dataB64, e.mimeType);
+        // Text-map assets carry no blob — only a textMap payload. Other
+        // sources have dataB64 / mimeType. Skip the blob decode for the
+        // text-map case.
+        const blob = (e.dataB64 && e.mimeType)
+          ? b64ToBlob(e.dataB64, e.mimeType)
+          : undefined;
         const asset = _omitUndefined({
           id:              e.id,
           filename:        e.filename,
@@ -503,6 +517,7 @@ export async function importBundleText(
           calibrationLine: e.calibrationLine,
           scaleConfidence: e.scaleConfidence,
           noGrid:          e.noGrid,
+          textMap:         e.textMap,
           addedAt:         e.addedAt,
         }) as MapAsset;
         await saveMapAsset(asset);
