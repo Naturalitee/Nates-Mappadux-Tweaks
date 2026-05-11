@@ -121,7 +121,15 @@ export async function rasterizeTextMap(
   // font even though that path isn't what the rasteriser uses.
   try { ensureFontsLoaded([cfg.fontFamily]); } catch { /* non-fatal */ }
 
+  // Sanitise the body, then re-serialise as well-formed XHTML. The
+  // sanitiser emits HTML5 (`<br>`, `<img>` not self-closed) but
+  // SVG-foreignObject content is parsed as strict XML when loaded via
+  // <img>, which rejects any non-self-closed void element. XMLSerializer
+  // produces XML-compliant output with correct void-element handling
+  // and preserved namespace declarations on inline SVG icons. This is
+  // the root cause of the "image load failed" the user kept hitting.
   const sanitised = sanitizeSplashHtml(cfg.bodyHtml ?? '');
+  const bodyXhtml = htmlToXhtml(sanitised);
   const padPx = Math.round(pxW * 0.06);
   // Scale the base font size so a font-scale of 1 renders at a
   // comfortable reading size on the page. The editor preview uses ems
@@ -157,7 +165,7 @@ export async function rasterizeTextMap(
       +   `font-size:${basePx}px;`
       +   `line-height:1.45;`
       +   `overflow:hidden;`
-      + `">${styleBlock}${sanitised}</div>`
+      + `">${styleBlock}${bodyXhtml}</div>`
       + `</foreignObject>`
       + `</svg>`
     );
@@ -179,12 +187,52 @@ export async function rasterizeTextMap(
     return await renderSvgToPng(buildSvg(false), pxW, pxH, cfg.backgroundColor);
   } catch (err) {
     console.warn('[rasterizeTextMap] SVG-foreignObject path failed entirely; falling back to Canvas-2D plain text:', err);
-    // Last-chance: log the SVG so we can see what's tripping the parser.
-    if (typeof console.debug === 'function') {
-      console.debug('[rasterizeTextMap] failed SVG markup was:\n', buildSvg(false));
-    }
+    // Log the SVG that broke at warn level so the user / dev can see it
+    // in the console without enabling verbose mode. Trimmed so the
+    // console isn't a wall of base64 if font embedding was in play.
+    const failedSvg = buildSvg(false);
+    const trimmed = failedSvg.length > 4000
+      ? failedSvg.slice(0, 2000) + '\n...\n[truncated ' + (failedSvg.length - 4000) + ' chars]\n...\n' + failedSvg.slice(-2000)
+      : failedSvg;
+    console.warn('[rasterizeTextMap] failed SVG markup was:\n', trimmed);
   }
   return await renderPlainTextFallback(cfg, pxW, pxH, basePx, padPx, sanitised);
+}
+
+/** Convert sanitised HTML5 body markup into well-formed XHTML so it can
+ *  live inside an SVG foreignObject. The parser is HTML5 (lenient enough
+ *  to accept `<br>` / `<img>` without slashes) and the serialiser is
+ *  XMLSerializer (strict — emits self-closing void elements and explicit
+ *  namespace declarations on SVG / MathML descendants).
+ *
+ *  Idempotent on already-well-formed input. Returns empty string for
+ *  empty / parse-fail input. */
+function htmlToXhtml(html: string): string {
+  if (!html) return '';
+  try {
+    const doc = new DOMParser().parseFromString(
+      `<div xmlns="http://www.w3.org/1999/xhtml">${html}</div>`,
+      'text/html',
+    );
+    const div = doc.body.firstElementChild;
+    if (!div) return '';
+    // Serialise children, not the wrapper div — the wrapper is provided
+    // by our buildSvg() with its own styling.
+    const ser = new XMLSerializer();
+    return Array.from(div.childNodes)
+      .map((node) => {
+        if (node.nodeType === 1) return ser.serializeToString(node as Element);
+        if (node.nodeType === 3) return escapeXmlText(node.textContent ?? '');
+        return '';
+      })
+      .join('');
+  } catch {
+    return html; // Last-resort: pass through and let the foreignObject loader complain.
+  }
+}
+
+function escapeXmlText(s: string): string {
+  return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;');
 }
 
 async function renderSvgToPng(
