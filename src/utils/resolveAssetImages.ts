@@ -37,17 +37,80 @@ export async function resolveAssetImages(html: string): Promise<string> {
   return container.innerHTML;
 }
 
-/** Resolve a single asset id to a renderable src (data URL for SVG /
- *  Unicode, object URL for raster). Exported so callers like the Text Map
- *  editor can resolve at insertion time and bake the data URL into the
- *  body HTML — avoids the editor showing a broken `asset:` reference.
+/** Resolve a single asset id to inline HTML for insertion into the
+ *  rich-text body. Vector assets (SVG, Unicode) come back as inline
+ *  `<svg>` markup so they live in the editor's DOM and inherit `color`
+ *  from a surrounding span — `currentColor` then resolves to the
+ *  handout's textColor automatically. Raster assets return an `<img>`
+ *  with a blob: URL. Returns null when the asset is missing or has no
+ *  renderable payload.
  *
- *  `tintColor` (when provided) is baked into the resulting SVG in place of
- *  `currentColor`. This is required because an `<img src="data:image/svg+xml">`
- *  loads the SVG in its own sandboxed document — `currentColor` there
- *  defaults to black, regardless of the host page's text colour. The Text
- *  Map editor passes the handout's textColor so icons take the chosen
- *  foreground with a transparent background. */
+ *  The vector path is what makes tinting actually work. The older
+ *  `<img src="data:image/svg+xml">` path sandboxed the SVG in its own
+ *  document where currentColor defaulted to black, producing the
+ *  "black box" rendering bug regardless of what colour we baked in. */
+export async function renderAssetToInlineHtml(
+  id: string,
+  opts: { sizeEm?: number } = {},
+): Promise<string | null> {
+  const asset = await ImageAssetStore.get(id);
+  if (!asset) return null;
+  const sizeEm = opts.sizeEm ?? 2;
+  // Wrapper style — color is the inheritance point currentColor reads.
+  // Caller sets the color via the editor's `color` CSS rule on the body;
+  // we don't bake a specific colour here so live re-tinting works.
+  const wrapStyle =
+    `display:inline-block;`
+    + `width:${sizeEm}em;`
+    + `height:${sizeEm}em;`
+    + `vertical-align:middle;`;
+
+  if (asset.svgSource) {
+    let svg = asset.svgSource;
+    if (asset.tintable) {
+      // Normalise tintable paints to currentColor. Leave fill="none"
+      // alone — Lucide's stroke-only icons would otherwise become
+      // solid filled squares. Also handle fillless paths whose paint
+      // comes from a stroke attribute.
+      svg = svg
+        .replace(/fill\s*=\s*"(?!none\b|currentColor\b)[^"]*"/gi, 'fill="currentColor"')
+        .replace(/stroke\s*=\s*"(?!none\b|currentColor\b)[^"]*"/gi, 'stroke="currentColor"');
+    }
+    // Force-size the root svg so it lays out at the wrapper size. Some
+    // sources ship without width / height attributes which then default
+    // to 300x150 in HTML context.
+    svg = svg.replace(
+      /<svg(\s|>)/i,
+      `<svg width="100%" height="100%"$1`,
+    );
+    return `<span style="${wrapStyle}">${svg}</span>`;
+  }
+
+  if (asset.unicodeChar) {
+    const ch = asset.unicodeChar;
+    // Inline SVG so currentColor inherits from the wrapper span. The
+    // text uses the host page's font stack — no sandboxed fallback.
+    const svg =
+      '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" width="100%" height="100%">' +
+      '<text x="16" y="24" text-anchor="middle" font-size="28" fill="currentColor">' +
+      escapeXml(ch) +
+      '</text></svg>';
+    return `<span style="${wrapStyle}">${svg}</span>`;
+  }
+
+  if (asset.blob) {
+    // Raster blob — no tinting, just dimensions on the wrapper.
+    const url = URL.createObjectURL(asset.blob);
+    return `<img src="${url}" alt="" style="${wrapStyle.replace('display:inline-block;', '')}" />`;
+  }
+
+  return null;
+}
+
+/** Legacy: resolve a single asset id to a renderable src (data URL for
+ *  SVG / Unicode, object URL for raster). Kept for the back-compat
+ *  `<img src="asset:...">` rehydration path in resolveAssetImages.
+ *  New callers should prefer renderAssetToInlineHtml — see above. */
 export async function renderAssetToSrc(id: string, tintColor?: string): Promise<string | null> {
   const asset = await ImageAssetStore.get(id);
   if (!asset) return null;

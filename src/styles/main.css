@@ -1990,9 +1990,22 @@ option.select-option--add {
 /* Inline icons inserted via the toolbar are clickable to cycle through
    sizes (RichTextEditor adds the click handler). Drag-handle resize is
    the proper UX (M4) — until then the cursor hint signposts the
-   interaction. */
-.rte-editor img { cursor: pointer; }
-.rte-editor img:hover { outline: 1px solid var(--accent, #6aa3ff); outline-offset: 1px; }
+   interaction. Vector icons live inside a sized <span> wrapper around
+   inline <svg>; raster icons are bare <img>. Both forms get the hint. */
+.rte-editor img,
+.rte-editor span[style*="inline-block"] { cursor: pointer; }
+.rte-editor img:hover,
+.rte-editor span[style*="inline-block"]:hover {
+  outline: 1px solid var(--accent, #6aa3ff);
+  outline-offset: 1px;
+}
+/* Inline SVGs inherit color from the editor / page so currentColor
+   resolves to the host text colour. Force a transparent background so
+   they don't paint a tinted rectangle behind the glyph. */
+.rte-editor svg { background: transparent; display: block; width: 100%; height: 100%; }
+.txt-map-page svg { background: transparent; display: block; width: 100%; height: 100%; }
+.txt-map-page span[style*="inline-block"] svg,
+.rte-editor  span[style*="inline-block"] svg { pointer-events: none; }
 .rte-editor:empty::before {
   content: attr(data-placeholder);
   color: var(--text-dim);

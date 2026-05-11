@@ -6,7 +6,7 @@ import { ImageAssetModal } from '../images/ImageAssetModal.ts';
 import { ensureFontsLoaded } from '../images/fontCatalog.ts';
 import { generateId } from '../utils/id.ts';
 import { sanitizeSplashHtml } from '../utils/sanitizeHtml.ts';
-import { resolveAssetImages, renderAssetToSrc } from '../utils/resolveAssetImages.ts';
+import { resolveAssetImages, renderAssetToInlineHtml } from '../utils/resolveAssetImages.ts';
 import { createRichTextEditor } from './RichTextEditor.ts';
 
 /**
@@ -175,8 +175,13 @@ export class TextMapEditor {
     footer.append(cancel, save);
     dialog.appendChild(footer);
 
-    // Initial preview render after the dialog mounts.
-    requestAnimationFrame(() => this._renderPreview());
+    // Initial preview render after the dialog mounts, plus initial colour
+    // sync on the body editor so existing inline icons immediately render
+    // in the handout's textColor.
+    requestAnimationFrame(() => {
+      this._renderPreview();
+      this._syncEditorColors();
+    });
 
     return overlay;
   }
@@ -304,8 +309,20 @@ export class TextMapEditor {
     input.addEventListener('input', () => {
       this.draft[key] = input.value;
       this._renderPreview();
+      this._syncEditorColors();
     });
     return input;
+  }
+
+  /** Apply the handout's background / text colour to the body editor so
+   *  the user sees inline icons in the chosen colour while typing — not
+   *  just in the preview. Inline SVG icons read `color` from the editor
+   *  via currentColor, so this is what makes the live tinting work. */
+  private _syncEditorColors(): void {
+    const editor = this.overlay?.querySelector<HTMLElement>('.rte-editor');
+    if (!editor) return;
+    editor.style.color = this.draft.textColor;
+    editor.style.backgroundColor = this.draft.backgroundColor;
   }
 
   private _buildBodyTextarea(): HTMLElement {
@@ -328,19 +345,16 @@ export class TextMapEditor {
   }
 
   /** Opens the Small Assets Library in pick mode (defaulting to the
-   *  Textmap category). The picked icon is resolved to a data: URL at
-   *  insertion time so the editor's contentEditable can render it
-   *  immediately — the alternative (`<img src="asset:<id>">`) renders as
-   *  a broken image inside the editor since the contentEditable doesn't
-   *  run the asset resolver. The trade-off is that inline icons bloat
-   *  the saved body HTML with each icon's full SVG — acceptable for
-   *  typical handouts.
+   *  Textmap category). The picked icon is rendered as inline SVG inside
+   *  a sized wrapper span so `currentColor` inside the SVG resolves to
+   *  the host editor / preview's CSS color — no data-URL sandbox, no
+   *  baked colour, and live re-tinting when the handout's textColor
+   *  changes.
    *
-   *  Passes the handout's textColor to renderAssetToSrc so the SVG bakes
-   *  that colour in. An <img src="data:image/svg+xml"> loads the SVG in
-   *  its own sandboxed document where currentColor defaults to black;
-   *  without baking, every tintable icon would render as a solid black
-   *  square instead of the chosen text colour. */
+   *  Raster blobs fall through to <img src="blob:..."> in the same
+   *  wrapper (no tint possible there, just sizing). Click the inserted
+   *  icon to cycle through 1em / 1.5em / 2em / 3em / 4em sizes — see
+   *  RichTextEditor for the handler. */
   private async _pickInlineIcon(): Promise<string | null> {
     return new Promise<string | null>((resolve) => {
       let picked = false;
@@ -350,17 +364,12 @@ export class TextMapEditor {
         pickMode: true,
         onPick: async (asset) => {
           picked = true;
-          const src = await renderAssetToSrc(asset.id, this.draft.textColor);
-          if (!src) {
+          const html = await renderAssetToInlineHtml(asset.id, { sizeEm: 2 });
+          if (!html) {
             resolve(null);
             return;
           }
-          // Default to a sensible inline size; click an inserted icon to
-          // cycle through 1em / 1.5em / 2em / 3em (see RichTextEditor).
-          resolve(
-            `<img src="${src}" alt="${this._escAttr(asset.name)}" `
-            + `style="width: 2em; height: 2em; vertical-align: middle;" />`,
-          );
+          resolve(html);
         },
       });
       // If the user closes without picking, resolve null so the editor
@@ -371,10 +380,6 @@ export class TextMapEditor {
         if (!picked) resolve(null);
       };
     });
-  }
-
-  private _escAttr(s: string): string {
-    return s.replace(/&/g, '&amp;').replace(/"/g, '&quot;').replace(/</g, '&lt;');
   }
 
   /** Render the preview. The page element's pixel dimensions are computed

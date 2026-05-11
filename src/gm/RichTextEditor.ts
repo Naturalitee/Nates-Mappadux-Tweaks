@@ -171,21 +171,46 @@ export function createRichTextEditor(opts: RichTextEditorOptions): HTMLElement {
   // Click an inline icon to cycle its size. Drag-handle resize is the
   // proper UX (M4) — until that lands, this gives the user a way to
   // resize at all rather than being stuck with the 2em default.
+  //
+  // Inline icons are wrapped in <span style="display:inline-block; width:Xem;
+  // height:Xem; ..."> (see renderAssetToInlineHtml) — that wrapper is what
+  // carries the size. Click could land on the SVG, on a path inside it,
+  // on the wrapping span, or on a raster <img>: walk up from the target
+  // until we find the sizing element.
   const ICON_SIZE_CYCLE = ['1em', '1.5em', '2em', '3em', '4em'];
   editor.addEventListener('click', (e) => {
-    const target = e.target as HTMLElement;
-    if (target.tagName !== 'IMG') return;
+    const start = e.target as Element | null;
+    if (!start) return;
+    const sizer = _findSizingElement(start, editor);
+    if (!sizer) return;
     e.preventDefault();
-    const img = target as HTMLImageElement;
-    const current = img.style.width || '2em';
+    const current = sizer.style.width || '2em';
     const idx = ICON_SIZE_CYCLE.indexOf(current);
     const next = ICON_SIZE_CYCLE[(idx + 1) % ICON_SIZE_CYCLE.length];
-    img.style.width = next;
-    img.style.height = next;
+    sizer.style.width = next;
+    sizer.style.height = next;
     opts.onChange(editor.innerHTML);
   });
 
   return wrap;
+}
+
+/** Walk up from a click target to find the element that carries the icon
+ *  sizing styles. Inline SVG icons live inside a wrapping span sized via
+ *  width/height styles; raster icons are bare <img>. Stops at the editor
+ *  so a stray click on the editor itself doesn't get treated as a resize. */
+function _findSizingElement(start: Element, editor: HTMLElement): HTMLElement | null {
+  let cur: Element | null = start;
+  while (cur && cur !== editor) {
+    const tag = cur.tagName.toUpperCase();
+    if (tag === 'IMG') return cur as HTMLImageElement;
+    if (tag === 'SPAN' && cur instanceof HTMLElement && cur.style.display === 'inline-block') {
+      // Icon wrapper for inline-SVG insertions.
+      return cur;
+    }
+    cur = cur.parentElement;
+  }
+  return null;
 }
 
 /** Capture the current selection range IF it lives inside the editor. */
