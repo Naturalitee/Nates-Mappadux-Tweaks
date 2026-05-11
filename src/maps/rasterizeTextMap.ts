@@ -19,6 +19,73 @@ import type { TextMapConfig } from '../types.ts';
 import { sanitizeSplashHtml } from '../utils/sanitizeHtml.ts';
 import { ensureFontsLoaded } from '../images/fontCatalog.ts';
 
+/** Cache of @font-face rules with base64-embedded woff2 bytes, keyed by
+ *  font family. The SVG document context can't reach fonts loaded by the
+ *  host page, so we embed the font binary inside a <style> inside the
+ *  SVG itself. Per-session cache — fonts don't change mid-run. */
+const fontFaceCache = new Map<string, string | null>();
+
+async function fetchFontFaceForSvg(family: string): Promise<string | null> {
+  const cached = fontFaceCache.get(family);
+  if (cached !== undefined) return cached;
+
+  try {
+    // Fetch the Google Fonts CSS as the browser sees it — that path
+    // returns woff2 URLs (other agents see ttf).
+    const cssUrl =
+      `https://fonts.googleapis.com/css2?family=`
+      + encodeURIComponent(family).replace(/%20/g, '+')
+      + `&display=swap`;
+    const cssRes = await fetch(cssUrl);
+    if (!cssRes.ok) { fontFaceCache.set(family, null); return null; }
+    const css = await cssRes.text();
+    // Pull every woff2 URL out of the CSS — most families ship multiple
+    // unicode-range variants, all of which we want available inside the
+    // SVG document so glyph fallbacks work. Build a single <style> with
+    // all the @font-face blocks, woff2 bodies inlined as data URIs.
+    const blocks: string[] = [];
+    const woff2Pattern = /url\((https:\/\/[^)]+\.woff2)\)/g;
+    const ffPattern    = /@font-face\s*\{([^}]+)\}/g;
+    let m: RegExpExecArray | null;
+    while ((m = ffPattern.exec(css)) !== null) {
+      const body = m[1] ?? '';
+      const urlMatch = woff2Pattern.exec(body);
+      if (!urlMatch) continue;
+      const woffUrl = urlMatch[1];
+      if (!woffUrl) continue;
+      const fontRes = await fetch(woffUrl);
+      if (!fontRes.ok) continue;
+      const buf = await fontRes.arrayBuffer();
+      const b64 = arrayBufferToBase64(buf);
+      const dataUri = `data:font/woff2;base64,${b64}`;
+      // Rewrite the original block: swap the http url() for the data
+      // URI, leave font-family / font-style / font-weight / unicode-range
+      // intact so the browser still picks the right variant per glyph.
+      const rewritten = body.replace(woff2Pattern, `url(${dataUri})`);
+      blocks.push(`@font-face{${rewritten}}`);
+      woff2Pattern.lastIndex = 0;
+    }
+    const out = blocks.length > 0 ? blocks.join('\n') : null;
+    fontFaceCache.set(family, out);
+    return out;
+  } catch {
+    fontFaceCache.set(family, null);
+    return null;
+  }
+}
+
+function arrayBufferToBase64(buf: ArrayBuffer): string {
+  // btoa expects a binary string; chunk to avoid call-stack blowups on
+  // larger font files.
+  const bytes = new Uint8Array(buf);
+  let bin = '';
+  const chunk = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunk) {
+    bin += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
+  }
+  return btoa(bin);
+}
+
 export interface RasterizeOpts {
   /** Pixels on the long side. Defaults to 1080 — enough for a sharp
    *  player view at typical viewport sizes; the projector path can ask
@@ -50,13 +117,15 @@ export async function rasterizeTextMap(
 ): Promise<Blob> {
   const { pxW, pxH } = predictTextMapPixelDimensions(cfg, opts.longSidePx);
 
-  // Best-effort font load. document.fonts.ready resolves once all
-  // pending @font-face loads have settled, so the SVG render below has
-  // the right metrics whenever the font is actually available.
-  try {
-    ensureFontsLoaded([cfg.fontFamily]);
-    await document.fonts.ready;
-  } catch { /* non-fatal — fall back to system fonts */ }
+  // Kick off the host-page font load AND the SVG-context @font-face
+  // fetch in parallel. The SVG document doesn't share font context with
+  // the host page when loaded via <img>, so we embed the woff2 binary
+  // inside a <style> in the SVG itself. The host-page load only helps
+  // the editor preview, not this rasterisation.
+  try { ensureFontsLoaded([cfg.fontFamily]); } catch { /* non-fatal */ }
+  const fontFacePromise = fetchFontFaceForSvg(cfg.fontFamily);
+  try { await document.fonts.ready; } catch { /* non-fatal */ }
+  const fontFaceCss = await fontFacePromise;
 
   const sanitised = sanitizeSplashHtml(cfg.bodyHtml ?? '');
   const padPx = Math.round(pxW * 0.06);
@@ -64,6 +133,10 @@ export async function rasterizeTextMap(
   // comfortable reading size on the page. The editor preview uses ems
   // against the host page; here we anchor to page width.
   const basePx = Math.round((pxW / 60) * cfg.fontScale);
+
+  const styleBlock = fontFaceCss
+    ? `<style xmlns="http://www.w3.org/1999/xhtml">${fontFaceCss}</style>`
+    : '';
 
   const svgMarkup =
     `<svg xmlns="http://www.w3.org/2000/svg" `
@@ -79,7 +152,7 @@ export async function rasterizeTextMap(
     +   `font-size:${basePx}px;`
     +   `line-height:1.45;`
     +   `overflow:hidden;`
-    + `">${sanitised}</div>`
+    + `">${styleBlock}${sanitised}</div>`
     + `</foreignObject>`
     + `</svg>`;
 
