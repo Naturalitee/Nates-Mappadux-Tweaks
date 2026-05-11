@@ -85,4 +85,22 @@ export interface ImageSourceConnector {
    * tintable too (they use stroke="currentColor" or similar).
    */
   readonly tintable: boolean;
+
+  /**
+   * Minimum search query length before the connector grid renders matches.
+   * Defaults to 1 (any character triggers a search) but very large catalogs
+   * like Lucide raise it to 2 so a single letter doesn't return hundreds of
+   * unrelated icons. The modal shows a "Type at least N characters" hint
+   * while the query is below the threshold.
+   */
+  readonly minSearchChars?: number;
+
+  /**
+   * Whether the "Show all" escape-hatch button is offered alongside the
+   * search box. Connectors with hundreds-to-thousands of entries should
+   * leave this false — showing them all at once spams CDN previews. A small
+   * curated source (Game Icons starter set) leaves it true so users can
+   * browse without typing.
+   */
+  readonly allowShowAll?: boolean;
 }

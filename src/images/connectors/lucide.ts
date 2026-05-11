@@ -60,12 +60,17 @@ const STARTER_MANIFEST: ConnectorManifestEntry[] = [
 ];
 
 export const lucideConnector: ImageSourceConnector = {
-  id:          'lucide',
-  displayName: 'Lucide',
-  license:     'MIT',
-  licenseUrl:  'https://lucide.dev/license',
-  sourceUrl:   'https://lucide.dev/',
-  tintable:    true,
+  id:             'lucide',
+  displayName:    'Lucide',
+  license:        'MIT',
+  licenseUrl:     'https://lucide.dev/license',
+  sourceUrl:      'https://lucide.dev/',
+  tintable:       true,
+  // Lucide ships ~1,500 icons after the runtime manifest fetch — require 2+
+  // characters so single-letter searches don't return hundreds of hits, and
+  // skip "Show all" entirely since rendering 1,500 previews is far too much.
+  minSearchChars: 2,
+  allowShowAll:   false,
 
   async loadManifest(): Promise<ConnectorManifestEntry[]> {
     if (cachedManifest) return cachedManifest;

@@ -1,0 +1,17 @@
+[
+  { "slug": "lorc/broadsword",      "name": "Broadsword",      "author": "Lorc", "tags": ["weapon","sword","melee","fantasy"] },
+  { "slug": "lorc/crossed-axes",    "name": "Crossed Axes",    "author": "Lorc", "tags": ["weapon","axe","melee","dual","fantasy"] },
+  { "slug": "lorc/spear-hook",      "name": "Spear",           "author": "Lorc", "tags": ["weapon","spear","melee","polearm"] },
+  { "slug": "lorc/lightning-trio",  "name": "Lightning",       "author": "Lorc", "tags": ["magic","lightning","storm","elemental"] },
+  { "slug": "lorc/magic-swirl",     "name": "Magic Swirl",     "author": "Lorc", "tags": ["magic","spell","arcane","aura"] },
+  { "slug": "lorc/dragon-head",     "name": "Dragon Head",     "author": "Lorc", "tags": ["creature","dragon","monster","fantasy"] },
+  { "slug": "lorc/wolf-head",       "name": "Wolf Head",       "author": "Lorc", "tags": ["creature","wolf","beast","animal"] },
+  { "slug": "lorc/locked-chest",    "name": "Treasure Chest",  "author": "Lorc", "tags": ["item","chest","loot","treasure"] },
+  { "slug": "lorc/key",             "name": "Key",             "author": "Lorc", "tags": ["item","key","door","unlock"] },
+  { "slug": "lorc/portal",          "name": "Portal",          "author": "Lorc", "tags": ["place","portal","gate","arcane"] },
+  { "slug": "lorc/cauldron",        "name": "Cauldron",        "author": "Lorc", "tags": ["feature","cauldron","witch","alchemy"] },
+  { "slug": "lorc/ray-gun",         "name": "Ray Gun",         "author": "Lorc", "tags": ["scifi","weapon","blaster","ranged"] },
+  { "slug": "lorc/processor",       "name": "Processor",       "author": "Lorc", "tags": ["scifi","tech","cpu","machine"] },
+  { "slug": "lorc/footprint",       "name": "Footprint",       "author": "Lorc", "tags": ["abstract","footprint","track","trail"] },
+  { "slug": "lorc/two-shadows",     "name": "Hidden / Stealth","author": "Lorc", "tags": ["abstract","stealth","shadow","hidden"] }
+]

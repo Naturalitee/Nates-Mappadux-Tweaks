@@ -7,11 +7,33 @@ import { lucideConnector } from './connectors/lucide.ts';
 import { generateId } from '../utils/id.ts';
 import { UNICODE_LICENSE_LABEL } from './seedImageAssets.ts';
 import { BUNDLED_FONTS } from './fontCatalog.ts';
+import { fuzzySearch } from '../utils/fuzzySearch.ts';
 
 const CONNECTORS: readonly ImageSourceConnector[] = [
   gameIconsConnector,
   lucideConnector,
 ];
+
+/** Pseudo-category id used for the sidebar "All" row — shows every asset
+ *  regardless of categoryId. Not stored in IDB. */
+const ALL_CATEGORY_ID = '__all__';
+
+/** Auto-route map — when an imported icon's tags include any of these
+ *  keywords, route it to the matching system category. First-match wins. */
+const AUTO_CATEGORY_RULES: ReadonlyArray<{ keywords: readonly string[]; categoryId: string }> = [
+  { keywords: ['fantasy','dragon','wolf','sword','axe','knight','medieval','wizard','witch','cauldron','potion','dwarf','elf','orc','goblin','rune','spell','magic','arcane','undead','skeleton','demon','angel'], categoryId: 'sys-fantasy' },
+  { keywords: ['scifi','sci-fi','space','rocket','laser','blaster','ray','robot','cyborg','alien','starship','tech','cpu','processor','satellite','probe','plasma'],                                          categoryId: 'sys-scifi' },
+  { keywords: ['ui','interface','arrow','nav','navigation','time','clock','hourglass','tool','wrench','hammer','phone','mail','file','folder','calendar','marker','pin','flag','user','users'],          categoryId: 'sys-contemporary' },
+  { keywords: ['abstract','shape','circle','square','triangle','star','dot','geometric'],                                                                                                                  categoryId: 'sys-abstract' },
+];
+
+function suggestCategoryFromTags(tags: readonly string[]): string | null {
+  const lower = new Set(tags.map((t) => t.toLowerCase()));
+  for (const rule of AUTO_CATEGORY_RULES) {
+    if (rule.keywords.some((kw) => lower.has(kw))) return rule.categoryId;
+  }
+  return null;
+}
 
 /**
  * ImageAssetModal — Image Assets Library browser. Third first-class asset
@@ -50,6 +72,14 @@ export class ImageAssetModal {
    *  traffic light and the experience feels search-first like the public
    *  catalogs themselves. */
   private connectorShowAll: boolean = false;
+  /** How many results to render in the connector grid. Bumped by 60 each
+   *  time the user clicks the "More" button. Resets on search change or
+   *  tab switch. */
+  private connectorResultLimit: number = 60;
+  /** Target-category override on connector imports. 'auto' = route by the
+   *  manifest entry's tags via suggestCategoryFromTags(). Otherwise this
+   *  mirrors `selectedCategoryId`. */
+  private connectorImportTarget: string = 'auto';
 
   async open(opts: ImageAssetModalOptions = {}): Promise<void> {
     if (opts.initialCategoryId) this.selectedCategoryId = opts.initialCategoryId;
@@ -187,6 +217,7 @@ export class ImageAssetModal {
     this.activeTab = c.id;
     this.connectorSearchQuery = '';
     this.connectorShowAll = false;
+    this.connectorResultLimit = 60;
     // Lazy-load the manifest on first visit; cache thereafter.
     if (!this.connectorManifests.has(c.id)) {
       try {
@@ -218,6 +249,10 @@ export class ImageAssetModal {
     if (!host) return;
     host.innerHTML = '';
 
+    // "All" pseudo-row — shows every asset across every category. Pinned
+    // above the system section so it's always the first option.
+    host.appendChild(this._allRow());
+
     // System category section
     const sysHeader = document.createElement('div');
     sysHeader.className = 'img-modal-sidebar-section';
@@ -246,6 +281,23 @@ export class ImageAssetModal {
     addRow.textContent = '+ New Category';
     addRow.addEventListener('click', () => void this._promptNewCategory());
     host.appendChild(addRow);
+  }
+
+  private _allRow(): HTMLElement {
+    const row = document.createElement('button');
+    row.type = 'button';
+    row.className = 'img-modal-sidebar-cat';
+    if (this.selectedCategoryId === ALL_CATEGORY_ID) row.classList.add('is-active');
+    const total = this.assets.length;
+    row.innerHTML = `<span class="img-cat-name"><strong>All</strong></span><span class="img-cat-count">${total}</span>`;
+    row.addEventListener('click', () => {
+      this.selectedCategoryId = ALL_CATEGORY_ID;
+      this.searchQuery = '';
+      this._renderSidebar();
+      this._renderToolbar();
+      this._renderGrid();
+    });
+    return row;
   }
 
   private _categoryRow(cat: ImageCategory): HTMLElement {
@@ -383,27 +435,32 @@ export class ImageAssetModal {
       // Typing automatically dismisses the "Show all" state — the search
       // narrows the result set, never expands beyond a match.
       if (this.connectorSearchQuery) this.connectorShowAll = false;
+      // New query → reset pagination so the first page is the most-relevant 60.
+      this.connectorResultLimit = 60;
       this._renderGrid();
     });
     host.appendChild(search);
 
     // "Show all" toggle — escape hatch for users who want to browse the
-    // full curated set without typing.
-    const showAllBtn = document.createElement('button');
-    showAllBtn.type = 'button';
-    showAllBtn.className = 'btn btn--ghost btn--xs';
-    showAllBtn.textContent = this.connectorShowAll ? 'Hide all' : 'Show all';
-    showAllBtn.addEventListener('click', () => {
-      this.connectorShowAll = !this.connectorShowAll;
-      this.connectorSearchQuery = '';
-      this._renderToolbar();
-      this._renderGrid();
-    });
-    host.appendChild(showAllBtn);
+    // full curated set without typing. Hidden when the connector opts out
+    // (e.g. Lucide with 1500 entries would spam CDN previews).
+    if (conn.allowShowAll !== false) {
+      const showAllBtn = document.createElement('button');
+      showAllBtn.type = 'button';
+      showAllBtn.className = 'btn btn--ghost btn--xs';
+      showAllBtn.textContent = this.connectorShowAll ? 'Hide all' : 'Show all';
+      showAllBtn.addEventListener('click', () => {
+        this.connectorShowAll = !this.connectorShowAll;
+        this.connectorSearchQuery = '';
+        this._renderToolbar();
+        this._renderGrid();
+      });
+      host.appendChild(showAllBtn);
+    }
 
-    // "Import into" target — dropdown so the user can choose where imports
-    // land without leaving the Browse tab to click in the sidebar. Defaults
-    // to whichever sidebar category is currently selected.
+    // "Import into" target — dropdown to pick where imports land. Includes
+    // an "Auto (by tags)" option that uses suggestCategoryFromTags() to
+    // route each import to its best-fit system category.
     const label = document.createElement('span');
     label.className = 'img-modal-import-target';
     label.textContent = 'Imports →';
@@ -411,18 +468,22 @@ export class ImageAssetModal {
 
     const targetSel = document.createElement('select');
     targetSel.className = 'img-modal-target-select';
+    const autoOpt = document.createElement('option');
+    autoOpt.value = 'auto';
+    autoOpt.textContent = '🪄 Auto (by tags)';
+    if (this.connectorImportTarget === 'auto') autoOpt.selected = true;
+    targetSel.appendChild(autoOpt);
     for (const cat of this.categories) {
+      // Fonts isn't a valid import target; skip it.
+      if (cat.id === SYSTEM_CATEGORY_IDS.fonts) continue;
       const opt = document.createElement('option');
       opt.value = cat.id;
       opt.textContent = cat.name;
-      if (cat.id === this.selectedCategoryId) opt.selected = true;
+      if (cat.id === this.connectorImportTarget) opt.selected = true;
       targetSel.appendChild(opt);
     }
     targetSel.addEventListener('change', () => {
-      this.selectedCategoryId = targetSel.value;
-      // Refresh sidebar so the active category visually matches the new
-      // target. Grid doesn't need a re-render — it's connector content.
-      this._renderSidebar();
+      this.connectorImportTarget = targetSel.value;
     });
     host.appendChild(targetSel);
   }
@@ -519,13 +580,15 @@ export class ImageAssetModal {
       return;
     }
 
-    const filtered = this.assets
-      .filter((a) => a.categoryId === this.selectedCategoryId)
-      .filter((a) => {
-        if (!this.searchQuery) return true;
-        const haystack = (a.name + ' ' + (a.tags ?? []).join(' ')).toLowerCase();
-        return haystack.includes(this.searchQuery);
-      });
+    const inCategory = this.selectedCategoryId === ALL_CATEGORY_ID
+      ? this.assets
+      : this.assets.filter((a) => a.categoryId === this.selectedCategoryId);
+    const filtered = this.searchQuery
+      ? fuzzySearch(
+          inCategory.map((a) => ({ slug: a.id, name: a.name, tags: a.tags ?? [] })),
+          this.searchQuery,
+        ).map((r) => inCategory.find((a) => a.id === r.entry.slug)!).filter(Boolean)
+      : inCategory;
 
     if (filtered.length === 0) {
       const empty = document.createElement('div');
@@ -597,6 +660,8 @@ export class ImageAssetModal {
     const conn = CONNECTORS.find((c) => c.id === this.activeTab);
     if (!conn) return;
     const manifest = this.connectorManifests.get(conn.id) ?? [];
+    const minChars = conn.minSearchChars ?? 1;
+    const allowShowAll = conn.allowShowAll !== false;
 
     if (manifest.length === 0) {
       const empty = document.createElement('div');
@@ -606,25 +671,33 @@ export class ImageAssetModal {
       return;
     }
 
-    // Search-first UX: with no query AND no "Show all" toggle, show a prompt
-    // rather than the full manifest. Avoids firing 30+ CDN fetches on every
-    // tab open and matches the feel of the upstream catalog browsers.
-    if (!this.connectorSearchQuery && !this.connectorShowAll) {
+    // Empty / too-short query, and Show all not active → search-first prompt.
+    if (
+      !this.connectorShowAll
+      && (this.connectorSearchQuery.length < minChars)
+    ) {
       const prompt = document.createElement('div');
       prompt.className = 'img-modal-empty';
+      const sizeHint = manifest.length > 200
+        ? ` from <strong>${manifest.length.toLocaleString()}</strong> icons`
+        : '';
+      const minHint = minChars > 1
+        ? `Type at least <strong>${minChars} characters</strong> to search${sizeHint}.`
+        : `Type to search${sizeHint}.`;
+      const showAllHint = allowShowAll
+        ? ' Or click <strong>Show all</strong> for the full set.'
+        : '';
       prompt.innerHTML = `
-        <p style="margin:0 0 var(--space-sm);">Search by name or tag to browse <strong>${this._esc(conn.displayName)}</strong>.</p>
-        <p style="margin:0; font-size:0.85em;">Try terms like <em>sword</em>, <em>dragon</em>, <em>key</em>, or use <strong>Show all</strong> to browse the curated starter set.</p>
+        <p style="margin:0 0 var(--space-sm);">Browsing <strong>${this._esc(conn.displayName)}</strong> — ${minHint}${showAllHint}</p>
+        <p style="margin:0; font-size:0.85em;">Try terms like <em>sword</em>, <em>dragon</em>, <em>key</em>, <em>arrow</em>, <em>map</em>.</p>
       `;
       host.appendChild(prompt);
       return;
     }
 
-    const filtered = manifest.filter((entry) => {
-      if (!this.connectorSearchQuery) return true;
-      const haystack = (entry.name + ' ' + entry.tags.join(' ') + ' ' + (entry.author ?? '')).toLowerCase();
-      return haystack.includes(this.connectorSearchQuery);
-    });
+    const filtered = this.connectorSearchQuery
+      ? fuzzySearch(manifest, this.connectorSearchQuery).map((r) => r.entry)
+      : manifest;
 
     if (filtered.length === 0) {
       const empty = document.createElement('div');
@@ -634,8 +707,38 @@ export class ImageAssetModal {
       return;
     }
 
-    for (const entry of filtered) {
+    // Paginated render — fuzzy-search returns scored results, so the first
+    // page is the most relevant matches. "More" button loads the next 60.
+    const limit = this.connectorResultLimit;
+    const capped = filtered.length > limit;
+    const toRender = capped ? filtered.slice(0, limit) : filtered;
+
+    for (const entry of toRender) {
       host.appendChild(this._connectorCell(conn, entry));
+    }
+
+    if (capped) {
+      const moreWrap = document.createElement('div');
+      moreWrap.className = 'img-modal-more';
+      moreWrap.style.gridColumn = '1 / -1';
+
+      const status = document.createElement('span');
+      status.className = 'img-modal-more-status';
+      status.textContent = `Showing ${limit.toLocaleString()} of ${filtered.length.toLocaleString()} matches`;
+      moreWrap.appendChild(status);
+
+      const moreBtn = document.createElement('button');
+      moreBtn.type = 'button';
+      moreBtn.className = 'btn btn--primary btn--sm';
+      const nextBatch = Math.min(60, filtered.length - limit);
+      moreBtn.textContent = `More results (${nextBatch.toLocaleString()})`;
+      moreBtn.addEventListener('click', () => {
+        this.connectorResultLimit += 60;
+        this._renderGrid();
+      });
+      moreWrap.appendChild(moreBtn);
+
+      host.appendChild(moreWrap);
     }
   }
 
@@ -724,11 +827,27 @@ export class ImageAssetModal {
   ): Promise<void> {
     const svg = await conn.fetchSvg(entry);
     const id = `${conn.id}-${entry.slug.replace(/[^\w-]/g, '_')}-${Date.now().toString(36)}`;
+    // Pick where to land. Auto: route by tags; explicit: respect the choice.
+    // Auto falls back to the user's sidebar selection (or Abstract by default)
+    // if no tag rule matches.
+    let categoryId: string;
+    if (this.connectorImportTarget === 'auto') {
+      const suggested = suggestCategoryFromTags(entry.tags);
+      if (suggested) {
+        categoryId = suggested;
+      } else if (this.selectedCategoryId && this.selectedCategoryId !== ALL_CATEGORY_ID) {
+        categoryId = this.selectedCategoryId;
+      } else {
+        categoryId = SYSTEM_CATEGORY_IDS.abstract;
+      }
+    } else {
+      categoryId = this.connectorImportTarget;
+    }
     const asset: ImageAsset = {
       id,
       name:            entry.name,
       source:          conn.id,
-      categoryId:      this.selectedCategoryId,
+      categoryId,
       tintable:        conn.tintable,
       svgSource:       svg,
       mimeType:        'image/svg+xml',

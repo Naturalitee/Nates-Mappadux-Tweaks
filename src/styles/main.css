@@ -1593,6 +1593,18 @@ option.select-option--add {
 }
 .img-modal-target-select:focus { outline: 1px solid var(--accent); }
 
+/* "More results" footer on connector grids. */
+.img-modal-more {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-md);
+  padding: var(--space-md);
+  border-top: 1px dashed var(--border);
+  margin-top: var(--space-sm);
+}
+.img-modal-more-status { color: var(--text-dim); font-size: 0.85rem; }
+
 /* Fonts category — read-only list, not a grid. */
 .img-modal-font-row {
   grid-column: 1 / -1;
