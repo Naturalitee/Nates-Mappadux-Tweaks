@@ -311,7 +311,9 @@ body.player-view #renderer-canvas {
 }
 .gm-menu[hidden] { display: none; }
 .gm-menu-item {
-  display: block;
+  display: flex;
+  align-items: center;
+  gap: 10px;
   width: 100%;
   padding: 8px 14px;
   background: transparent;
@@ -321,6 +323,20 @@ body.player-view #renderer-canvas {
   color: var(--text-primary);
   cursor: pointer;
 }
+.gm-menu-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  flex-shrink: 0;
+  color: var(--text-dim);
+}
+.gm-menu-icon svg { width: 16px; height: 16px; display: block; }
+.gm-menu-item:hover:not(:disabled) .gm-menu-icon { color: inherit; }
+.gm-menu-item--danger .gm-menu-icon                       { color: var(--danger); }
+.gm-menu-item--danger:hover:not(:disabled) .gm-menu-icon  { color: var(--danger-hover); }
+.gm-menu-label { flex: 1; }
 .gm-menu-item:hover:not(:disabled) {
   background: var(--bg-hover, rgba(255, 255, 255, 0.06));
 }

@@ -2023,61 +2023,69 @@ export class GMApp {
 
     this.hamburger = new HamburgerMenu(btn, menu);
 
-    // ── Pack file group ── traditional File-menu order: New, Open, Save.
-    // All four pack-level "what bundle am I on" actions cluster together
-    // including the destructive New Map Pack.
+    // Pack file group — traditional File-menu order: New, Open, Save.
     this.hamburger.addItem({
-      label: '🆕 New Map Pack…',
+      label: 'New Map Pack…',
+      icon: 'file-plus',
       danger: true,
       onSelect: () => { void this.newMapPack(); },
     });
     this.hamburger.addItem({
-      label: '📂 Load Map Pack',
+      label: 'Load Map Pack',
+      icon: 'folder-open',
       onSelect: () => {
         const input = document.querySelector<HTMLInputElement>('#bundle-import');
         input?.click();
       },
     });
     this.hamburger.addItem({
-      label: '💾 Save Map Pack…',
+      label: 'Save Map Pack…',
+      icon: 'save',
       onSelect: () => { void this.saveBundle(); },
     });
     this.hamburger.addItem({
-      label: '🔒 Save Encrypted Pack…',
+      label: 'Save Encrypted Pack…',
+      icon: 'lock',
       onSelect: () => { void this.saveBundleEncrypted(); },
     });
 
     this.hamburger.addDivider();
 
-    // ── Asset Libraries group ── all three first-class libraries.
+    // Asset Libraries group.
     this.hamburger.addItem({
-      label: '🗺 Map Asset Library…',
+      label: 'Map Asset Library…',
+      icon: 'map',
       onSelect: () => { this.mapAssetModal.open(() => { /* browse-only */ }); },
     });
     this.hamburger.addItem({
-      label: '🔊 Audio Asset Library…',
+      label: 'Audio Asset Library…',
+      icon: 'volume',
       onSelect: () => { void this.openSoundLibrary(); },
     });
     this.hamburger.addItem({
-      label: '🖼 Small Assets Library…',
+      label: 'Small Assets Library…',
+      icon: 'image',
       onSelect: () => { void this.openImageLibrary(); },
     });
 
     this.hamburger.addDivider();
 
-    // ── Pack settings + app settings ──
+    // Pack settings + app settings.
     this.hamburger.addItem({
-      label: '🎨 Customise pack…',
+      label: 'Customise pack…',
+      icon: 'palette',
       onSelect: () => { void this.openAboutDialog({ startInEdit: true }); },
     });
     this.hamburger.addItem({
-      label: '⚙ Settings…',
+      label: 'Settings…',
+      icon: 'settings',
       onSelect: () => { void this.openSettings(); },
     });
 
-    // ── Footer ── About pinned at the very bottom (auto-divider above).
+    // Footer — About pinned at the very bottom (auto-divider above).
     this.hamburger.addItem({
-      label: 'ℹ About…',
+      label: 'About…',
+      icon: 'info',
       footer: true,
       onSelect: () => { void this.openAboutDialog({}); },
     });
