@@ -1717,6 +1717,110 @@ option.select-option--add {
   width: 96vw;
   height: 94vh;
 }
+/* Element-canvas variant (M4). The legacy `.txt-map-body` two-column
+   layout is gone; toolbar across the top, canvas filling the middle,
+   footer at the bottom. */
+.txt-map-dialog--canvas {
+  display: flex;
+  flex-direction: column;
+}
+.txt-map-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+  align-items: center;
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-panel);
+  flex-shrink: 0;
+}
+.txt-map-toolbar-name {
+  flex: 1 1 200px;
+  min-width: 160px;
+}
+.txt-map-canvas-wrap {
+  flex: 1;
+  display: grid;
+  place-items: center;
+  background: rgba(0,0,0,0.3);
+  padding: var(--space-md);
+  min-height: 0;
+  overflow: hidden;
+}
+.txt-map-el {
+  position: absolute;
+  box-sizing: border-box;
+  /* Default chrome: invisible. The selected-class below turns it on. */
+  border: 1px dashed transparent;
+}
+.txt-map-el-body {
+  width: 100%;
+  height: 100%;
+  padding: 0.4em 0.6em;
+  box-sizing: border-box;
+  outline: none;
+  overflow: hidden;
+  cursor: text;
+}
+.txt-map-el--image .txt-map-el-body {
+  display: grid;
+  place-items: center;
+  cursor: grab;
+  font-size: 2em;
+  opacity: 0.85;
+}
+.txt-map-el--image .txt-map-el-body svg,
+.txt-map-el--image .txt-map-el-body span {
+  width: 100% !important;
+  height: 100% !important;
+}
+/* Selected element: dashed accent border + visible drag bar + resize +
+   delete button. Border stays inside the element bounds so geometry
+   matches what the rasteriser will produce. */
+.txt-map-el--selected {
+  border: 1px dashed var(--accent, #6aa3ff);
+  box-shadow: 0 0 0 1px rgba(106,163,255,0.25);
+}
+.txt-map-el-drag,
+.txt-map-el-resize,
+.txt-map-el-delete {
+  position: absolute;
+  display: none;
+  z-index: 2;
+}
+.txt-map-el--selected .txt-map-el-drag,
+.txt-map-el--selected .txt-map-el-resize,
+.txt-map-el--selected .txt-map-el-delete { display: block; }
+.txt-map-el-drag {
+  top: -12px; left: 0; right: 0;
+  height: 10px;
+  background: var(--accent, #6aa3ff);
+  border-radius: 2px;
+  cursor: move;
+  opacity: 0.8;
+}
+.txt-map-el-drag:hover { opacity: 1; }
+.txt-map-el-resize {
+  right: -6px; bottom: -6px;
+  width: 14px; height: 14px;
+  background: var(--accent, #6aa3ff);
+  border: 1px solid var(--bg-panel);
+  border-radius: 50%;
+  cursor: nwse-resize;
+}
+.txt-map-el-delete {
+  top: -12px; right: -12px;
+  width: 22px; height: 22px;
+  border: none;
+  border-radius: 50%;
+  background: var(--danger, #c0392b);
+  color: #fff;
+  font-size: 16px;
+  line-height: 1;
+  cursor: pointer;
+  padding: 0;
+}
+.txt-map-el-delete:hover { background: #d44e3f; }
 .txt-map-body {
   flex: 1;
   display: flex;

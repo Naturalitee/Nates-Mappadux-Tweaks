@@ -15,9 +15,11 @@
  * base64-encoded font binaries in a follow-up if creators ask for it.
  */
 
-import type { TextMapConfig } from '../types.ts';
+import type { TextMapConfig, TextMapElement } from '../types.ts';
 import { sanitizeSplashHtml } from '../utils/sanitizeHtml.ts';
 import { ensureFontsLoaded } from '../images/fontCatalog.ts';
+import { ensureTextMapElements } from './textMapElements.ts';
+import { renderAssetToInlineHtml } from '../utils/resolveAssetImages.ts';
 
 /** Cache of @font-face rules with base64-embedded woff2 bytes, keyed by
  *  font family. The SVG document context can't reach fonts loaded by the
@@ -126,19 +128,20 @@ export async function rasterizeTextMap(
   // font even though that path isn't what the rasteriser uses.
   try { ensureFontsLoaded([cfg.fontFamily]); } catch { /* non-fatal */ }
 
-  // Sanitise the body, then re-serialise as well-formed XHTML. The
-  // sanitiser emits HTML5 (`<br>`, `<img>` not self-closed) but
-  // SVG-foreignObject content is parsed as strict XML when loaded via
-  // <img>, which rejects any non-self-closed void element. XMLSerializer
-  // produces XML-compliant output with correct void-element handling
-  // and preserved namespace declarations on inline SVG icons. This is
-  // the root cause of the "image load failed" the user kept hitting.
-  const sanitised = sanitizeSplashHtml(cfg.bodyHtml ?? '');
-  const bodyXhtml = htmlToXhtml(sanitised);
+  // Resolve config → element array (synthesises a full-page text
+  // element from the legacy bodyHtml if needed). Each element is
+  // rendered as a positioned div inside the foreignObject.
+  const elements = ensureTextMapElements(cfg);
+  // Build the inner HTML for the page in well-formed XHTML so
+  // SVG-foreignObject (parsed as strict XML when loaded via <img>)
+  // accepts it. HTML5 parses then XMLSerializer emits — `<br>`, `<img>`,
+  // and inline SVG icons all get correct self-closing / namespace.
+  const elementsXhtml = await renderElementsForRaster(elements, cfg);
   const padPx = Math.round(pxW * 0.06);
   // Scale the base font size so a font-scale of 1 renders at a
-  // comfortable reading size on the page. The editor preview uses ems
-  // against the host page; here we anchor to page width.
+  // comfortable reading size on the page. The editor preview uses the
+  // SAME formula against page width so preview ↔ map render at matching
+  // scale.
   const basePx = Math.round((pxW / 60) * cfg.fontScale);
 
   // Try font embedding first; fall back to system font if anything goes
@@ -170,7 +173,8 @@ export async function rasterizeTextMap(
       +   `font-size:${basePx}px;`
       +   `line-height:1.45;`
       +   `overflow:hidden;`
-      + `">${styleBlock}${bodyXhtml}</div>`
+      +   `position:relative;`
+      + `">${styleBlock}${elementsXhtml}</div>`
       + `</foreignObject>`
       + `</svg>`
     );
@@ -201,7 +205,64 @@ export async function rasterizeTextMap(
       : failedSvg;
     console.warn('[rasterizeTextMap] failed SVG markup was:\n', trimmed);
   }
-  return await renderPlainTextFallback(cfg, pxW, pxH, basePx, padPx, sanitised);
+  // Plain-text fallback: concatenate text-element bodies, drop image
+  // elements (no formatting / positioning preserved). Last-line-of-
+  // defence so a handout always produces SOMETHING readable.
+  const plainBodyConcat = elements
+    .filter((e): e is TextMapElement & { type: 'text' } => e.type === 'text')
+    .map((e) => sanitizeSplashHtml(e.html ?? ''))
+    .join('<p></p>');
+  return await renderPlainTextFallback(cfg, pxW, pxH, basePx, padPx, plainBodyConcat);
+}
+
+/** Render the element array as a flat XHTML string suitable for embedding
+ *  inside an SVG foreignObject. Each element becomes an absolutely-
+ *  positioned div sized in %. Text elements emit their sanitised HTML
+ *  body; image elements resolve via ImageAssetStore and inline the SVG /
+ *  blob URL the same way the editor does. The whole result is run
+ *  through htmlToXhtml() at the end so void elements self-close and
+ *  inline SVG namespaces serialise correctly. */
+async function renderElementsForRaster(
+  elements: TextMapElement[],
+  _cfg: TextMapConfig,
+): Promise<string> {
+  const parts: string[] = [];
+  for (const el of elements) {
+    const box =
+      `position:absolute;`
+      + `left:${el.x}%;top:${el.y}%;`
+      + `width:${el.w}%;height:${el.h}%;`
+      + `box-sizing:border-box;`
+      + `overflow:hidden;`;
+    if (el.type === 'text') {
+      const style =
+        box
+        + `padding:0.4em 0.6em;`
+        + (el.fontFamily ? `font-family:'${escapeAttr(el.fontFamily)}',serif;` : '')
+        + (el.fontScale  ? `font-size:${el.fontScale * 100}%;` : '')
+        + (el.color      ? `color:${el.color};` : '')
+        + (el.textAlign  ? `text-align:${el.textAlign};` : '');
+      const inner = sanitizeSplashHtml(el.html ?? '');
+      parts.push(`<div style="${style}">${inner}</div>`);
+    } else if (el.type === 'image') {
+      // Asset resolution runs in the host context (DOM available); the
+      // resulting inline-SVG / <img> markup is then dropped verbatim
+      // into the foreignObject. We don't need the editor's interactive
+      // wrap span here — strip the contenteditable=false attribute and
+      // just keep the inner SVG/img.
+      const inline = await renderAssetToInlineHtml(el.assetId, { sizeEm: 1 });
+      const body = inline ?? '';
+      // Style the OUTER positioned div as the bounding box; let the SVG
+      // inside fill the whole box via 100%/100%.
+      const style =
+        box
+        + (el.tint ? `color:${el.tint};` : '');
+      parts.push(`<div style="${style}" class="textmap-image-host">${body}</div>`);
+    }
+  }
+  // After concatenation we wrap in a parent to ensure single-root XML
+  // when serialised. htmlToXhtml() strips that wrapper back off.
+  return htmlToXhtml(parts.join(''));
 }
 
 /** Convert sanitised HTML5 body markup into well-formed XHTML so it can

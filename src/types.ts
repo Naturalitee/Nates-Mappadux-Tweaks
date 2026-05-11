@@ -734,31 +734,77 @@ export interface MapAsset {
 /** Stream C handout configuration — the body and presentation settings for
  *  a text-map. Animation runs on the player side using the same body. */
 export interface TextMapConfig {
-  /** Sanitised HTML body. Same whitelist as the splash editor, plus inline
-   *  `<img src="asset:…">` references resolved from the Image Library. */
-  bodyHtml:     string;
   /**
    * Aspect-ratio width / height. These are NOT a fixed render resolution —
    * they exist to express the ratio (so the editor preview and the
    * eventual rasteriser both know whether to draw A4 portrait or 16:9).
-   * Concrete values like 1080×1527 are convenient round numbers; the
-   * downstream renderer is expected to choose its own actual resolution
-   * per use case (preview = container size, projector = calibration
-   * pixels, print export = 300 DPI of the physical size, etc).
+   * The rasteriser picks an actual resolution per use case.
    */
   width:        number;
   height:       number;
-  /** CSS font-family for body text. Loaded via the Image Library's font
-   *  registry — bundled defaults or user-added Google Fonts. */
+  /** Default font-family applied to text elements that don't override. */
   fontFamily:   string;
-  /** Multiplier on the base font-size (16px). 0.5–4.0 typical. */
+  /** Multiplier on the base font-size (anchored to page width). 0.5–4.0 typical. */
   fontScale:    number;
-  /** CSS hex colour for the page background. Defaults to parchment-ish. */
+  /** CSS hex colour for the page background. */
   backgroundColor: string;
-  /** Body text colour. Defaults to readable dark on the background. */
+  /** Default text colour applied to text elements that don't override. */
   textColor:    string;
+  /**
+   * Free-positioned elements (text boxes + image boxes) that compose the
+   * handout. Each element's geometry is expressed as % of the page so the
+   * layout is resolution-independent. Drawn in array order (later items
+   * paint on top).
+   *
+   * Optional for back-compat: if absent AND `bodyHtml` is set, the
+   * editor / rasteriser treat the legacy bodyHtml as a single full-page
+   * text element.
+   */
+  elements?:    TextMapElement[];
+  /**
+   * LEGACY (pre-element-canvas): a single sanitised HTML body that took
+   * up the whole page. Carried for round-trip of older saved packs.
+   * Migrated to `elements` on first open via ensureTextMapElements().
+   */
+  bodyHtml?:    string;
   /** Animation behaviour. */
   animation?:   TextMapAnimation;
+}
+
+/** Union of all element kinds that can live on a text-map page. */
+export type TextMapElement = TextMapTextElement | TextMapImageElement;
+
+interface TextMapElementBase {
+  /** Stable id — used for selection state and React-style reconciliation. */
+  id:    string;
+  /** Geometry as PERCENTAGES of the page (0..100). Lets the same layout
+   *  render correctly at any rasterisation resolution. */
+  x:     number;
+  y:     number;
+  w:     number;
+  h:     number;
+}
+
+export interface TextMapTextElement extends TextMapElementBase {
+  type:        'text';
+  /** Sanitised rich-text body for this box. Same whitelist as the splash
+   *  editor (plus inline SVG icon spans). */
+  html:        string;
+  /** Optional per-element overrides — when absent the page-level value
+   *  from TextMapConfig is used. fontScale here is a multiplier on the
+   *  page-level fontScale. */
+  fontFamily?: string;
+  fontScale?:  number;
+  color?:      string;
+  textAlign?:  'left' | 'center' | 'right' | 'justify';
+}
+
+export interface TextMapImageElement extends TextMapElementBase {
+  type:    'image';
+  /** ImageAssetStore id. The rasteriser resolves to inline SVG / blob URL. */
+  assetId: string;
+  /** Optional tint colour for monochrome SVG icons. */
+  tint?:   string;
 }
 
 export interface TextMapAnimation {
