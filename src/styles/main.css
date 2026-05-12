@@ -886,6 +886,16 @@ option.select-option--add {
 }
 .panel-toggle-icon[title] { pointer-events: auto; }
 .panel-toggle-icon svg { display: block; }
+
+/* "Nothing receiving" hint — fade the broadcast toggle + its visibility-eye
+   icon when no player / projector view is currently connected. Toggle stays
+   functional (the GM can pre-arm the broadcast state before a viewer joins);
+   the fade just communicates that flipping it right now has no audience. */
+.panel-header--no-connection .panel-toggle,
+.panel-header--no-connection .panel-toggle-icon {
+  opacity: 0.4;
+  transition: opacity 180ms ease;
+}
 .toggle-switch--bypass .toggle-slider {
   background: rgba(192, 57, 43, 0.45); /* red when off */
   border-color: #c0392b;

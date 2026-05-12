@@ -404,6 +404,15 @@ export class GMApp {
         : '';
     }
 
+    // Grey out the broadcast toggles on the side-panel headers when nothing
+    // of that type is currently receiving. CSS handles the visual fade; the
+    // toggle stays clickable so the GM can pre-set state before joining
+    // players / projectors arrive.
+    document.querySelector('#view-panel .panel-header')
+      ?.classList.toggle('panel-header--no-connection', players === 0);
+    document.querySelector('#projection-panel .panel-header')
+      ?.classList.toggle('panel-header--no-connection', projCount === 0);
+
     // Hover tooltip on the session-meta line listing what we know about each
     // connected peer. Players are anonymous PeerJS peers today (real names
     // arrive in v2.13 with User ID); projectors carry their setup name from
@@ -2137,6 +2146,10 @@ export class GMApp {
     // instant. A fresh funny message is picked on every off-flip.
     this._wireBroadcastBypass('#player-broadcast-toggle', 'player');
     this._wireBroadcastBypass('#projection-broadcast-toggle', 'projector');
+
+    // Paint initial "no connection" greying so the toggles are correctly
+    // faded before any first connect/disconnect event fires.
+    this._updatePlayerCount();
   }
 
   private _wireBroadcastBypass(selector: string, target: 'player' | 'projector'): void {
