@@ -482,6 +482,13 @@ export interface MsgSoundboardMuteAll {
   muted: boolean;
 }
 
+/** GM toggled the master mute on the Markers panel — silences positional
+ *  audio sources without affecting soundboard playback. */
+export interface MsgPositionalMuteAll {
+  type:  'positional_mute_all';
+  muted: boolean;
+}
+
 /** GM changed volume on a playing slot — update without interrupting playback */
 export interface MsgSoundboardVolume {
   type: 'soundboard_volume';
@@ -660,6 +667,7 @@ export type GMMessage =
   | MsgPositionalPlay
   | MsgPositionalVolume
   | MsgPositionalStop
+  | MsgPositionalMuteAll
   | MsgTrackerScan
   | MsgTrackerBlob
   | MsgProjectorHello

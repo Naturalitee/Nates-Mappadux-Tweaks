@@ -47,6 +47,14 @@ export class PositionalAudioInteraction implements MarkerInteraction {
     this.engine.tryResume();
   }
 
+  /** Master mute for the local engine — GMApp handles broadcasting to
+   *  players separately so the toggle works even before the first
+   *  marker_update sets up the broadcast callback. */
+  setMuteAll(muted: boolean): void {
+    this.engine.setMuteAll(muted);
+  }
+  isMutedAll(): boolean { return this.engine.isMutedAll(); }
+
   onMarkersChanged(ctx: InteractionContext): void {
     this.broadcast = ctx.broadcast;
     const markers = ctx.markers;

@@ -1973,6 +1973,18 @@ export class GMApp {
     // the GM clicks the toggle.
     const muteToggle = document.querySelector<HTMLInputElement>('#mute-all-toggle');
     if (muteToggle) muteToggle.addEventListener('click', (e) => e.stopPropagation());
+    // Markers-panel master mute: silences every positional-audio source
+    // (local engine + broadcasts a hint to players). Mirrors the
+    // Soundboard bypass switch but only affects marker audio.
+    const markerMuteToggle = document.querySelector<HTMLInputElement>('#marker-mute-all-toggle');
+    if (markerMuteToggle) {
+      markerMuteToggle.addEventListener('click', (e) => e.stopPropagation());
+      markerMuteToggle.addEventListener('change', () => {
+        const muted = !markerMuteToggle.checked;
+        this.audio.setMuteAll(muted);
+        this.host.broadcast({ type: 'positional_mute_all', muted });
+      });
+    }
   }
 
   /** Sample the top-left pixel of a map image blob and return a CSS hex colour. */

@@ -41,6 +41,8 @@ export class PlayerApp {
   private sbMuted = true;
   /** slotIds paused by a mute transition — used to resume them on unmute. */
   private _sbPausedByMute = new Set<string>();
+  /** markerIds paused by a positional mute-all — resumed on unmute. */
+  private _posPausedByMute = new Set<string>();
   private _audioResumeScheduled = false;
   /** markerId → <audio> element for active positional sources */
   private _posAudioEls  = new Map<string, HTMLAudioElement>();
@@ -384,6 +386,28 @@ export class PlayerApp {
         const el = this._posAudioEls.get(msg.markerId);
         if (el) { el.pause(); el.currentTime = 0; }
         this._posAudioEls.delete(msg.markerId);
+        break;
+      }
+
+      case 'positional_mute_all': {
+        // Pause / resume every positional source so loops survive the
+        // round-trip cleanly. Soundboard slots are unaffected — they
+        // ride the separate soundboard_mute_all channel.
+        if (msg.muted) {
+          this._posPausedByMute.clear();
+          for (const [id, el] of this._posAudioEls.entries()) {
+            if (!el.paused) {
+              this._posPausedByMute.add(id);
+              el.pause();
+            }
+          }
+        } else {
+          for (const id of this._posPausedByMute) {
+            const el = this._posAudioEls.get(id);
+            if (el) void el.play().catch(() => { /* autoplay blocked */ });
+          }
+          this._posPausedByMute.clear();
+        }
         break;
       }
 

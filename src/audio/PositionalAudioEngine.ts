@@ -33,6 +33,7 @@ export class PositionalAudioEngine {
   private listenerX   = 0.5;
   private listenerY   = 0.5;
   private hasListener = false;
+  private _muteAll    = false;
 
   /** Fired when a source starts playing (or a random one-shot fires).
    *  GMApp uses this to broadcast positional_play to players. */
@@ -246,7 +247,7 @@ export class PositionalAudioEngine {
     node.loop   = false;
     node.connect(src.gain);
     const gain2 = this._calcGain(src.x, src.y, src.maxDist, src.volume);
-    src.gain.gain.value = gain2;
+    src.gain.gain.value = this._muteAll ? 0 : gain2;
     node.start();
     src.node = node;
     // Notify GMApp so it can broadcast each random fire to players
@@ -257,11 +258,22 @@ export class PositionalAudioEngine {
     };
   }
 
+  /** Master mute for all positional sources — zeros every gain node so
+   *  loops keep their playback position but produce no sound until
+   *  unmuted, mirroring the soundboard's mute-all behaviour. */
+  setMuteAll(muted: boolean): void {
+    this._muteAll = muted;
+    this._refreshGains();
+  }
+  isMutedAll(): boolean { return this._muteAll; }
+
   private _refreshGains(): void {
     if (!this.hasListener) return;
     for (const src of this.sources.values()) {
       if (src.node !== null) {
-        src.gain.gain.value = this._calcGain(src.x, src.y, src.maxDist, src.volume);
+        src.gain.gain.value = this._muteAll
+          ? 0
+          : this._calcGain(src.x, src.y, src.maxDist, src.volume);
       }
     }
   }
