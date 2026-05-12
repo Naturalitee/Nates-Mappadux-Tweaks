@@ -701,7 +701,7 @@ export class ImageAssetModal {
       const addUpload = document.createElement('button');
       addUpload.type = 'button';
       addUpload.className = 'btn btn--primary btn--xs';
-      addUpload.textContent = '+ Upload image';
+      addUpload.textContent = '+ Upload image(s)';
       addUpload.addEventListener('click', () => this._promptUpload());
       host.appendChild(addUpload);
     }
