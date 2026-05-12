@@ -508,6 +508,26 @@ body.player-view #renderer-canvas {
   color: var(--accent, #0a0e1a);
 }
 
+/* Broker-down notice — replaces the QR (which is meaningless when the
+   PeerJS signaling server is offline) with a clear explanation. */
+.broker-error {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border: 1px solid rgba(192, 57, 43, 0.5);
+  border-radius: var(--radius-sm);
+  background: rgba(192, 57, 43, 0.08);
+  color: var(--text-dim);
+  text-align: center;
+  font-size: 0.85em;
+}
+.broker-error[hidden] { display: none; }
+.broker-error svg     { color: rgba(220, 100, 90, 0.95); }
+.broker-error strong  { color: var(--text); }
+.broker-error p       { margin: 0; line-height: 1.4; }
+
 .session-actions {
   display: flex;
   flex-direction: column;

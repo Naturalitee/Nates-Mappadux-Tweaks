@@ -197,9 +197,37 @@ export class GMApp {
       onReady: (code) => this.onHostReady(code),
       onPeerConnected:    (id) => this.onPeerConnected(id),
       onPeerDisconnected: (id) => this.onPeerDisconnected(id),
-      onError: (err) => this.setStatus(`P2P error: ${err.message}`, 'error'),
+      onError: (err) => this.onP2PError(err),
       onPeerMessage: (peerId, msg) => this.onPeerMessage(peerId, msg),
     });
+  }
+
+  /**
+   * Route PeerJS errors. Broker-level failures (socket / network /
+   * server) replace the QR with a clear "broker unreachable" notice
+   * because the QR is meaningless when remote peers can't reach us.
+   * Per-peer errors (peer-unavailable, webrtc) just go to the status
+   * line as before.
+   */
+  private onP2PError(err: Error): void {
+    const type = (err as unknown as { type?: string }).type;
+    const isBrokerLevel =
+      type === 'socket-error'  || type === 'socket-closed' ||
+      type === 'server-error'  || type === 'network'       ||
+      type === 'disconnected'  || type === 'ssl-unavailable';
+    if (isBrokerLevel) {
+      this._setBrokerErrorVisible(true);
+      this.setStatus('Network broker unreachable — remote players can\'t connect', 'error');
+      return;
+    }
+    this.setStatus(`P2P error: ${err.message}`, 'error');
+  }
+
+  private _setBrokerErrorVisible(visible: boolean): void {
+    const errBox = document.getElementById('broker-error');
+    const qr     = document.getElementById('qr-container');
+    if (errBox) errBox.hidden = !visible;
+    if (qr)     qr.hidden     =  visible;
   }
 
   async init(): Promise<void> {
@@ -320,6 +348,9 @@ export class GMApp {
   }
 
   private async onHostReady(roomCode: string): Promise<void> {
+    // Broker just confirmed our peer id — any prior broker-down notice
+    // is stale, restore the QR.
+    this._setBrokerErrorVisible(false);
     this.roomCodeEl.textContent = roomCode;
 
     // On localhost, replace with the real LAN IP so QR/URL works for other devices.
