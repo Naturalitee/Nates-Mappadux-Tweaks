@@ -108,6 +108,12 @@ export class GMApp {
    *  bundles continue to resolve after the icon-store migration. */
   readonly iconCache    = new Map<string, ImageBitmap>();
   readonly iconDataUrls = new Map<string, string>();
+  /** libAsset id → tintable flag. Populated during the picker's onPick
+   *  callback and during _preloadLibIcons / _ensureLibIcons, used by
+   *  updateMarkerPanel to decide synchronously whether to show the
+   *  Colour row. Avoids the hide-then-show flicker that previously
+   *  killed Chrome's native colour-picker dialog mid-interaction. */
+  private _libAssetTintable = new Map<string, boolean>();
   private mapAssetModal!:    MapAssetModal;
   /** Last real (non-sentinel) value selected in #map-select — used to revert
    *  when the user picks the "+ Add" sentinel and we need to keep the dropdown
@@ -493,6 +499,11 @@ export class GMApp {
    */
   private async _preloadLibIcons(): Promise<void> {
     const all = await ImageAssetStore.getAll();
+    // Tintability is cheap to remember for every library asset (regardless
+    // of whether we pre-render the bitmap) — used synchronously by the
+    // marker panel to decide whether to show the Colour row.
+    for (const a of all) this._libAssetTintable.set(a.id, a.tintable);
+
     await Promise.all(all.map(async (asset) => {
       if (asset.tintable) return;
       if (asset.source === 'unicode' || asset.source === 'font') return;
@@ -2292,6 +2303,7 @@ export class GMApp {
             this.updateSelectedMarker({ icon: asset.unicodeChar });
             return;
           }
+          this._libAssetTintable.set(asset.id, asset.tintable);
           const rendered = await renderLibIconFromAsset(asset, currentColor);
           if (rendered) {
             this.iconCache.set(rendered.key, rendered.bitmap);
@@ -3098,22 +3110,38 @@ export class GMApp {
       }
       // Tintability gate for the Colour row. Unicode glyphs are always
       // tintable. Legacy 'asset:' and inline 'data:' icons are not.
-      // libAsset: defers to ImageAssetStore.tintable — we resolve it
-      // async and adjust the row when the answer lands.
+      // libAsset: reads from the _libAssetTintable cache which is
+      // populated at preload + pick time — synchronous so the row's
+      // hidden state never flickers mid-render. Mid-render flicker on
+      // a `<input type="color">` ancestor closes the native picker
+      // dialog in Chrome, which is what we're avoiding here.
       const colorRow = document.getElementById('marker-color-row');
       if (colorRow) {
+        let shouldHide: boolean;
         if (isLib) {
-          // Optimistically hide; flip back if the asset turns out tintable.
-          colorRow.hidden = true;
           const id = sel.icon.slice('libAsset:'.length);
-          void ImageAssetStore.get(id).then((asset) => {
-            if (asset && this.selectedMarkerId === sel.id) {
-              colorRow.hidden = !asset.tintable;
-            }
-          });
+          const known = this._libAssetTintable.get(id);
+          if (known === undefined) {
+            // Unknown so far — leave the row as-is and fetch in the
+            // background so the next render is correct.
+            shouldHide = colorRow.hidden === true;
+            void ImageAssetStore.get(id).then((asset) => {
+              if (!asset) return;
+              this._libAssetTintable.set(id, asset.tintable);
+              if (this.selectedMarkerId === sel.id) {
+                colorRow.hidden = !asset.tintable;
+              }
+            });
+          } else {
+            shouldHide = !known;
+          }
         } else {
-          colorRow.hidden = isAsset; // tintable iff not a legacy raster asset
+          shouldHide = isAsset; // tintable iff not a legacy raster asset
         }
+        // Only touch the DOM when the value actually changes — keeps the
+        // native colour-picker dialog open through stream of 'input'
+        // events fired while the user drags the picker around.
+        if (colorRow.hidden !== shouldHide) colorRow.hidden = shouldHide;
       }
 
       // Audio role buttons — translate legacy data-role values to the current audio role
