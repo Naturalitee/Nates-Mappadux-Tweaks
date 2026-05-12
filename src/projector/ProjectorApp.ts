@@ -314,8 +314,15 @@ export class ProjectorApp {
         if (this.mapBlob) {
           void this.renderer.loadMap(this.mapBlob, this.currentFog);
         }
-        if (msg.iconData?.length) void this._decodeIconData(msg.iconData);
-        this._renderMarkers();
+        // Decode-then-render so the icon bitmaps are in cache by the
+        // time _renderMarkers reads them. Fire-and-forget left markers
+        // showing fallback circles on the projector until something
+        // else nudged the canvas; the player has always awaited the
+        // decode, this matches that pattern.
+        void (async () => {
+          if (msg.iconData?.length) await this._decodeIconData(msg.iconData);
+          this._renderMarkers();
+        })();
         this._applyView();
         this._applyFilter();
         break;
@@ -344,8 +351,10 @@ export class ProjectorApp {
           this.mapBlob = blob;
           void this.renderer.loadMap(blob, this.currentFog);
         }
-        if (msg.iconData?.length) void this._decodeIconData(msg.iconData);
-        this._renderMarkers();
+        void (async () => {
+          if (msg.iconData?.length) await this._decodeIconData(msg.iconData);
+          this._renderMarkers();
+        })();
         this._applyView();
         this._applyFilter();
         break;
@@ -371,7 +380,15 @@ export class ProjectorApp {
       }
       case 'marker_update': {
         this.currentMarkers = msg.payload;
-        this._renderMarkers();
+        // marker_update messages carry iconData for any libAsset bitmaps
+        // the GM just rendered (see _rebroadcastMarkersWithFreshIconData
+        // in GMApp). The projector previously ignored that payload here
+        // so colour changes / freshly picked tintable icons never
+        // reached the projector cache. Mirror the player's path.
+        void (async () => {
+          if (msg.iconData?.length) await this._decodeIconData(msg.iconData);
+          this._renderMarkers();
+        })();
         break;
       }
       case 'projector_viewport_update': {
