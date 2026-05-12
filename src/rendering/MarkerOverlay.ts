@@ -258,7 +258,13 @@ export class MarkerOverlay {
     for (const [kind, btn] of el.badges) {
       if (!wantKinds.has(kind)) { btn.remove(); el.badges.delete(kind); }
     }
-    // Add / update each badge in caller-provided order (DOM order = visual order).
+    // Add / update each badge in caller-provided order (DOM order = visual
+    // order). The update is idempotent — DOM mutations only happen when
+    // something actually changed. Critical during motion-tracker animation:
+    // the marker layer redraws ~60 Hz and unconditionally clobbering
+    // innerHTML on every frame replaced the SVG between pointerdown and
+    // pointerup, killing badge clicks. Now the SVG is only rebuilt when
+    // the on/off state flips.
     for (const badge of wantList) {
       let btn = el.badges.get(badge.kind);
       if (!btn) {
@@ -269,11 +275,16 @@ export class MarkerOverlay {
         this._bindBadge(btn, item.id, badge.kind);
         el.badges.set(badge.kind, btn);
       }
-      // Re-append in order so the row reflects wantList sequence.
-      el.badgesRow.appendChild(btn);
-      btn.innerHTML  = badgeIconSvg(badge.kind, badge.on);
-      btn.style.background = badgeColor(badge.kind, badge.on);
-      btn.title = badge.title;
+      // Re-append only if order shifted (appendChild on a same-parent
+      // existing child is technically a "move to end" — cheap but not free).
+      if (btn.parentElement !== el.badgesRow) el.badgesRow.appendChild(btn);
+      const stateKey = badge.on ? 'on' : 'off';
+      if (btn.dataset['state'] !== stateKey) {
+        btn.innerHTML        = badgeIconSvg(badge.kind, badge.on);
+        btn.style.background = badgeColor(badge.kind, badge.on);
+        btn.dataset['state'] = stateKey;
+      }
+      if (btn.title !== badge.title) btn.title = badge.title;
     }
   }
 

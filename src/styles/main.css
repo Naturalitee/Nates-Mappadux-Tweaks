@@ -229,11 +229,11 @@ body.projector-view .marker-overlay {
 }
 .marker-handle svg { display: block; }
 
-/* Move handle — sits 4 px above the icon's top edge (no overlap onto the
-   token body), centred horizontally. Badges in .marker-badges stack
-   another row above. */
+/* Move handle — centred above the icon, allowed to overlap the icon's
+   top edge slightly so the whole handle/badge stack sits closer to the
+   token rather than floating well above it. */
 .marker-handle--move {
-  top:  calc(-1 * var(--icon-half-h, 0px) - 17px);
+  top:  calc(-1 * var(--icon-half-h, 0px) - 4px);
   left: 0;
   cursor: move;
 }
@@ -243,7 +243,7 @@ body.projector-view .marker-overlay {
    the row regardless of badge count (1–3). */
 .marker-badges {
   position: absolute;
-  top:  calc(-1 * var(--icon-half-h, 0px) - 45px);
+  top:  calc(-1 * var(--icon-half-h, 0px) - 32px);
   left: 0;
   transform: translate(-50%, -50%);
   display: flex;
@@ -279,7 +279,7 @@ body.projector-view .marker-overlay {
    icon body's 0.4 dim from drawMarkerShape so the whole marker reads
    as faded together. */
 .marker-overlay-item--locked .marker-badges {
-  top: calc(-1 * var(--icon-half-h, 0px) - 17px);
+  top: calc(-1 * var(--icon-half-h, 0px) - 4px);
 }
 .marker-overlay-item--locked .marker-badge {
   pointer-events: none;
