@@ -2370,6 +2370,18 @@ export class GMApp {
       },
       // Broadcast play/stop to players
       (msg: SoundboardBroadcast) => {
+        // Mute_all is a safety signal — it always propagates even when
+        // remote audio is disabled, so any audio still playing on a
+        // player (e.g. from before remoteAudio was switched off) gets
+        // silenced. Stop messages always propagate for the same reason.
+        if (msg.type === 'mute_all') {
+          this.host.broadcast({ type: 'soundboard_mute_all', muted: msg.muted });
+          return;
+        }
+        if (msg.type === 'stop') {
+          this.host.broadcast({ type: 'soundboard_stop', slotId: msg.slotId });
+          return;
+        }
         if (!this.remoteAudioEnabled) return;
         if (msg.type === 'play') {
           this.host.broadcast({
@@ -2380,12 +2392,8 @@ export class GMApp {
             volume:  msg.data.volume,
             dataUrl: msg.data.dataUrl,
           });
-        } else if (msg.type === 'stop') {
-          this.host.broadcast({ type: 'soundboard_stop', slotId: msg.slotId });
         } else if (msg.type === 'volume') {
           this.host.broadcast({ type: 'soundboard_volume', slotId: msg.slotId, volume: msg.volume });
-        } else {
-          this.host.broadcast({ type: 'soundboard_mute_all', muted: msg.muted });
         }
       },
     );
