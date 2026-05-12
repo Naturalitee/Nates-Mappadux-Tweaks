@@ -76,10 +76,16 @@ export interface Marker {
   position: { x: number; y: number }; // 0–1 normalised map coords
 
   // Visual
-  label: string;
-  icon:  string;   // emoji or 'asset:<uuid>' / 'data:...' for image icons
-  color: string;   // hex
-  size:  number;   // 1.0 = default
+  label:    string;
+  icon:     string;   // emoji or 'asset:<uuid>' / 'data:...' for image icons
+  color:    string;   // hex
+  size:     number;   // 1.0 = default
+  /** Clockwise rotation in degrees applied to the icon body, around its centre.
+   *  Range [0, 360); 0 = upright as drawn in the source image. Set via the
+   *  overlay rotate handle (v2.11/A3b5); travels through broadcast like any
+   *  other marker field. Selection ring + label + handles stay un-rotated
+   *  (screen-fixed) — only the icon itself spins. */
+  rotation: number;
 
   // Visibility
   hidden:    boolean; // hides from players; GM sees with ghost opacity
@@ -115,6 +121,7 @@ export function defaultMarker(id: string, x = 0.5, y = 0.5): Marker {
     icon:     '◆',
     color:    '#e03e3e',
     size:     1.0,
+    rotation:         0,
     hidden:           false,
     showLabel:        false,
     audioTrackId:     null,

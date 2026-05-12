@@ -2341,6 +2341,11 @@ export class GMApp {
           else if (phase === 'move') this.markerEditor.updateOverlayResize(clientX, clientY);
           else                       this.markerEditor.endOverlayResize();
         },
+        onRotateDrag: (id, clientX, clientY, phase) => {
+          if (phase === 'start')     this.markerEditor.beginOverlayRotate(id, clientX, clientY);
+          else if (phase === 'move') this.markerEditor.updateOverlayRotate(clientX, clientY);
+          else                       this.markerEditor.endOverlayRotate();
+        },
       });
       this.markerEditor.layer.setOverlay(overlay);
     }

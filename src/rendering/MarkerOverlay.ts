@@ -90,6 +90,13 @@ export type ResizeDragHandler = (
   phase:    'start' | 'move' | 'end',
 ) => void;
 
+export type RotateDragHandler = (
+  markerId: string,
+  clientX:  number,
+  clientY:  number,
+  phase:    'start' | 'move' | 'end',
+) => void;
+
 export interface OverlayHandlers {
   /** Move handle drag — fires for the entire pointerdown → pointerup arc. */
   onMoveDrag?: MoveDragHandler;
@@ -97,6 +104,8 @@ export interface OverlayHandlers {
   onBadgeClick?: (markerId: string, kind: BadgeKind) => void;
   /** Resize handle drag — distance-based scaling of the selected marker. */
   onResizeDrag?: ResizeDragHandler;
+  /** Rotate handle drag — angle-based rotation of the selected marker. */
+  onRotateDrag?: RotateDragHandler;
 }
 
 // ── Badge icon SVG fragments (Lucide-inspired strokes) ───────────────────────
@@ -143,6 +152,7 @@ interface MarkerElements {
   badges:        Map<BadgeKind, HTMLButtonElement>;
   selectionRing: HTMLDivElement | null;
   resizeHandle:  HTMLDivElement | null;
+  rotateHandle:  HTMLDivElement | null;
 }
 
 export class MarkerOverlay {
@@ -195,7 +205,7 @@ export class MarkerOverlay {
     this.container.appendChild(root);
     return {
       root, label: null, moveHandle: null, badgesRow: null,
-      badges: new Map(), selectionRing: null, resizeHandle: null,
+      badges: new Map(), selectionRing: null, resizeHandle: null, rotateHandle: null,
     };
   }
 
@@ -251,6 +261,26 @@ export class MarkerOverlay {
       el.resizeHandle.remove();
       el.resizeHandle = null;
     }
+
+    // Rotate handle (v2.11/A3b5) — sits to the right of the resize handle.
+    // Press + drag around the marker centre to rotate the icon body.
+    if (want && !el.rotateHandle) {
+      el.rotateHandle = document.createElement('div');
+      el.rotateHandle.className = 'marker-handle marker-handle--rotate';
+      el.rotateHandle.title = 'Drag in a circle around the marker to rotate';
+      el.rotateHandle.innerHTML = `
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12a9 9 0 1 1-3-6.7"/>
+          <polyline points="21 4 21 9 16 9"/>
+        </svg>
+      `;
+      this._bindRotateHandle(el.rotateHandle, item.id);
+      el.root.appendChild(el.rotateHandle);
+    } else if (!want && el.rotateHandle) {
+      el.rotateHandle.remove();
+      el.rotateHandle = null;
+    }
   }
 
   private _bindResizeHandle(handle: HTMLDivElement, markerId: string): void {
@@ -263,6 +293,26 @@ export class MarkerOverlay {
       const onMove = (ev: PointerEvent) => this.handlers.onResizeDrag?.(markerId, ev.clientX, ev.clientY, 'move');
       const onEnd  = (ev: PointerEvent) => {
         this.handlers.onResizeDrag?.(markerId, ev.clientX, ev.clientY, 'end');
+        handle.removeEventListener('pointermove',   onMove);
+        handle.removeEventListener('pointerup',     onEnd);
+        handle.removeEventListener('pointercancel', onEnd);
+      };
+      handle.addEventListener('pointermove',   onMove);
+      handle.addEventListener('pointerup',     onEnd);
+      handle.addEventListener('pointercancel', onEnd);
+    });
+  }
+
+  private _bindRotateHandle(handle: HTMLDivElement, markerId: string): void {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      e.preventDefault();
+      e.stopPropagation();
+      try { handle.setPointerCapture(e.pointerId); } catch { /* not supported */ }
+      this.handlers.onRotateDrag?.(markerId, e.clientX, e.clientY, 'start');
+      const onMove = (ev: PointerEvent) => this.handlers.onRotateDrag?.(markerId, ev.clientX, ev.clientY, 'move');
+      const onEnd  = (ev: PointerEvent) => {
+        this.handlers.onRotateDrag?.(markerId, ev.clientX, ev.clientY, 'end');
         handle.removeEventListener('pointermove',   onMove);
         handle.removeEventListener('pointerup',     onEnd);
         handle.removeEventListener('pointercancel', onEnd);

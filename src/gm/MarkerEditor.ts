@@ -287,10 +287,9 @@ export class MarkerEditor {
     const centerCssY = rect.top  + center.y * (rect.height / this.layer.canvas.height);
     const dist = Math.hypot(clientX - centerCssX, clientY - centerCssY);
     const ratio = dist / this._overlayResize.initialDist;
-    // Min 0.5 (was 0.2 from the slider era) — visual resize doesn't need
-    // a pixel-vanish floor; users wanting tiny markers can use 0.5 and a
-    // small-aspect icon. Max stays at 8 for huge creatures.
-    const newSize = Math.max(0.5, Math.min(8, this._overlayResize.initialSize * ratio));
+    // Min 0.1 — users want to be able to drop tiny markers (pickups,
+    // ambient details) without a slider. Max stays 8 for huge creatures.
+    const newSize = Math.max(0.1, Math.min(8, this._overlayResize.initialSize * ratio));
     this.markers = this.markers.map((m) =>
       m.id !== this._overlayResize!.id ? m : { ...m, size: newSize },
     );
@@ -300,6 +299,58 @@ export class MarkerEditor {
   endOverlayResize(): void {
     if (!this._overlayResize) return;
     this._overlayResize = null;
+    this._onChange([...this.markers]);
+  }
+
+  // ── Overlay-driven rotate (only available while selected) ─────────────────
+
+  private _overlayRotate: {
+    id:             string;
+    initialAngle:   number; // radians
+    initialRotation: number; // degrees
+  } | null = null;
+
+  /** Angle (radians) from marker centre to a CSS-px cursor point. */
+  private _angleFromMarker(markerId: string, clientX: number, clientY: number): number | null {
+    const marker = this.markers.find((m) => m.id === markerId);
+    if (!marker) return null;
+    const center = this.layer.project(marker.position.x, marker.position.y, null);
+    if (!center) return null;
+    const rect = this.layer.canvas.getBoundingClientRect();
+    const cssCx = rect.left + center.x * (rect.width  / this.layer.canvas.width);
+    const cssCy = rect.top  + center.y * (rect.height / this.layer.canvas.height);
+    return Math.atan2(clientY - cssCy, clientX - cssCx);
+  }
+
+  beginOverlayRotate(markerId: string, clientX: number, clientY: number): void {
+    const marker = this.markers.find((m) => m.id === markerId);
+    if (!marker || marker.locked) return;
+    const angle = this._angleFromMarker(markerId, clientX, clientY);
+    if (angle === null) return;
+    this._overlayRotate = {
+      id:               markerId,
+      initialAngle:     angle,
+      initialRotation:  marker.rotation ?? 0,
+    };
+  }
+
+  updateOverlayRotate(clientX: number, clientY: number): void {
+    if (!this._overlayRotate) return;
+    const angle = this._angleFromMarker(this._overlayRotate.id, clientX, clientY);
+    if (angle === null) return;
+    const deltaRad = angle - this._overlayRotate.initialAngle;
+    const deltaDeg = (deltaRad * 180) / Math.PI;
+    // Normalise to [0, 360).
+    let next = (this._overlayRotate.initialRotation + deltaDeg) % 360;
+    if (next < 0) next += 360;
+    const id = this._overlayRotate.id;
+    this.markers = this.markers.map((m) => (m.id !== id ? m : { ...m, rotation: next }));
+    this._redraw();
+  }
+
+  endOverlayRotate(): void {
+    if (!this._overlayRotate) return;
+    this._overlayRotate = null;
     this._onChange([...this.markers]);
   }
 

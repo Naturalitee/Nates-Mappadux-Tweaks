@@ -305,13 +305,20 @@ body.projector-view .marker-overlay {
   box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
 }
 
-/* Resize handle — appears below the icon when selected. Drag away from /
-   toward the marker centre to scale; A3b5 will add a rotate sibling. */
+/* Resize + rotate handles — pair sits below the icon when selected.
+   Resize on the left, rotate on the right, both 26 px circles with a
+   4 px gap between them. */
 .marker-handle--resize {
   top:  calc(var(--icon-half-h, 0px) + 14px);
-  left: 0;
+  left: -15px;
   cursor: nwse-resize;
 }
+.marker-handle--rotate {
+  top:  calc(var(--icon-half-h, 0px) + 14px);
+  left: 15px;
+  cursor: grab;
+}
+.marker-handle--rotate:active { cursor: grabbing; }
 #projector-viewport-canvas {
   position: absolute;
   inset: 0;

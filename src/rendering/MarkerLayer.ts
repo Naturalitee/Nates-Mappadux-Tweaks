@@ -179,7 +179,18 @@ export function drawMarkerShape(
   //    selection chrome (resize / rotate handles) can sit alongside it.
   void selected;
 
-  // 3. Icon rendering — rect with the icon's natural aspect ratio
+  // 3. Icon rendering — rect with the icon's natural aspect ratio, rotated
+  //    around its centre by m.rotation (v2.11/A3b5). Wrapped in save/restore
+  //    so the rotation doesn't leak into the screen-space overlay positioning
+  //    or any subsequent canvas operations.
+  const rotRad = ((m.rotation ?? 0) * Math.PI) / 180;
+  const rotated = rotRad !== 0;
+  if (rotated) {
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(rotRad);
+    ctx.translate(-cx, -cy);
+  }
   if (isImage) {
     if (bmp) {
       ctx.drawImage(bmp, cx - halfW, cy - halfH, halfW * 2, halfH * 2);
@@ -201,6 +212,7 @@ export function drawMarkerShape(
     ctx.fillStyle = m.color;
     ctx.fillText(m.icon || '?', cx, cy);
   }
+  if (rotated) ctx.restore();
 
   // 4. Label — moved to the HTML screen-space overlay layer in v2.11/A3a
   //    so it stays readable regardless of map zoom. drawMarkerShape no
