@@ -229,10 +229,11 @@ body.projector-view .marker-overlay {
 }
 .marker-handle svg { display: block; }
 
-/* Move handle — sits just outside the icon's top-right corner. */
+/* Move handle — sits just outside the icon's top-left corner. The badge
+   bubbles (A3b2) will stack vertically below it on the same left edge. */
 .marker-handle--move {
   top:  calc(-1 * var(--icon-half-h, 0px) - 4px);
-  left: calc(var(--icon-half-w, 0px) + 4px);
+  left: calc(-1 * var(--icon-half-w, 0px) - 4px);
   cursor: move;
 }
 #projector-viewport-canvas {

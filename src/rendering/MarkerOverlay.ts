@@ -82,7 +82,10 @@ export class MarkerOverlay {
     for (const item of items) {
       seen.add(item.id);
       let el = this.items.get(item.id);
-      if (!el) el = this._create(item.id);
+      if (!el) {
+        el = this._create(item.id);
+        this.items.set(item.id, el);
+      }
       this._applyItem(el, item);
     }
     for (const [id, el] of this.items) {
