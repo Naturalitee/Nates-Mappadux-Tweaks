@@ -11,7 +11,7 @@ import { ProjectorViewportEditor } from './ProjectorViewportEditor.ts';
 import { HamburgerMenu } from './HamburgerMenu.ts';
 import { SELECT_ADD_SENTINEL, appendAddOption } from './selectAdd.ts';
 import { EditableSelect } from './EditableSelect.ts';
-import { getAllSetups, setActiveSetupId } from '../projector/calibrationStorage.ts';
+import { getAllSetups, setActiveSetupId, saveSetup } from '../projector/calibrationStorage.ts';
 import { SoundboardPanel, type SoundboardBroadcast } from './SoundboardPanel.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { Renderer } from '../rendering/Renderer.ts';
@@ -218,7 +218,8 @@ export class GMApp {
   private playerCountEl!:          HTMLElement;
   private statusEl!:               HTMLElement;
   private markerSelect!:           HTMLSelectElement;
-  private markerLabelInput!:       HTMLInputElement;
+  private markerEditableSelect!:   EditableSelect;
+  private projectorEditableSelect: EditableSelect | null = null;
   private markerIconBtn!:          HTMLButtonElement;
   private markerColorInput!:       HTMLInputElement;
   // Marker size slider removed in v2.11/A3b4 — visual resize handle on the
@@ -1780,7 +1781,9 @@ export class GMApp {
     this.playerCountEl         = q('#player-count');
     this.statusEl              = q('#status');
     this.markerSelect          = q<HTMLSelectElement>('#marker-select');
-    this.markerLabelInput      = q<HTMLInputElement>('#marker-label');
+    this.markerEditableSelect  = new EditableSelect(this.markerSelect, {
+      onRename: (id, label) => this._renameMarker(id, label),
+    });
     this.markerIconBtn         = q<HTMLButtonElement>('#marker-icon-btn');
     this.markerColorInput      = q<HTMLInputElement>('#marker-color');
     this.markerHiddenToggle    = q<HTMLInputElement>('#marker-hidden');
@@ -1912,6 +1915,11 @@ export class GMApp {
     // setup / "+ Calibrate New Projector…". GM and projector share
     // localStorage on the same device, so the list is read fresh.
     const projectorSelect = document.getElementById('projection-projector-select') as HTMLSelectElement | null;
+    if (projectorSelect) {
+      this.projectorEditableSelect = new EditableSelect(projectorSelect, {
+        onRename: (id, name) => this._renameProjectorSetup(id, name),
+      });
+    }
     projectorSelect?.addEventListener('change', () => this._onProjectorSelectChange(projectorSelect));
     this.refreshProjectorSetupSelect();
     // Calibration completes in its own window — pick up the new setup the
@@ -1996,7 +2004,11 @@ export class GMApp {
     for (const s of setups) {
       const opt = document.createElement('option');
       opt.value = s.id;
-      opt.textContent = `${s.name} · ${s.pixelsPerSquare.toFixed(1)} px/sq`;
+      // Display the name only — px/sq calibration density lives in the
+      // option tooltip so the EditableSelect's in-place rename can edit
+      // the bare name without mangling the density suffix.
+      opt.textContent = s.name;
+      opt.title       = `${s.pixelsPerSquare.toFixed(1)} px/sq`;
       sel.appendChild(opt);
     }
 
@@ -2006,6 +2018,7 @@ export class GMApp {
     // default to "No Projection" so picking the previously-active setup
     // actually fires a change event and re-launches it.
     sel.value = liveSetupId ?? 'off';
+    this.projectorEditableSelect?.refresh();
   }
 
   /**
@@ -2877,9 +2890,7 @@ export class GMApp {
       this.updateMarkerPanel();
     });
 
-    this.markerLabelInput.addEventListener('input', () => {
-      this.updateSelectedMarker({ label: this.markerLabelInput.value });
-    });
+    // Marker rename — driven by markerEditableSelect.onRename → _renameMarker.
 
     this.markerIconBtn.addEventListener('click', () => {
       const sel = this.state.getState().markers.find((m) => m.id === this.selectedMarkerId);
@@ -3299,6 +3310,28 @@ export class GMApp {
     this.mapEditableSelect.refresh();
   }
 
+  /** Rename the active marker. updateMarkerPanel rebuilds the dropdown
+   *  and calls markerEditableSelect.refresh() so the menu picks up the
+   *  new label. */
+  private _renameMarker(id: string, label: string): void {
+    if (!id) return;
+    if (this.selectedMarkerId !== id) this.markerEditor.selectById(id);
+    this.updateSelectedMarker({ label });
+  }
+
+  /** Rename a projector calibration setup. Updates the option text + the
+   *  saved setup, then refreshes the EditableSelect so the menu picks
+   *  up the new name. Other tabs running the GM pick it up via the
+   *  `storage` event already wired in init(). */
+  private _renameProjectorSetup(id: string, name: string): void {
+    if (!id) return;
+    const setups = getAllSetups();
+    const setup = setups.find((s) => s.id === id);
+    if (!setup) return;
+    saveSetup({ ...setup, name });
+    this.refreshProjectorSetupSelect();
+  }
+
   /** Persist the pack-name input value to session, debounced. Pass
    *  `immediate=true` to bypass the debounce (e.g. on blur). */
   private _schedulePackNameSave(value: string, immediate = false): void {
@@ -3671,8 +3704,9 @@ export class GMApp {
     const controlsEl = document.querySelector<HTMLElement>('#marker-controls');
     if (controlsEl) controlsEl.hidden = !sel;
 
+    this.markerEditableSelect?.refresh();
+
     if (sel) {
-      this.markerLabelInput.value     = sel.label;
       this.markerColorInput.value     = sel.color;
       this.markerHiddenToggle.checked    = sel.hidden;
       this.markerShowLabelToggle.checked = sel.showLabel ?? false;
