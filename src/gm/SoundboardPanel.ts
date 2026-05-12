@@ -123,7 +123,10 @@ export class SoundboardPanel {
     this.addBtn.addEventListener('click',  () => this._addSlot());
 
     this.muteAllToggle.addEventListener('change', () => {
-      const muted = this.muteAllToggle.checked;
+      // Toggle semantics flipped to match the other panel bypass
+      // switches: checked = audio enabled (green); unchecked = muted
+      // (red bypass). Engine + broadcast still use muted=boolean.
+      const muted = !this.muteAllToggle.checked;
       this.engine.setMuteAll(muted);
       this.onBroadcast({ type: 'mute_all', muted });
       if (muted) this._stopRaf();

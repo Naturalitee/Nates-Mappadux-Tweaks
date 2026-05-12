@@ -832,6 +832,39 @@ option.select-option--add {
   background: var(--accent);
 }
 
+/* Panel-header bypass toggle — sits in the panel header just BEFORE
+   the expand chevron (which is a ::after on the title button). Off
+   (unchecked) = section is bypassed entirely (transition=none /
+   filter=none / muted). On (checked) = section behaves normally.
+   Red when off, green when on so the bypass state reads at a
+   glance. */
+.panel-toggle {
+  position: absolute;
+  top: 50%;
+  /* var(--space-md) for the panel-title's right padding + ~10px for
+     the chevron glyph + 8px breathing room before the toggle. */
+  right: calc(var(--space-md) + 18px);
+  transform: translateY(-50%);
+  z-index: 1;
+}
+.toggle-switch--bypass .toggle-slider {
+  background: rgba(192, 57, 43, 0.45); /* red when off */
+  border-color: #c0392b;
+}
+.toggle-switch--bypass .toggle-slider::before {
+  background: #e74c3c;
+}
+.toggle-switch--bypass input:checked + .toggle-slider {
+  background: rgba(39, 174, 96, 0.45); /* green when on */
+  border-color: #27ae60;
+}
+.toggle-switch--bypass input:checked + .toggle-slider::before {
+  background: #2ecc71;
+}
+/* Panel titles need extra right padding so the title text doesn't run
+   under the toggle that sits in front of the chevron. */
+.panel:has(.panel-toggle) .panel-title { padding-right: 72px; }
+
 .toggle-switch--warning input:checked + .toggle-slider {
   background: rgba(249, 115, 22, 0.25);
   border-color: #f97316;

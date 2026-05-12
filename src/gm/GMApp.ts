@@ -48,7 +48,7 @@ import { MotionTrackerInteraction } from './markerInteractions/MotionTrackerInte
 import { TrackerAudioPlayer } from '../audio/TrackerAudioPlayer.ts';
 import { blobToDataUrl } from '../utils/blob.ts';
 import type { MotionOverlay } from '../rendering/MarkerLayer.ts';
-import type { SessionState, StoredMap, TransitionConfig, Marker, MarkerIconData, AudioAsset, AudioRole, MotionRole, ProjectorConnection, ProjectorViewport, GMMessage } from '../types.ts';
+import type { SessionState, StoredMap, TransitionConfig, FilterState, Marker, MarkerIconData, AudioAsset, AudioRole, MotionRole, ProjectorConnection, ProjectorViewport, GMMessage } from '../types.ts';
 import { defaultProjectorViewport } from '../types.ts';
 import QRCode from 'qrcode';
 
@@ -593,7 +593,9 @@ export class GMApp {
     }
 
     if (changed.includes('filter')) {
-      this.renderer.setFilter(state.filter);
+      // Honour the panel-header bypass switch — when off, the renderer
+      // gets 'none' regardless of what's in state.filter.
+      this.renderer.setFilter(this._effectiveFilter());
       const filterId = state.filter.filterId;
       if (filterId !== this.activeFilterId) {
         // Filter switched — rebuild the panel for the new filter
@@ -610,7 +612,7 @@ export class GMApp {
       // so a separate filter_update would arrive before the transition starts and
       // corrupt the snapshot.  Only broadcast standalone filter changes.
       if (!changed.includes('map')) {
-        this.host.broadcast({ type: 'filter_update', payload: state.filter });
+        this.host.broadcast({ type: 'filter_update', payload: this._effectiveFilter() });
       }
     }
 
@@ -1045,7 +1047,7 @@ export class GMApp {
       type: 'map_change',
       payload:    { id: map.id, name: map.name },
       fog,
-      filter:     this.state.getState().filter,
+      filter:     this._effectiveFilter(),
       view:       this.state.getState().view,
       markers:    broadcastMarkers2,
       audio:      this.state.getState().audio,
@@ -1694,16 +1696,46 @@ export class GMApp {
       this._suppressNextMapTransition = false;
       return { transitionId: 'none', params: {} };
     }
+    // Bypass switch on the panel header — when off, every transition
+    // is reported as 'none' (an instant cut). Selected transition
+    // persists in the dropdown for when the GM flips the switch back.
+    if (this._transitionBypassed) return { transitionId: 'none', params: {} };
     return {
       transitionId: this.activeTransitionId,
       params: this.allTransitionParams[this.activeTransitionId] ?? transitionRegistry.defaultParams(this.activeTransitionId),
     };
+  }
+
+  /** Effective filter for broadcast + renderer — returns 'none' when
+   *  the Visual Filter bypass switch is off, otherwise the live
+   *  state.filter. Keeps the dropdown selection alive in the UI
+   *  while suppressing the actual effect. */
+  private _effectiveFilter(): FilterState {
+    if (this._filterBypassed) return { filterId: 'none', params: {} };
+    return this.state.getState().filter;
+  }
+
+  /** Apply current bypass state to the renderer + broadcast a fresh
+   *  filter_update so player + projector match. Called whenever the
+   *  filter bypass toggle flips. */
+  private _reapplyFilterBypass(): void {
+    const eff = this._effectiveFilter();
+    this.renderer.setFilter(eff);
+    this.host.broadcast({ type: 'filter_update', payload: eff });
   }
   /** One-shot flag — set true before a loadMap() that should NOT play
    *  the entry transition (same-map reload after an edit, fix-missing,
    *  re-target). Consumed and cleared by the next buildTransitionConfig
    *  call. */
   private _suppressNextMapTransition = false;
+  /** Panel-header bypass switch: when true, every buildTransitionConfig
+   *  call returns 'none' regardless of the selected transition. State
+   *  is UI-only; the selected transition persists in the dropdown. */
+  private _transitionBypassed = false;
+  /** Panel-header bypass switch: when true, the broadcast filter
+   *  payload + the local renderer's filter are forced to 'none'
+   *  regardless of what's selected in the dropdown. */
+  private _filterBypassed = false;
 
   /** Read the duration param of the currently-active map→map entry
    *  transition. Used by the auto-reveal scheduler to wait the right
@@ -1904,15 +1936,43 @@ export class GMApp {
       }
     });
 
-    // Collapsible panel sections
+    // Collapsible panel sections. Use the parent panel's .panel-body
+    // child rather than nextElementSibling so panels with a header
+    // bypass toggle (which sits between the title button and the body
+    // in DOM order) still expand/collapse correctly.
     document.querySelectorAll<HTMLElement>('.panel-title[aria-expanded]').forEach((btn) => {
       btn.addEventListener('click', () => {
         const expanded = btn.getAttribute('aria-expanded') === 'true';
         btn.setAttribute('aria-expanded', String(!expanded));
-        const body = btn.nextElementSibling as HTMLElement | null;
+        const body = btn.parentElement?.querySelector<HTMLElement>('.panel-body') ?? null;
         if (body) body.hidden = expanded;
       });
     });
+
+    // Panel-header bypass toggles. Each toggle stops propagation so a
+    // click doesn't bubble to anything else; flipping the toggle
+    // applies the bypass immediately on the local renderer + broadcasts
+    // a fresh state to player + projector.
+    const transToggle = document.querySelector<HTMLInputElement>('#transition-bypass-toggle');
+    if (transToggle) {
+      transToggle.addEventListener('click', (e) => e.stopPropagation());
+      transToggle.addEventListener('change', () => {
+        this._transitionBypassed = !transToggle.checked;
+      });
+    }
+    const filterToggle = document.querySelector<HTMLInputElement>('#filter-bypass-toggle');
+    if (filterToggle) {
+      filterToggle.addEventListener('click', (e) => e.stopPropagation());
+      filterToggle.addEventListener('change', () => {
+        this._filterBypassed = !filterToggle.checked;
+        this._reapplyFilterBypass();
+      });
+    }
+    // mute-all-toggle is wired by SoundboardPanel — just stop click
+    // propagation here so the panel-title doesn't expand/collapse when
+    // the GM clicks the toggle.
+    const muteToggle = document.querySelector<HTMLInputElement>('#mute-all-toggle');
+    if (muteToggle) muteToggle.addEventListener('click', (e) => e.stopPropagation());
   }
 
   /** Sample the top-left pixel of a map image blob and return a CSS hex colour. */
