@@ -1785,6 +1785,33 @@ option.select-option--add {
   align-items: center;
   justify-content: center;
 }
+/* Vertical divider between per-type element controls and the shared
+   ones (To Back / To Front / Don't animate). Matches the divider style
+   used between the name section and the clipboard cluster. */
+.txt-map-toolbar-sep {
+  width: 1px;
+  height: 22px;
+  background: var(--border);
+  margin: 0 var(--space-sm);
+  display: inline-block;
+}
+.txt-map-toolbar-checkbox {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  user-select: none;
+  cursor: pointer;
+}
+.txt-map-toolbar-checkbox input { margin: 0; }
+/* Vertical divider in front of the Layout group so the Element
+   Properties (centre) and Layout (right) sections are visually
+   separated — matches the divider style between Name and clipboard. */
+.txt-map-toolbar-right {
+  padding-left: var(--space-md);
+  border-left: 1px solid var(--border);
+}
 .txt-map-canvas-wrap {
   flex: 1;
   display: grid;

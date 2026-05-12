@@ -783,6 +783,12 @@ interface TextMapElementBase {
   y:     number;
   w:     number;
   h:     number;
+  /** When true, this element is part of the handout's STARTING frame —
+   *  it shows immediately when the map appears and is not transitioned
+   *  in. The reveal animation runs from "background + noAnimate
+   *  elements" to "background + all elements". Defaults to false
+   *  (everything animates in). */
+  noAnimate?: boolean;
 }
 
 export interface TextMapTextElement extends TextMapElementBase {

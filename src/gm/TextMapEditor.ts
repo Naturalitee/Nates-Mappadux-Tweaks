@@ -431,9 +431,39 @@ export class TextMapEditor {
       if (this.pageEl) this.pageEl.style.backgroundColor = v;
     }));
 
+    // Animation — opens a popover for picking a handout-reveal
+    // transition + duration. The reveal runs at map-load time from
+    // "background + noAnimate elements" to "background + all elements"
+    // using the existing transition catalogue (the same one map → map
+    // changes use), filtered to transitions tagged as handout-suitable.
+    // Wiring to the actual transition engine lands next commit; this
+    // button stub gets the UI in place so the rest of the design can
+    // come together around it.
+    const animBtn = document.createElement('button');
+    animBtn.type = 'button';
+    animBtn.className = 'btn btn--ghost btn--sm';
+    animBtn.textContent = 'Animation…';
+    animBtn.title = 'Configure the handout reveal animation';
+    animBtn.addEventListener('click', () => this._openAnimationPicker());
+    right.appendChild(animBtn);
+
     tb.appendChild(right);
 
     return tb;
+  }
+
+  /** Placeholder popover for animation settings — list of
+   *  handout-suitable transitions + a duration slider. Wired to the
+   *  actual transition engine in the follow-up commit; for now it
+   *  surfaces the design + lets the UI shape settle. */
+  private _openAnimationPicker(): void {
+    alert(
+      'Handout reveal animation — design landing in the next commit.\n\n'
+      + 'Approach: run a transition from "background + Don\'t-animate elements" '
+      + 'to "background + all elements". Reuses the same transition system '
+      + 'as map→map changes; transition picker shows only the ones tagged '
+      + 'as handout-suitable (fades, wipes, dissolves).'
+    );
   }
 
   /** Save a user-picked image file to the Image Library (Textmap
@@ -638,8 +668,85 @@ export class TextMapEditor {
     if (!el) { tb.hidden = true; return; }
     tb.hidden = false;
 
+    // Leading group label — "Element Properties:" sits at the head of
+    // the centre section so it's clear what the controls apply to.
+    const groupLabel = document.createElement('span');
+    groupLabel.className = 'txt-map-toolbar-group-label';
+    groupLabel.textContent = 'Element Properties:';
+    tb.appendChild(groupLabel);
+
     if (el.type === 'text')  this._buildTextElementToolbar(tb, el);
     if (el.type === 'image') this._buildImageElementToolbar(tb, el);
+
+    // Trailing controls — shared between text + image elements.
+    this._buildElementCommonControls(tb, el);
+  }
+
+  /** Layering + animation-flag controls common to every element type.
+   *  Appended after the per-type controls so the bar reads:
+   *    Element Properties: [type-specific] | To Back | To Front | [✓] Don't animate */
+  private _buildElementCommonControls(tb: HTMLElement, el: TextMapElement): void {
+    // Subtle divider before the shared controls so the per-type group
+    // visually separates from the universal ones.
+    const sep = document.createElement('span');
+    sep.className = 'txt-map-toolbar-sep';
+    tb.appendChild(sep);
+
+    const backBtn = document.createElement('button');
+    backBtn.type = 'button';
+    backBtn.className = 'btn btn--ghost btn--sm';
+    backBtn.textContent = 'To Back';
+    backBtn.title = 'Send element behind everything else';
+    backBtn.addEventListener('click', () => this._moveToBack(el.id));
+    tb.appendChild(backBtn);
+
+    const frontBtn = document.createElement('button');
+    frontBtn.type = 'button';
+    frontBtn.className = 'btn btn--ghost btn--sm';
+    frontBtn.textContent = 'To Front';
+    frontBtn.title = 'Bring element in front of everything else';
+    frontBtn.addEventListener('click', () => this._moveToFront(el.id));
+    tb.appendChild(frontBtn);
+
+    // Don't animate — flag this element as part of the starting frame
+    // of the reveal animation (it appears immediately, no transition).
+    // Used by the rasteriser to split the handout into "before" and
+    // "after" frames for the transition system.
+    const animLabel = document.createElement('label');
+    animLabel.className = 'txt-map-toolbar-checkbox';
+    animLabel.title = 'When the handout reveal animation runs, this element shows immediately as part of the starting frame';
+    const animCheck = document.createElement('input');
+    animCheck.type = 'checkbox';
+    animCheck.checked = el.noAnimate === true;
+    animCheck.addEventListener('change', () => {
+      el.noAnimate = animCheck.checked;
+    });
+    animLabel.append(animCheck, document.createTextNode(' Don\'t animate'));
+    tb.appendChild(animLabel);
+  }
+
+  /** Move an element to the END of the elements array (paints on top).
+   *  DOM follows the array via insertBefore / appendChild. */
+  private _moveToFront(id: string): void {
+    const idx = this.elements.findIndex((e) => e.id === id);
+    if (idx < 0 || idx === this.elements.length - 1) return;
+    const removed = this.elements.splice(idx, 1)[0];
+    if (!removed) return;
+    this.elements.push(removed);
+    const node = this.elementNodes.get(id);
+    if (node && this.pageEl) this.pageEl.appendChild(node);
+  }
+
+  /** Move an element to the START of the elements array (paints behind
+   *  everything else). */
+  private _moveToBack(id: string): void {
+    const idx = this.elements.findIndex((e) => e.id === id);
+    if (idx <= 0) return;
+    const removed = this.elements.splice(idx, 1)[0];
+    if (!removed) return;
+    this.elements.unshift(removed);
+    const node = this.elementNodes.get(id);
+    if (node && this.pageEl) this.pageEl.insertBefore(node, this.pageEl.firstChild);
   }
 
   private _buildTextElementToolbar(tb: HTMLElement, el: TextMapTextElement): void {
