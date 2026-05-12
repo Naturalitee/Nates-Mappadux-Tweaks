@@ -869,6 +869,23 @@ option.select-option--add {
   transform: translateY(-50%);
   z-index: 1;
 }
+
+/* Inline icon hint sitting just LEFT of a panel-toggle — communicates
+   whether the bypass affects visuals (eye) or audio (ear). The icon is
+   purely informational; it doesn't react to the toggle state. */
+.panel-toggle-icon {
+  position: absolute;
+  top: 50%;
+  /* Toggle width 36px + ~6px gap, anchored at calc(--space-md + 22px) */
+  right: calc(var(--space-md) + 22px + 36px + 6px);
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  display: inline-flex;
+  pointer-events: none;
+  z-index: 1;
+}
+.panel-toggle-icon[title] { pointer-events: auto; }
+.panel-toggle-icon svg { display: block; }
 .toggle-switch--bypass .toggle-slider {
   background: rgba(192, 57, 43, 0.45); /* red when off */
   border-color: #c0392b;
@@ -887,7 +904,7 @@ option.select-option--add {
    under the toggle that sits in front of the chevron. Chevron itself
    is absolutely positioned by .panel-title::after — it stays at
    right: var(--space-md) regardless of this padding. */
-.panel-header:has(.panel-toggle) .panel-title { padding-right: 80px; }
+.panel-header:has(.panel-toggle) .panel-title { padding-right: 100px; }
 
 .toggle-switch--warning input:checked + .toggle-slider {
   background: rgba(249, 115, 22, 0.25);
