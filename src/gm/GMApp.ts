@@ -53,6 +53,7 @@ import { blobToDataUrl } from '../utils/blob.ts';
 import type { MotionOverlay } from '../rendering/MarkerLayer.ts';
 import { MarkerOverlay } from '../rendering/MarkerOverlay.ts';
 import { CanvasTransform } from '../utils/CanvasTransform.ts';
+import { attachGestures } from '../utils/Gestures.ts';
 import type { SessionState, StoredMap, TransitionConfig, FilterState, Marker, MarkerIconData, AudioAsset, AudioRole, MotionRole, ProjectorConnection, ProjectorViewport, GMMessage } from '../types.ts';
 import { defaultProjectorViewport } from '../types.ts';
 import QRCode from 'qrcode';
@@ -234,30 +235,72 @@ export class GMApp {
   }
 
   /**
-   * Bind wheel + keyboard handlers that drive the workspace pan/zoom
-   * transform. Wheel zooms around the cursor; arrow keys pan in world
-   * units (smaller deltas when zoomed in so each keystroke feels
-   * similar regardless of zoom); R resets to identity. Inputs / textareas
-   * are ignored so typing doesn't pan the map mid-word.
+   * Bind wheel + keyboard + touch handlers that drive the workspace
+   * pan/zoom transform. Wheel zooms around the cursor; arrow keys pan in
+   * world units (smaller deltas when zoomed in so each keystroke feels
+   * similar regardless of zoom); R resets to identity. Two-finger
+   * pinch + pan does the same on touchscreens via the shared Gestures
+   * helper (which also takes care of touch-action:none on the wrapper
+   * so the browser doesn't fight the pinch). Inputs / textareas are
+   * ignored so typing doesn't pan the map mid-word.
+   *
+   * Single-touch / single-finger taps are NOT consumed here — they
+   * fall through to the existing canvas editors (marker overlay
+   * handles, fog drawing, viewport editing). Only multi-touch and
+   * wheel events drive the workspace.
    */
   private _bindWorkspacePanZoom(): void {
     const wrapper = document.getElementById('canvas-wrapper');
     if (!wrapper) return;
 
-    wrapper.addEventListener('wheel', (e) => {
-      // Only consume wheel when it lands on the canvas stack (avoids
-      // hijacking page scroll if the wrapper ever becomes scrollable).
-      e.preventDefault();
-      const factor = (e as WheelEvent).deltaY > 0 ? 1 / 1.25 : 1.25;
-      const rect = wrapper.getBoundingClientRect();
-      const cssX = (e as WheelEvent).clientX - rect.left;
-      const cssY = (e as WheelEvent).clientY - rect.top;
-      const world = this.renderer.screenToWorld(cssX, cssY);
-      if (world) {
-        this.gmTransform.zoomAround(factor, world.x, world.y);
+    // Track in-flight two-finger gesture state so we can apply per-frame
+    // incremental zoom + pan from cumulative scale + midpoint deltas.
+    let twoLast = { midX: 0, midY: 0, scale: 1 };
+
+    attachGestures(wrapper, {
+      // Single-touch / mouse drag is reserved for the editors — don't
+      // accept it here. shouldStart can't gate per-pointer count, so
+      // we just leave onDrag undefined and rely on Gestures' internal
+      // "no handler = no-op" behaviour.
+      onWheel: ({ clientX, clientY, factor }) => {
+        const rect = wrapper.getBoundingClientRect();
+        const world = this.renderer.screenToWorld(clientX - rect.left, clientY - rect.top);
+        if (!world) return;
+        // Gestures emits factor < 1 for zoom-in (scroll up); flip so
+        // CanvasTransform's "factor > 1 zooms in" reads naturally here.
+        this.gmTransform.zoomAround(1 / factor, world.x, world.y);
         this._applyWorkspaceTransform();
-      }
-    }, { passive: false });
+      },
+
+      onTwoFinger: (e) => {
+        if (e.phase === 'start') {
+          twoLast = { midX: e.midX, midY: e.midY, scale: 1 };
+          return;
+        }
+        if (e.phase !== 'move') return;
+        // Incremental: per-frame zoom around current midpoint, then
+        // pan by the per-frame midpoint delta. Mirrors the calibration
+        // board's pinch math from v2.11/A1.
+        const stepScale = e.scale / twoLast.scale;
+        const dxClient  = e.midX  - twoLast.midX;
+        const dyClient  = e.midY  - twoLast.midY;
+        twoLast = { midX: e.midX, midY: e.midY, scale: e.scale };
+
+        const rect = wrapper.getBoundingClientRect();
+        const world = this.renderer.screenToWorld(e.midX - rect.left, e.midY - rect.top);
+        if (world) this.gmTransform.zoomAround(stepScale, world.x, world.y);
+        // Pan-by-output-px after zoom so the midpoint stays glued under
+        // the fingers as they slide.
+        const sScale = this.renderer.worldToScreenScale();
+        if (sScale.pxPerWorldX > 0 && sScale.pxPerWorldY > 0) {
+          this.gmTransform.panByWorld(
+            -dxClient / sScale.pxPerWorldX,
+             dyClient / sScale.pxPerWorldY,  // screen-Y down = world-Y up
+          );
+        }
+        this._applyWorkspaceTransform();
+      },
+    });
 
     window.addEventListener('keydown', (e) => {
       // Skip when typing into form fields.
