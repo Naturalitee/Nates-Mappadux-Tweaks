@@ -2337,6 +2337,7 @@ export class GMApp {
           else if (phase === 'move')  this.markerEditor.updateOverlayDrag(clientX, clientY);
           else                        this.markerEditor.endOverlayDrag();
         },
+        onBadgeClick: (id, kind) => this.markerEditor.toggleOverlayBadge(id, kind),
       });
       this.markerEditor.layer.setOverlay(overlay);
     }

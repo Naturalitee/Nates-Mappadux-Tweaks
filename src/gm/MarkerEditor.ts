@@ -24,7 +24,6 @@ export class MarkerEditor {
   private dragging    = false;
 
   private ctxMenuEl:  HTMLElement;
-  private _tooltip:   HTMLDivElement;
   private _ctxPos = { x: 0.5, y: 0.5 }; // normalised map position of last right-click
 
   private readonly _onChange:     (markers: Marker[]) => void;
@@ -44,11 +43,6 @@ export class MarkerEditor {
     this._onChange      = onChange;
     this._onSelect      = onSelect;
     this._getIconCache  = getIconCache;
-
-    this._tooltip = document.createElement('div');
-    this._tooltip.className = 'marker-badge-tooltip';
-    this._tooltip.hidden = true;
-    document.body.appendChild(this._tooltip);
 
     this._bindEvents(canvas);
   }
@@ -108,7 +102,8 @@ export class MarkerEditor {
     canvas.addEventListener('pointerdown',  (e) => this._onDown(e));
     canvas.addEventListener('pointermove',  (e) => this._onMove(e));
     canvas.addEventListener('pointerup',    (e) => this._onUp(e));
-    canvas.addEventListener('pointerleave', ()  => { this._tooltip.hidden = true; });
+    // (Hover tooltip removed in v2.11/A3b2 — badge titles are now native
+    // `title` attributes on the HTML buttons in MarkerOverlay.)
     canvas.addEventListener('contextmenu',  (e) => this._onCtxMenu(e));
 
     // Dismiss context menu when clicking anywhere else
@@ -126,14 +121,8 @@ export class MarkerEditor {
 
     const { x, y } = this._toCanvas(e);
 
-    // Badge-click on the currently selected marker takes priority
-    if (this.selectedId) {
-      const sel = this.markers.find((m) => m.id === this.selectedId);
-      if (sel && !sel.locked) {
-        const badge = this.layer.hitTestBadge(x, y, sel, null);
-        if (badge) { this._handleBadge(sel, badge); return; }
-      }
-    }
+    // Badges no longer live on the canvas (v2.11/A3b2) — those clicks now
+    // come through MarkerOverlay's onBadgeClick → toggleOverlayBadge path.
 
     const hit = this.layer.hitTestMarker(x, y, this.markers.filter(m => !m.locked), null);
 
@@ -153,50 +142,19 @@ export class MarkerEditor {
   }
 
   private _onMove(e: PointerEvent): void {
+    if (!this.dragging || !this.selectedId) return;
     const { x, y } = this._toCanvas(e);
-
-    if (this.dragging && this.selectedId) {
-      const norm = this.layer.unproject(x, y, null);
-      this.markers = this.markers.map((m) =>
-        m.id !== this.selectedId ? m : {
-          ...m,
-          position: {
-            x: Math.max(0, Math.min(1, norm.x)),
-            y: Math.max(0, Math.min(1, norm.y)),
-          },
-        }
-      );
-      this._redraw();
-      this._tooltip.hidden = true;
-      return;
-    }
-
-    // Badge tooltip hover
-    const hit = this.layer.hitTestBadgeAny(x, y, this.markers, null);
-    if (hit) {
-      this._tooltip.textContent = this._badgeLabel(hit.marker, hit.badge);
-      this._tooltip.hidden = false;
-      const TW = this._tooltip.offsetWidth;
-      const TH = this._tooltip.offsetHeight;
-      const left = Math.min(e.clientX + 12, window.innerWidth  - TW - 6);
-      const top  = Math.max(e.clientY - TH - 8, 6);
-      this._tooltip.style.left = `${left}px`;
-      this._tooltip.style.top  = `${top}px`;
-    } else {
-      this._tooltip.hidden = true;
-    }
-  }
-
-  private _badgeLabel(m: Marker, badge: 'hidden' | 'audio' | 'motion'): string {
-    if (badge === 'hidden') return m.hidden ? 'Hidden' : 'Visible';
-    if (badge === 'audio') {
-      if (m.roles.audio === 'source')   return m.audioMuted ? 'Muted Sound Source' : 'Sound Source';
-      if (m.roles.audio === 'listener') return m.audioMuted ? 'Deaf Listener'      : 'Listener';
-      return '';
-    }
-    if (m.roles.motion === 'source')  return m.motionMuted ? 'Muted Motion Source' : 'Motion Source';
-    if (m.roles.motion === 'tracker') return m.motionMuted ? 'Motion Tracker Off' : 'Motion Tracker';
-    return '';
+    const norm = this.layer.unproject(x, y, null);
+    this.markers = this.markers.map((m) =>
+      m.id !== this.selectedId ? m : {
+        ...m,
+        position: {
+          x: Math.max(0, Math.min(1, norm.x)),
+          y: Math.max(0, Math.min(1, norm.y)),
+        },
+      },
+    );
+    this._redraw();
   }
 
   private _onUp(_e: PointerEvent): void {
@@ -312,5 +270,25 @@ export class MarkerEditor {
     if (!this._overlayDrag) return;
     this._overlayDrag = null;
     this._onChange([...this.markers]);
+  }
+
+  /**
+   * Tap an overlay action badge — toggles its state AND selects the marker
+   * (matches the v2.11/A3b spec: every badge tap is both an action and a
+   * selection so the side panel surfaces relevant settings without an
+   * extra step). Maps the badge kind to the legacy _handleBadge target.
+   */
+  toggleOverlayBadge(markerId: string, kind: import('../rendering/MarkerOverlay.ts').BadgeKind): void {
+    const marker = this.markers.find((m) => m.id === markerId);
+    if (!marker || marker.locked) return;
+    if (this.selectedId !== markerId) {
+      this.selectedId = markerId;
+      this._onSelect(marker);
+    }
+    const target: 'hidden' | 'audio' | 'motion' =
+      kind === 'visibility' ? 'hidden' :
+      (kind === 'audio-source' || kind === 'audio-listener') ? 'audio' :
+      'motion';
+    this._handleBadge(marker, target);
   }
 }

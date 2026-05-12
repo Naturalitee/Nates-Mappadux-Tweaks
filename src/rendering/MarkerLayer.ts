@@ -1,8 +1,5 @@
 import type { Marker, ViewState } from '../types.ts';
-import type { MarkerOverlay, OverlayItem } from './MarkerOverlay.ts';
-
-const BADGE_R   = 9;   // badge circle radius in canvas px
-const BADGE_HIT = 15;  // hit-test radius for badge clicks
+import type { MarkerOverlay, OverlayItem, OverlayBadge } from './MarkerOverlay.ts';
 
 interface Frustum { left: number; right: number; top: number; bottom: number; }
 
@@ -69,219 +66,51 @@ function _hexWithAlpha(hex: string, alpha: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-// ── Badge background circle ───────────────────────────────────────────────────
+// Canvas badge drawing functions removed in v2.11/A3b2 — badges now live
+// in the HTML screen-space overlay (MarkerOverlay). Click handling +
+// visual state are managed there; what's left on the canvas is the icon
+// body plus motion-overlay scan rings.
 
-function _badge(ctx: Ctx2D, bx: number, by: number, bg: string, drawIcon: (ctx: Ctx2D, cx: number, cy: number, r: number) => void): void {
-  ctx.save();
-  ctx.beginPath();
-  ctx.arc(bx, by, BADGE_R, 0, Math.PI * 2);
-  ctx.fillStyle = bg;
-  ctx.fill();
-  ctx.strokeStyle = 'rgba(0,0,0,0.45)';
-  ctx.lineWidth   = 1;
-  ctx.stroke();
-  drawIcon(ctx, bx, by, BADGE_R);
-  ctx.restore();
-}
-
-// ── Icon drawing functions (white paths on coloured badge circle) ─────────────
-
-function _iconEye(ctx: Ctx2D, cx: number, cy: number, r: number): void {
-  ctx.strokeStyle = 'white';
-  ctx.fillStyle   = 'white';
-  ctx.lineWidth   = r * 0.19;
-  ctx.lineCap     = 'round';
-  ctx.beginPath();
-  ctx.moveTo(cx - r * 0.7, cy);
-  ctx.quadraticCurveTo(cx, cy - r * 0.55, cx + r * 0.7, cy);
-  ctx.quadraticCurveTo(cx, cy + r * 0.55, cx - r * 0.7, cy);
-  ctx.closePath();
-  ctx.stroke();
-  ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.25, 0, Math.PI * 2);
-  ctx.fill();
-}
-
-function _iconEyeCrossed(ctx: Ctx2D, cx: number, cy: number, r: number): void {
-  ctx.save();
-  ctx.globalAlpha *= 0.5;
-  _iconEye(ctx, cx, cy, r);
-  ctx.restore();
-  ctx.strokeStyle = 'white';
-  ctx.lineWidth   = r * 0.26;
-  ctx.lineCap     = 'round';
-  ctx.beginPath();
-  ctx.moveTo(cx - r * 0.62, cy - r * 0.62);
-  ctx.lineTo(cx + r * 0.62, cy + r * 0.62);
-  ctx.stroke();
-}
-
-function _iconSpeaker(ctx: Ctx2D, cx: number, cy: number, r: number): void {
-  ctx.fillStyle   = 'white';
-  ctx.strokeStyle = 'white';
-  ctx.lineWidth   = r * 0.18;
-  ctx.lineCap     = 'round';
-  ctx.beginPath();
-  ctx.moveTo(cx - r * 0.58, cy - r * 0.3);
-  ctx.lineTo(cx - r * 0.18, cy - r * 0.3);
-  ctx.lineTo(cx + r * 0.42, cy - r * 0.62);
-  ctx.lineTo(cx + r * 0.42, cy + r * 0.62);
-  ctx.lineTo(cx - r * 0.18, cy + r * 0.3);
-  ctx.lineTo(cx - r * 0.58, cy + r * 0.3);
-  ctx.closePath();
-  ctx.fill();
-  ctx.beginPath();
-  ctx.arc(cx + r * 0.25, cy, r * 0.42, -Math.PI * 0.42, Math.PI * 0.42);
-  ctx.stroke();
-}
-
-function _iconSpeakerMuted(ctx: Ctx2D, cx: number, cy: number, r: number): void {
-  ctx.save();
-  ctx.globalAlpha *= 0.5;
-  ctx.fillStyle = 'white';
-  ctx.beginPath();
-  ctx.moveTo(cx - r * 0.58, cy - r * 0.3);
-  ctx.lineTo(cx - r * 0.18, cy - r * 0.3);
-  ctx.lineTo(cx + r * 0.42, cy - r * 0.62);
-  ctx.lineTo(cx + r * 0.42, cy + r * 0.62);
-  ctx.lineTo(cx - r * 0.18, cy + r * 0.3);
-  ctx.lineTo(cx - r * 0.58, cy + r * 0.3);
-  ctx.closePath();
-  ctx.fill();
-  ctx.restore();
-  ctx.strokeStyle = 'white';
-  ctx.lineWidth   = r * 0.24;
-  ctx.lineCap     = 'round';
-  ctx.beginPath();
-  ctx.moveTo(cx + r * 0.1,  cy - r * 0.5);
-  ctx.lineTo(cx + r * 0.65, cy + r * 0.5);
-  ctx.moveTo(cx + r * 0.65, cy - r * 0.5);
-  ctx.lineTo(cx + r * 0.1,  cy + r * 0.5);
-  ctx.stroke();
-}
-
-function _iconEar(ctx: Ctx2D, cx: number, cy: number, r: number): void {
-  ctx.strokeStyle = 'white';
-  ctx.lineWidth   = r * 0.22;
-  ctx.lineCap     = 'round';
-  // Outer C arc — draws the left half of a circle (bottom → left → top), opening right
-  ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.68, Math.PI * 0.55, Math.PI * 1.45);
-  ctx.stroke();
-  // Inner canal
-  ctx.beginPath();
-  ctx.arc(cx + r * 0.05, cy + r * 0.1, r * 0.3, Math.PI * 0.4, Math.PI * 1.3);
-  ctx.stroke();
-}
-
-function _iconEarMuted(ctx: Ctx2D, cx: number, cy: number, r: number): void {
-  ctx.save();
-  ctx.globalAlpha *= 0.5;
-  _iconEar(ctx, cx, cy, r);
-  ctx.restore();
-  ctx.strokeStyle = 'white';
-  ctx.lineWidth   = r * 0.26;
-  ctx.lineCap     = 'round';
-  ctx.beginPath();
-  ctx.moveTo(cx - r * 0.62, cy - r * 0.62);
-  ctx.lineTo(cx + r * 0.62, cy + r * 0.62);
-  ctx.stroke();
-}
-
-function _iconMotion(ctx: Ctx2D, cx: number, cy: number, r: number): void {
-  ctx.fillStyle   = 'white';
-  ctx.strokeStyle = 'white';
-  ctx.lineWidth   = r * 0.2;
-  ctx.lineCap     = 'round';
-  ctx.lineJoin    = 'round';
-  // Shaft
-  ctx.beginPath();
-  ctx.moveTo(cx - r * 0.6, cy);
-  ctx.lineTo(cx + r * 0.1, cy);
-  ctx.stroke();
-  // Arrowhead
-  ctx.beginPath();
-  ctx.moveTo(cx + r * 0.62, cy);
-  ctx.lineTo(cx + r * 0.08, cy - r * 0.44);
-  ctx.lineTo(cx + r * 0.08, cy + r * 0.44);
-  ctx.closePath();
-  ctx.fill();
-}
-
-/** Radar-screen style: concentric arcs in the upper-right quadrant + centre dot. */
-function _iconRadar(ctx: Ctx2D, cx: number, cy: number, r: number): void {
-  ctx.strokeStyle = 'white';
-  ctx.fillStyle   = 'white';
-  ctx.lineWidth   = r * 0.18;
-  ctx.lineCap     = 'round';
-  // Centre dot
-  ctx.beginPath();
-  ctx.arc(cx, cy, r * 0.18, 0, Math.PI * 2);
-  ctx.fill();
-  // Two outward arcs (upper-right quadrant ≈ 45°-arc swept from -PI/4 to 0)
-  for (const radius of [r * 0.45, r * 0.7]) {
-    ctx.beginPath();
-    ctx.arc(cx, cy, radius, -Math.PI * 0.4, -Math.PI * 0.05);
-    ctx.stroke();
-  }
-}
-
-/** Diagonal slash overlay used to mark a muted icon. */
-function _slash(ctx: Ctx2D, cx: number, cy: number, r: number): void {
-  ctx.strokeStyle = 'white';
-  ctx.lineWidth   = r * 0.22;
-  ctx.lineCap     = 'round';
-  ctx.beginPath();
-  ctx.moveTo(cx - r * 0.62, cy + r * 0.62);
-  ctx.lineTo(cx + r * 0.62, cy - r * 0.62);
-  ctx.stroke();
-}
-
-// ── Composite badge renderers ─────────────────────────────────────────────────
-
-function _visibilityBadge(ctx: Ctx2D, m: Marker, bx: number, by: number): void {
-  if (m.hidden) {
-    _badge(ctx, bx, by, '#dc2626', _iconEyeCrossed);
-  } else {
-    _badge(ctx, bx, by, '#22c55e', _iconEye);
-  }
-}
-
-// Badge colour scheme:
-//   source (emitter)     unmuted = blue,  muted = purple
-//   listener/tracker     unmuted = green, muted = red
-const BADGE_SOURCE_ON    = '#3b82f6'; // blue
-const BADGE_SOURCE_MUTED = '#a855f7'; // purple
-const BADGE_RECV_ON      = '#22c55e'; // green
-const BADGE_RECV_MUTED   = '#dc2626'; // red
-
-function _audioBadge(ctx: Ctx2D, m: Marker, bx: number, by: number): void {
+/**
+ * Build the 1–3 action badges that should appear above an unlocked GM
+ * marker. Visibility is always present; audio + motion only appear when
+ * their roles are set. Order is fixed (visibility, audio, motion) so the
+ * row reads consistently across markers.
+ */
+function buildBadges(m: Marker): OverlayBadge[] {
+  const out: OverlayBadge[] = [];
+  out.push({
+    kind:  'visibility',
+    on:    !m.hidden,
+    title: m.hidden ? 'Hidden — click to show' : 'Visible — click to hide',
+  });
   if (m.roles.audio === 'source') {
-    _badge(ctx, bx, by, m.audioMuted ? BADGE_SOURCE_MUTED : BADGE_SOURCE_ON,
-      m.audioMuted ? _iconSpeakerMuted : _iconSpeaker);
+    out.push({
+      kind:  'audio-source',
+      on:    !m.audioMuted,
+      title: m.audioMuted ? 'Sound source muted — click to unmute' : 'Sound source — click to mute',
+    });
   } else if (m.roles.audio === 'listener') {
-    _badge(ctx, bx, by, m.audioMuted ? BADGE_RECV_MUTED : BADGE_RECV_ON,
-      m.audioMuted ? _iconEarMuted : _iconEar);
+    out.push({
+      kind:  'audio-listener',
+      on:    !m.audioMuted,
+      title: m.audioMuted ? 'Deaf listener — click to enable' : 'Listener — click to mute',
+    });
   }
-  // no audio role: no audio badge
-}
-
-function _motionBadge(ctx: Ctx2D, m: Marker, bx: number, by: number): void {
-  const muted = m.motionMuted;
   if (m.roles.motion === 'source') {
-    const colour = muted ? BADGE_SOURCE_MUTED : BADGE_SOURCE_ON;
-    _badge(ctx, bx, by, colour, (c, x, y, r) => {
-      _iconMotion(c, x, y, r);
-      if (muted) _slash(c, x, y, r);
+    out.push({
+      kind:  'motion-source',
+      on:    !m.motionMuted,
+      title: m.motionMuted ? 'Motion source muted — click to enable' : 'Motion source — click to mute',
     });
   } else if (m.roles.motion === 'tracker') {
-    const colour = muted ? BADGE_RECV_MUTED : BADGE_RECV_ON;
-    _badge(ctx, bx, by, colour, (c, x, y, r) => {
-      _iconRadar(c, x, y, r);
-      if (muted) _slash(c, x, y, r);
+    out.push({
+      kind:  'motion-tracker',
+      on:    !m.motionMuted,
+      title: m.motionMuted ? 'Tracker off — click to enable' : 'Tracker scanning — click to disable',
     });
   }
-  // no motion role: no badge
+  return out;
 }
 
 /**
@@ -385,19 +214,9 @@ export function drawMarkerShape(
   //    by the caller (MarkerLayer.render for GM, MarkerSprites callers
   //    for the broadcast views).
 
-  // 5. Status badges — GM only
-  //    top-left:    visibility (eye) — always shown
-  //    top-right:   audio (speaker / ear) — only when roles.audio is set
-  //    bottom-right: motion (arrow) — only when roles.motion is set
-  // Badge offsets follow the rectangle's bounds so wide icons keep their
-  // badges out of the icon body rather than floating inside it.
-  if (isGM) {
-    const bOffX = Math.max(BADGE_R + 2, halfW * 0.78);
-    const bOffY = Math.max(BADGE_R + 2, halfH * 0.78);
-    _visibilityBadge(ctx, m, cx - bOffX, cy - bOffY);
-    _audioBadge(ctx, m, cx + bOffX, cy - bOffY);
-    _motionBadge(ctx, m, cx + bOffX, cy + bOffY);
-  }
+  // 5. Status badges — moved to the HTML overlay layer in v2.11/A3b2.
+  //    The overlay renders them in screen-space above the move handle
+  //    where they're finger-friendly and never occlude the icon body.
 
   // 6. Reset alpha
   ctx.globalAlpha = 1;
@@ -555,6 +374,9 @@ export class MarkerLayer {
       const halfHBuf = (H / frustumH) * 0.025 * m.size;
       const aspect   = getMarkerAspect(m, iconCache);
       const halfWBuf = halfHBuf * aspect;
+      // Locked GM markers keep their status badges (display-only via CSS)
+      // but lose the move handle. Unlocked markers get both.
+      const badges = isGM ? buildBadges(m) : undefined;
       items.push({
         id:               m.id,
         anchorX:          pos.x    * pxToCssX,
@@ -565,12 +387,11 @@ export class MarkerLayer {
           text:    m.label ?? '',
           visible: !!m.label && (isGM || !!m.showLabel) && !m.hidden,
         },
-        // GM only — players and projector get labels but no handles.
-        // Locked markers also skip the handle (A3b6 will replace it with
-        // a lock glyph instead).
         ...(isGM && !m.locked
           ? { moveHandle: { visible: true, interactive: true } }
           : {}),
+        ...(badges && badges.length > 0 ? { badges } : {}),
+        ...(m.locked ? { locked: true } : {}),
       });
     }
     this._overlay.update(items);
@@ -720,53 +541,10 @@ export class MarkerLayer {
     return null;
   }
 
-  /** Returns the topmost badge under (px, py) across all markers, or null. */
-  hitTestBadgeAny(
-    px: number, py: number,
-    markers: Marker[],
-    view: ViewState | null,
-  ): { marker: Marker; badge: 'hidden' | 'audio' | 'motion' } | null {
-    for (let i = markers.length - 1; i >= 0; i--) {
-      const m = markers[i]!;
-      if (m.locked) continue;
-      const badge = this.hitTestBadge(px, py, m, view);
-      if (badge) return { marker: m, badge };
-    }
-    return null;
-  }
-
-  /** Returns which GM badge is under canvas pixel (px, py) for the given marker. */
-  hitTestBadge(
-    px: number, py: number,
-    marker: Marker,
-    view: ViewState | null,
-  ): 'hidden' | 'audio' | 'motion' | null {
-    const pos = this.project(marker.position.x, marker.position.y, view);
-    if (!pos) return null;
-    const fr = this._frustum(view);
-    const frustumH = Math.max(0.0001, fr.top - fr.bottom);
-    const r      = (this.canvas.height / frustumH) * 0.025 * marker.size;
-    const aspect = getMarkerAspect(marker, this._iconCache);
-    const halfW  = r * aspect;
-    const halfH  = r;
-    const bOffX  = Math.max(BADGE_R + 2, halfW * 0.78);
-    const bOffY  = Math.max(BADGE_R + 2, halfH * 0.78);
-
-    // Top-left: visibility
-    if (Math.hypot(px - (pos.x - bOffX), py - (pos.y - bOffY)) <= BADGE_HIT) return 'hidden';
-
-    // Top-right: audio (only when a marker has an audio role)
-    if (marker.roles.audio) {
-      if (Math.hypot(px - (pos.x + bOffX), py - (pos.y - bOffY)) <= BADGE_HIT) return 'audio';
-    }
-
-    // Bottom-right: motion (only when a marker has a motion role)
-    if (marker.roles.motion) {
-      if (Math.hypot(px - (pos.x + bOffX), py - (pos.y + bOffY)) <= BADGE_HIT) return 'motion';
-    }
-
-    return null;
-  }
+  // hitTestBadge / hitTestBadgeAny removed in v2.11/A3b2 — badges moved
+  // to the HTML overlay layer and dispatch clicks directly via the
+  // MarkerOverlay onBadgeClick handler, so the canvas no longer needs a
+  // hit-test surface for them.
 
   private _frustum(view: ViewState | null): Frustum {
     const W  = this.canvas.width  || 1;

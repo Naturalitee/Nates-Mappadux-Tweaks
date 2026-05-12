@@ -21,6 +21,20 @@
  * lock enforcement.
  */
 
+export type BadgeKind =
+  | 'visibility'
+  | 'audio-source'  | 'audio-listener'
+  | 'motion-source' | 'motion-tracker';
+
+export interface OverlayBadge {
+  /** Which badge this is; drives the icon + the click-action target. */
+  kind: BadgeKind;
+  /** Whether the badge is in its "active" state (visible / unmuted). */
+  on:   boolean;
+  /** Tooltip text (native title attribute). */
+  title: string;
+}
+
 export interface OverlayItem {
   id: string;
   /** Icon centre in CSS px relative to the overlay container. */
@@ -34,11 +48,26 @@ export interface OverlayItem {
   label?: { text: string; visible: boolean };
 
   /**
-   * GM-only move handle at the icon's top-right corner. Omit on player /
-   * projector. When `interactive` is false (e.g. locked marker placeholder
-   * preview in A3b6) the handle is shown but doesn't accept pointer events.
+   * GM-only move handle centred above the icon. Omit on player / projector.
+   * When `interactive` is false (e.g. locked-marker placeholder preview)
+   * the handle is shown but doesn't accept pointer events.
    */
   moveHandle?: { visible: boolean; interactive: boolean };
+
+  /**
+   * GM-only action badges shown in a row above the move handle. Order is
+   * caller-controlled (typically: visibility, then audio variant, then
+   * motion variant). 1–3 badges depending on the marker's roles.
+   */
+  badges?: OverlayBadge[];
+
+  /**
+   * Locked markers: render in display-only mode (no move handle; badges
+   * shift down to where the move handle would have been and become
+   * non-interactive). The CSS rules under `.marker-overlay-item--locked`
+   * handle the layout shift.
+   */
+  locked?: boolean;
 }
 
 export type MoveDragHandler = (
@@ -51,12 +80,52 @@ export type MoveDragHandler = (
 export interface OverlayHandlers {
   /** Move handle drag — fires for the entire pointerdown → pointerup arc. */
   onMoveDrag?: MoveDragHandler;
+  /** Single tap on an action badge — should toggle its state and select. */
+  onBadgeClick?: (markerId: string, kind: BadgeKind) => void;
+}
+
+// ── Badge icon SVG fragments (Lucide-inspired strokes) ───────────────────────
+
+const SVG_HEAD = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">';
+const SVG_TAIL = '</svg>';
+const SVG_SLASH = '<line x1="2" y1="2" x2="22" y2="22"/>';
+
+const ICON_EYE          = '<path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/>';
+const ICON_EYE_OFF      = '<path d="M9.88 9.88a3 3 0 1 0 4.24 4.24"/><path d="M10.73 5.08A10.43 10.43 0 0 1 12 5c7 0 10 7 10 7a13.16 13.16 0 0 1-1.67 2.68"/><path d="M6.61 6.61A13.526 13.526 0 0 0 2 12s3 7 10 7a9.74 9.74 0 0 0 5.39-1.61"/>' + SVG_SLASH;
+const ICON_SPEAKER      = '<polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/>';
+const ICON_EAR          = '<path d="M6 8.5a6.5 6.5 0 1 1 13 0c0 6-6 6-6 10a3.5 3.5 0 1 1-7 0"/><path d="M15 8.5a2.5 2.5 0 0 0-5 0v1a2 2 0 0 1-2 2"/>';
+const ICON_MOTION_ARROW = '<line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/>';
+const ICON_RADAR        = '<circle cx="12" cy="12" r="2"/><path d="M14 12a2 2 0 1 0-2-2"/><path d="M16 12a4 4 0 1 0-4-4"/>';
+
+function badgeIconSvg(kind: BadgeKind, on: boolean): string {
+  let inner: string;
+  switch (kind) {
+    case 'visibility':       inner = on ? ICON_EYE          : ICON_EYE_OFF;   break;
+    case 'audio-source':     inner = on ? ICON_SPEAKER      : ICON_SPEAKER + SVG_SLASH; break;
+    case 'audio-listener':   inner = on ? ICON_EAR          : ICON_EAR     + SVG_SLASH; break;
+    case 'motion-source':    inner = on ? ICON_MOTION_ARROW : ICON_MOTION_ARROW + SVG_SLASH; break;
+    case 'motion-tracker':   inner = on ? ICON_RADAR        : ICON_RADAR   + SVG_SLASH; break;
+  }
+  return SVG_HEAD + inner + SVG_TAIL;
+}
+
+// Colour scheme mirrors the old canvas badges from MarkerLayer:
+//   source emitter → blue (on) / purple (muted)
+//   listener / tracker / visibility → green (on) / red (off)
+function badgeColor(kind: BadgeKind, on: boolean): string {
+  if (kind === 'audio-source' || kind === 'motion-source') {
+    return on ? '#3b82f6' : '#a855f7';
+  }
+  return on ? '#22c55e' : '#dc2626';
 }
 
 interface MarkerElements {
   root:        HTMLDivElement;
   label:       HTMLDivElement | null;
   moveHandle:  HTMLDivElement | null;
+  badgesRow:   HTMLDivElement | null;
+  /** Map of badge kind → button element so we can reuse / restyle each. */
+  badges:      Map<BadgeKind, HTMLButtonElement>;
 }
 
 export class MarkerOverlay {
@@ -107,7 +176,7 @@ export class MarkerOverlay {
     root.className = 'marker-overlay-item';
     root.dataset['markerId'] = id;
     this.container.appendChild(root);
-    return { root, label: null, moveHandle: null };
+    return { root, label: null, moveHandle: null, badgesRow: null, badges: new Map() };
   }
 
   private _applyItem(el: MarkerElements, item: OverlayItem): void {
@@ -117,9 +186,11 @@ export class MarkerOverlay {
     el.root.style.top  = `${item.anchorY}px`;
     el.root.style.setProperty('--icon-half-w', `${item.iconHalfWidthPx}px`);
     el.root.style.setProperty('--icon-half-h', `${item.iconHalfHeightPx}px`);
+    el.root.classList.toggle('marker-overlay-item--locked', !!item.locked);
 
     this._applyLabel(el, item);
     this._applyMoveHandle(el, item);
+    this._applyBadges(el, item);
   }
 
   private _applyLabel(el: MarkerElements, item: OverlayItem): void {
@@ -165,6 +236,56 @@ export class MarkerOverlay {
     }
     el.moveHandle.style.pointerEvents = item.moveHandle!.interactive ? 'auto' : 'none';
     el.moveHandle.style.opacity = item.moveHandle!.interactive ? '1' : '0.4';
+  }
+
+  private _applyBadges(el: MarkerElements, item: OverlayItem): void {
+    const wantList = item.badges ?? [];
+    if (wantList.length === 0) {
+      if (el.badgesRow) {
+        el.badgesRow.remove();
+        el.badgesRow = null;
+        el.badges.clear();
+      }
+      return;
+    }
+    if (!el.badgesRow) {
+      el.badgesRow = document.createElement('div');
+      el.badgesRow.className = 'marker-badges';
+      el.root.appendChild(el.badgesRow);
+    }
+    const wantKinds = new Set(wantList.map((b) => b.kind));
+    // Remove badges no longer needed (e.g. role dropped from marker).
+    for (const [kind, btn] of el.badges) {
+      if (!wantKinds.has(kind)) { btn.remove(); el.badges.delete(kind); }
+    }
+    // Add / update each badge in caller-provided order (DOM order = visual order).
+    for (const badge of wantList) {
+      let btn = el.badges.get(badge.kind);
+      if (!btn) {
+        btn = document.createElement('button');
+        btn.type = 'button';
+        btn.className = 'marker-badge';
+        btn.dataset['kind'] = badge.kind;
+        this._bindBadge(btn, item.id, badge.kind);
+        el.badges.set(badge.kind, btn);
+      }
+      // Re-append in order so the row reflects wantList sequence.
+      el.badgesRow.appendChild(btn);
+      btn.innerHTML  = badgeIconSvg(badge.kind, badge.on);
+      btn.style.background = badgeColor(badge.kind, badge.on);
+      btn.title = badge.title;
+    }
+  }
+
+  private _bindBadge(btn: HTMLButtonElement, markerId: string, kind: BadgeKind): void {
+    btn.addEventListener('click', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      this.handlers.onBadgeClick?.(markerId, kind);
+    });
+    // Stop pointerdown from bubbling to anything underneath; we never want
+    // a badge click to also kick off a body / fog / map drag.
+    btn.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
   }
 
   private _bindMoveHandle(handle: HTMLDivElement, markerId: string): void {

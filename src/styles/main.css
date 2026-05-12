@@ -229,14 +229,65 @@ body.projector-view .marker-overlay {
 }
 .marker-handle svg { display: block; }
 
-/* Move handle — centred above the icon. The badge bubbles (A3b2) will
-   stack below it, naturally landing either above the icon body (if there's
-   room) or down the side. */
+/* Move handle — sits 4 px above the icon's top edge (no overlap onto the
+   token body), centred horizontally. Badges in .marker-badges stack
+   another row above. */
 .marker-handle--move {
-  top:  calc(-1 * var(--icon-half-h, 0px) - 4px);
+  top:  calc(-1 * var(--icon-half-h, 0px) - 17px);
   left: 0;
   cursor: move;
 }
+
+/* Action-badge row — sits above the move handle. The container is
+   click-through; each badge child opts back in. Flex layout auto-centres
+   the row regardless of badge count (1–3). */
+.marker-badges {
+  position: absolute;
+  top:  calc(-1 * var(--icon-half-h, 0px) - 45px);
+  left: 0;
+  transform: translate(-50%, -50%);
+  display: flex;
+  gap: 4px;
+  pointer-events: none;
+}
+
+.marker-badge {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  color: rgba(255, 255, 255, 1);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  pointer-events: auto;
+  cursor: pointer;
+  user-select: none;
+  transition: filter 120ms ease, transform 80ms ease;
+  touch-action: manipulation;
+  background: rgba(20, 24, 36, 0.85); /* fallback; overridden inline per-state */
+}
+.marker-badge:hover  { filter: brightness(1.15); }
+.marker-badge:active { transform: scale(0.94); }
+.marker-badge svg    { display: block; }
+
+/* Locked markers: no move handle, so the badge row shifts down to where
+   the handle would have been. Badges become display-only — they still
+   communicate state but no longer accept clicks. Opacity matches the
+   icon body's 0.4 dim from drawMarkerShape so the whole marker reads
+   as faded together. */
+.marker-overlay-item--locked .marker-badges {
+  top: calc(-1 * var(--icon-half-h, 0px) - 17px);
+}
+.marker-overlay-item--locked .marker-badge {
+  pointer-events: none;
+  cursor: default;
+  opacity: 0.4;
+}
+.marker-overlay-item--locked .marker-badge:hover  { filter: none; }
+.marker-overlay-item--locked .marker-badge:active { transform: translate(0, 0); }
 #projector-viewport-canvas {
   position: absolute;
   inset: 0;
