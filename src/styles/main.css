@@ -1767,16 +1767,20 @@ option.select-option--add {
   padding: 0;
   cursor: grab;
 }
-/* The image body's children (wrapper span + inline SVG) must FILL the
-   body, not size to their intrinsic dimensions. `display: grid +
-   place-items: center` did the latter, so a 1em wrapper span landed
-   centred at 1em x 1em regardless of the element's actual size. */
+/* The image body's children (wrapper span + inline SVG + raw <img> for
+   raster uploads) must FILL the body, not size to their intrinsic
+   dimensions. renderAssetToInlineHtml returns a bare <img> for raster
+   blobs with inline width: 1em — without > img in this selector the
+   raster preview stayed thumbnail-sized in the editor even though the
+   rasterised PNG rendered it at the right size. */
 .txt-map-el--image .txt-map-el-body > span,
-.txt-map-el--image .txt-map-el-body > svg {
+.txt-map-el--image .txt-map-el-body > svg,
+.txt-map-el--image .txt-map-el-body > img {
   display: block !important;
   width:  100% !important;
   height: 100% !important;
 }
+.txt-map-el--image .txt-map-el-body > img { object-fit: contain; }
 .txt-map-el--image .txt-map-el-body > span > svg {
   display: block !important;
   width:  100% !important;
