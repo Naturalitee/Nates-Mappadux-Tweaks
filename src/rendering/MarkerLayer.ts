@@ -481,6 +481,13 @@ export class MarkerLayer {
     ctx.clearRect(0, 0, W, H);
 
     const { _markers: markers, _view: view, _selectedId: sel, _isGM: isGM, _iconCache: iconCache } = this;
+    // frustumH is the visible world height in this view; H / frustumH is
+    // "canvas pixels per world Y unit", which is the same scale
+    // MarkerSprites uses for the player/projector planes. Driving baseR
+    // off this — instead of raw canvas H — keeps marker sizing identical
+    // across all three views regardless of letterboxing.
+    const fr = this._frustum(view);
+    const frustumH = Math.max(0.0001, fr.top - fr.bottom);
 
     // dB range circle for the selected audio_source marker (GM only)
     if (isGM && sel) {
@@ -516,7 +523,12 @@ export class MarkerLayer {
       if (!isGM && m.hidden) continue;
       const pos = this.project(m.position.x, m.position.y, view);
       if (!pos) continue;
-      const baseR = H * 0.025 * m.size;
+      // baseR is computed in WORLD units (0.025 × m.size) then converted
+      // to canvas pixels via the current frustum height — this matches
+      // how MarkerSprites sizes the player/projector planes in world
+      // coords, so a marker at the same `size` ends up the same fraction
+      // of the rendered map height on every view (no letterbox drift).
+      const baseR = (H / frustumH) * 0.025 * m.size;
       this._drawMarker(ctx, m, pos.x, pos.y, baseR, m.id === sel, isGM, iconCache);
     }
 
@@ -528,6 +540,8 @@ export class MarkerLayer {
   private _drawMotionBlobs(ctx: CanvasRenderingContext2D, m: MotionOverlay, W: number, H: number): void {
     void W;
     const view = this._view;
+    const fr   = this._frustum(view);
+    const frustumH = Math.max(0.0001, fr.top - fr.bottom);
     for (const b of m.blobs) {
       const elapsed = m.now - b.startTime;
       const alpha   = Math.max(0, 1 - elapsed / b.fadeMs) * 0.85;
@@ -535,7 +549,7 @@ export class MarkerLayer {
       const pos = this.project(b.position.x, b.position.y, view);
       if (!pos) continue;
       const marker = this._markers.find((mm) => mm.id === b.sourceId);
-      const r = H * 0.025 * (marker?.size ?? 1);
+      const r = (H / frustumH) * 0.025 * (marker?.size ?? 1);
       ctx.save();
       ctx.fillStyle = _hexWithAlpha(b.colour, alpha);
       if (b.mode === 'multi-few' || b.mode === 'multi-many') {
@@ -652,11 +666,13 @@ export class MarkerLayer {
    */
   hitTestMarker(px: number, py: number, markers: Marker[], view: ViewState | null): Marker | null {
     const H = this.canvas.height;
+    const fr = this._frustum(view);
+    const frustumH = Math.max(0.0001, fr.top - fr.bottom);
     for (let i = markers.length - 1; i >= 0; i--) {
       const m   = markers[i]!;
       const pos = this.project(m.position.x, m.position.y, view);
       if (!pos) continue;
-      const r      = H * 0.025 * m.size;
+      const r      = (H / frustumH) * 0.025 * m.size;
       const aspect = getMarkerAspect(m, this._iconCache);
       const halfW  = r * aspect + 6;
       const halfH  = r + 6;
@@ -688,7 +704,9 @@ export class MarkerLayer {
   ): 'hidden' | 'audio' | 'motion' | null {
     const pos = this.project(marker.position.x, marker.position.y, view);
     if (!pos) return null;
-    const r      = this.canvas.height * 0.025 * marker.size;
+    const fr = this._frustum(view);
+    const frustumH = Math.max(0.0001, fr.top - fr.bottom);
+    const r      = (this.canvas.height / frustumH) * 0.025 * marker.size;
     const aspect = getMarkerAspect(marker, this._iconCache);
     const halfW  = r * aspect;
     const halfH  = r;

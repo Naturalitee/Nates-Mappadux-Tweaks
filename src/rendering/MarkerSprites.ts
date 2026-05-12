@@ -1,6 +1,6 @@
 import * as THREE from 'three';
 import type { Marker } from '../types.ts';
-import { drawMarkerShape, getMarkerAspect } from './MarkerLayer.ts';
+import { drawMarkerShape, getMarkerAspect, getMarkerBitmap } from './MarkerLayer.ts';
 
 /**
  * MarkerSprites — per-marker Three.js mesh group for the player + projector
@@ -34,8 +34,13 @@ const PAD_FACTOR = 1.6;
 /** Canvas long-side pixel cap to avoid memory blowup at extreme size × DPR. */
 const MAX_PX = 1024;
 const MIN_PX = 64;
-/** Base pixel density per `m.size` unit at DPR=1. size=8 fills the cap. */
-const BASE_PX_PER_SIZE = 128;
+/**
+ * Base pixel density per `m.size` unit at DPR=1. Default markers get 256
+ * canvas px so the 512-px source bitmap only downsamples once before
+ * Three.js displays it; the previous 128 caused a visibly soft second
+ * downsample on the GPU at typical projector resolutions.
+ */
+const BASE_PX_PER_SIZE = 256;
 
 interface MarkerEntry {
   mesh:     THREE.Mesh;
@@ -145,6 +150,12 @@ export class MarkerSprites {
         }
       }
 
+      // hasBmp is in the digest so a marker that initially rendered with
+      // the fallback dot (icon decode still in flight) re-renders the
+      // moment its bitmap lands in the cache. Without this, square-aspect
+      // icons keep showing the placeholder until some unrelated marker
+      // field changes and re-shapes the digest.
+      const hasBmp = getMarkerBitmap(m, iconCache) ? 1 : 0;
       const digest = [
         m.icon, m.color, m.size.toFixed(3),
         m.label ?? '', m.showLabel ? 1 : 0,
@@ -153,6 +164,7 @@ export class MarkerSprites {
         m.roles.audio ?? '', m.roles.motion ?? '',
         isGM ? 1 : 0,
         canvasW, canvasH,
+        hasBmp,
       ].join('|');
 
       if (entry.digest !== digest || dprChanged) {
@@ -212,6 +224,8 @@ export class MarkerSprites {
   ): void {
     const { canvas, pxW, pxH } = entry;
     const ctx = canvas.getContext('2d') as unknown as CanvasRenderingContext2D;
+    ctx.imageSmoothingEnabled = true;
+    ctx.imageSmoothingQuality = 'high';
     ctx.clearRect(0, 0, pxW, pxH);
 
     const shortSide = Math.min(pxW, pxH);
