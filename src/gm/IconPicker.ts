@@ -1,6 +1,7 @@
-import { saveAsset, getAllAssets, deleteAsset } from '../storage/db.ts';
-import { getUsedIconKeys } from '../storage/assetUsage.ts';
 import { generateId } from '../utils/id.ts';
+import { ImageAssetStore } from '../images/ImageAssetStore.ts';
+import { renderLibIconFromAsset, LIB_ICON_PREFIX } from '../images/libIconRender.ts';
+import { SYSTEM_CATEGORY_IDS, type ImageAsset } from '../types.ts';
 
 const PRESET_ICONS = [
   '◆','◇','●','○','■','□','▲','△','▼','▽',
@@ -13,28 +14,31 @@ const PRESET_ICONS = [
 /**
  * IconPicker — popover for selecting marker icons.
  *
- * Supports preset Unicode symbols and custom uploaded images (stored as assets
- * in IndexedDB). Custom icons use 'asset:<uuid>' as their key in iconCache and
- * in the marker.icon field.
+ * Supports preset Unicode symbols and Small Asset Library entries (the
+ * third first-class library introduced in v2.11). Library entries emit
+ * 'libAsset:<id>' as the marker.icon value; tintable assets are bitmap-
+ * baked with the marker's colour, raster assets render verbatim.
+ *
+ * The pre-v2.11 'asset:<uuid>' custom-icon store is no longer surfaced
+ * in this picker — those records were migrated into the library under
+ * "Uncategorised" by `migrateLegacyIconsIfNeeded`.
  */
 export class IconPicker {
   private readonly _el: HTMLElement;
   private readonly _fileInput: HTMLInputElement;
-  private _onSelect:    ((icon: string) => void) | null = null;
-  private _deleteMode = false;
-  private _currentIcon = '◆';
+  private _onSelect:     ((icon: string) => void) | null = null;
+  private _currentIcon  = '◆';
+  private _currentColor = '#e03e3e';
   readonly iconCache    = new Map<string, ImageBitmap>();
-  /** data URLs keyed by 'asset:uuid' — used when broadcasting markers over P2P */
+  /** data URLs keyed by their compound cache key — used when broadcasting markers over P2P */
   readonly iconDataUrls = new Map<string, string>();
 
   constructor() {
-    // Build the popover element
     this._el = document.createElement('div');
     this._el.className = 'icon-picker';
     this._el.hidden = true;
     document.body.appendChild(this._el);
 
-    // Hidden file input for icon uploads
     this._fileInput = document.createElement('input');
     this._fileInput.type = 'file';
     this._fileInput.accept = 'image/*';
@@ -45,44 +49,42 @@ export class IconPicker {
     this._bindUpload();
   }
 
-  /** Load custom icons from IndexedDB and pre-decode to ImageBitmap + data URL. */
+  /** Pre-warm the iconCache with raster library assets so first-render
+   *  of saved markers doesn't fall back to a circle. Tintable assets are
+   *  rendered lazily because they depend on per-marker colour. */
   async load(): Promise<void> {
-    const assets = await getAllAssets('icon');
-    await Promise.all(assets.map(async (a) => {
-      const key = 'asset:' + a.id;
-      if (!this.iconCache.has(key)) {
-        const [bmp, dataUrl] = await Promise.all([
-          createImageBitmap(a.blob),
-          IconPicker._blobToDataUrl(a.blob),
-        ]);
-        this.iconCache.set(key, bmp);
-        this.iconDataUrls.set(key, dataUrl);
-      }
+    const all = await ImageAssetStore.getAll();
+    await Promise.all(all.map(async (asset) => {
+      if (asset.tintable) return; // colour-dependent — render on demand
+      if (asset.source === 'unicode' || asset.source === 'font') return;
+      const key = LIB_ICON_PREFIX + asset.id;
+      if (this.iconCache.has(key)) return;
+      const rendered = await renderLibIconFromAsset(asset, this._currentColor);
+      if (!rendered) return;
+      this.iconCache.set(rendered.key, rendered.bitmap);
+      this.iconDataUrls.set(rendered.key, rendered.dataUrl);
     }));
   }
 
-  /** Drop the in-memory cache and reload from IDB — call after the asset library is wiped. */
+  /** Drop the in-memory cache and reload — call after the library is wiped. */
   async reload(): Promise<void> {
     this.iconCache.clear();
     this.iconDataUrls.clear();
     await this.load();
   }
 
-  private static _blobToDataUrl(blob: Blob): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const reader = new FileReader();
-      reader.onload  = () => resolve(reader.result as string);
-      reader.onerror = () => reject(reader.error);
-      reader.readAsDataURL(blob);
-    });
-  }
-
-  /** Open the picker anchored below `anchor`. `currentIcon` is highlighted. */
-  open(anchor: HTMLElement, currentIcon: string, onSelect: (icon: string) => void): void {
-    this._onSelect    = onSelect;
-    this._currentIcon = currentIcon;
-    this._deleteMode  = false;
-    void this._rebuild(currentIcon);
+  /** Open the picker anchored below `anchor`. `currentIcon` is highlighted;
+   *  `currentColor` is used to tint tintable library previews. */
+  open(
+    anchor: HTMLElement,
+    currentIcon: string,
+    currentColor: string,
+    onSelect: (icon: string) => void,
+  ): void {
+    this._onSelect     = onSelect;
+    this._currentIcon  = currentIcon;
+    this._currentColor = currentColor;
+    void this._rebuild();
     const rect = anchor.getBoundingClientRect();
     this._el.style.left = `${Math.min(rect.left, window.innerWidth - 270)}px`;
     this._el.style.top  = `${rect.bottom + 4}px`;
@@ -90,26 +92,18 @@ export class IconPicker {
   }
 
   close(): void {
-    this._el.hidden  = true;
-    this._onSelect   = null;
-    this._deleteMode = false;
+    this._el.hidden = true;
+    this._onSelect  = null;
   }
 
-  private async _rebuild(current: string): Promise<void> {
+  private async _rebuild(): Promise<void> {
     this._el.innerHTML = '';
 
     // ── Preset section ──────────────────────────────────────────────────────
-    const presetLabel = document.createElement('div');
-    presetLabel.className = 'icon-picker-section-label';
-    presetLabel.textContent = 'Preset';
-    this._el.appendChild(presetLabel);
-
-    const presetGrid = document.createElement('div');
-    presetGrid.className = 'icon-picker-grid';
+    this._appendSectionLabel('Preset');
+    const presetGrid = this._makeGrid();
     for (const icon of PRESET_ICONS) {
-      const btn = document.createElement('button');
-      btn.type = 'button';
-      btn.className = 'icon-picker-btn' + (current === icon ? ' icon-picker-btn--active' : '');
+      const btn = this._makeButton(icon === this._currentIcon);
       btn.textContent = icon;
       btn.addEventListener('click', () => {
         this._onSelect?.(icon);
@@ -119,82 +113,113 @@ export class IconPicker {
     }
     this._el.appendChild(presetGrid);
 
-    // ── Custom icons section ─────────────────────────────────────────────────
-    const assets   = await getAllAssets('icon');
-    const usedKeys = this._deleteMode ? await getUsedIconKeys() : new Set<string>();
-    if (assets.length > 0) {
-      const sep = document.createElement('div');
-      sep.className = 'icon-picker-sep';
-      this._el.appendChild(sep);
+    // ── Small Asset Library section ─────────────────────────────────────────
+    const [assets, categories] = await Promise.all([
+      ImageAssetStore.getAll(),
+      ImageAssetStore.getAllCategories(),
+    ]);
 
-      const customLabel = document.createElement('div');
-      customLabel.className = 'icon-picker-section-label';
-      customLabel.textContent = this._deleteMode ? 'Custom — click to delete' : 'Custom';
-      if (this._deleteMode) customLabel.style.color = 'var(--danger, #e05)';
-      this._el.appendChild(customLabel);
+    // Render library assets only — exclude unicode (already in Preset) and
+    // font references (not usable as marker bitmaps).
+    const renderable = assets.filter((a) => a.source !== 'unicode' && a.source !== 'font');
 
-      const customGrid = document.createElement('div');
-      customGrid.className = 'icon-picker-grid';
-      for (const asset of assets) {
-        const assetKey = 'asset:' + asset.id;
-        const isUnused = this._deleteMode && !usedKeys.has(assetKey);
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.className = 'icon-picker-btn'
-          + (current === assetKey ? ' icon-picker-btn--active' : '')
-          + (this._deleteMode ? ' icon-picker-btn--danger' : '')
-          + (isUnused ? ' icon-picker-btn--unused' : '');
-        if (isUnused) btn.title = 'Unused — safe to delete';
+    if (renderable.length > 0) {
+      this._appendSep();
+      const libWrap = document.createElement('div');
+      libWrap.className = 'icon-picker-scroll';
+      this._el.appendChild(libWrap);
 
-        const img = document.createElement('img');
-        img.src = URL.createObjectURL(asset.blob);
-        img.onload = () => URL.revokeObjectURL(img.src);
-        btn.appendChild(img);
+      // Group by category, in category sortOrder. Skip empty groups.
+      for (const cat of categories) {
+        const inCat = renderable.filter((a) => a.categoryId === cat.id);
+        if (inCat.length === 0) continue;
+        const label = document.createElement('div');
+        label.className = 'icon-picker-section-label';
+        label.textContent = cat.name;
+        libWrap.appendChild(label);
 
-        btn.addEventListener('click', () => {
-          if (this._deleteMode) {
-            void deleteAsset(asset.id).then(async () => {
-              this.iconCache.delete(assetKey);
-              this.iconDataUrls.delete(assetKey);
-              const remaining = await getAllAssets('icon');
-              if (remaining.length === 0) this._deleteMode = false;
-              void this._rebuild(this._currentIcon);
-            });
-          } else {
-            this._onSelect?.(assetKey);
-            this.close();
-          }
-        });
-        customGrid.appendChild(btn);
+        const grid = this._makeGrid();
+        for (const asset of inCat) {
+          grid.appendChild(this._makeLibAssetButton(asset));
+        }
+        libWrap.appendChild(grid);
       }
-      this._el.appendChild(customGrid);
     }
 
-    // ── Upload / delete buttons ───────────────────────────────────────────────
-    const sep2 = document.createElement('div');
-    sep2.className = 'icon-picker-sep';
-    this._el.appendChild(sep2);
-
+    // ── Upload custom icon ──────────────────────────────────────────────────
+    this._appendSep();
     const uploadBtn = document.createElement('button');
     uploadBtn.type = 'button';
     uploadBtn.className = 'icon-picker-upload';
     uploadBtn.textContent = '+ Upload custom icon';
-    uploadBtn.addEventListener('click', () => {
-      this._fileInput.click();
-    });
+    uploadBtn.addEventListener('click', () => this._fileInput.click());
     this._el.appendChild(uploadBtn);
+  }
 
-    if (assets.length > 0) {
-      const deleteToggleBtn = document.createElement('button');
-      deleteToggleBtn.type = 'button';
-      deleteToggleBtn.className = 'icon-picker-upload icon-picker-upload--danger';
-      deleteToggleBtn.textContent = this._deleteMode ? '← Cancel delete' : '✕ Delete custom icon';
-      deleteToggleBtn.addEventListener('click', () => {
-        this._deleteMode = !this._deleteMode;
-        void this._rebuild(this._currentIcon);
+  private _makeLibAssetButton(asset: ImageAsset): HTMLButtonElement {
+    const key = LIB_ICON_PREFIX + asset.id;
+    const active = this._currentIcon === key;
+    const btn = this._makeButton(active);
+    btn.title = asset.name;
+
+    const img = document.createElement('img');
+    btn.appendChild(img);
+
+    // Preview source: tintables get tinted with the current marker colour
+    // so the picker visualises the on-canvas result; raster renders verbatim.
+    if (asset.tintable && asset.svgSource) {
+      void renderLibIconFromAsset(asset, this._currentColor).then((r) => {
+        if (r) img.src = r.dataUrl;
       });
-      this._el.appendChild(deleteToggleBtn);
+    } else if (asset.blob) {
+      const url = URL.createObjectURL(asset.blob);
+      img.src = url;
+      img.onload = () => URL.revokeObjectURL(url);
+    } else if (asset.svgSource) {
+      img.src = 'data:image/svg+xml;utf8,' + encodeURIComponent(asset.svgSource);
     }
+
+    btn.addEventListener('click', async () => {
+      // Pre-warm the cache with a bitmap rendered at the current colour
+      // so the marker canvas has something to draw immediately. The
+      // GMApp markers_change handler also pre-renders, but doing it
+      // here means the first render after the click is already correct
+      // rather than briefly showing a fallback circle.
+      const rendered = await renderLibIconFromAsset(asset, this._currentColor);
+      if (rendered) {
+        this.iconCache.set(rendered.key, rendered.bitmap);
+        this.iconDataUrls.set(rendered.key, rendered.dataUrl);
+      }
+      this._onSelect?.(key);
+      this.close();
+    });
+    return btn;
+  }
+
+  private _appendSectionLabel(text: string): void {
+    const el = document.createElement('div');
+    el.className = 'icon-picker-section-label';
+    el.textContent = text;
+    this._el.appendChild(el);
+  }
+
+  private _appendSep(): void {
+    const sep = document.createElement('div');
+    sep.className = 'icon-picker-sep';
+    this._el.appendChild(sep);
+  }
+
+  private _makeGrid(): HTMLDivElement {
+    const grid = document.createElement('div');
+    grid.className = 'icon-picker-grid';
+    return grid;
+  }
+
+  private _makeButton(active: boolean): HTMLButtonElement {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'icon-picker-btn' + (active ? ' icon-picker-btn--active' : '');
+    return btn;
   }
 
   private _bindClose(): void {
@@ -213,17 +238,26 @@ export class IconPicker {
 
       const blob = await this._resize(file, 64);
       const id   = generateId();
-      await saveAsset({ id, name: file.name, type: 'icon', blob, addedAt: Date.now() });
+      const asset: ImageAsset = {
+        id,
+        name:       file.name,
+        source:     'upload',
+        categoryId: SYSTEM_CATEGORY_IDS.uncategorised,
+        tintable:   false,
+        blob,
+        mimeType:   blob.type || 'image/png',
+        addedAt:    Date.now(),
+      };
+      await ImageAssetStore.save(asset);
 
-      const [bmp, dataUrl] = await Promise.all([
-        createImageBitmap(blob),
-        IconPicker._blobToDataUrl(blob),
-      ]);
-      const iconKey = 'asset:' + id;
-      this.iconCache.set(iconKey, bmp);
-      this.iconDataUrls.set(iconKey, dataUrl);
+      const rendered = await renderLibIconFromAsset(asset, this._currentColor);
+      const key = LIB_ICON_PREFIX + id;
+      if (rendered) {
+        this.iconCache.set(rendered.key, rendered.bitmap);
+        this.iconDataUrls.set(rendered.key, rendered.dataUrl);
+      }
 
-      this._onSelect?.(iconKey);
+      this._onSelect?.(key);
       this.close();
     });
   }
@@ -238,5 +272,11 @@ export class IconPicker {
     return new Promise<Blob>((resolve) =>
       cv.toBlob((b) => resolve(b!), 'image/png')
     );
+  }
+
+  // Used by the marker icon button's tintability check — caller already has
+  // the asset id; expose this so we don't duplicate the prefix logic.
+  static stripPrefix(icon: string): string {
+    return icon.startsWith(LIB_ICON_PREFIX) ? icon.slice(LIB_ICON_PREFIX.length) : icon;
   }
 }

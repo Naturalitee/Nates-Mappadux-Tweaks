@@ -1290,6 +1290,14 @@ option.select-option--add {
 .icon-picker-btn--active { border-color: var(--accent); background: var(--accent-dim); }
 .icon-picker-btn img { width: 18px; height: 18px; object-fit: contain; }
 .icon-picker-sep { height: 1px; background: var(--border); margin: var(--space-xs) 0; }
+/* Library section can be many categories deep — scroll inside the popover
+   rather than letting the popover grow past the viewport. */
+.icon-picker-scroll {
+  max-height: 280px;
+  overflow-y: auto;
+  margin-right: -4px;
+  padding-right: 4px;
+}
 .panel-sep      { height: 1px; background: var(--border); margin: var(--space-sm) 0; border: 0; }
 .icon-picker-upload {
   display: block; width: 100%;

@@ -2245,7 +2245,9 @@ export class GMApp {
       const currentIcon = this.state.getState().markers.find(
         (m) => m.id === this.selectedMarkerId
       )?.icon ?? '◆';
-      this.iconPicker.open(this.markerIconBtn, currentIcon, (icon) => {
+      const currentColor = this.state.getState().markers
+        .find((m) => m.id === this.selectedMarkerId)?.color ?? '#e03e3e';
+      this.iconPicker.open(this.markerIconBtn, currentIcon, currentColor, (icon) => {
         this.updateSelectedMarker({ icon });
       });
     });
