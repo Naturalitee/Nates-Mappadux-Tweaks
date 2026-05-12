@@ -51,6 +51,7 @@ import { TrackerAudioPlayer } from '../audio/TrackerAudioPlayer.ts';
 import { randomFaffMessage } from '../utils/faffMessages.ts';
 import { blobToDataUrl } from '../utils/blob.ts';
 import type { MotionOverlay } from '../rendering/MarkerLayer.ts';
+import { MarkerOverlay } from '../rendering/MarkerOverlay.ts';
 import type { SessionState, StoredMap, TransitionConfig, FilterState, Marker, MarkerIconData, AudioAsset, AudioRole, MotionRole, ProjectorConnection, ProjectorViewport, GMMessage } from '../types.ts';
 import { defaultProjectorViewport } from '../types.ts';
 import QRCode from 'qrcode';
@@ -2322,6 +2323,14 @@ export class GMApp {
       },
       () => this.iconCache,
     );
+
+    // HTML overlay layer for marker labels (and, in A3b, handles + badges).
+    // MarkerLayer drives label positions out of _draw — pass the overlay
+    // in once and it stays in sync with every redraw.
+    const overlayEl = document.getElementById('marker-overlay');
+    if (overlayEl) {
+      this.markerEditor.layer.setOverlay(new MarkerOverlay(overlayEl));
+    }
 
     this.markerEditor.setFogSelectCallback((pos) => this.fogEditor.trySelectAt(pos));
 

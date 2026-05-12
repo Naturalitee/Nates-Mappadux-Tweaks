@@ -77,6 +77,8 @@ export class Renderer {
   private gmOverlayEnabled = false;
   private filterEnabled = true;
   private aspectRatio = 1;
+  /** Read-only map aspect ratio (width / height). Set when a map loads. */
+  get mapAspect(): number { return this.aspectRatio; }
   private fogOpacity = 1.0;
   /**
    * Dirty flag: when true the next animation frame will render.
@@ -480,6 +482,26 @@ export class Renderer {
   markMarkersDirty(): void {
     if (this.markerTex) this.markerTex.needsUpdate = true;
     this.needsRender = true;
+  }
+
+  /**
+   * Project a world coordinate to a CSS-pixel coordinate on the canvas
+   * (relative to canvas top-left). Used by the screen-space marker
+   * overlay to position labels above the WebGL view.
+   *
+   * Returns null when the canvas isn't laid out yet (zero dims).
+   */
+  private _projVec = new THREE.Vector3();
+  worldToScreen(worldX: number, worldY: number): { x: number; y: number } | null {
+    const canvas = this.renderer.domElement;
+    const rect   = canvas.getBoundingClientRect();
+    if (rect.width === 0 || rect.height === 0) return null;
+    this._projVec.set(worldX, worldY, 0);
+    this._projVec.project(this.camera);
+    return {
+      x: (this._projVec.x + 1) / 2 * rect.width,
+      y: (1 - this._projVec.y) / 2 * rect.height,
+    };
   }
 
   // ─── Reveal-overlay (handout animation) ────────────────────────────────

@@ -150,6 +150,42 @@ body.gm-view {
   pointer-events: none;
   z-index: 3;
 }
+
+/* HTML screen-space layer sitting on top of every canvas. Used for marker
+   labels (and, in A3b, GM marker handles / badges / selection widgets).
+   Default to click-through; per-child opt back in with pointer-events:auto. */
+.marker-overlay {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  overflow: hidden;
+  z-index: 5;
+}
+body.player-view .marker-overlay,
+body.projector-view .marker-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 5;
+}
+
+/* Per-marker name label. Positioned via `left`/`top` on the icon's bottom
+   edge centre; transform recenters horizontally. Screen-fixed CSS px so the
+   label stays readable regardless of map zoom. */
+.marker-label {
+  position: absolute;
+  transform: translate(-50%, 0);
+  color: #fff;
+  font: bold 11px var(--font-system, system-ui, sans-serif);
+  white-space: nowrap;
+  text-shadow:
+    0  1px 0 rgba(0, 0, 0, 0.9),
+    0 -1px 0 rgba(0, 0, 0, 0.9),
+    1px  0 0 rgba(0, 0, 0, 0.9),
+   -1px  0 0 rgba(0, 0, 0, 0.9),
+    0 0 3px rgba(0, 0, 0, 0.8);
+  pointer-events: none;
+  user-select: none;
+}
 #projector-viewport-canvas {
   position: absolute;
   inset: 0;

@@ -1,4 +1,5 @@
 import type { Marker, ViewState } from '../types.ts';
+import type { MarkerOverlay, OverlayItem } from './MarkerOverlay.ts';
 
 const BADGE_R   = 9;   // badge circle radius in canvas px
 const BADGE_HIT = 15;  // hit-test radius for badge clicks
@@ -378,18 +379,11 @@ export function drawMarkerShape(
     ctx.fillText(m.icon || '?', cx, cy);
   }
 
-  // 4. Label below icon — GM always sees it; players only if showLabel is set
-  if (m.label && (isGM || m.showLabel)) {
-    const lPx = Math.max(9, r * 0.55);
-    ctx.font         = `bold ${lPx}px system-ui,sans-serif`;
-    ctx.textAlign    = 'center';
-    ctx.textBaseline = 'top';
-    ctx.lineWidth    = 2.5;
-    ctx.strokeStyle  = 'rgba(0,0,0,0.85)';
-    ctx.strokeText(m.label, cx, cy + halfH + 3);
-    ctx.fillStyle    = 'white';
-    ctx.fillText(m.label, cx, cy + halfH + 3);
-  }
+  // 4. Label — moved to the HTML screen-space overlay layer in v2.11/A3a
+  //    so it stays readable regardless of map zoom. drawMarkerShape no
+  //    longer draws the label; MarkerOverlay does, positioned each frame
+  //    by the caller (MarkerLayer.render for GM, MarkerSprites callers
+  //    for the broadcast views).
 
   // 5. Status badges — GM only
   //    top-left:    visibility (eye) — always shown
@@ -431,6 +425,9 @@ export class MarkerLayer {
   private _isGM:       boolean         = false;
   private _iconCache:  Map<string, ImageBitmap> | undefined;
   private _motion:     MotionOverlay | null = null;
+  /** HTML overlay layer that renders marker labels in screen-space.
+   *  Populated via setOverlay(). Updated at the end of every _draw(). */
+  private _overlay:    MarkerOverlay | null = null;
 
   constructor(canvas: HTMLCanvasElement) {
     this.canvas = canvas;
@@ -449,6 +446,7 @@ export class MarkerLayer {
   }
 
   setAspectRatio(ar: number): void { this.ar = ar; }
+  setOverlay(overlay: MarkerOverlay | null): void { this._overlay = overlay; }
 
   // ── Rendering ──────────────────────────────────────────────────────────────
 
@@ -535,6 +533,40 @@ export class MarkerLayer {
     // Scan rings + the static range preview live ABOVE markers — they're
     // transparent strokes so they don't obscure tokens.
     if (this._motion) this._drawMotionOverlay(ctx, this._motion, W, H);
+
+    // Sync the HTML screen-space overlay (labels for v2.11/A3a; handles +
+    // badges follow in A3b). Positions are in CSS px relative to the canvas
+    // top-left, derived from the same frustum math we just used.
+    this._updateOverlay(W, H, frustumH);
+  }
+
+  /** Build the screen-space label set for the overlay layer. */
+  private _updateOverlay(W: number, H: number, frustumH: number): void {
+    if (!this._overlay) return;
+    void W;
+    const { _markers: markers, _view: view, _isGM: isGM } = this;
+    const rect = this.canvas.getBoundingClientRect();
+    const pxToCssX = rect.width  / Math.max(1, this.canvas.width);
+    const pxToCssY = rect.height / Math.max(1, this.canvas.height);
+    const items: OverlayItem[] = [];
+    for (const m of markers) {
+      const pos = this.project(m.position.x, m.position.y, view);
+      if (!pos) {
+        items.push({ id: m.id, text: '', x: 0, y: 0, visible: false });
+        continue;
+      }
+      // Icon's bottom edge in canvas-buffer px, then converted to CSS px
+      // so the label hangs just below the icon regardless of DPR.
+      const halfH = (H / frustumH) * 0.025 * m.size;
+      items.push({
+        id:      m.id,
+        text:    m.label ?? '',
+        x:       pos.x * pxToCssX,
+        y:       (pos.y + halfH + 4) * pxToCssY,
+        visible: !!m.label && (isGM || !!m.showLabel) && !m.hidden,
+      });
+    }
+    this._overlay.update(items);
   }
 
   private _drawMotionBlobs(ctx: CanvasRenderingContext2D, m: MotionOverlay, W: number, H: number): void {

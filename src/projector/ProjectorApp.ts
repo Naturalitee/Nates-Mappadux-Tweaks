@@ -2,6 +2,7 @@ import { Guest } from '../p2p/Guest.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { MarkerTexture } from '../rendering/MarkerTexture.ts';
 import { MarkerSprites } from '../rendering/MarkerSprites.ts';
+import { MarkerOverlay, type OverlayItem } from '../rendering/MarkerOverlay.ts';
 import {
   type ProjectorSetup,
   getActiveSetup,
@@ -50,6 +51,7 @@ export class ProjectorApp {
   private renderer!: Renderer;
   private markerTexture!: MarkerTexture;
   private markerSprites!: MarkerSprites;
+  private markerOverlay!: MarkerOverlay;
 
   private statusEl!:        HTMLElement;
   private connectPanel!:    HTMLElement;
@@ -158,6 +160,9 @@ export class ProjectorApp {
     this.markerSprites = new MarkerSprites();
     this.renderer.setMarkerCanvas(this.markerTexture.canvas);
     this.renderer.setMarkerSpriteGroup(this.markerSprites.group);
+
+    const overlayEl = document.getElementById('marker-overlay');
+    this.markerOverlay = new MarkerOverlay(overlayEl ?? document.body);
     this.renderer.onMapLoaded = (aspect) => {
       this.markerTexture.setAspectRatio(aspect);
       this.markerSprites.setAspectRatio(aspect);
@@ -507,7 +512,30 @@ export class ProjectorApp {
   private _renderMarkers(): void {
     if (!this.currentMarkers) return;
     this.markerSprites.render(this.currentMarkers, this.playerIconCache);
+    this._updateMarkerOverlay();
     this.renderer.markMarkersDirty();
+  }
+
+  /** Sync the HTML overlay so each marker's label sits below the icon. */
+  private _updateMarkerOverlay(): void {
+    if (!this.currentMarkers) { this.markerOverlay.update([]); return; }
+    const aspect = this.renderer.mapAspect;
+    const items: OverlayItem[] = [];
+    for (const m of this.currentMarkers) {
+      if (m.hidden) { items.push({ id: m.id, text: '', x: 0, y: 0, visible: false }); continue; }
+      const wx = (m.position.x - 0.5) * aspect;
+      const wy = -(m.position.y - 0.5) - 0.025 * m.size;
+      const s  = this.renderer.worldToScreen(wx, wy);
+      if (!s)  { items.push({ id: m.id, text: '', x: 0, y: 0, visible: false }); continue; }
+      items.push({
+        id:      m.id,
+        text:    m.label ?? '',
+        x:       s.x,
+        y:       s.y + 4,
+        visible: !!m.label && !!m.showLabel,
+      });
+    }
+    this.markerOverlay.update(items);
   }
 
   private async _decodeIconData(iconData: MarkerIconData[]): Promise<void> {

@@ -18,6 +18,10 @@
   <!-- Transition overlay canvas — drawn on by TransitionEngine during map changes -->
   <canvas id="transition-canvas"></canvas>
 
+  <!-- HTML screen-space layer for marker labels — stays readable independent
+       of the map's render scale. -->
+  <div id="marker-overlay" class="marker-overlay"></div>
+
   <!-- Status overlay — shown while connecting or on errors -->
   <div id="status" hidden></div>
 

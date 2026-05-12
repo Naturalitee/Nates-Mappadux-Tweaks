@@ -5,6 +5,7 @@ import { decodeImageBitmap } from '../utils/decodeImageBitmap.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { MarkerTexture } from '../rendering/MarkerTexture.ts';
 import { MarkerSprites } from '../rendering/MarkerSprites.ts';
+import { MarkerOverlay, type OverlayItem } from '../rendering/MarkerOverlay.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
 import { TransitionEngine } from '../transitions/TransitionEngine.ts';
 import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
@@ -26,6 +27,7 @@ export class PlayerApp {
   private renderer!: Renderer;
   private markerTexture!: MarkerTexture;
   private markerSprites!: MarkerSprites;
+  private markerOverlay!: MarkerOverlay;
   private transitionEngine!: TransitionEngine;
   private guest!: Guest;
   private statusEl!: HTMLElement;
@@ -107,6 +109,9 @@ export class PlayerApp {
     this.renderer.setMarkerCanvas(this.markerTexture.canvas);
     this.renderer.setMarkerSpriteGroup(this.markerSprites.group);
 
+    const overlayEl = document.getElementById('marker-overlay');
+    this.markerOverlay = new MarkerOverlay(overlayEl ?? document.body);
+
     this.transitionEngine = new TransitionEngine(
       document.querySelector<HTMLCanvasElement>('#transition-canvas')!,
     );
@@ -115,6 +120,7 @@ export class PlayerApp {
       this.markerSprites.setAspectRatio(aspect);
       this.markerTexture.render(this.currentMarkers, this.playerIconCache);
       this.markerSprites.render(this.currentMarkers, this.playerIconCache);
+      this._updateMarkerOverlay();
       this.renderer.markMarkersDirty();
     };
     this.renderer.start();
@@ -180,6 +186,7 @@ export class PlayerApp {
           this.renderer.setView(this.lastView);
         }
         this.markerSprites.render(this.currentMarkers, this.playerIconCache);
+        this._updateMarkerOverlay();
         this.renderer.markMarkersDirty();
         this.setStatus('');
       });
@@ -263,6 +270,7 @@ export class PlayerApp {
           if (msg.soundboardAssets?.length) this._cacheSoundboardAssets(msg.soundboardAssets);
           if (msg.soundboardActive?.length) this._applySoundboardActive(msg.soundboardActive);
           this.markerSprites.render(this.currentMarkers, this.playerIconCache);
+          this._updateMarkerOverlay();
           this.renderer.markMarkersDirty();
         })();
         this.setStatus('');
@@ -373,6 +381,7 @@ export class PlayerApp {
         // Re-render markers in case the view change should also retrigger
         // sprite resizing decisions (e.g. DPR change after window move).
         this.markerSprites.render(this.currentMarkers, this.playerIconCache);
+        this._updateMarkerOverlay();
         this.renderer.markMarkersDirty();
         break;
       }
@@ -382,6 +391,7 @@ export class PlayerApp {
         void (async () => {
           if (msg.iconData?.length) await this._decodeIconData(msg.iconData);
           this.markerSprites.render(this.currentMarkers, this.playerIconCache);
+          this._updateMarkerOverlay();
           this.renderer.markMarkersDirty();
         })();
         break;
@@ -560,6 +570,7 @@ export class PlayerApp {
       };
       this.markerTexture.render(this.currentMarkers, this.playerIconCache, overlay);
       this.markerSprites.render(this.currentMarkers, this.playerIconCache);
+      this._updateMarkerOverlay();
       this.renderer.markMarkersDirty();
 
       if (this._trackerScans.length > 0 || this._trackerBlobs.length > 0) {
@@ -748,6 +759,33 @@ export class PlayerApp {
           }
         }),
     );
+  }
+
+  /**
+   * Sync the HTML overlay so each marker label sits below its icon in
+   * screen px. World coords ↦ screen via the renderer's camera projection,
+   * with a small vertical offset for breathing room below the icon body
+   * (icon body half-height = 0.025 × m.size world units; PAD_FACTOR
+   * margin in the per-marker sprite is on top of that).
+   */
+  private _updateMarkerOverlay(): void {
+    const aspect = this.renderer.mapAspect;
+    const items: OverlayItem[] = [];
+    for (const m of this.currentMarkers) {
+      if (m.hidden) { items.push({ id: m.id, text: '', x: 0, y: 0, visible: false }); continue; }
+      const wx = (m.position.x - 0.5) * aspect;
+      const wy = -(m.position.y - 0.5) - 0.025 * m.size;
+      const s  = this.renderer.worldToScreen(wx, wy);
+      if (!s)  { items.push({ id: m.id, text: '', x: 0, y: 0, visible: false }); continue; }
+      items.push({
+        id:      m.id,
+        text:    m.label ?? '',
+        x:       s.x,
+        y:       s.y + 4,
+        visible: !!m.label && !!m.showLabel,
+      });
+    }
+    this.markerOverlay.update(items);
   }
 
   // ─── Transitions ──────────────────────────────────────────────────────────

@@ -484,6 +484,10 @@
       <canvas id="gm-markers-canvas"></canvas>
       <canvas id="viewport-canvas"></canvas>
       <canvas id="projector-viewport-canvas"></canvas>
+      <!-- HTML screen-space layer for marker labels (+ handles/badges in A3b).
+           Sits on top of every canvas; pointer-events:none by default so
+           clicks pass through to the editors below. -->
+      <div id="marker-overlay" class="marker-overlay"></div>
     </div>
 
     <div id="marker-context-menu" class="context-menu" hidden>
