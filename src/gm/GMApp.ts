@@ -72,6 +72,11 @@ function rangeToSlider(r: number): number {
 }
 
 
+/** Inside-rect hit-test for CSS-pixel bounding boxes. */
+function inRect(r: { x: number; y: number; w: number; h: number }, x: number, y: number): boolean {
+  return x >= r.x && x <= r.x + r.w && y >= r.y && y <= r.y + r.h;
+}
+
 /**
  * GMApp — top-level orchestrator for the GM interface.
  *
@@ -106,6 +111,18 @@ export class GMApp {
     startNorm: { x: number; y: number };
     startCenter: { x: number; y: number };
   } | null = null;
+
+  /** Active overlay-handle resize drag for the player rectangle. The
+   *  bottom-right corner follows the cursor; top-left stays fixed. */
+  private _rectResizeDrag: {
+    /** Top-left corner in map-norm at drag start — anchor for the resize. */
+    anchor: { x: number; y: number };
+  } | null = null;
+
+  /** Which viewport rect (if any) is currently selected. Mutual-exclusive
+   *  with the marker selection: selecting a rect deselects any marker,
+   *  and selecting a marker deselects any rect. */
+  private _selectedViewport: 'player' | 'projector' | null = null;
   /**
    * Connected projectors keyed by their per-window clientId. The first entry
    * (insertion order) is the primary; everyone after is a monitor. The map
@@ -359,6 +376,85 @@ export class GMApp {
   }
 
   /**
+   * Resize the player viewport by dragging its bottom-right handle. The
+   * top-left corner stays fixed (anchor); the rect grows / shrinks
+   * toward / away from the cursor. Clamped to [5%, 100%] of map per axis.
+   */
+  private _handleRectResizeDrag(kind: 'player' | 'projector', clientX: number, clientY: number, phase: 'start' | 'move' | 'end'): void {
+    // Only player resizes; projector size is fixed by calibration.
+    if (kind !== 'player') return;
+    const wrapper = document.getElementById('canvas-wrapper');
+    if (!wrapper) return;
+    const wrect = wrapper.getBoundingClientRect();
+    const norm  = this.renderer.canvasCssToMapNorm(clientX - wrect.left, clientY - wrect.top);
+    if (phase === 'start') {
+      const v = this.viewportEditor.getView();
+      this._rectResizeDrag = {
+        anchor: {
+          x: v.centerX - v.viewNW / 2,
+          y: v.centerY - v.viewNH / 2,
+        },
+      };
+      return;
+    }
+    if (phase === 'end') { this._rectResizeDrag = null; return; }
+    if (!this._rectResizeDrag || !norm) return;
+    const a = this._rectResizeDrag.anchor;
+    // Cursor is the new bottom-right corner; clamp inside map bounds
+    // and enforce minimum 5% rect to avoid pixel-vanish collapses.
+    const brX = Math.max(a.x + 0.05, Math.min(1, norm.x));
+    const brY = Math.max(a.y + 0.05, Math.min(1, norm.y));
+    const newViewNW = brX - a.x;
+    const newViewNH = brY - a.y;
+    const newCx = (a.x + brX) / 2;
+    const newCy = (a.y + brY) / 2;
+    const v = this.viewportEditor.getView();
+    const next = {
+      ...v,
+      centerX: newCx,
+      centerY: newCy,
+      viewNW:  newViewNW,
+      viewNH:  newViewNH,
+    };
+    this.viewportEditor.setView(next);
+    this.state.setView(next);
+    this._refreshRectOverlays();
+  }
+
+  /**
+   * Wrapper-level pointerdown hit-test against viewport rects — clicking
+   * inside a rect selects it; clicking outside both deselects. Overlay
+   * handles (move / resize / badges) stopPropagation upstream so this
+   * never fires when the user grabbed a handle. Marker selection isn't
+   * affected here — that flow stays in MarkerEditor; mutual exclusion
+   * happens via _selectViewport / markerEditor.selectById.
+   */
+  private _bindRectSelection(): void {
+    const wrapper = document.getElementById('canvas-wrapper');
+    if (!wrapper) return;
+    wrapper.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      // Already-consumed by a handle (stopPropagation) won't reach here.
+      const r = wrapper.getBoundingClientRect();
+      const cssX = e.clientX - r.left;
+      const cssY = e.clientY - r.top;
+      const playerBounds = this.viewportEditor?.getRectBounds() ?? null;
+      const projBounds   = this.projectorEditor?.getRectBounds() ?? null;
+      // Projector first so it wins on overlap (it's typically smaller +
+      // sits on top of the player rect visually).
+      if (projBounds && inRect(projBounds, cssX, cssY)) {
+        this._selectViewport('projector');
+        return;
+      }
+      if (playerBounds && inRect(playerBounds, cssX, cssY)) {
+        this._selectViewport('player');
+        return;
+      }
+      this._selectViewport(null);
+    });
+  }
+
+  /**
    * Sync the viewport-rectangle chrome (move handle now; resize / maximise
    * / aspect-lock later in A8.x) for both player + projector rects. Pulls
    * the current canvas-CSS-px bounds from each editor and pushes them to
@@ -367,18 +463,42 @@ export class GMApp {
    */
   private _refreshRectOverlays(): void {
     if (!this._markerOverlay) return;
-    // Player rect — always shown when a map is loaded.
+    const playerSelected = this._selectedViewport === 'player';
+    const projSelected   = this._selectedViewport === 'projector';
+    // Player rect — always shown when a map is loaded. Selection-gated
+    // chrome (resize / aspect / maximise) shows only while selected.
     const playerBounds = this.viewportEditor?.getRectBounds() ?? null;
     this._markerOverlay.updateRect('player', playerBounds
-      ? { ...playerBounds, color: '#ff8c00', selected: false }
+      ? {
+          ...playerBounds,
+          color:      '#ff8c00',
+          selected:   playerSelected,
+          showResize: playerSelected,
+        }
       : null,
     );
     // Projector rect — only when a projector is connected + calibrated.
     const projBounds = this.projectorEditor?.getRectBounds() ?? null;
     this._markerOverlay.updateRect('projector', projBounds
-      ? { ...projBounds, color: '#22c55e', selected: false }
+      ? {
+          ...projBounds,
+          color:    '#22c55e',
+          selected: projSelected,
+        }
       : null,
     );
+  }
+
+  /**
+   * Set the active viewport selection. Enforces mutual exclusion with the
+   * marker selection (selecting a viewport clears any selected marker).
+   * Pass null to deselect.
+   */
+  private _selectViewport(kind: 'player' | 'projector' | null): void {
+    if (this._selectedViewport === kind) return;
+    this._selectedViewport = kind;
+    if (kind !== null) this.markerEditor?.selectById(null);
+    this._refreshRectOverlays();
   }
 
   /**
@@ -2525,6 +2645,9 @@ export class GMApp {
         this.selectedMarkerId = marker?.id ?? null;
         this.updateMarkerPanel();
         if (marker) {
+          // Marker selection wins — clear any selected viewport rect so
+          // only one item carries the selection chrome at a time.
+          if (this._selectedViewport !== null) this._selectViewport(null);
           const body  = document.querySelector<HTMLElement>('#markers-panel .panel-body');
           const title = document.querySelector<HTMLElement>('#markers-panel .panel-title');
           if (body?.hidden) {
@@ -2559,7 +2682,8 @@ export class GMApp {
           else if (phase === 'move') this.markerEditor.updateOverlayRotate(clientX, clientY);
           else                       this.markerEditor.endOverlayRotate();
         },
-        onRectMoveDrag: (kind, clientX, clientY, phase) => this._handleRectMoveDrag(kind, clientX, clientY, phase),
+        onRectMoveDrag:   (kind, clientX, clientY, phase) => this._handleRectMoveDrag(kind, clientX, clientY, phase),
+        onRectResizeDrag: (kind, clientX, clientY, phase) => this._handleRectResizeDrag(kind, clientX, clientY, phase),
       });
       this.markerEditor.layer.setOverlay(overlay);
       this._markerOverlay = overlay;
@@ -2567,6 +2691,7 @@ export class GMApp {
       // (viewport edit, projector connection, camera pan/zoom) all funnel
       // back to _refreshRectOverlays().
       this._refreshRectOverlays();
+      this._bindRectSelection();
     }
 
     this.markerEditor.setFogSelectCallback((pos) => this.fogEditor.trySelectAt(pos));
