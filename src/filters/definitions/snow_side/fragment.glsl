@@ -20,9 +20,10 @@ float hash21(vec2 p) {
 }
 
 float snowLayer(vec2 uv, float cellScale, float fallSpeed, float flakeRadius) {
-  // Wrap on Y so flakes loop seamlessly; add per-cell phase for sway so each
-  // flake drifts independently.
-  uv.y -= time * uSpeed * fallSpeed;
+  // Sign is `+=` not `-=` — the framebuffer we sample is flipped vs what
+  // I assumed when writing the first cut, so subtraction made flakes
+  // rise instead of fall. Verified empirically — flakes now drift down.
+  uv.y += time * uSpeed * fallSpeed;
   vec2 cell = floor(uv * cellScale);
   vec2 f    = fract(uv * cellScale);
   float h   = hash21(cell);

@@ -22,9 +22,11 @@ float hash21(vec2 p) {
 // cellAspect = vertical stretch (>1 makes cells taller — longer streaks).
 float rainLayer(vec2 uv, float cellScale, float cellAspect, float speedMul) {
   // Wind shears streaks diagonally — multiplier kept gentle so wind=1 looks
-  // like a moderate slant, not horizontal.
+  // like a moderate slant, not horizontal. Sign on the Y march is `+=` so
+  // streaks fall down the screen (same fix as snow_side — the framebuffer
+  // sampling direction is opposite to what the original code assumed).
   uv.x += uv.y * uWind * 0.6;
-  uv.y -= time * uSpeed * speedMul;
+  uv.y += time * uSpeed * speedMul;
 
   vec2 cell = vec2(floor(uv.x * cellScale), floor(uv.y * cellScale / cellAspect));
   vec2 f    = vec2(fract(uv.x * cellScale), fract(uv.y * cellScale / cellAspect));
