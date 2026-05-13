@@ -549,6 +549,95 @@ export class GMApp {
         }
       : null,
     );
+    this._updateOffscreenIndicators(playerBounds, projBounds);
+  }
+
+  /** Off-screen viewport indicators — small edge-pinned pills with a
+   *  directional arrow that appear when the GM has panned / zoomed away
+   *  far enough that a viewport rect's bounding box no longer overlaps
+   *  the canvas. Click to recenter the camera on the rect. (A7) */
+  private _offscreenIndicators: { player: HTMLDivElement | null; projector: HTMLDivElement | null } = { player: null, projector: null };
+
+  private _updateOffscreenIndicators(
+    playerBounds: { x: number; y: number; w: number; h: number } | null,
+    projBounds:   { x: number; y: number; w: number; h: number } | null,
+  ): void {
+    this._updateOneOffscreenIndicator('player',    playerBounds);
+    this._updateOneOffscreenIndicator('projector', projBounds);
+  }
+
+  private _updateOneOffscreenIndicator(
+    kind: 'player' | 'projector',
+    bounds: { x: number; y: number; w: number; h: number } | null,
+  ): void {
+    const wrapper = document.getElementById('canvas-wrapper');
+    if (!wrapper) return;
+    let el = this._offscreenIndicators[kind];
+    if (!el) {
+      el = document.createElement('div');
+      el.className = `offscreen-indicator offscreen-indicator--${kind}`;
+      el.hidden = true;
+      const arrow = '<svg class="offscreen-indicator__arrow" viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>';
+      const label = `<span class="offscreen-indicator__label">${kind === 'player' ? 'Player view' : 'Projector view'}</span>`;
+      el.innerHTML = arrow + label;
+      el.title = `Recenter on ${kind} view`;
+      el.addEventListener('click', () => this._centerOnRect(kind));
+      wrapper.appendChild(el);
+      this._offscreenIndicators[kind] = el;
+    }
+    if (!bounds) { el.hidden = true; return; }
+    const wRect = wrapper.getBoundingClientRect();
+    const offScreen =
+      bounds.x + bounds.w < 0 ||
+      bounds.x         > wRect.width ||
+      bounds.y + bounds.h < 0 ||
+      bounds.y         > wRect.height;
+    if (!offScreen) { el.hidden = true; return; }
+    const wCx = wRect.width  / 2;
+    const wCy = wRect.height / 2;
+    const rCx = bounds.x + bounds.w / 2;
+    const rCy = bounds.y + bounds.h / 2;
+    const dx = rCx - wCx;
+    const dy = rCy - wCy;
+    const len = Math.hypot(dx, dy) || 1;
+    const ux = dx / len;
+    const uy = dy / len;
+    // Clamp the indicator to the wrapper edge with a padding inset so
+    // the pill doesn't get clipped by the wrapper bounds.
+    const pad   = 36;
+    const halfW = Math.max(1, wCx - pad);
+    const halfH = Math.max(1, wCy - pad);
+    const t = Math.min(
+      halfW / Math.max(1e-6, Math.abs(ux)),
+      halfH / Math.max(1e-6, Math.abs(uy)),
+    );
+    const ex = wCx + ux * t;
+    const ey = wCy + uy * t;
+    el.hidden = false;
+    el.style.left = `${ex}px`;
+    el.style.top  = `${ey}px`;
+    const arrow = el.querySelector<SVGElement>('svg.offscreen-indicator__arrow');
+    if (arrow) {
+      const angle = Math.atan2(dy, dx) * (180 / Math.PI);
+      arrow.style.transform = `rotate(${angle}deg)`;
+    }
+  }
+
+  /** Pan the camera so a viewport rect's centre sits at the workspace
+   *  centre. Preserves the current zoom level. */
+  private _centerOnRect(kind: 'player' | 'projector'): void {
+    let normCx: number, normCy: number;
+    if (kind === 'player') {
+      const v = this.viewportEditor.getView();
+      normCx = v.centerX; normCy = v.centerY;
+    } else {
+      const vp = this.projectorEditor.getViewport();
+      normCx = vp.centerX; normCy = vp.centerY;
+    }
+    const worldX = (normCx - 0.5) * this.mapAspectRatio;
+    const worldY = -(normCy - 0.5);
+    this.gmTransform.set(this.gmTransform.scale, worldX, worldY);
+    this._applyWorkspaceTransform();
   }
 
   /**
