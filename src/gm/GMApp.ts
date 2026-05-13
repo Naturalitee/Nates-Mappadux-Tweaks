@@ -290,12 +290,50 @@ export class GMApp {
     // Track in-flight two-finger gesture state so we can apply per-frame
     // incremental zoom + pan from cumulative scale + midpoint deltas.
     let twoLast = { midX: 0, midY: 0, scale: 1 };
+    // Snapshot of the camera transform + world-px scale taken at the
+    // start of a mouse drag-pan; on each pointermove we recompute the
+    // offset from the cumulative dx/dy against this base so the cursor
+    // stays glued to the world point it grabbed.
+    let mouseDragBase: { scale: number; offsetX: number; offsetY: number; pxPerWorldX: number; pxPerWorldY: number } | null = null;
 
     attachGestures(wrapper, {
-      // Single-touch / mouse drag is reserved for the editors — don't
-      // accept it here. shouldStart can't gate per-pointer count, so
-      // we just leave onDrag undefined and rely on Gestures' internal
-      // "no handler = no-op" behaviour.
+      // Mouse drag = pan the camera. Single-touch drags pass through
+      // to the editors (fog draw, marker selection, etc.); we only
+      // claim mouse here. The rect chrome's move/resize handles
+      // stopPropagation upstream, so a drag that started on a handle
+      // never reaches us.
+      onDrag: (e) => {
+        if (e.pointerType !== 'mouse') return;
+        if (e.phase === 'start') {
+          const s = this.renderer.worldToScreenScale();
+          mouseDragBase = {
+            scale:       this.gmTransform.scale,
+            offsetX:     this.gmTransform.offsetX,
+            offsetY:     this.gmTransform.offsetY,
+            pxPerWorldX: s.pxPerWorldX,
+            pxPerWorldY: s.pxPerWorldY,
+          };
+          wrapper.style.cursor = 'grabbing';
+          return;
+        }
+        if (e.phase === 'end') {
+          mouseDragBase = null;
+          wrapper.style.cursor = '';
+          return;
+        }
+        if (!mouseDragBase) return;
+        // Cumulative screen-pixel delta → world delta. Apply against
+        // the captured base so the cursor tracks the grabbed world
+        // point. Screen-Y is down, world-Y is up — flip dy.
+        if (mouseDragBase.pxPerWorldX <= 0 || mouseDragBase.pxPerWorldY <= 0) return;
+        this.gmTransform.set(
+          mouseDragBase.scale,
+          mouseDragBase.offsetX - e.dx / mouseDragBase.pxPerWorldX,
+          mouseDragBase.offsetY + e.dy / mouseDragBase.pxPerWorldY,
+        );
+        this._applyWorkspaceTransform();
+      },
+
       onWheel: ({ clientX, clientY, factor }) => {
         const rect = wrapper.getBoundingClientRect();
         const world = this.renderer.screenToWorld(clientX - rect.left, clientY - rect.top);
@@ -434,23 +472,35 @@ export class GMApp {
   }
 
   /**
-   * Wrapper-level pointerdown — soft deselect for viewport rects. Selection
-   * itself is deliberate (handle-driven only) per the design philosophy
-   * established in A8: clicking the move / resize / aspect / maximise
-   * handle is the ONLY way to select a rect. Casual clicks inside the
-   * rect bounds no longer select — they fall through to whatever's
-   * underneath (markers, canvas, future mouse-pan).
+   * Wrapper-level tap → soft deselect for viewport rects. Selection itself
+   * is deliberate (handle-driven only) per the A8 design philosophy:
+   * clicking the move / resize / aspect / maximise handle is the ONLY
+   * way to select a rect. Casual taps anywhere else dismiss the chrome.
    *
-   * This listener still fires on bubble; handle clicks stopPropagation
-   * upstream so a handle-click never reaches here. Anything that DOES
-   * reach here is by definition "not a handle" — so if a rect is
-   * currently selected, dismiss the chrome.
+   * Critically this is gated on movement so it doesn't fire during a
+   * mouse drag-pan (A8.6) — without the threshold, every pan gesture
+   * would clear the rect selection on its pointerdown, which is
+   * surprising. We compare pointerdown / pointerup positions; a tiny
+   * movement is a tap, anything larger is a drag and the deselect is
+   * skipped.
    */
   private _bindRectSelection(): void {
     const wrapper = document.getElementById('canvas-wrapper');
     if (!wrapper) return;
+    let downX = 0, downY = 0, downActive = false;
     wrapper.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 && e.pointerType === 'mouse') return;
+      downX = e.clientX;
+      downY = e.clientY;
+      downActive = true;
+    });
+    wrapper.addEventListener('pointerup', (e) => {
+      if (!downActive) return;
+      downActive = false;
+      const dx = e.clientX - downX;
+      const dy = e.clientY - downY;
+      // 5 CSS-px slop tolerates jitter; anything bigger is a drag.
+      if (dx * dx + dy * dy > 25) return;
       if (this._selectedViewport !== null) this._selectViewport(null);
     });
   }
