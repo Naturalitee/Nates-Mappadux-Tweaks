@@ -1,15 +1,16 @@
-// Heat Haze — desert / asphalt-shimmer wobble. Two-octave value-noise drives
-// a vertical UV displacement that's WEIGHTED toward the bottom of the frame
-// (heat rises from the ground), so the upper sky is calm and the lower
-// foreground writhes. Warm wash + slight bleach on highlights sells the
-// "things are HOT here" feel without obliterating the map.
+// Heat Haze — top-down map shimmer. The frame is the ground seen from above,
+// so there's no "up" direction for heat to rise into — instead we get
+// patches of distortion that bloom and drift across the whole surface, the
+// way you'd see warm air pockets over an aerial desert shot. Two noise
+// fields scrolling in different directions drive a 2D distortion vector
+// per pixel; warm wash + highlight bleach finish the "hot" feel.
 
 uniform sampler2D tDiffuse;
 uniform vec2      resolution;
 uniform float     time;
 uniform float     uShimmer;
 uniform float     uSpeed;
-uniform float     uHeight;
+uniform float     uPatchiness;
 uniform float     uWarmth;
 varying vec2      vUv;
 
@@ -31,33 +32,37 @@ float vnoise(vec2 p) {
 }
 
 void main() {
-  // Vertical weighting — strong shimmer near the bottom, zero near the top.
-  // Height slider controls how far up the haze rises (0.2 = thin band along
-  // the bottom; 1.0 = full-frame shimmer).
-  float vWeight = 1.0 - smoothstep(0.0, max(uHeight, 0.05), vUv.y);
-  vWeight = pow(vWeight, 1.5);
+  // Aspect-correct so patches stay roughly round regardless of screen shape.
+  vec2 aUv = vUv * vec2(resolution.x / resolution.y, 1.0);
 
-  // Two-octave noise drifting upward + sideways — gives a rolling heat-
-  // column feel rather than just a flat wobble.
-  vec2 nUv = vec2(vUv.x * 6.0, vUv.y * 4.0) + vec2(time * uSpeed * 0.3, -time * uSpeed * 0.7);
-  float n  = vnoise(nUv) * 0.6 + vnoise(nUv * 2.3) * 0.4;
-  // Centre on zero so positive + negative both contribute.
-  n = (n - 0.5) * 2.0;
+  // Patchiness slider trades broad smooth shimmer (low) for crunchy
+  // localised heat-pockets (high) by tightening the noise scale.
+  float scale = mix(3.5, 9.0, uPatchiness);
 
-  // Mostly vertical displacement — that's how real heat-haze reads (objects
-  // wobble up-down, not side-to-side). Tiny x component keeps it from
-  // looking like a vertical shutter.
-  vec2 displace = vec2(n * 0.003, n * 0.012) * uShimmer * vWeight;
+  // Two noise fields scrolling in different directions — gives the brain
+  // separate "shimmer columns" rather than one drifting wave.
+  vec2 nUvA = aUv * scale         + vec2( time * uSpeed * 0.20, time * uSpeed * 0.13);
+  vec2 nUvB = aUv * scale * 1.7   + vec2(-time * uSpeed * 0.11, time * uSpeed * 0.27);
+
+  // Sample at two offsets per field to derive a 2D distortion direction
+  // (cheap gradient — direction = (noise(x+e) - noise(x-e), ...)).
+  float e = 0.10;
+  float nA1 = vnoise(nUvA + vec2(e, 0.0)) - vnoise(nUvA - vec2(e, 0.0));
+  float nA2 = vnoise(nUvA + vec2(0.0, e)) - vnoise(nUvA - vec2(0.0, e));
+  float nB1 = vnoise(nUvB + vec2(e, 0.0)) - vnoise(nUvB - vec2(e, 0.0));
+  float nB2 = vnoise(nUvB + vec2(0.0, e)) - vnoise(nUvB - vec2(0.0, e));
+
+  vec2 displace = (vec2(nA1, nA2) * 0.6 + vec2(nB1, nB2) * 0.4) * 0.020 * uShimmer;
 
   vec4 color = texture2D(tDiffuse, vUv + displace);
 
   // Warm wash + slight highlight bleach. Multiplicative warm tint, then a
-  // bloom-cheap brighten on already-bright pixels so the hottest patches
-  // shimmer toward white.
-  vec3 warm = vec3(1.10, 0.96, 0.82);
+  // cheap bloom-style brighten on already-bright pixels so the hottest
+  // patches shimmer toward white.
+  vec3 warm = vec3(1.14, 0.95, 0.78);
   color.rgb = mix(color.rgb, color.rgb * warm, uWarmth);
   float luma = dot(color.rgb, vec3(0.299, 0.587, 0.114));
-  color.rgb += vec3(0.10) * smoothstep(0.7, 1.0, luma) * uWarmth;
+  color.rgb += vec3(0.12) * smoothstep(0.7, 1.0, luma) * uWarmth;
 
   gl_FragColor = color;
 }
