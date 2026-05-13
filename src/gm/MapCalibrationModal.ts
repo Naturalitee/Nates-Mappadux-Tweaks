@@ -81,6 +81,12 @@ export class MapCalibrationModal {
     const initialSquares = savedLine?.squares
       ?? (asset.pixelsPerSquare ? (px0 / asset.pixelsPerSquare) : 10);
 
+    // Pre-fill the by-grid inputs from the last saved grid dims if any.
+    // Falling back to "" (empty) is deliberate — empty means "user is on the
+    // ruler path, don't auto-prefer by-grid on save".
+    const initialGridH = asset.gridSquares?.h ?? '';
+    const initialGridV = asset.gridSquares?.v ?? '';
+
     overlay.innerHTML = `
       <div class="calibration-frame">
         <header class="calibration-header">
@@ -100,11 +106,21 @@ export class MapCalibrationModal {
           </svg>
         </div>
         <footer class="calibration-footer">
-          <label class="calibration-distance">
-            <span>This line is</span>
-            <input type="number" class="calibration-distance-input" min="0.5" step="0.5" value="${initialSquares.toFixed(1)}" />
-            <span>squares <small>(1&Prime;/25 mm)</small></span>
-          </label>
+          <div class="calibration-mode-rows">
+            <label class="calibration-distance">
+              <span>This line is</span>
+              <input type="number" class="calibration-distance-input" min="0.5" step="0.5" value="${initialSquares.toFixed(1)}" />
+              <span>squares <small>(1&Prime;/25 mm)</small></span>
+            </label>
+            <div class="calibration-by-grid">
+              <span>or whole map is</span>
+              <input type="number" class="calibration-grid-h" min="1" step="1" placeholder="H" value="${initialGridH}" />
+              <span aria-hidden="true">&times;</span>
+              <input type="number" class="calibration-grid-v" min="1" step="1" placeholder="V" value="${initialGridV}" />
+              <span>squares</span>
+              <span class="calibration-grid-feedback" aria-live="polite"></span>
+            </div>
+          </div>
           <span class="calibration-current">${asset.pixelsPerSquare
             ? `Current: ${asset.pixelsPerSquare.toFixed(1)} map-px per square`
             : 'Not yet calibrated'}</span>
@@ -284,11 +300,92 @@ export class MapCalibrationModal {
       redraw();
     });
 
+    // ─── By-grid path: live feedback + save-time precedence ───────────────
+    // The user can skip the ruler entirely if they know the map's grid
+    // dimensions (e.g. "this map is 25 × 30"). When both inputs are filled
+    // with positive integers, the save path prefers them over the ruler.
+    const gridHInput   = overlay.querySelector<HTMLInputElement>('.calibration-grid-h')!;
+    const gridVInput   = overlay.querySelector<HTMLInputElement>('.calibration-grid-v')!;
+    const gridFeedback = overlay.querySelector<HTMLSpanElement>('.calibration-grid-feedback')!;
+
+    type GridSolve = {
+      ok: boolean;
+      pps: number | null;
+      hPps: number | null;
+      vPps: number | null;
+      hClean: boolean;
+      vClean: boolean;
+      matched: boolean;
+    };
+    const solveGrid = (): GridSolve => {
+      const h = parseInt(gridHInput.value, 10);
+      const v = parseInt(gridVInput.value, 10);
+      const hValid = Number.isFinite(h) && h > 0;
+      const vValid = Number.isFinite(v) && v > 0;
+      if (!hValid && !vValid) {
+        return { ok: false, pps: null, hPps: null, vPps: null, hClean: false, vClean: false, matched: false };
+      }
+      const hPps = hValid ? this.imgW / h : null;
+      const vPps = vValid ? this.imgH / v : null;
+      const hClean = hPps !== null && Math.abs(hPps - Math.round(hPps)) < 1e-6;
+      const vClean = vPps !== null && Math.abs(vPps - Math.round(vPps)) < 1e-6;
+      const matched = hPps !== null && vPps !== null && Math.abs(hPps - vPps) < 0.5;
+      const ok = hValid && vValid;
+      const pps = ok ? ((hPps! + vPps!) / 2) : null;
+      return { ok, pps, hPps, vPps, hClean, vClean, matched };
+    };
+
+    const updateGridFeedback = () => {
+      const g = solveGrid();
+      gridFeedback.classList.remove('is-ok', 'is-warn');
+      if (!g.ok) {
+        if (g.hPps !== null || g.vPps !== null) {
+          // One field filled — show what it'd give as a hint, no decision yet.
+          const single = g.hPps ?? g.vPps!;
+          gridFeedback.textContent = `→ ${single.toFixed(1)} px/sq (need both)`;
+        } else {
+          gridFeedback.textContent = '';
+        }
+        return;
+      }
+      // Both filled — judge cleanliness and match.
+      const messages: string[] = [];
+      if (!g.hClean) messages.push(`H not whole (${g.hPps!.toFixed(2)})`);
+      if (!g.vClean) messages.push(`V not whole (${g.vPps!.toFixed(2)})`);
+      if (!g.matched) messages.push(`H≠V (${g.hPps!.toFixed(1)} vs ${g.vPps!.toFixed(1)})`);
+      if (messages.length === 0) {
+        gridFeedback.textContent = `✓ ${g.pps!.toFixed(0)} px/sq`;
+        gridFeedback.classList.add('is-ok');
+      } else {
+        gridFeedback.textContent = `⚠ ${messages.join(', ')}`;
+        gridFeedback.classList.add('is-warn');
+      }
+    };
+    gridHInput.addEventListener('input', updateGridFeedback);
+    gridVInput.addEventListener('input', updateGridFeedback);
+    updateGridFeedback();
+
     overlay.querySelector<HTMLButtonElement>('.calibration-cancel')?.addEventListener('click', () => this.close());
     overlay.querySelector<HTMLButtonElement>('.calibration-save')?.addEventListener('click', async () => {
       const distInput = overlay.querySelector<HTMLInputElement>('.calibration-distance-input')!;
       const squares   = parseFloat(distInput.value);
-      if (!isFinite(squares) || squares <= 0) { alert('Enter a positive number of squares.'); return; }
+
+      // By-grid takes precedence when both H and V are filled with positive
+      // integers — the user explicitly chose the "I know the map dims" path.
+      const g = solveGrid();
+      if (g.ok && g.pps !== null) {
+        await MapAssetStore.update(asset.id, {
+          pixelsPerSquare:  g.pps,
+          gridSquares:      { h: parseInt(gridHInput.value, 10), v: parseInt(gridVInput.value, 10) },
+          scaleConfidence:  'manual',
+          noGrid:           false,
+        });
+        this.close();
+        return;
+      }
+
+      // Ruler path (existing behaviour).
+      if (!isFinite(squares) || squares <= 0) { alert('Enter a positive number of squares, or fill both grid H and V.'); return; }
       const px = Math.hypot(this.b.x - this.a.x, this.b.y - this.a.y);
       if (px < 4) { alert('Drag the two crosses further apart before saving.'); return; }
       const pixelsPerSquare = px / squares;

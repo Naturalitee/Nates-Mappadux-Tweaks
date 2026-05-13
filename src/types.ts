@@ -779,6 +779,13 @@ export interface MapAsset {
     squares: number;
   };
   /**
+   * Optional whole-map grid dimensions in 1"/25 mm squares. Set when the user
+   * calibrated via the "by grid" path (typing H × V squares) rather than the
+   * ruler. Re-opening calibration pre-fills these. Stored separately from
+   * calibrationLine so the ruler still has its own memory.
+   */
+  gridSquares?: { h: number; v: number };
+  /**
    * Provenance + confidence behind `pixelsPerSquare`. Drives the library
    * badge and retrofit behaviour:
    *   • 'manual'      — user calibrated by hand via the two-endpoint flow.
