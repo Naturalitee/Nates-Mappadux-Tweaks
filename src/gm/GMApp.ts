@@ -2066,6 +2066,10 @@ export class GMApp {
       const current = this.state.snapshot().projectorViewport ?? defaultProjectorViewport();
       const next: ProjectorViewport = { ...current, ...patch };
       this.state.setProjectorViewport(next);
+      // Keep the projectorEditor's local viewport in sync with state — otherwise
+      // a later rect-drag would spread its stale copy (missing this patch) and
+      // clobber the toggle back off on the projector. Mirrors rotation / mode.
+      this.projectorEditor.setViewport(next);
       this.host.broadcast({ type: 'projector_viewport_update', payload: next });
     };
     gridToggle?.addEventListener  ('change', () => broadcastVp({ gridEnabled:   gridToggle.checked   }));
