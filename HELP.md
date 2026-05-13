@@ -31,6 +31,24 @@ Pack-level actions live behind the hamburger.
 
 ---
 
+## Running multiple sessions from one machine *(power-user tip)*
+
+One GM window = one room code = one room of players + projectors. If you want to drive *different* content to different devices at the same time — say a battlemap on a table tablet AND a handout on a player tablet, simultaneously and independently — open Mappadux a second time in a **private / incognito window**.
+
+The private window is fully isolated from your normal window: separate storage, separate room code, separate broker registration. Two GM windows side-by-side, each running its own room, each broadcasting its own map to its own set of devices.
+
+To share the same pack between both:
+
+1. In the first window, **☰ → Save Map Pack…** to a `.mappadux` file.
+2. Open a private / incognito window and load Mappadux.
+3. **☰ → Load Map Pack** → pick the file you just saved.
+
+Or, if you've hosted the pack at a URL, open both windows with `?bundle=<URL>` and they'll both auto-load it.
+
+Use cases this unlocks: floorplan tablet (room A's projector view) + handout tablet (room B's player view), or multiple battlemaps in parallel, or a "rehearsal" window where you stage the next scene while the live window keeps the players' current view going.
+
+---
+
 ## Player Connection *(renamed from Session in v2.11)*
 
 **QR Code** — Scan to open the player view on a phone or tablet at the table. **Hover** the QR for a tooltip showing the three-word room code; **click** the QR (or the small light bar to its left) to copy the player URL to your clipboard. Any device on the same network with a browser is a fully functional second screen — no app install, no cable.
