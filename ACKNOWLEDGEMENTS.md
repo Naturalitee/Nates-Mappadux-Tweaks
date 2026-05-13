@@ -55,6 +55,22 @@ Lucide is also exposed at runtime in the **Small Assets Library**'s
 own packs. Imports carry the same MIT attribution string via the unified
 asset-library credits modal.
 
+## Image Asset Library Connectors *(v2.11)*
+
+The Small Asset Library ships two built-in icon source connectors so users
+can pull icons into their packs without leaving the app. Both flow proper
+per-asset attribution back through the unified credits modal whenever
+an icon is used in a pack.
+
+| Source | Licence | Asset count | Authors |
+|---|---|---|---|
+| [Lucide](https://lucide.dev) | MIT | ~1,500 | Lucide contributors (forked from Feather Icons by Cole Bemis) |
+| [game-icons.net](https://game-icons.net/) | [CC-BY 3.0](https://creativecommons.org/licenses/by/3.0/) | ~4,000 | Lorc, Delapouite, Skoll, Quoting, and other contributors |
+
+SVGs are served via jsDelivr from the upstream GitHub repositories at use
+time; the bundled manifests carry name, slug, and author metadata only,
+not the SVG bytes.
+
 ## Visual Filters
 
 The following filter effects are adapted from ShaderToy shaders by **florian berger (flockaroo)**,
