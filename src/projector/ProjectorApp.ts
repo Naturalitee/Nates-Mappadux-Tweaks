@@ -386,6 +386,19 @@ export class ProjectorApp {
         this.renderer.updateFog(msg.payload);
         break;
       }
+      case 'brush_stroke': {
+        // v2.12/M2 — apply live stroke deltas via the shared rasteriser.
+        if (msg.layer === 'fog') {
+          this.renderer.applyFogBrushStroke({
+            points: msg.points,
+            radius: msg.radius,
+            mode:   msg.mode,
+            color:  msg.color,
+          });
+        }
+        // MapFX in M4.
+        break;
+      }
       case 'marker_update': {
         this.currentMarkers = msg.payload;
         // marker_update messages carry iconData for any libAsset bitmaps

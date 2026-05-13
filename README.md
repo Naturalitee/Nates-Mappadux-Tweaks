@@ -17,9 +17,9 @@ No account needed. No server. Everything stays on your device — maps you uploa
 
 ### Any device on your LAN is a second screen
 
-This is the headline difference for in-person play. Mappadux connects the GM and players over peer-to-peer, so **any phone, tablet, or laptop on the same network is a fully functional second screen** — no HDMI cable, no DisplayLink dongle, no installed app. Open the QR code on the device, done.
+Mappadux connects the GM and players over peer-to-peer, so **any phone, tablet, or laptop on the same network is a fully functional second screen** — no HDMI cable, no DisplayLink dongle, no installed app. Open the QR code on the device, done.
 
-> Pack your gaming laptop and two tablets. The laptop is your GM screen. One tablet sits flat on the table at true 1″ scale as the projector view — your battlemap / floorplan. The other tablet faces the players for handouts, room descriptions, and reveals. That's a full three-screen VTT setup in a bag.
+> Pack your gaming laptop and two old tablets. The laptop is your GM screen. One tablet sits flat on the table at true 1″ scale as the projector view — your battlemap / floorplan. The other tablet faces the players for handouts, room descriptions, and reveals. That's a full three-screen VTT setup in a bag.
 
 > **Pro tip — drive more screens at once.** Need the floorplan AND a handout up at the same time, on different tablets? Open Mappadux a second time in a private / incognito window — that gives you a fresh, independent GM session with its own room code. To get your pack into both, **Save Map Pack…** from the first window, then drag the `.mappadux` file into the second one (or host it once and use `?bundle=<URL>` for instant load in both). Now you can run two GM windows side-by-side: one broadcasting the battlemap to the table tablet via its projector view, the other broadcasting a handout to a player tablet via its player view. Each room is independent, so the same pack can feed as many simultaneous views as you have devices.
 

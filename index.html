@@ -119,14 +119,29 @@
     </section>
 
     <section class="panel" id="fog-panel">
-      <button type="button" class="panel-title" aria-expanded="false">Fog of War</button>
+      <button type="button" class="panel-title" aria-expanded="false">Fog of War &amp; MapFX</button>
       <div class="panel-body" hidden>
         <div class="fog-toolbar">
-          <button id="fog-draw-btn" class="btn btn--sm btn--ghost">Draw</button>
+          <button id="fog-draw-btn"  class="btn btn--sm btn--ghost">Polygon</button>
+          <button id="fog-brush-btn" class="btn btn--sm btn--ghost">Brush</button>
           <button id="fog-delete-btn" class="btn btn--sm btn--danger" hidden>Delete</button>
           <input type="color" id="fog-colour" value="#000000" title="Fog colour" />
         </div>
-        <p class="fog-hint">Click to place vertices · Click near first to close · Esc to cancel · Del to delete selected</p>
+        <div class="fog-brush-controls" hidden>
+          <label class="fog-brush-row">
+            <span>Mode</span>
+            <select id="fog-brush-mode">
+              <option value="paint">Paint fog</option>
+              <option value="erase">Reveal (erase)</option>
+            </select>
+          </label>
+          <label class="fog-brush-row">
+            <span>Size</span>
+            <input id="fog-brush-radius" type="range" min="0.01" max="0.20" step="0.005" value="0.06" />
+          </label>
+          <button id="fog-brush-clear" class="btn btn--sm btn--ghost">Clear brush</button>
+        </div>
+        <p class="fog-hint">Polygon: click vertices, close to commit. Brush: drag to paint. Esc cancels in-progress drawing.</p>
       </div>
     </section>
 

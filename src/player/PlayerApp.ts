@@ -376,6 +376,22 @@ export class PlayerApp {
         break;
       }
 
+      case 'brush_stroke': {
+        // v2.12/M2 — live brush stroke delta. Reproduced locally with the
+        // same rasteriser the GM used, so pixels stay in sync.
+        if (msg.mapId && msg.mapId !== this.currentMapId) break;
+        if (msg.layer === 'fog') {
+          this.renderer.applyFogBrushStroke({
+            points: msg.points,
+            radius: msg.radius,
+            mode:   msg.mode,
+            color:  msg.color,
+          });
+        }
+        // MapFX strokes handled in M4 once the player has a MapFX compositor.
+        break;
+      }
+
       case 'view_update': {
         this.lastView = msg.payload;
         this.renderer.setView(msg.payload);

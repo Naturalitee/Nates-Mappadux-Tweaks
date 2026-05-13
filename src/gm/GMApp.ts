@@ -2461,15 +2461,51 @@ export class GMApp {
       }
     });
 
-    // Draw button toggles draw / select mode
+    // Polygon button toggles draw / select mode (renamed from "Draw" in v2.12).
     document.querySelector('#fog-draw-btn')?.addEventListener('click', () => {
       if (this.fogDrawing) {
         this.fogEditor.disable();
         this.markerEditor?.setPointerCapture(true);
       } else {
+        this.fogEditor.setBrushActive(false);          // brush off → polygon on
         this.fogEditor.enable();
         this.markerEditor?.setPointerCapture(false);
       }
+    });
+
+    // v2.12/M3 — Brush button toggles brush mode. Mutually exclusive with
+    // polygon draw; markers stay clickable when brush is off.
+    const brushBtn = document.querySelector<HTMLButtonElement>('#fog-brush-btn');
+    const brushControls = document.querySelector<HTMLElement>('.fog-brush-controls');
+    brushBtn?.addEventListener('click', () => {
+      const wasOn = brushBtn.classList.contains('btn--active');
+      if (!wasOn) this.fogEditor.disable();            // polygon off → brush on
+      this.fogEditor.setBrushActive(!wasOn);
+      brushBtn.classList.toggle('btn--active', !wasOn);
+      if (brushControls) brushControls.hidden = wasOn;
+      this.markerEditor?.setPointerCapture(wasOn);
+    });
+
+    const brushModeSel = document.querySelector<HTMLSelectElement>('#fog-brush-mode');
+    brushModeSel?.addEventListener('change', () => {
+      this.fogEditor.setBrushSettings({ mode: brushModeSel.value as 'paint' | 'erase' });
+    });
+    const brushRadiusInput = document.querySelector<HTMLInputElement>('#fog-brush-radius');
+    brushRadiusInput?.addEventListener('input', () => {
+      this.fogEditor.setBrushSettings({ radius: parseFloat(brushRadiusInput.value) });
+    });
+    document.querySelector('#fog-brush-clear')?.addEventListener('click', () => {
+      this.renderer.clearFogBrush();
+      const fog = this.state.getState().fog;
+      // Drop the brush field entirely (undefined isn't assignable under
+      // exactOptionalPropertyTypes; construct without it).
+      const next = { polygons: fog.polygons, ...(fog.brushColor ? { brushColor: fog.brushColor } : {}) };
+      this.state.setFog(next);
+      this.host.broadcast({
+        type: 'fog_update',
+        payload: this.state.getState().fog,
+        ...(this.state.getState().map?.id ? { mapId: this.state.getState().map!.id } : {}),
+      });
     });
 
     document.querySelector('#fog-delete-btn')?.addEventListener('click', () => {
@@ -2478,6 +2514,49 @@ export class GMApp {
 
     document.querySelector<HTMLInputElement>('#fog-colour')?.addEventListener('input', (e) => {
       this.fogEditor.setColor((e.target as HTMLInputElement).value);
+    });
+
+    // v2.12/M3 — FoW brush mode handlers. Live paints into the renderer for
+    // instant feedback; end-of-stroke broadcasts the full delta to players +
+    // persists the brush PNG into fog state.
+    this.fogEditor.setBrushHandlers(
+      (settings, points) => {
+        // Paint just the new point(s) into the renderer — keeps the stroke
+        // visible under the cursor without re-decoding the snapshot.
+        this.renderer.applyFogBrushStroke({
+          points, radius: settings.radius, mode: settings.mode, color: settings.color,
+        });
+      },
+      (settings, points) => {
+        void this._commitFogBrushStroke(settings, points);
+      },
+    );
+  }
+
+  /** Broadcast the completed stroke + flush the new PNG snapshot into state.
+   *  PNG export is async (toBlob) so this is a separate method. */
+  private async _commitFogBrushStroke(settings: import('../mapfx/BrushController.ts').BrushSettings, points: import('../types.ts').FogVertex[]): Promise<void> {
+    // Broadcast the stroke delta. Stable id lets players dedupe across BC + PeerJS.
+    const strokeId = generateId();
+    const mapId = this.state.getState().map?.id;
+    this.host.broadcast({
+      type:     'brush_stroke',
+      layer:    'fog',
+      points,
+      radius:   settings.radius,
+      mode:     settings.mode,
+      color:    settings.color,
+      strokeId,
+      ...(mapId ? { mapId } : {}),
+    });
+    // Re-encode the brush PNG and fold it into fog state — auto-save picks it
+    // up via the existing fog autosave path.
+    const brushPng = await this.renderer.exportFogBrush();
+    const fog = this.state.getState().fog;
+    this.state.setFog({
+      ...fog,
+      ...(brushPng ? { brush: brushPng } : {}),
+      brushColor: settings.color,
     });
   }
 

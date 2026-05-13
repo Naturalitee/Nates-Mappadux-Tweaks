@@ -1,15 +1,29 @@
 import type { FogPolygon, FogState, FogVertex } from '../types.ts';
 import { generateId } from '../utils/id.ts';
 import type { Renderer } from '../rendering/Renderer.ts';
+import { BrushController, type BrushSettings } from '../mapfx/BrushController.ts';
 
 export interface FogEditorMode {
   drawing: boolean;
   hasSelection: boolean;
   hasPolygons: boolean;
+  /** v2.12/M3 — true when the FoW brush is active (polygon draw is off). */
+  brushing?: boolean;
 }
 
 type FogChangeCallback = (fog: FogState) => void;
 type ModeChangeCallback = (mode: FogEditorMode) => void;
+
+/** Live brush callback — fires per point during the stroke so the GM
+ *  renderer can paint in real time. End-of-stroke is reported separately
+ *  via `setBrushEndHandler` so the GM can broadcast + persist a single
+ *  consolidated delta. */
+export interface FogBrushLiveHandler {
+  (settings: BrushSettings, points: FogVertex[]): void;
+}
+export interface FogBrushEndHandler {
+  (settings: BrushSettings, points: FogVertex[]): void;
+}
 
 export class FogEditor {
   private canvas: HTMLCanvasElement;
@@ -48,6 +62,14 @@ export class FogEditor {
    *  every camera change via GMApp). Null until setOverlayHost wires a host. */
   private deleteHandleEl: HTMLButtonElement | null = null;
 
+  /** v2.12/M3 — FoW brush mode. When `brushActive` is true, polygon draw
+   *  + selection are suspended and pointer events route into the
+   *  BrushController which produces strokes. */
+  private brushActive = false;
+  private brushController: BrushController;
+  private brushLive: FogBrushLiveHandler | null = null;
+  private brushEnd:  FogBrushEndHandler  | null = null;
+
   constructor(canvas: HTMLCanvasElement, onChange: FogChangeCallback) {
     this.canvas = canvas;
     const ctx = canvas.getContext('2d');
@@ -55,9 +77,59 @@ export class FogEditor {
     this.ctx = ctx;
     this.onChange = onChange;
 
+    this.brushController = new BrushController((cx, cy) => this._clientToMapNorm(cx, cy));
+    this.brushController.setHandlers({
+      onStart:    (p, s) => this.brushLive?.(s, [p]),
+      onContinue: (p, s) => this.brushLive?.(s, [p]),
+      onEnd:      (pts, s) => this.brushEnd?.(s, pts),
+    });
+
     this.syncSize();
     this.bindEvents();
     window.addEventListener('resize', () => { this.syncSize(); this.redraw(); });
+  }
+
+  /** Wire the live-stroke + end-stroke handlers. GMApp passes:
+   *   • live: paint each new point into the renderer for instant feedback
+   *   • end: broadcast the final smoothed stroke + persist the snapshot */
+  setBrushHandlers(live: FogBrushLiveHandler, end: FogBrushEndHandler): void {
+    this.brushLive = live;
+    this.brushEnd  = end;
+  }
+
+  /** Toggle FoW brush mode. When `on`, polygon draw is suspended; pointer
+   *  events on the fog canvas route into the brush controller. */
+  setBrushActive(on: boolean): void {
+    if (this.brushActive === on) return;
+    this.brushActive = on;
+    if (on) {
+      // Brush takes the canvas — suspend polygon draw + selection.
+      this.enabled = false;
+      this.setSelection(null);
+      this.canvas.classList.add('fog-active', 'fog-brush');
+      this.canvas.classList.remove('fog-draw');
+    } else {
+      this.brushController.cancel();
+      this.canvas.classList.remove('fog-brush');
+    }
+    this.redraw();
+    this.emitMode();
+  }
+
+  setBrushSettings(patch: Partial<BrushSettings>): void {
+    this.brushController.setSettings(patch);
+  }
+
+  getBrushSettings(): BrushSettings {
+    return this.brushController.getSettings();
+  }
+
+  /** Convert a client (clientX, clientY) into map-norm coords. Mirrors the
+   *  eventToNorm path but routed through getBoundingClientRect / renderer
+   *  camera the same way. */
+  private _clientToMapNorm(cx: number, cy: number): FogVertex | null {
+    const rect = this.canvas.getBoundingClientRect();
+    return this.canvasPxToMapNorm(cx - rect.left, cy - rect.top, rect.width, rect.height);
   }
 
   setOnModeChange(fn: ModeChangeCallback): void {
@@ -190,6 +262,7 @@ export class FogEditor {
       drawing: this.enabled,
       hasSelection: this.selectedId !== null,
       hasPolygons: this.polygons.length > 0,
+      brushing: this.brushActive,
     });
   }
 
@@ -202,7 +275,10 @@ export class FogEditor {
   }
 
   private bindEvents(): void {
-    this.canvas.addEventListener('click',       (e) => this.handlePointerTap(this.eventToNorm(e)));
+    this.canvas.addEventListener('click',       (e) => {
+      if (this.brushActive) return; // brush owns the canvas — no polygon taps
+      this.handlePointerTap(this.eventToNorm(e));
+    });
     this.canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); this.cancelCurrent(); });
 
     this.canvas.addEventListener('mousemove', (e) => {
@@ -220,6 +296,7 @@ export class FogEditor {
 
     this.canvas.addEventListener('touchend', (e) => {
       e.preventDefault();
+      if (this.brushActive) return; // brush ignores tap-to-add-poly
       const t = e.changedTouches[0];
       if (t) {
         const pos = this.touchToNorm(t);
@@ -232,6 +309,31 @@ export class FogEditor {
         }
       }
     }, { passive: false });
+
+    // v2.12/M3 — Pointer events for brush mode. Captured here so the same
+    // fog canvas hosts both polygon clicks (when brush off) and stroke
+    // painting (when brush on). pointerdown→pointerup spans the whole stroke;
+    // pointer capture keeps us receiving events even if the cursor leaves
+    // the canvas mid-stroke.
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (!this.brushActive) return;
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      e.preventDefault();
+      try { this.canvas.setPointerCapture(e.pointerId); } catch { /* not supported */ }
+      this.brushController.begin(e.clientX, e.clientY);
+    });
+    this.canvas.addEventListener('pointermove', (e) => {
+      if (!this.brushActive) return;
+      this.brushController.continue(e.clientX, e.clientY);
+    });
+    const endBrush = (e: PointerEvent) => {
+      if (!this.brushActive) return;
+      try { this.canvas.releasePointerCapture(e.pointerId); } catch { /* ok */ }
+      this.brushController.end();
+    };
+    this.canvas.addEventListener('pointerup',     endBrush);
+    this.canvas.addEventListener('pointercancel', endBrush);
+    this.canvas.addEventListener('pointerleave',  endBrush);
 
     window.addEventListener('keydown', (e) => {
       if (e.key === 'Escape') this.cancelCurrent();
