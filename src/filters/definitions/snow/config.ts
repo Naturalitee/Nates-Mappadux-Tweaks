@@ -14,6 +14,7 @@ const definition: FilterDefinition = {
     { type: 'slider', id: 'density',   label: 'Density',    min: 0.01, max: 0.50, step: 0.01, default: 0.22 },
     { type: 'slider', id: 'windSpeed', label: 'Wind Speed', min: 0,    max: 4,    step: 0.05, default: 0.8  },
     { type: 'slider', id: 'windAngle', label: 'Wind Angle (0-1 = 360°)', min: 0, max: 1, step: 0.01, default: 0.0 },
+    { type: 'slider', id: 'gusts',     label: 'Gusts',      min: 0,    max: 2,    step: 0.05, default: 0.6  },
     { type: 'slider', id: 'coolTint',  label: 'Cool Tint',  min: 0,    max: 1,    step: 0.01, default: 0.35 },
   ],
 };
