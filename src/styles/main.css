@@ -3420,12 +3420,10 @@ option.select-option--add {
   font-family: var(--font-mono);
 }
 
-/* Player + Projector floating fullscreen corner button — auto-fades when idle.
-   Inset from the viewport corner (not flush) so it sits visibly inside the
-   screen, easier to spot and click without aiming at the very edge. */
+/* Player + Projector floating fullscreen corner button — auto-fades when idle. */
 .player-fullscreen-btn {
   position: fixed;
-  bottom: 40px; right: 40px;
+  bottom: 12px; right: 12px;
   z-index: 100;
   background: rgba(0, 0, 0, 0.6);
   color: var(--text);
@@ -3559,7 +3557,7 @@ option.select-option--add {
 
 .projector-controls {
   position: fixed;
-  bottom: 40px; right: 40px;
+  bottom: 12px; right: 12px;
   background: rgba(0, 0, 0, 0.6);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
