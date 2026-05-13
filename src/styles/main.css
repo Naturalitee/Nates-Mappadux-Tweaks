@@ -1514,6 +1514,44 @@ option.select-option--add {
 #fog-canvas.mapfx-paint,
 #fog-canvas.mapfx-poly { pointer-events: auto; cursor: crosshair; }
 
+/* v2.12/M4 — MapFX selector icon. Sits on the marker-overlay layer at the
+   entity's anchor point. Pale when not selected (~50% opacity); pops to
+   full opacity when the GM picks it. */
+.mapfx-selector {
+  position: absolute;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  border-radius: 50%;
+  background: rgba(20, 24, 36, 0.85);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  cursor: pointer;
+  opacity: 0.5;
+  transition: opacity 120ms ease, transform 80ms ease;
+}
+.mapfx-selector:hover { opacity: 0.85; }
+.mapfx-selector svg { display: block; }
+.mapfx-selector--selected {
+  opacity: 1;
+  border-color: var(--accent, #6aa3ff);
+  box-shadow: 0 0 0 2px var(--accent, #6aa3ff), 0 2px 4px rgba(0, 0, 0, 0.6);
+}
+/* Trashcan delete handle sits at the bottom-left of the selector icon,
+   matching markers / text / FoW polys. */
+.mapfx-selector__delete {
+  top:  calc(100% - 6px);
+  left: -6px;
+  /* The base .marker-handle--delete styling already covers colour, border,
+     and hover; we just position it relative to the selector button. */
+  transform: translate(-50%, -50%);
+}
+
 /* ── View panel ─────────────────────────────────────────────────────────── */
 .view-hint {
   font-size: 0.7rem;

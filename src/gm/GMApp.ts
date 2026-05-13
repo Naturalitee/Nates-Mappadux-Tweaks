@@ -591,6 +591,32 @@ export class GMApp {
       : null,
     );
     this._updateOffscreenIndicators(playerBounds, projBounds);
+    this._refreshMapFXSelectors();
+  }
+
+  /** v2.12/M4 — push MapFX selector icons to the overlay at their current
+   *  screen positions. Called from _refreshRectOverlays so the icons track
+   *  camera pan/zoom for free. */
+  private _refreshMapFXSelectors(): void {
+    if (!this._markerOverlay) return;
+    const entities = this.state.getState().mapfx.entities;
+    const sel = this.selectedMapFXEntityId;
+    const items: import('../rendering/MarkerOverlay.ts').MapFXSelectorItem[] = [];
+    for (const e of entities) {
+      const p = this.renderer.mapNormToCanvasCss(e.anchor.x, e.anchor.y);
+      if (!p) continue;
+      const k = MAPFX_REGISTRY[e.kind] ?? MAPFX_REGISTRY.fire;
+      items.push({
+        id:       e.id,
+        anchorX:  p.x,
+        anchorY:  p.y,
+        iconSvg:  k.iconSvg,
+        color:    k.defaultColor,
+        title:    e.label ?? k.label,
+        selected: sel === e.id,
+      });
+    }
+    this._markerOverlay.updateMapFXSelectors(items);
   }
 
   /** Off-screen viewport indicators — small edge-pinned pills with a
@@ -738,6 +764,24 @@ export class GMApp {
       this.markerEditor.selectById(null);
     }
     this.state.setMarkers(markers);
+  }
+
+  /** v2.12/M4 — Select / deselect a MapFX entity. Triggers a renderer
+   *  recomposite so the entity pops to full opacity, then refreshes the
+   *  selector-icon overlay so the trashcan handle appears. */
+  private _selectMapFXEntity(id: string | null): void {
+    this.selectedMapFXEntityId = id === this.selectedMapFXEntityId ? null : id;
+    const state = this.state.getState();
+    void this.renderer.updateMapFX(state.mapfx.entities, this.selectedMapFXEntityId);
+    this._refreshMapFXSelectors();
+  }
+
+  /** v2.12/M4 — Remove a MapFX entity from state + broadcast. Selection
+   *  clears if the deleted entity was the active one. */
+  private _deleteMapFXEntity(id: string): void {
+    if (this.selectedMapFXEntityId === id) this.selectedMapFXEntityId = null;
+    this.state.removeMapFXEntity(id);
+    // The 'mapfx' branch in onStateChange handles renderer + broadcast.
   }
 
   private _handleRectAspect(kind: 'player' | 'projector'): void {
@@ -3242,6 +3286,9 @@ export class GMApp {
         onRectResizeDrag: (kind, clientX, clientY, phase) => this._handleRectResizeDrag(kind, clientX, clientY, phase),
         onRectAspectLock: (kind) => this._handleRectAspect(kind),
         onRectMaximise:   (kind) => this._handleRectMaximise(kind),
+        // v2.12/M4 — MapFX selector clicks
+        onMapFXSelect:    (id) => this._selectMapFXEntity(id),
+        onMapFXDelete:    (id) => this._deleteMapFXEntity(id),
       });
       this.markerEditor.layer.setOverlay(overlay);
       this._markerOverlay = overlay;

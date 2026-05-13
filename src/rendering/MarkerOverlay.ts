@@ -145,6 +145,14 @@ export interface OverlayHandlers {
   /** Delete handle click — remove the selected marker. */
   onDeleteClick?: (markerId: string) => void;
 
+  /** v2.12/M4 — MapFX selector-icon click → select that entity. */
+  onMapFXSelect?:    (entityId: string) => void;
+  /** v2.12/M4 — MapFX trashcan click → delete that entity. */
+  onMapFXDelete?:    (entityId: string) => void;
+  /** v2.12/M4 — click on empty space inside the overlay → deselect any
+   *  selected MapFX entity. Fires when no selector icon was hit. */
+  onMapFXDeselect?:  () => void;
+
   /** Viewport rectangle move-handle drag. */
   onRectMoveDrag?:    RectMoveHandler;
   /** Player viewport resize-handle drag. */
@@ -215,14 +223,49 @@ interface RectElements {
   lastAspect:   'apply'  | 'undo'      | null;
 }
 
+/**
+ * v2.12/M4 — MapFX selector-icon overlay item. One per MapFX entity.
+ * Anchor point + kind glyph (from MAPFX_REGISTRY) drives the rendering.
+ * Selected state pops the icon to full opacity + reveals a trashcan
+ * delete handle at the bottom-left (consistent with marker / text / fog
+ * delete chrome).
+ */
+export interface MapFXSelectorItem {
+  id:       string;
+  anchorX:  number;  // CSS px relative to overlay container
+  anchorY:  number;
+  /** Inline SVG body for the kind icon (e.g. flame, snowflake). */
+  iconSvg:  string;
+  /** Colour for the icon stroke / fill. */
+  color:    string;
+  /** Hover label — typically the kind label, with the user-set label if any. */
+  title?:   string;
+  selected: boolean;
+}
+
+interface MapFXSelectorElements {
+  root:         HTMLButtonElement;
+  deleteHandle: HTMLDivElement | null;
+  /** Last-applied iconSvg + colour for idempotent updates. */
+  lastIcon:     string;
+  lastColor:    string;
+}
+
 export class MarkerOverlay {
   private container: HTMLElement;
   private items     = new Map<string, MarkerElements>();
   private rects     = new Map<RectKind, RectElements>();
+  private mapfx     = new Map<string, MapFXSelectorElements>();
   private handlers: OverlayHandlers = {};
 
   constructor(container: HTMLElement) {
     this.container = container;
+    // v2.12/M4 — clicking blank space inside the overlay should clear any
+    // selected MapFX entity. The overlay container is pointer-events:none
+    // so events bubble through; but if we attach a transparent backdrop
+    // we can capture deselect clicks. For now we expose a public method
+    // that the GMApp calls on canvas-wrapper clicks (see _bindRectSelection
+    // pattern in GMApp).
   }
 
   setHandlers(h: OverlayHandlers): void {
@@ -259,6 +302,93 @@ export class MarkerOverlay {
     this.items.clear();
     for (const r of this.rects.values()) r.root.remove();
     this.rects.clear();
+    for (const m of this.mapfx.values()) m.root.remove();
+    this.mapfx.clear();
+  }
+
+  /**
+   * v2.12/M4 — Sync the MapFX selector icons. One button per entity at its
+   * anchor; click selects, trashcan deletes. Idempotent: existing elements
+   * are updated in place; missing entities are torn down.
+   */
+  updateMapFXSelectors(items: MapFXSelectorItem[]): void {
+    const seen = new Set<string>();
+    for (const item of items) {
+      seen.add(item.id);
+      let el = this.mapfx.get(item.id);
+      if (!el) {
+        el = this._createMapFXSelector(item.id);
+        this.mapfx.set(item.id, el);
+      }
+      this._applyMapFXSelector(el, item);
+    }
+    for (const [id, el] of this.mapfx) {
+      if (!seen.has(id)) {
+        el.root.remove();
+        this.mapfx.delete(id);
+      }
+    }
+  }
+
+  private _createMapFXSelector(id: string): MapFXSelectorElements {
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'mapfx-selector';
+    btn.dataset['entityId'] = id;
+    btn.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+    btn.addEventListener('click', (e) => {
+      e.stopPropagation();
+      this.handlers.onMapFXSelect?.(id);
+    });
+    this.container.appendChild(btn);
+    return { root: btn, deleteHandle: null, lastIcon: '', lastColor: '' };
+  }
+
+  private _applyMapFXSelector(el: MapFXSelectorElements, item: MapFXSelectorItem): void {
+    el.root.style.left = `${item.anchorX}px`;
+    el.root.style.top  = `${item.anchorY}px`;
+    el.root.classList.toggle('mapfx-selector--selected', item.selected);
+    if (item.title) el.root.title = item.title;
+
+    // Re-inject the SVG only when icon / colour actually changed (avoids
+    // hammering the DOM on every camera-driven reposition).
+    if (el.lastIcon !== item.iconSvg || el.lastColor !== item.color) {
+      el.root.innerHTML = `
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="${item.color}" stroke="${item.color}"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          ${item.iconSvg}
+        </svg>
+      `;
+      el.lastIcon = item.iconSvg;
+      el.lastColor = item.color;
+    }
+
+    // Delete handle — trashcan at bottom-left when selected.
+    if (item.selected && !el.deleteHandle) {
+      const dh = document.createElement('div');
+      dh.className = 'marker-handle marker-handle--delete mapfx-selector__delete';
+      dh.title = 'Delete this MapFX effect';
+      dh.innerHTML = `
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 6h18"/>
+          <path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/>
+          <path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/>
+          <line x1="10" y1="11" x2="10" y2="17"/>
+          <line x1="14" y1="11" x2="14" y2="17"/>
+        </svg>
+      `;
+      dh.addEventListener('pointerdown', (e) => e.stopPropagation());
+      dh.addEventListener('click', (e) => {
+        e.stopPropagation();
+        this.handlers.onMapFXDelete?.(item.id);
+      });
+      el.root.appendChild(dh);
+      el.deleteHandle = dh;
+    } else if (!item.selected && el.deleteHandle) {
+      el.deleteHandle.remove();
+      el.deleteHandle = null;
+    }
   }
 
   /**
