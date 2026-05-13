@@ -1,5 +1,140 @@
 # Changelog
 
+## v2.11.0 — 2026-05-13
+
+### Workspace pan/zoom, a rebuilt direct-manipulation UX, and tablet-as-screen
+
+v2.11 turns the GM canvas into a real workspace and rebuilds every
+selection / handle interaction around one consistent design language.
+The biggest practical win is **tablet-as-screen**: any device on the
+LAN — a phone, a spare tablet, a laptop — opens the player view in a
+browser and becomes a fully functional second screen. Throw a tablet
+in your bag with the gaming laptop and you have a portable VTT
+setup; a second tablet flat on the table is a third screen for
+floorplans.
+
+#### GM canvas workspace
+
+- **Mouse drag-pan** — click + drag anywhere on the canvas (away from
+  handles / markers) to pan the camera. Cursor flips to "grabbing".
+- **Wheel zoom + keyboard pan** — scroll-wheel zooms around the
+  cursor; arrow keys pan; R resets. Carried over from earlier A4 work.
+- **Touch gestures** — two-finger pinch to zoom + pan, single-touch
+  still reserved for editors (fog draw, marker handles).
+- **Off-screen indicator pills** — when a player / projector rect is
+  panned out of the visible workspace a colour-matched pill appears
+  at the wrapper edge with a rotating arrow pointing to the rect.
+  Click recentres the camera on it.
+- **Reset view pill** — small bottom-right affordance that appears
+  only when the camera is off identity. Click restores the default
+  centred fit.
+
+#### Direct-manipulation rebuild — markers and viewport rectangles
+
+The marker panel's separate label / icon / size / role inputs are
+gone in favour of on-canvas chrome. Every marker now carries:
+
+- **Move handle** at the top-left corner (drag = move + select).
+- **Badge row** along the top edge — visibility, audio role, motion
+  role; live indicators of state, click to toggle.
+- **Resize + rotate handles** at the bottom-right and top edges when
+  selected.
+- **Locked enforcement** — locked markers ignore handle drags and
+  show greyed badges as display-only.
+- **Per-marker sprite layer** — each marker renders into its own
+  Three.js sprite with an unbounded-resolution canvas texture, so
+  large markers stay crisp even at deep player-side zoom levels.
+
+The player and projector viewport rectangles speak the same language:
+
+- **Move handle** at the top-left, **resize handle** at the bottom-
+  right (player only — projector size is calibration-locked),
+  **aspect-lock (16:9)** and **maximise / restore** buttons on the
+  right edge.
+- **"Pop" shortcut** — grabbing the move handle on a full-map player
+  rect snaps it to 50% map dimensions centred, so a maximised rect
+  becomes draggable in one gesture.
+- **Selection is handle-only** — clicking inside the rect no longer
+  steals selection, so canvas clicks fall through to markers, fog
+  selection, and mouse drag-pan as expected.
+
+#### Side panel rework
+
+- **Player View panel retired** — every action it carried is now a
+  handle click on the rect. The broadcast toggle ("GM is faffing"
+  placeholder) moved to the **Player Connection** panel header
+  (Session was renamed for clarity).
+- **Background Colour** folded into Map Selection alongside the
+  other per-map settings.
+- **Projection View panel** auto-collapses when the projector rect
+  is deselected.
+- **Blackout button retired** — broadcast toggle covers the same
+  need with a friendlier UX (and the legacy `'black'` projection
+  mode normalises to `'full'` on load for backward compatibility).
+
+#### EditableSelect — in-place rename combobox
+
+A new custom combobox wraps every renamable dropdown:
+
+- **Map dropdown**, **Marker dropdown**, **Projector calibration
+  picker** — selected option's label is editable inline. Click to
+  rename, Enter commits, Esc reverts, chevron opens the menu.
+- The separate "Name" input rows in the Map and Marker panels are
+  gone; the dropdown IS the rename field.
+- **Native `<select>` baseline** — unified styling across every
+  modal dropdown (licence pickers, calibration LFD selects, Text
+  Map font / aspect, Freesound duration) so the visual family is
+  consistent without per-control wrapping.
+
+#### Fullscreen UX
+
+- The exit-fullscreen button on player + projector grows to ~50vmin
+  in `:fullscreen` state and stays fully visible — a generous tap
+  target so dismounting fullscreen from a tablet doesn't require
+  precision aiming at a 20px corner button.
+
+#### Text Map editor
+
+- **Element chrome unified** with the marker / viewport rect design:
+  move handle top-left, resize bottom-right, delete badge top-right,
+  selection cue = dashed outline + soft veil.
+
+#### Calibration board (mobile)
+
+- **Pinch + drag-pan** on the manual calibration board so tablet
+  users can zoom in on a crowded grid to place endpoints precisely.
+
+#### Image Assets Library
+
+- Stream B landed earlier in v2.11 — a third first-class asset
+  library alongside Maps and Sounds, with the same library / web-
+  link / upload / connector taxonomy. Includes the **Lucide** icon
+  set (MIT) and **game-icons.net** (CC-BY 3.0) as built-in
+  connectors with proper attribution flow-through to the unified
+  credits modal.
+- **Icon-picker preview prefetch threshold** raised from 12 → 30,
+  giving previews sooner without slamming the jsDelivr CDN on
+  wide 2-char searches.
+
+#### Text Maps (Handouts)
+
+- Stream C landed earlier in v2.11 — text-map / handout entries are
+  a new map type with a rich element editor, multiple aspect
+  presets, font picker, and animated reveal transitions.
+
+#### Internals
+
+- **CanvasTransform** controller — a pure-math pan/zoom model
+  shared between the GM workspace, the calibration board, and any
+  future zoomable surface.
+- **Gestures** helper extended with a `pointerType` field on
+  drag events so consumers can filter mouse vs touch without going
+  back to the raw PointerEvent.
+- **Renderer** gained mapNormToCanvasCss / canvasCssToMapNorm /
+  worldToScreen / setCameraTransform so the editors (Fog, Marker,
+  Viewport, ProjectorViewport) all route through one source of
+  truth for screen ↔ map coordinate translation.
+
 ## v2.10.5 — 2026-05-11
 
 Feature:
