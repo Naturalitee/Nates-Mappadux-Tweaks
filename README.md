@@ -15,10 +15,16 @@ No account needed. No server. Everything stays on your device — maps you uploa
 
 **Hi, I'm Alex.** I wanted VTT features for the table I actually game at — players around real wood, a screen showing the map. I kept cobbling together half a dozen tools, and prep was eating most of my evening before anyone arrived. I wanted *one* thing: fast to set up, easy to use without breaking the flow of play. That's Mappadux.
 
-What it does:
+### Any device on your LAN is a second screen
+
+This is the headline difference for in-person play. Mappadux connects the GM and players over peer-to-peer, so **any phone, tablet, or laptop on the same network is a fully functional second screen** — no HDMI cable, no DisplayLink dongle, no installed app. Open the QR code on the device, done.
+
+> Throw a tablet in your bag with the gaming laptop and you have a full setup. A second tablet flat on the table at true 1″ scale is your floorplan. A third becomes a dedicated handouts screen.
+
+### What it does
 
 - **Sets up in minutes, not hours.** Add a map, set a scale, drop a few markers — you're ready.
-- **Shows maps on a second screen** for players, or **projects at true 1″ / 25 mm scale** onto an under-table screen for in-person play.
+- **Shows maps on any tablet / phone** for players, or **projects at true 1″ / 25 mm scale** onto an under-table screen or down-projector for in-person play.
 - **Fog of war, markers, motion trackers, atmospheric audio, and visual filters** — without hunting through menus mid-scene.
 
 It tries to feel **immersive** too: parchment / hand-drawn / CRT-phosphor filters, smooth map transitions, positional and motion-tracker audio.
@@ -62,9 +68,10 @@ Players connect over peer-to-peer (PeerJS); no server infrastructure beyond stat
 
   Transitions are extensible — each lives in its own folder under `src/transitions/definitions/` with its own configurable parameters.
 
+- **GM workspace pan/zoom** *(new in v2.11)* — the GM canvas is now a real workspace. Mouse drag to pan, scroll-wheel to zoom around the cursor, arrow keys to nudge, R to reset. Two-finger pinch + drag on touch. A small "Reset view" pill appears at the bottom-right whenever the camera is off identity. Off-screen indicator pills appear at the wrapper edge when a viewport rectangle is panned out of view — click to recentre.
 - **Markers / tokens** — place and manage tokens on the map from the Markers panel:
   - **Add** — click **+ Add Marker** in the sidebar or right-click the map.
-  - **Drag** — drag any marker to reposition it; position broadcasts to players on release.
+  - **Direct manipulation** — every marker carries on-canvas chrome when selected: a move handle at the top-left, a row of action badges along the top (visibility / audio role / motion role), and resize + rotate handles. Drag the move handle to reposition; click badges to toggle state.
   - **Properties** — edit name, icon, colour, and size per marker.
   - **Icon picker** — click the icon button to open a grid of 46 preset Unicode symbols (shapes, chess/card suits, circled numbers ①–⑳, check/cross marks). Upload your own custom icon (resized to 64×64 and saved to IndexedDB); custom icons are included in bundle export/import and transmitted to connected players automatically. Use **✕ Delete custom icon** to remove any uploaded icon from the picker.
   - **Clone** — **Clone Marker** duplicates the selected marker (offset slightly, label gets " - copy"), useful for quickly placing groups of identical tokens.
@@ -80,7 +87,7 @@ Players connect over peer-to-peer (PeerJS); no server infrastructure beyond stat
     - All positional audio is broadcast to connected players via P2P.
   - **Motion Tracker** — periodic radar / sonar / sensor sweep. Pick one marker as **Motion Tracker** and one or more as **Motion Source**. Every few seconds the tracker fires an outgoing ping; an expanding ring sweeps from the tracker, and as it crosses each source it fires a return blob + return ping at that exact moment. Configure range (logarithmic slider, 0.05–4.0 of map height), ping rate (0.25–15 s), scan speed, colour, and per-source blob style (single / multi-few / multi-many). Works for _Aliens_-style motion sensors, submarine sonar, sci-fi sensor sweeps, magical scrying — any "I'm here" pulse mechanic. Two CC0 ping sounds are bundled by default. Works through visual filters on the player view.
 
-- **Player view control** — interactive on-map viewport editor: an orange rectangle on the GM's canvas always shows what players see. Click **Edit Player View** to drag-move or freely corner-resize it. One-click **Reset to Full Map**. The player's screen is strictly clipped to the rectangle; background colour fills any bars caused by aspect-ratio differences. Touching any other control while editing implicitly commits the move.
+- **Player view control** — an orange rectangle on the GM's canvas always shows what players see. Direct-manipulation chrome: a move handle at the top-left, resize handle at the bottom-right, plus **aspect-lock (16:9)** and **maximise / restore** buttons on the right edge when selected. Grabbing the move handle on a full-map rect snaps it to 50% map-dimensions centred so a maximised view becomes draggable in one gesture. The player's screen is strictly clipped to the rectangle; background colour fills any bars caused by aspect-ratio differences. A **broadcast toggle** in the Player Connection panel header swaps the player view for a friendly placeholder ("the GM is faffing") while you reset things mid-scene.
 - **Projector view (battlemap mode)** — render a calibrated crop of the map at true table scale on an under-table screen or down-projector, so a 1″ creature on the map projects as 1″ on the surface and miniatures occupy real-world inches. Calibrate the map (1″ / 25 mm squares) and the projector device once; thereafter the Projection View panel runs the whole flow from a single dropdown — pan the rectangle to move, optional 1″ grid overlay, rotation for portrait maps, mirror to additional bezel-framed monitor windows. See [HELP.md](./HELP.md#projection-view) for the workflow.
 - **Background colour** — set the letterbox colour; auto-sampled from the map on first load.
 - **Real-time sync** — all GM changes (map, fog, filter, view, markers, audio, transition) push to connected players instantly.
@@ -103,6 +110,10 @@ Players connect over peer-to-peer (PeerJS); no server infrastructure beyond stat
   - **Player mute** — players can right-click the player screen at any time to toggle their own audio mute. A badge indicator (🔇 / 🔊) confirms the action.
   - **Attributions** — the ℹ Attributions button lists all CC-BY sounds currently in use, with full credit text ready to copy.
   - **Preloading** — all sounds assigned to a map are cached on the player client when the map loads, so playback starts instantly with no buffering delay.
+
+- **Text Maps (handouts)** *(new in v2.11)* — a second map type for letters, posters, journal pages, stat blocks, in-fiction documents. Rich element editor with text + image elements, font picker, multiple aspect presets, per-element move/resize, and an optional animated reveal so the handout types itself out for the players.
+
+- **Image Assets Library** *(new in v2.11)* — a third first-class asset library alongside Maps and Sounds. Marker icons + handout images live here with the same Library / Web Links / Upload taxonomy as audio, plus built-in connectors for **Lucide** (~1500 MIT-licensed icons) and **game-icons.net** (~4000 CC-BY 3.0 fantasy / sci-fi / abstract icons). Attribution flows through the unified credits modal.
 
 - **Bundle import/export** — save and restore your entire pack as a single `.json` file. **Stored** assets (uploads + anything you've explicitly Stored) travel with their blobs and work offline on the recipient. **URL** assets travel as references only and re-fetch on first use, keeping bundle size small.
 - **Auto-save** — all per-map settings (fog polygons, filter, view position, background colour) save automatically to browser IndexedDB.
