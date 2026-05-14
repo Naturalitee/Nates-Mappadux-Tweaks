@@ -4,6 +4,19 @@ import type { Renderer } from '../rendering/Renderer.ts';
 import { BrushController, type BrushSettings } from '../mapfx/BrushController.ts';
 import { offsetPolyline } from '../mapfx/polylineOffset.ts';
 import { cleanRibbonToBlobs } from '../mapfx/polygonOps.ts';
+import { OVERLAY_KIND_ORDER } from '../mapfx/overlayKindRegistry.ts';
+
+/**
+ * Kind → click-selection priority. Derived from OVERLAY_KIND_ORDER:
+ * earlier in the list = higher priority on click. Fog sits at the
+ * top so a FoW polygon stacked under a MapFX (fire, river, …) still
+ * wins the click — without this, an accidentally-large fire polygon
+ * could trap the GM's underlying fog out of reach. Within the same
+ * kind, the most recently created polygon wins (createdAt desc).
+ */
+const KIND_CLICK_PRIORITY: Map<OverlayKind, number> = new Map(
+  OVERLAY_KIND_ORDER.map((k, i) => [k, i] as const),
+);
 
 export interface FogEditorMode {
   drawing: boolean;
@@ -491,9 +504,12 @@ export class FogEditor {
 
   private trySelect(pos: FogVertex): void {
     // Interior hit test — a point is "in" a polygon if it's inside the
-    // outer ring AND not inside any of its holes.
-    for (let i = this.polygons.length - 1; i >= 0; i--) {
-      const poly = this.polygons[i]!;
+    // outer ring AND not inside any of its holes. Collect every
+    // polygon containing the click point (might be several when fog
+    // and a MapFX overlap, or multiple MapFX kinds stack), then pick
+    // by priority instead of "last seen wins".
+    const hits: FogPolygon[] = [];
+    for (const poly of this.polygons) {
       if (!this.pointInPolygon(pos, poly.vertices)) continue;
       let inHole = false;
       if (poly.holes) {
@@ -502,13 +518,27 @@ export class FogEditor {
         }
       }
       if (inHole) continue;
-      this.setSelection(poly.id);
+      hits.push(poly);
+    }
+
+    if (hits.length === 0) {
+      this.setSelection(null);
       this.redraw();
       this.emitMode();
       return;
     }
 
-    this.setSelection(null);
+    // Sort by kind priority (dropdown order — fog first, then MapFX),
+    // breaking ties by createdAt desc so the newest of a same-kind
+    // stack wins.
+    hits.sort((a, b) => {
+      const pa = KIND_CLICK_PRIORITY.get(a.kind) ?? 999;
+      const pb = KIND_CLICK_PRIORITY.get(b.kind) ?? 999;
+      if (pa !== pb) return pa - pb;
+      return b.createdAt - a.createdAt;
+    });
+
+    this.setSelection(hits[0]!.id);
     this.redraw();
     this.emitMode();
   }
