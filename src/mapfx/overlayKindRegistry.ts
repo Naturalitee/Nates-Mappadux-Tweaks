@@ -96,6 +96,10 @@ export interface OverlayKindEntry {
   shaderParams?:     ShaderParamDef[];
 }
 
+// Only the four supported kinds keep their SVGs. The earlier flat-fill
+// kinds (cold/smoke/blood/water/shadow/electric/poison/holy/healing/fear)
+// were dev placeholders without shaders; they're removed pending real
+// adaptations (incoming: smoke / starfield / etc.).
 const SVG_FOG =
   '<path d="M3 14h13a3 3 0 0 0 0-6 5 5 0 0 0-9.78-1A4 4 0 0 0 3 14Z"/>' +
   '<path d="M5 18h14"/>' +
@@ -105,16 +109,9 @@ const SVG_FLAME =
   '<path d="M12 2c1 4 4 5 4 9a4 4 0 0 1-8 0c0-3 2-3 2-6Z"/>' +
   '<path d="M12 22a6 6 0 0 0 6-6c0-2-1-3-2-4 0 3-2 5-4 5s-4-2-4-5c-1 1-2 2-2 4a6 6 0 0 0 6 6Z"/>';
 
-const SVG_SNOWFLAKE =
-  '<line x1="12" y1="2"  x2="12" y2="22"/>' +
-  '<line x1="2"  y1="12" x2="22" y2="12"/>' +
-  '<line x1="5"  y1="5"  x2="19" y2="19"/>' +
-  '<line x1="5"  y1="19" x2="19" y2="5"/>';
-
-const SVG_SMOKE =
-  '<path d="M5 14c0-3 2-4 5-4s4 2 4 4-2 3-4 3-5-1-5-3Z"/>' +
-  '<path d="M9 7c0-2 2-3 4-3s3 1 3 3-1 2-3 2"/>' +
-  '<path d="M14 19c0 2 1 3 3 3s3-1 3-3"/>';
+const SVG_WATER =
+  '<path d="M2 12c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>' +
+  '<path d="M2 17c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>';
 
 const SVG_LIGHT =
   '<path d="M12 2v3"/><path d="M12 19v3"/>' +
@@ -122,40 +119,6 @@ const SVG_LIGHT =
   '<path d="M5 5l2 2"/><path d="M17 17l2 2"/>' +
   '<path d="M5 19l2-2"/><path d="M17 7l2-2"/>' +
   '<circle cx="12" cy="12" r="4"/>';
-
-const SVG_BLOOD =
-  '<path d="M12 2c4 5 6 9 6 13a6 6 0 0 1-12 0c0-4 2-8 6-13Z"/>';
-
-const SVG_WATER =
-  '<path d="M2 12c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>' +
-  '<path d="M2 17c2-2 4-2 6 0s4 2 6 0 4-2 6 0"/>';
-
-const SVG_SHADOW =
-  '<path d="M21 12.8A8 8 0 1 1 11.2 3a6 6 0 0 0 9.8 9.8Z"/>';
-
-const SVG_ELECTRIC =
-  '<polygon points="13 2 4 14 11 14 9 22 20 10 13 10 13 2"/>';
-
-const SVG_POISON =
-  '<path d="M9 2h6v3l-1 2v4l3 7a3 3 0 0 1-3 4H10a3 3 0 0 1-3-4l3-7V7L9 5Z"/>';
-
-const SVG_HOLY =
-  '<circle cx="12" cy="12" r="4"/>' +
-  '<line x1="12" y1="2"  x2="12" y2="6"/>' +
-  '<line x1="12" y1="18" x2="12" y2="22"/>' +
-  '<line x1="2"  y1="12" x2="6"  y2="12"/>' +
-  '<line x1="18" y1="12" x2="22" y2="12"/>' +
-  '<line x1="4.5"  y1="4.5"  x2="7.5"  y2="7.5"/>' +
-  '<line x1="16.5" y1="16.5" x2="19.5" y2="19.5"/>' +
-  '<line x1="4.5"  y1="19.5" x2="7.5"  y2="16.5"/>' +
-  '<line x1="16.5" y1="7.5"  x2="19.5" y2="4.5"/>';
-
-const SVG_HEALING =
-  '<path d="M12 4v16"/><path d="M4 12h16"/>' +
-  '<circle cx="12" cy="12" r="9"/>';
-
-const SVG_FEAR =
-  '<path d="M12 3a9 9 0 0 1 9 9c0 4-3 7-7 7s-6-2-6-5 1-4 3-4 3 1 3 3"/>';
 
 // defaultRadius is now in CSS pixels — see the type doc above. Brush stays
 // visually the same size as you zoom in / out; the resulting map polygon
@@ -225,30 +188,38 @@ const RIVER_SHADER_PARAMS: ShaderParamDef[] = [
   { id: 'direction', label: 'Direction', min: 0.0,  max: 6.2831853,      step: 0.087266, default: 0.0 },
 ];
 
+// Light shader params (in-house Mappadux shader).
+//   • intensity — overall brightness multiplier (universal).
+//   • scale     — feature size (swirl wavelength + particle grid).
+//   • speed     — animation rate for swirls + particle twinkling.
+//   • swirls    — strength of the animated noise swirl overlay. 0 hides
+//     swirls completely (just a soft radial glow + particles). 1 is
+//     prominent magical-aura strands.
+//   • particles — density of twinkling bright dots scattered through
+//     the polygon. 0 = none, 1 = thick dust.
+const LIGHT_SHADER_PARAMS: ShaderParamDef[] = [
+  { id: 'intensity', label: 'Intensity', min: 0.05, max: 2.0, step: 0.05, default: 1.0 },
+  { id: 'scale',     label: 'Scale',     min: 0.1,  max: 4.0, step: 0.05, default: 1.0 },
+  { id: 'speed',     label: 'Speed',     min: 0.0,  max: 4.0, step: 0.05, default: 1.0 },
+  { id: 'swirls',    label: 'Swirls',    min: 0.0,  max: 1.0, step: 0.05, default: 0.5 },
+  { id: 'particles', label: 'Particles', min: 0.0,  max: 1.0, step: 0.05, default: 0.4 },
+];
+
 export const OVERLAY_KIND_REGISTRY: Record<OverlayKind, OverlayKindEntry> = {
-  fog:      { id: 'fog',      label: 'Fog of War',    iconSvg: SVG_FOG,       defaultColor: '#000000', defaultRadius: 25, blend: 'normal',   animated: false, selectByInterior: true,  allowColor: true,  z: 100 },
-  fire:     { id: 'fire',     label: 'Coloured Flames', iconSvg: SVG_FLAME,   defaultColor: '#ff5a14', defaultRadius: 30, blend: 'screen',   animated: true,  selectByInterior: false, allowColor: true,  z: 10, shader: 'fire', shaderParams: FIRE_SHADER_PARAMS },
-  cold:     { id: 'cold',     label: 'Ice / Cold',    iconSvg: SVG_SNOWFLAKE, defaultColor: '#9fd6ff', defaultRadius: 30, blend: 'screen',   animated: false, selectByInterior: false, allowColor: false, z: 10  },
-  smoke:    { id: 'smoke',    label: 'Smoke',         iconSvg: SVG_SMOKE,     defaultColor: '#9aa3ad', defaultRadius: 50, blend: 'normal',   animated: true,  selectByInterior: false, allowColor: true,  z: 20  },
-  light:    { id: 'light',    label: 'Magical Light', iconSvg: SVG_LIGHT,     defaultColor: '#ffd76b', defaultRadius: 35, blend: 'screen',   animated: false, selectByInterior: false, allowColor: false, z: 5   },
-  blood:    { id: 'blood',    label: 'Blood',         iconSvg: SVG_BLOOD,     defaultColor: '#8a0d18', defaultRadius: 15, blend: 'multiply', animated: false, selectByInterior: false, allowColor: false, z: 5   },
-  water:    { id: 'water',    label: 'Water',         iconSvg: SVG_WATER,     defaultColor: '#4aa3ff', defaultRadius: 35, blend: 'screen',   animated: true,  selectByInterior: false, allowColor: true,  z: 5   },
-  river:    { id: 'river',    label: 'River',         iconSvg: SVG_WATER,     defaultColor: '#5aa9d6', defaultRadius: 35, blend: 'normal',   animated: true,  selectByInterior: false, allowColor: true,  z: 5, shader: 'river', shaderParams: RIVER_SHADER_PARAMS },
-  ocean:    { id: 'ocean',    label: 'Ocean',         iconSvg: SVG_WATER,     defaultColor: '#5fa9d6', defaultRadius: 60, blend: 'normal',   animated: true,  selectByInterior: false, allowColor: true,  z: 5, shader: 'ocean', shaderParams: OCEAN_SHADER_PARAMS },
-  shadow:   { id: 'shadow',   label: 'Shadow',        iconSvg: SVG_SHADOW,    defaultColor: '#10131c', defaultRadius: 35, blend: 'multiply', animated: false, selectByInterior: false, allowColor: false, z: 30  },
-  electric: { id: 'electric', label: 'Lightning',     iconSvg: SVG_ELECTRIC,  defaultColor: '#a0c8ff', defaultRadius: 12, blend: 'screen',   animated: true,  selectByInterior: false, allowColor: false, z: 15  },
-  poison:   { id: 'poison',   label: 'Poison',        iconSvg: SVG_POISON,    defaultColor: '#7dd23a', defaultRadius: 20, blend: 'screen',   animated: false, selectByInterior: false, allowColor: false, z: 10  },
-  holy:     { id: 'holy',     label: 'Holy',          iconSvg: SVG_HOLY,      defaultColor: '#ffe9a0', defaultRadius: 35, blend: 'screen',   animated: false, selectByInterior: false, allowColor: false, z: 5   },
-  healing:  { id: 'healing',  label: 'Healing',       iconSvg: SVG_HEALING,   defaultColor: '#a3e8a0', defaultRadius: 25, blend: 'screen',   animated: false, selectByInterior: false, allowColor: false, z: 5   },
-  fear:     { id: 'fear',     label: 'Fear',          iconSvg: SVG_FEAR,      defaultColor: '#3c0a4a', defaultRadius: 30, blend: 'multiply', animated: true,  selectByInterior: false, allowColor: false, z: 20  },
+  fog:    { id: 'fog',    label: 'Fog of War',      iconSvg: SVG_FOG,   defaultColor: '#000000', defaultRadius: 25, blend: 'normal', animated: false, selectByInterior: true,  allowColor: true,  z: 100 },
+  fire:   { id: 'fire',   label: 'Coloured Flames', iconSvg: SVG_FLAME, defaultColor: '#ff5a14', defaultRadius: 30, blend: 'screen', animated: true,  selectByInterior: false, allowColor: true,  z: 10, shader: 'fire',  shaderParams: FIRE_SHADER_PARAMS  },
+  river:  { id: 'river',  label: 'River',           iconSvg: SVG_WATER, defaultColor: '#5aa9d6', defaultRadius: 35, blend: 'normal', animated: true,  selectByInterior: false, allowColor: true,  z: 5,  shader: 'river', shaderParams: RIVER_SHADER_PARAMS },
+  ocean:  { id: 'ocean',  label: 'Ocean',           iconSvg: SVG_WATER, defaultColor: '#5fa9d6', defaultRadius: 60, blend: 'normal', animated: true,  selectByInterior: false, allowColor: true,  z: 5,  shader: 'ocean', shaderParams: OCEAN_SHADER_PARAMS },
+  light:  { id: 'light',  label: 'Magical Light',   iconSvg: SVG_LIGHT, defaultColor: '#ffd76b', defaultRadius: 35, blend: 'screen', animated: true,  selectByInterior: false, allowColor: true,  z: 8,  shader: 'light', shaderParams: LIGHT_SHADER_PARAMS },
 };
 
-/** Order for the kind dropdown — fog first (most-used), then groupings. */
+/** Order for the kind dropdown — fog first (most-used + click-priority),
+ *  then MapFX kinds in a natural elemental order. The dropdown order
+ *  doubles as click-selection priority (see FogEditor.trySelect): when
+ *  polygons overlap, the kind earlier in this list wins the click. */
 export const OVERLAY_KIND_ORDER: OverlayKind[] = [
   'fog',
-  'fire', 'cold', 'river', 'ocean', 'water', 'smoke', 'electric',
-  'light', 'holy', 'healing',
-  'blood', 'shadow', 'poison', 'fear',
+  'fire', 'river', 'ocean', 'light',
 ];
 
 /** Quick lookup with a fall-back. Unknown kinds fall through to fog so

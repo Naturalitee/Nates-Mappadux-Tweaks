@@ -42,19 +42,9 @@ export interface FogVertex {
 export type OverlayKind =
   | 'fog'
   | 'fire'
-  | 'cold'
-  | 'smoke'
-  | 'light'
-  | 'blood'
-  | 'water'
   | 'river'
   | 'ocean'
-  | 'shadow'
-  | 'electric'
-  | 'poison'
-  | 'holy'
-  | 'healing'
-  | 'fear';
+  | 'light';
 
 /**
  * The unified polygon used by the overlay system. Every shape that renders

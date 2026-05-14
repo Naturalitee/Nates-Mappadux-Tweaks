@@ -94,11 +94,21 @@ export function migrateSessionState(saved: any): SessionState | null {
   // Preserve `holes` (donut shapes) and `shaderParams` (per-poly tuning) so
   // a reload doesn't reset the GM's work. Bug fix 2026-05-14: earlier the
   // field-by-field rebuild was silently dropping both.
+  //
+  // Mid-v2.12 (2026-05-14) the OverlayKind union was trimmed to just the
+  // fully-supported kinds (fog / fire / river / ocean / light). Any saved
+  // polygon with a now-removed kind (cold/smoke/blood/water/shadow/
+  // electric/poison/holy/healing/fear) is migrated to 'fog' so the shape
+  // is preserved and the GM can morph it via the dropdown if they want.
+  const SUPPORTED_KINDS: Record<string, boolean> = {
+    fog: true, fire: true, river: true, ocean: true, light: true,
+  };
+  const coerceKind = (k: any): string => (typeof k === 'string' && SUPPORTED_KINDS[k]) ? k : 'fog';
   const rawFog = (cur.fog && Array.isArray(cur.fog.polygons)) ? cur.fog.polygons : [];
   const polygons = rawFog.map((p: any) => {
     const out: any = {
       id:        p?.id ?? '',
-      kind:      (p?.kind ?? 'fog'),
+      kind:      coerceKind(p?.kind),
       vertices:  Array.isArray(p?.vertices) ? p.vertices : [],
       createdAt: typeof p?.createdAt === 'number' ? p.createdAt : Date.now(),
     };
