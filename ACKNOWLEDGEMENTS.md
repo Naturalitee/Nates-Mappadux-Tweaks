@@ -78,7 +78,6 @@ used under the [Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unport
 
 | Filter | Name | Source |
 |--------|------|--------|
-| Ballpoint Pen | Scribble Blue (tsV3Rw) | https://www.shadertoy.com/view/tsV3Rw |
 | Hand Drawing | Hand Drawing (XtVGD1) | https://www.shadertoy.com/view/XtVGD1 |
 | Watercolour | Watercolor (ltyGRV) | https://www.shadertoy.com/view/ltyGRV |
 | Oil Painting | Oil Painting (Mlcczf) | https://www.shadertoy.com/view/Mlcczf |
