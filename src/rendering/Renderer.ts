@@ -62,6 +62,10 @@ export class Renderer {
   /** v2.12 — Three.js plane + ShaderMaterial per shader-driven kind that
    *  has any polygons painted. Created lazily; disposed on map switch. */
   private shaderPlanes: Map<OverlayKind, { mesh: THREE.Mesh; material: THREE.ShaderMaterial }> = new Map();
+  /** v2.12 — when false (set by GMApp), shader planes are not created and
+   *  shader-driven kinds render as flat fills via FogCompositor instead.
+   *  Default true; player + projector keep the fancy effects. */
+  private shaderPlanesEnabled = true;
 
   // Marker layer split as of v2.10.29:
   //   - Motion overlay (return blobs, scan rings) → single shared OffscreenCanvas
@@ -262,13 +266,15 @@ export class Renderer {
         // actual aspect ratio, so polygon positions are always correct.
         this.fogCompositor.dispose();
         this.fogCompositor = new FogCompositor(1024, 1024);
-        this.fogCompositor.redraw(this.lastFogState);
+        this.fogCompositor.redraw(this.lastFogState, 0, !this.shaderPlanesEnabled);
         // Tear down per-kind shader planes + masks for the previous map.
         this._disposeShaderPlanes();
         this.kindMaskCompositor.dispose();
         this.kindMaskCompositor = new KindMaskCompositor(1024);
-        this.kindMaskCompositor.redraw(this.lastFogState.polygons);
-        this._syncShaderPlanes();
+        if (this.shaderPlanesEnabled) {
+          this.kindMaskCompositor.redraw(this.lastFogState.polygons);
+          this._syncShaderPlanes();
+        }
 
         this.rebuildLayerMeshes();
         this.refreshCamera();
@@ -284,12 +290,31 @@ export class Renderer {
 
   updateFog(fog: FogState): void {
     this.lastFogState = fog;
-    this.fogCompositor.redraw(fog);
-    // Per-kind shader-driven kinds need their alpha masks rebuilt + the
-    // matching Three.js planes spun up / torn down based on which kinds
-    // are present.
-    this.kindMaskCompositor.redraw(fog.polygons);
-    this._syncShaderPlanes();
+    // GM view: render shader-driven kinds as flat fills too (perf + simplicity
+    // while editing). Player/projector: skip them here, shader planes own them.
+    this.fogCompositor.redraw(fog, 0, !this.shaderPlanesEnabled);
+    if (this.shaderPlanesEnabled) {
+      this.kindMaskCompositor.redraw(fog.polygons);
+      this._syncShaderPlanes();
+    }
+    this.needsRender = true;
+  }
+
+  /** v2.12 — set whether this Renderer instance should spin up shader
+   *  planes for shader-driven kinds. GMApp calls with false so the GM
+   *  view stays simple (flat fills); player + projector keep the default
+   *  true so they get the fancy effects. */
+  setShaderPlanesEnabled(enabled: boolean): void {
+    if (this.shaderPlanesEnabled === enabled) return;
+    this.shaderPlanesEnabled = enabled;
+    if (!enabled) this._disposeShaderPlanes();
+    // Re-run the compositor so shader-driven kinds reappear as flat fills
+    // (or disappear, when we re-enable).
+    this.fogCompositor.redraw(this.lastFogState, 0, !enabled);
+    if (enabled) {
+      this.kindMaskCompositor.redraw(this.lastFogState.polygons);
+      this._syncShaderPlanes();
+    }
     this.needsRender = true;
   }
 

@@ -2054,6 +2054,7 @@ export class GMApp {
     const canvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas')!;
     this.renderer = new Renderer(canvas);
     this.renderer.setFilterEnabled(false); // GM sees raw unfiltered scene
+    this.renderer.setShaderPlanesEnabled(false); // GM sees flat fills for MapFX kinds, not the player's fancy shaders
     this.renderer.enableGMOverlay();
     this.renderer.setFogOpacity(0.35);     // GM sees through fog; players get full opacity
   }

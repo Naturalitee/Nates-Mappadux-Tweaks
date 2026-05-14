@@ -42,8 +42,11 @@ export class FogCompositor {
   }
 
   /** Re-composite the overlay layer from the current state. Optional `time`
-   *  parameter drives animated kinds; pass 0 for static composites. */
-  redraw(fog: FogState, time: number = 0): void {
+   *  parameter drives animated kinds; pass 0 for static composites.
+   *  `includeShaderKinds = true` makes shader-driven kinds render as flat
+   *  fills here too — the GM view uses this so they don't have to look
+   *  at the player's animated effects while editing. */
+  redraw(fog: FogState, time: number = 0, includeShaderKinds: boolean = false): void {
     this.lastPolygons = fog.polygons;
     const { width, height } = this.canvas;
     this.ctx.clearRect(0, 0, width, height);
@@ -61,9 +64,10 @@ export class FogCompositor {
       if (poly.vertices.length < 3) continue;
       const kind = overlayKind(poly.kind);
       // Shader-driven kinds render via their own Three.js plane + custom
-      // GLSL (see KindMaskCompositor / Renderer's shader planes). Skip
-      // them in the flat-fill compositor so the two paths don't double up.
-      if (kind.shader) continue;
+      // GLSL on the player/projector. The GM view passes
+      // includeShaderKinds=true so those kinds render as flat fills here
+      // instead — the GM gets a simple, perf-friendly view while editing.
+      if (kind.shader && !includeShaderKinds) continue;
 
       // Per-kind blend mode.
       this.ctx.save();
