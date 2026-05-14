@@ -125,6 +125,49 @@ and sub-attributions for the noise / hash primitives they relied on
 "Adaptation notes" block describing what was changed for top-down
 battlemap use.
 
+#### Animated backdrops (in the bars)
+
+The letterbox / pillarbox area around the map used to be a dead
+solid colour. v2.12 turns it into per-pack territory:
+
+- **Theme → Backdrop dropdown** in the Customise pack… dialog,
+  alongside Mode + Accent. First kind shipped is a slow drifting
+  **Starfield** (Deadtotem, CC-BY-NC-SA) — ideal for sci-fi packs,
+  blooms softly behind the map without ever overlaying it.
+- Implemented as a clip-pass shader injection — the rectangle inside
+  the GM's viewport keeps showing the composed map untouched; the
+  starfield only paints the dead bars.
+- Backdrop choice travels with the bundle via `ThemeConfig.backdrop`.
+  Adding new kinds is a single registry entry in
+  `src/rendering/backdrops/`.
+- Player / Projector broadcast of the backdrop choice is a v2.13
+  follow-up; the GM canvas reads it today.
+
+#### Animated maps (webm / mp4)
+
+Map assets are no longer image-only:
+
+- Upload a `.webm` or `.mp4` through the same drop zone you'd use
+  for a PNG. The library treats it as a regular MapAsset — same
+  calibration flow, same fog editor, same marker workflow.
+- The renderer detects video via a magic-byte sniff (EBML for webm,
+  ftyp atom for mp4) and wraps it in a `THREE.VideoTexture`. Looped,
+  muted, autoplaying — no user gesture needed.
+- Magic Wand fill samples the current video frame so flood-fill
+  works against whatever the GM is actually looking at.
+- Per-file upload cap raised from 50 MB → 200 MB to fit short loops
+  comfortably; the file picker accept attribute extended.
+- Player / Projector broadcast of video bytes (and frame sync) is
+  a v2.13 follow-up; the GM canvas plays today.
+
+#### Sliders are "feel" controls
+
+Visible numeric readouts have been stripped from every "feel"
+slider in the GM UI — Filter, Transition, MapFX, Text Map element
+toolbar. The number lives on the slider's `title` attribute for
+share / screenshot use; the chrome stays uncluttered so users
+trust the touch and stop precision-twiddling.
+
 ---
 
 ## v2.11.0 — 2026-05-13
