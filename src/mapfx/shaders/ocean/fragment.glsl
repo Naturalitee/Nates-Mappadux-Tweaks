@@ -170,23 +170,20 @@ void main() {
   vec3 R = normalize(reflect(ray, N));
   R.y = abs(R.y);
 
-  // Sky + sun reflection.
+  // Sky + sun reflection. Stays natural (sky-blue) regardless of
+  // uColor — even a blood-red ocean reflects the real sky.
   vec3 reflection = getAtmosphere(R) + getSun(R);
 
-  // Subsurface scattering — the body colour of the water. Original
-  // afl_ext value is a deep blue. We expose it to GM tinting at the
-  // end so a green / red / void-purple ocean still reads as that
-  // colour beneath the sky reflection.
-  vec3 scattering = vec3(0.0293, 0.0698, 0.1717) * 0.3;
+  // Subsurface scattering — the body colour of the water. Originally
+  // afl_ext hardcoded a deep blue here (`vec3(0.0293, 0.0698, 0.1717)
+  // * 0.3`); we replace that with uColor so the GM's pick *is* the
+  // water body. Blood-red, void-purple, toxic-green, etc. all read
+  // properly. White uColor gives a neutral grey body that the sky
+  // reflection turns blue — closest to the unmodified afl_ext look.
+  vec3 scattering = uColor * 0.2;
 
   vec3 C = fresnel * reflection + scattering;
   vec3 finalCol = aces_tonemap(C * 2.0);
-
-  // Tint by uColor as a gentle hue shift. 20% mix — bed of water is
-  // mostly natural blue with a hint of GM-chosen hue. Set the colour
-  // swatch to white for the closest match to afl_ext's original
-  // ocean look.
-  finalCol = mix(finalCol, finalCol * uColor * 1.4, 0.2);
 
   // Normal alpha blend on the material — opaque-ish ocean surface.
   gl_FragColor = vec4(finalCol, maskAlpha * uIntensity);
