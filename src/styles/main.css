@@ -2561,9 +2561,15 @@ option.select-option--add {
 }
 /* Three top-level clusters: LEFT (name + add content + clipboard),
    CENTRE (element properties), RIGHT (layout + animation). Each
-   cluster lays its child sections + dividers in a flex row. */
+   cluster lays its child sections + dividers in a flex row.
+   v2.12 — flex-wrap so Add Content + Clipboard (and Layout +
+   Animation on the right) stack to a second toolbar row as the
+   GM's screen narrows, instead of crushing the centre/properties
+   cluster. The toolbar height grows to accommodate the second
+   row -- there's real estate above the page preview, use it. */
 .txt-map-toolbar-left,
 .txt-map-toolbar-right {
+  flex-wrap: wrap;
   display: flex;
   align-items: stretch;
   gap: var(--space-sm);
