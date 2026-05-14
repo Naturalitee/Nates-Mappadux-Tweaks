@@ -6,10 +6,17 @@ import { overlayKind } from '../mapfx/overlayKindRegistry.ts';
  * KindMaskCompositor (v2.12) — for shader-driven overlay kinds.
  *
  * Maintains one OffscreenCanvas per kind that has a `shader` set in the
- * registry. Each canvas holds a black/white alpha mask: white where any
- * polygon of that kind is, transparent elsewhere. The custom shader plane
- * for that kind reads the mask + time to produce the actual effect
- * (animated flames, electric crackle, etc.).
+ * registry. Each canvas holds an RGBA mask: the alpha channel encodes
+ * polygon coverage (1 where any polygon of that kind is, 0 elsewhere);
+ * the RGB channels carry the polygon's own colour. The custom shader
+ * plane for that kind samples this mask + time to produce the actual
+ * effect (animated flames, electric crackle, etc.) — including using
+ * mask.rgb as the per-polygon tint when allowColor is honoured.
+ *
+ * Two fire polygons with different colours produce different tints in
+ * their respective regions naturally because of how the canvas paints
+ * them; if they overlap, the later-drawn polygon's colour wins (which
+ * matches FogCompositor's z + createdAt sort).
  *
  * Mask resolution mirrors the fog compositor (1024×1024 with normalised
  * UVs); the kind's z-stacked Three plane stretches it onto the map.
@@ -106,9 +113,18 @@ export class KindMaskCompositor {
       entry.texture.needsUpdate = true;
       return;
     }
-    ctx.fillStyle = '#ffffff';
-    for (const poly of polys) {
+    // Sort by createdAt so overlapping polygons of the same kind paint in
+    // the same order the FogCompositor uses — newest wins on top. (Z is
+    // the same for all polys of a kind, so createdAt is the tiebreaker.)
+    const sorted = polys.slice().sort((a, b) => a.createdAt - b.createdAt);
+    for (const poly of sorted) {
       if (poly.vertices.length < 3) continue;
+      const kind = overlayKind(poly.kind);
+      // Tint the mask with the polygon's own colour when the kind allows
+      // per-poly colour; otherwise use the kind default. The shader reads
+      // mask.rgb as the polygon tint at composite time.
+      const tint = (kind.allowColor && poly.color) ? poly.color : kind.defaultColor;
+      ctx.fillStyle = tint;
       ctx.beginPath();
       const v0 = poly.vertices[0]!;
       ctx.moveTo(v0.x * width, v0.y * height);

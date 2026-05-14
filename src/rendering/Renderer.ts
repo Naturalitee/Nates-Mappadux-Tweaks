@@ -343,6 +343,14 @@ export class Renderer {
       const maskTex = this.kindMaskCompositor.textureFor(kind);
       if (!maskTex) continue;
 
+      // Build per-kind shader-param uniforms from the registry (intensity,
+      // scale, …). Default values come from the param defs; live values are
+      // overlaid by _pushShaderParamsToPlane() whenever fog state changes.
+      const paramUniforms: Record<string, { value: number }> = {};
+      for (const p of k.shaderParams ?? []) {
+        paramUniforms[`u${p.id.charAt(0).toUpperCase()}${p.id.slice(1)}`] = { value: p.default };
+      }
+
       const material = new THREE.ShaderMaterial({
         vertexShader:   shader.vertex,
         fragmentShader: shader.fragment,
@@ -360,6 +368,7 @@ export class Renderer {
           uNoise:     { value: shader.textures['uNoise'] ?? null },
           resolution: { value: this.resolution },
           time:       { value: 0 },
+          ...paramUniforms,
         },
       });
       const geo = new THREE.PlaneGeometry(this.aspectRatio, 1);
@@ -371,6 +380,30 @@ export class Renderer {
       mesh.position.z = slot;
       this.scene.add(mesh);
       this.shaderPlanes.set(kind, { mesh, material });
+    }
+
+    // Live shader-param values may have changed alongside the polygon set
+    // (e.g. GM moved the Intensity slider) — push them now so newly-spun
+    // planes pick up the GM's current tuning and existing planes refresh.
+    this._pushShaderParamsToPlanes();
+  }
+
+  /** Push per-kind shader-param values from the current fog state into
+   *  each active shader plane's uniforms. Falls back to each param's
+   *  registry default when the state doesn't have an explicit value. */
+  private _pushShaderParamsToPlanes(): void {
+    const stateParams = this.lastFogState.shaderParams ?? {};
+    for (const [kind, entry] of this.shaderPlanes) {
+      const k = overlayKind(kind);
+      const defs = k.shaderParams ?? [];
+      const values = stateParams[kind] ?? {};
+      for (const p of defs) {
+        const uName = `u${p.id.charAt(0).toUpperCase()}${p.id.slice(1)}`;
+        const u = entry.material.uniforms[uName];
+        if (!u) continue;
+        const v = values[p.id];
+        u.value = typeof v === 'number' && Number.isFinite(v) ? v : p.default;
+      }
     }
   }
 

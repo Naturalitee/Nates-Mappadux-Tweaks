@@ -155,6 +155,12 @@
           <button id="fog-erase-btn" class="btn btn--sm fog-action fog-action--erase" title="Carve one shape out of everything beneath">Erase</button>
         </div>
 
+        <!-- Per-kind shader tuning — populated by GMApp when the active
+             kind has shader params (e.g. Fire's Intensity + Scale). Hidden
+             for plain kinds. Edits flow into FogState.shaderParams and
+             travel via fog_update like polygon edits. -->
+        <div class="fog-shader-params" id="fog-shader-params" hidden></div>
+
         <!-- Clear-this-kind always available. Delete button gone — use the
              trashcan handle on a selected polygon or the Del key instead. -->
         <button id="fog-brush-clear" class="btn btn--sm btn--ghost btn--block">Clear all of this Kind</button>

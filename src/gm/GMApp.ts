@@ -2599,11 +2599,13 @@ export class GMApp {
       kindSelect.value = this.activeOverlayKind;
       this._applyActiveKindToBrush();
       this._applyKindToColourSwatch();
+      this._rebuildShaderParamsPanel();
       this.fogEditor.setActiveKind(this.activeOverlayKind);
       kindSelect.addEventListener('change', () => {
         this.activeOverlayKind = kindSelect.value as OverlayKind;
         this._applyActiveKindToBrush();
         this._applyKindToColourSwatch();
+        this._rebuildShaderParamsPanel();
         this.fogEditor.setActiveKind(this.activeOverlayKind);
         this.fogEditor.setColor(overlayKind(this.activeOverlayKind).defaultColor);
       });
@@ -2666,10 +2668,53 @@ export class GMApp {
     this.fogEditor.setBrushSettings({ color: k.defaultColor, radius: k.defaultRadius });
   }
 
+  /** v2.12 — rebuild the per-kind shader-params slider panel. Reads the
+   *  active kind's `shaderParams` from the registry; for each, builds a
+   *  slider hydrated from FogState.shaderParams[kind] (or the param
+   *  default if no value persisted yet). Edits go through
+   *  state.setShaderParams so they fan out to renderer + P2P. Hidden
+   *  entirely when the kind declares no shader params. */
+  private _rebuildShaderParamsPanel(): void {
+    const container = document.getElementById('fog-shader-params');
+    if (!container) return;
+    const k = overlayKind(this.activeOverlayKind);
+    const defs = k.shaderParams ?? [];
+    container.innerHTML = '';
+    if (defs.length === 0) {
+      container.hidden = true;
+      return;
+    }
+    container.hidden = false;
+    const fog = this.state.getState().fog;
+    const stored = fog.shaderParams?.[this.activeOverlayKind] ?? {};
+    for (const p of defs) {
+      const current = typeof stored[p.id] === 'number' ? stored[p.id]! : p.default;
+      const row = document.createElement('label');
+      row.className = 'fog-brush-row';
+      const labelEl = document.createElement('span');
+      labelEl.textContent = p.label;
+      const slider = document.createElement('input');
+      slider.type = 'range';
+      slider.min = String(p.min);
+      slider.max = String(p.max);
+      slider.step = String(p.step);
+      slider.value = String(current);
+      slider.title = `${p.label} — ${k.label}`;
+      slider.addEventListener('input', () => {
+        const v = parseFloat(slider.value);
+        if (!Number.isFinite(v)) return;
+        this.state.setShaderParams(this.activeOverlayKind, { [p.id]: v });
+      });
+      row.appendChild(labelEl);
+      row.appendChild(slider);
+      container.appendChild(row);
+    }
+  }
+
   /** Reflect the active kind in the colour swatch — set the swatch value
    *  to the kind's default colour and grey it out if the kind doesn't
-   *  honour per-polygon colour overrides (most MapFX kinds — fire is
-   *  always orange, electric always electric-blue, etc.). */
+   *  honour per-polygon colour overrides (fire/fog/smoke/water allow GM
+   *  tinting; identity-colour kinds like electric stay greyed out). */
   private _applyKindToColourSwatch(): void {
     const swatch = document.getElementById('fog-colour') as HTMLInputElement | null;
     if (!swatch) return;

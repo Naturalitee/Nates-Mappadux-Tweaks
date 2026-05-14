@@ -26,6 +26,21 @@ export type BlendMode =
   | 'multiply' // subtractive — for shadow / fear
   ;
 
+/**
+ * Per-kind shader parameter declaration (v2.12). Mirrors the filter
+ * `SliderParam` shape so the GM-panel renderer can build identical sliders
+ * for both. Each param becomes a `u<PascalCase>` uniform in the kind's
+ * fragment shader (e.g. id 'intensity' → uniform float uIntensity).
+ */
+export interface ShaderParamDef {
+  id:      string;
+  label:   string;
+  min:     number;
+  max:     number;
+  step:    number;
+  default: number;
+}
+
 export interface OverlayKindEntry {
   id:                OverlayKind;
   label:             string;
@@ -44,7 +59,8 @@ export interface OverlayKindEntry {
   selectByInterior:  boolean;
   /** True → the colour swatch in the panel is enabled for this kind and
    *  per-polygon color overrides are honoured. False → kind defaultColor
-   *  is canonical and the swatch is greyed out (e.g. fire isn't blue). */
+   *  is canonical and the swatch is greyed out (e.g. electric is always
+   *  electric-blue). */
   allowColor:        boolean;
   /** Optional render z-bias so kinds stack predictably. Higher = renders on
    *  top of lower. Fog is the highest so it covers MapFX effects beneath. */
@@ -61,6 +77,14 @@ export interface OverlayKindEntry {
    * a time as user picks shaders.
    */
   shader?:           string;
+  /**
+   * v2.12 — GM-tunable shader parameters for this kind. Each entry
+   * declares a slider that appears in the FoW/MapFX panel whenever this
+   * kind is active. Values persist per-map via FogState.shaderParams and
+   * travel through the same fog_update P2P path. Only meaningful when
+   * `shader` is set.
+   */
+  shaderParams?:     ShaderParamDef[];
 }
 
 const SVG_FOG =
@@ -129,15 +153,29 @@ const SVG_FEAR =
 // shrinks at higher zoom which gives fine-detail painting for free.
 //
 // allowColor:
-//   • fog / smoke / water — these are "stuff" with a wide range of natural
-//     colours (black/grey fog, white/green/poison smoke, muddy or clean
-//     water) — GM picks. Per-polygon colour overrides honoured.
-//   • everything else — the kind colour IS the kind's identity (fire is
-//     orange, electric is electric blue, light is warm yellow). Per-polygon
-//     overrides aren't honoured; the swatch is greyed out in the panel.
+//   • fog / smoke / water / fire — these are "stuff" with a wide range of
+//     natural / fictional colours (black/grey fog, white/green/poison smoke,
+//     muddy or clean water; fire reads as fire even when tinted blue for
+//     soulfire or green for wisp-flame). Per-polygon colour overrides honoured.
+//   • everything else — the kind colour IS the kind's identity (electric is
+//     electric blue, light is warm yellow). Per-polygon overrides aren't
+//     honoured; the swatch is greyed out in the panel.
+//
+// Fire shader params:
+//   • intensity — output multiplier. 1.0 = full additive glow, 0.05 = barely
+//     perceptible ember haze. Lets the GM dial fire from "screen-dominating
+//     inferno" down to "background warmth" without changing the polygons.
+//   • scale — pre-scales the procedural fire volume so flame features fit
+//     the polygon size. 1.0 = default, < 1 packs more (smaller) flames into
+//     the same area, > 1 stretches features bigger. Tune by eye.
+const FIRE_SHADER_PARAMS: ShaderParamDef[] = [
+  { id: 'intensity', label: 'Intensity', min: 0.05, max: 1.5, step: 0.05, default: 1.0 },
+  { id: 'scale',     label: 'Scale',     min: 0.25, max: 4.0, step: 0.05, default: 1.0 },
+];
+
 export const OVERLAY_KIND_REGISTRY: Record<OverlayKind, OverlayKindEntry> = {
   fog:      { id: 'fog',      label: 'Fog of War',    iconSvg: SVG_FOG,       defaultColor: '#000000', defaultRadius: 25, blend: 'normal',   animated: false, selectByInterior: true,  allowColor: true,  z: 100 },
-  fire:     { id: 'fire',     label: 'Fire',          iconSvg: SVG_FLAME,     defaultColor: '#ff5a14', defaultRadius: 30, blend: 'screen',   animated: true,  selectByInterior: false, allowColor: false, z: 10, shader: 'fire' },
+  fire:     { id: 'fire',     label: 'Fire',          iconSvg: SVG_FLAME,     defaultColor: '#ff5a14', defaultRadius: 30, blend: 'screen',   animated: true,  selectByInterior: false, allowColor: true,  z: 10, shader: 'fire', shaderParams: FIRE_SHADER_PARAMS },
   cold:     { id: 'cold',     label: 'Ice / Cold',    iconSvg: SVG_SNOWFLAKE, defaultColor: '#9fd6ff', defaultRadius: 30, blend: 'screen',   animated: false, selectByInterior: false, allowColor: false, z: 10  },
   smoke:    { id: 'smoke',    label: 'Smoke',         iconSvg: SVG_SMOKE,     defaultColor: '#9aa3ad', defaultRadius: 50, blend: 'normal',   animated: true,  selectByInterior: false, allowColor: true,  z: 20  },
   light:    { id: 'light',    label: 'Magical Light', iconSvg: SVG_LIGHT,     defaultColor: '#ffd76b', defaultRadius: 35, blend: 'screen',   animated: false, selectByInterior: false, allowColor: false, z: 5   },

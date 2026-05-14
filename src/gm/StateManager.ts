@@ -106,6 +106,23 @@ export class StateManager {
     this._notify(['fog']);
   }
 
+  /** v2.12 — patch shader-param values for a single overlay kind. Merges
+   *  with any existing values for that kind; other kinds untouched. Goes
+   *  through setFog so the change broadcasts on the same fog_update path
+   *  as polygon edits. */
+  setShaderParams(kind: import('../types.ts').OverlayKind, patch: Record<string, number>): void {
+    const fog = this.state.fog;
+    const existing = fog.shaderParams?.[kind] ?? {};
+    const next: FogState = {
+      ...fog,
+      shaderParams: {
+        ...(fog.shaderParams ?? {}),
+        [kind]: { ...existing, ...patch },
+      },
+    };
+    this.setFog(next);
+  }
+
   setMarkers(markers: Marker[]): void {
     this.state = { ...this.state, markers };
     this._notify(['markers'], undefined, true);

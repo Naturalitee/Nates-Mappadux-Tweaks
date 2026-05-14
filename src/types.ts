@@ -84,6 +84,15 @@ export interface FogPolygon {
 
 export interface FogState {
   polygons: FogPolygon[];
+  /**
+   * Per-kind shader parameter values (v2.12). Only kinds with `shader` and
+   * `shaderParams` in the registry have entries here. The renderer reads
+   * these on every fog update and pushes them as uniforms into the
+   * matching kind's shader plane. Unset / partially-set keys fall back to
+   * the kind's registry defaults — so omitting the field entirely on a
+   * pre-existing FogState is fine (the renderer applies defaults).
+   */
+  shaderParams?: Partial<Record<OverlayKind, Record<string, number>>>;
 }
 
 // ─── Filters ─────────────────────────────────────────────────────────────────
