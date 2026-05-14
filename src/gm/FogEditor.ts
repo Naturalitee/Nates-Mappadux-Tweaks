@@ -11,6 +11,10 @@ export interface FogEditorMode {
   hasPolygons: boolean;
   /** v2.12/M3 — true when the FoW brush is active (polygon draw is off). */
   brushing?: boolean;
+  /** v2.12 — id of the currently-selected polygon (or null). Lets the GM
+   *  panel react to selection by preselecting the poly's kind, opening
+   *  the right detail UI, etc. */
+  selectedId?: string | null;
 }
 
 type FogChangeCallback = (fog: FogState) => void;
@@ -341,6 +345,7 @@ export class FogEditor {
       hasSelection: this.selectedId !== null,
       hasPolygons: this.polygons.length > 0,
       brushing: this.brushActive,
+      selectedId: this.selectedId,
     });
   }
 

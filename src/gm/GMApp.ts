@@ -94,6 +94,10 @@ export class GMApp {
    *  select via the selector-icon overlay; fog kinds select via interior
    *  click. Same field for both. */
   private selectedOverlayId: string | null = null;
+  /** Tracks the last selection id we already pushed into the kind
+   *  dropdown so an unchanged selection doesn't re-fire kind-change side
+   *  effects (which would, for instance, reset the colour swatch). */
+  private _lastSelectedSyncedId: string | null = null;
   /** v2.12 — kind picked in the FoW & MapFX panel for new strokes/polygons. */
   private activeOverlayKind: OverlayKind = 'fog';
   /** v2.12 — sticky Drawing Mode preference (persisted to localStorage). */
@@ -599,36 +603,15 @@ export class GMApp {
     this._refreshMapFXSelectors();
   }
 
-  /** v2.12 — push selector icons to the overlay for every non-fog overlay
-   *  polygon at its centroid. Called from _refreshRectOverlays so the icons
-   *  track camera pan/zoom for free. Fog polygons use interior-click
-   *  selection (per their kind registry entry) so they get no icon. */
+  /** v2.12 — kept as a no-op shim while callers still reference it. The
+   *  centre-of-polygon selector icons were dropped: interior clicks
+   *  select any kind, the trashcan-on-select handle gives a clear
+   *  delete affordance, and the FoW panel opens automatically on
+   *  selection (and presets the kind dropdown to the picked polygon's
+   *  kind). The icons added clutter to the player + GM view for no
+   *  remaining benefit. */
   private _refreshMapFXSelectors(): void {
-    if (!this._markerOverlay) return;
-    const polygons = this.state.getState().fog.polygons;
-    const sel = this.selectedOverlayId;
-    const items: import('../rendering/MarkerOverlay.ts').MapFXSelectorItem[] = [];
-    for (const poly of polygons) {
-      const k = overlayKind(poly.kind);
-      if (k.selectByInterior) continue;  // fog — no icon needed
-      // Centroid in normalised coords.
-      let cx = 0, cy = 0;
-      for (const v of poly.vertices) { cx += v.x; cy += v.y; }
-      cx /= poly.vertices.length;
-      cy /= poly.vertices.length;
-      const p = this.renderer.mapNormToCanvasCss(cx, cy);
-      if (!p) continue;
-      items.push({
-        id:       poly.id,
-        anchorX:  p.x,
-        anchorY:  p.y,
-        iconSvg:  k.iconSvg,
-        color:    k.defaultColor,
-        title:    poly.label ?? k.label,
-        selected: sel === poly.id,
-      });
-    }
-    this._markerOverlay.updateMapFXSelectors(items);
+    this._markerOverlay?.updateMapFXSelectors([]);
   }
 
   /** Off-screen viewport indicators — small edge-pinned pills with a
@@ -2511,7 +2494,7 @@ export class GMApp {
     this.fogEditor.disable();
 
     // Wire context-sensitive toolbar.
-    this.fogEditor.setOnModeChange(({ drawing, hasSelection }) => {
+    this.fogEditor.setOnModeChange(({ drawing, hasSelection, selectedId }) => {
       // Restore marker interaction whenever draw mode ends.
       this.markerEditor?.setPointerCapture(!drawing);
       // Polygon commits go through _commitOverlayPolygon → _endAction so
@@ -2525,6 +2508,18 @@ export class GMApp {
           body.hidden = false;
           title?.setAttribute('aria-expanded', 'true');
         }
+      }
+      // When a polygon is selected, preselect its kind in the dropdown so
+      // the GM sees the same panel state they'd get by picking that kind
+      // manually (shader-params panel, colour swatch enable/disable, etc.).
+      if (selectedId && selectedId !== this._lastSelectedSyncedId) {
+        const poly = this.state.getState().fog.polygons.find((p) => p.id === selectedId);
+        if (poly && poly.kind !== this.activeOverlayKind) {
+          this._syncPanelToKind(poly.kind);
+        }
+        this._lastSelectedSyncedId = selectedId;
+      } else if (!selectedId) {
+        this._lastSelectedSyncedId = null;
       }
     });
 
@@ -2659,6 +2654,22 @@ export class GMApp {
       this.state.setFog({ polygons: [...fog.polygons, poly] });
     }
     this._endAction();
+  }
+
+  /** v2.12 — selection → panel sync. Called when the GM clicks a polygon
+   *  to select it: switches the kind dropdown to the polygon's kind and
+   *  runs the same cascade the manual dropdown change runs, so the
+   *  shader-params panel + colour swatch + brush defaults all match the
+   *  picked polygon. */
+  private _syncPanelToKind(kind: OverlayKind): void {
+    this.activeOverlayKind = kind;
+    const kindSelect = document.querySelector<HTMLSelectElement>('#mapfx-kind-select');
+    if (kindSelect) kindSelect.value = kind;
+    this._applyActiveKindToBrush();
+    this._applyKindToColourSwatch();
+    this._rebuildShaderParamsPanel();
+    this.fogEditor.setActiveKind(kind);
+    this.fogEditor.setColor(overlayKind(kind).defaultColor);
   }
 
   /** Push the active brush kind's defaults into the FogEditor's brush
