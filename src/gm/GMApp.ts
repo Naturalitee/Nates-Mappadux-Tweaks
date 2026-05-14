@@ -98,6 +98,12 @@ export class GMApp {
    *  dropdown so an unchanged selection doesn't re-fire kind-change side
    *  effects (which would, for instance, reset the colour swatch). */
   private _lastSelectedSyncedId: string | null = null;
+  /** v2.12 — properties snapshotted from the polygon that was selected
+   *  when Paint was clicked. Used by _commitOverlay* so the new polygon
+   *  inherits the selected exemplar's colour + shaderParams ("paint
+   *  another like this"). Set in _startAction('paint'), cleared in
+   *  _endAction. Null when paint started with no selection. */
+  private _pendingPaintInherit: { color: string; shaderParams: Record<string, number> } | null = null;
   /** v2.12 — kind picked in the FoW & MapFX panel for new strokes/polygons. */
   private activeOverlayKind: OverlayKind = 'fog';
   /** v2.12 — sticky Drawing Mode preference (persisted to localStorage). */
@@ -2660,6 +2666,9 @@ export class GMApp {
           this.state.setPolygonColor(selectedId, c);
         }
       }
+      // If mid-paint with inheritance pending, update the snapshot so
+      // the new polygon picks up the tweaked colour at commit time.
+      if (this._pendingPaintInherit) this._pendingPaintInherit.color = c;
     });
 
     // v2.12 unified — brush + polygon commits go through the same paths.
@@ -2687,15 +2696,19 @@ export class GMApp {
       this.state.setFog({ polygons: result });
     } else {
       const k = overlayKind(this.activeOverlayKind);
+      const inherit = this._pendingPaintInherit;
       const swatch = document.getElementById('fog-colour') as HTMLInputElement | null;
-      const color = (k.allowColor && swatch?.value) ? swatch.value : k.defaultColor;
+      const color = inherit
+        ? inherit.color
+        : ((k.allowColor && swatch?.value) ? swatch.value : k.defaultColor);
       const draft = fog.shaderParams?.[this.activeOverlayKind] ?? {};
+      const params = inherit ? inherit.shaderParams : draft;
       const poly: FogPolygon = {
         id:        generateId(),
         kind:      this.activeOverlayKind,
         vertices,
         color,
-        ...(Object.keys(draft).length > 0 ? { shaderParams: { ...draft } } : {}),
+        ...(Object.keys(params).length > 0 ? { shaderParams: { ...params } } : {}),
         createdAt: Date.now(),
       };
       this.state.setFog({ polygons: [...fog.polygons, poly] });
@@ -2751,26 +2764,32 @@ export class GMApp {
     const editingPoly = selectedPoly && selectedPoly.kind === this.activeOverlayKind ? selectedPoly : null;
 
     const polyValues = editingPoly?.shaderParams ?? {};
+    // While a Paint action is mid-flight with an inheritance snapshot,
+    // surface those values in the panel so the GM sees what the
+    // about-to-be-painted polygon will actually inherit.
+    const inherit = !editingPoly ? this._pendingPaintInherit : null;
     // Tiny header so the GM knows whether they're editing the selected
     // polygon or just the draft for the next-new polygon.
     const hdr = document.createElement('div');
     hdr.className = 'fog-shader-params-header';
-    hdr.textContent = editingPoly ? 'Selected polygon' : `${k.label} — next new polygon`;
+    hdr.textContent = editingPoly
+      ? 'Selected polygon'
+      : (inherit ? 'About to paint (inherited)' : `${k.label} — next new polygon`);
     container.appendChild(hdr);
 
     for (const p of defs) {
       // Resolution differs by edit target:
       //   • Editing a polygon: show that polygon's stored value, falling
-      //     back to the registry default (= what the renderer actually
-      //     uses for this poly at render time). NEVER fall through to
-      //     the kind draft — the draft is for "next new polygon" and
-      //     would otherwise leak across into existing polygons that the
-      //     GM hadn't tuned.
-      //   • Editing the next-new draft (no selection): show the draft
-      //     value, falling back to the registry default.
+      //     back to the registry default.
+      //   • Mid-Paint with inheritance: show the snapshot values so the
+      //     GM can see what the new polygon will get.
+      //   • Otherwise: show the kind draft (next-new defaults).
       let current: number;
       if (editingPoly) {
         const v = polyValues[p.id];
+        current = typeof v === 'number' && Number.isFinite(v) ? v : p.default;
+      } else if (inherit) {
+        const v = inherit.shaderParams[p.id];
         current = typeof v === 'number' && Number.isFinite(v) ? v : p.default;
       } else {
         const v = draft[p.id];
@@ -2780,9 +2799,12 @@ export class GMApp {
         // Always update the kind draft so subsequent new polygons
         // inherit the latest value. When a polygon is selected, ALSO
         // patch that polygon's own shaderParams in a single state
-        // commit per slider tick.
+        // commit per slider tick. When mid-paint with inheritance
+        // pending, also update the snapshot so the GM can fine-tune
+        // before committing the new polygon.
         this.state.setShaderParams(this.activeOverlayKind, { [p.id]: v });
         if (editingPoly) this.state.setPolygonShaderParams(editingPoly.id, { [p.id]: v });
+        if (this._pendingPaintInherit) this._pendingPaintInherit.shaderParams[p.id] = v;
       }));
     }
   }
@@ -2845,8 +2867,36 @@ export class GMApp {
   /** v2.12 — start a Paint or Erase action under the current Drawing Mode.
    *  Activates the drawing tool (polygon-click flow OR brush-drag flow)
    *  with the given action. Commit handlers call _endAction so single-shot
-   *  behaviour returns to neutral after one shape lands. */
+   *  behaviour returns to neutral after one shape lands.
+   *
+   *  Paint inheritance: if a polygon of the active kind is selected at
+   *  the moment Paint is clicked, snapshot its colour + shaderParams
+   *  into `_pendingPaintInherit`. The commit handler reads this so the
+   *  new polygon inherits the exemplar's look ("paint another like
+   *  this") — lets the GM lay down a row of identical campfires, a
+   *  consistent river flow, etc. without re-tuning per shape. */
   private _startAction(action: 'paint' | 'erase'): void {
+    if (action === 'paint') {
+      const selectedId = this.fogEditor.getSelectedId();
+      const exemplar = selectedId
+        ? this.state.getState().fog.polygons.find((p) => p.id === selectedId) ?? null
+        : null;
+      if (exemplar && exemplar.kind === this.activeOverlayKind) {
+        const k = overlayKind(exemplar.kind);
+        const color = (k.allowColor && exemplar.color) ? exemplar.color : k.defaultColor;
+        const shaderParams = exemplar.shaderParams ? { ...exemplar.shaderParams } : {};
+        this._pendingPaintInherit = { color, shaderParams };
+        // Push the inherited colour into the brush + polygon-outline
+        // colour so the live draw preview matches the exemplar.
+        this.fogEditor.setColor(color);
+        this.fogEditor.setBrushSettings({ color });
+      } else {
+        this._pendingPaintInherit = null;
+      }
+    } else {
+      this._pendingPaintInherit = null;
+    }
+
     const paintBtn = document.querySelector<HTMLButtonElement>('#fog-paint-btn');
     const eraseBtn = document.querySelector<HTMLButtonElement>('#fog-erase-btn');
     paintBtn?.classList.toggle('is-active', action === 'paint');
@@ -2863,12 +2913,26 @@ export class GMApp {
       this.fogEditor.setBrushActive(true);
     }
     this.markerEditor?.setPointerCapture(false);
+
+    // fogEditor.enable() may have cleared the selection (polygon mode);
+    // the resulting setOnModeChange has already clobbered the swatch
+    // back to the kind default. If we have inheritance pending, snap
+    // the swatch + slider panel back to the inherited values so the GM
+    // visually sees what the new polygon will get.
+    if (this._pendingPaintInherit) {
+      const swatch = document.getElementById('fog-colour') as HTMLInputElement | null;
+      if (swatch) swatch.value = this._pendingPaintInherit.color;
+      this._rebuildShaderParamsPanel();
+    }
   }
 
   /** v2.12 — exit the current Paint/Erase action. Called by the action
    *  buttons (re-click to cancel), by the Drawing Mode switch, and
-   *  automatically by polygon-complete + brush-commit handlers. */
+   *  automatically by polygon-complete + brush-commit handlers.
+   *  Clears any pending paint-inheritance snapshot so the next Paint
+   *  starts fresh. */
   private _endAction(): void {
+    this._pendingPaintInherit = null;
     const paintBtn = document.querySelector<HTMLButtonElement>('#fog-paint-btn');
     const eraseBtn = document.querySelector<HTMLButtonElement>('#fog-erase-btn');
     paintBtn?.classList.remove('is-active');
@@ -2904,19 +2968,28 @@ export class GMApp {
     }
     // Paint — one new polygon per blob, holes preserved (a donut scribble
     // keeps its hole). Erase carving still preserves target-polygon holes
-    // separately via subtractFromAll. New polys inherit the kind's
-    // current shader-params draft so the last GM tuning carries forward.
+    // separately via subtractFromAll.
+    //
+    // Inheritance:
+    //   • If Paint was clicked with a polygon selected, every blob in
+    //     this stroke inherits that exemplar's colour + shaderParams
+    //     (paint-another-like-this).
+    //   • Otherwise blobs inherit the kind's current draft (the
+    //     last-tweaked-or-painted look).
     const k = overlayKind(this.activeOverlayKind);
     const now = Date.now();
+    const inherit = this._pendingPaintInherit;
     const draft = fog.shaderParams?.[this.activeOverlayKind] ?? {};
-    const draftCopy = Object.keys(draft).length > 0 ? { shaderParams: { ...draft } } : {};
+    const params = inherit ? inherit.shaderParams : draft;
+    const inheritedColor = inherit?.color;
+    const paramsCopy = Object.keys(params).length > 0 ? { shaderParams: { ...params } } : {};
     const newPolys: FogPolygon[] = blobs.map((blob) => ({
       id:        generateId(),
       kind:      this.activeOverlayKind,
       vertices:  blob.outer,
       ...(blob.holes.length > 0 ? { holes: blob.holes } : {}),
-      ...draftCopy,
-      color:     settings.color || k.defaultColor,
+      ...paramsCopy,
+      color:     inheritedColor ?? settings.color ?? k.defaultColor,
       createdAt: now,
     }));
     this.state.setFog({ polygons: [...fog.polygons, ...newPolys] });
