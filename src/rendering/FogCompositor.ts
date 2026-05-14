@@ -85,11 +85,13 @@ export class FogCompositor {
         // GM-side flat-fill wobble (player view uses the proper shader).
         // Per-kind speed so fire flickers faster than river ripples.
         let wobble: number;
-        if      (kind.id === 'fire')  wobble = Math.sin(time *  8.0 + phase) * 0.30 + Math.sin(time * 17.0 + phase * 1.7) * 0.15;
-        else if (kind.id === 'river') wobble = Math.sin(time *  3.0 + phase) * 0.18;
-        else if (kind.id === 'ocean') wobble = Math.sin(time *  2.5 + phase) * 0.20;
-        else if (kind.id === 'light') wobble = Math.sin(time *  4.0 + phase) * 0.22;
-        else                          wobble = Math.sin(time *  3.5 + phase) * 0.18;
+        if      (kind.id === 'fire')      wobble = Math.sin(time *  8.0 + phase) * 0.30 + Math.sin(time * 17.0 + phase * 1.7) * 0.15;
+        else if (kind.id === 'river')     wobble = Math.sin(time *  3.0 + phase) * 0.18;
+        else if (kind.id === 'ocean')     wobble = Math.sin(time *  2.5 + phase) * 0.20;
+        else if (kind.id === 'light')     wobble = Math.sin(time *  4.0 + phase) * 0.22;
+        else if (kind.id === 'portal')    wobble = Math.sin(time *  5.0 + phase) * 0.25;
+        else if (kind.id === 'starfield') wobble = Math.sin(time *  1.2 + phase) * 0.12;
+        else                              wobble = Math.sin(time *  3.5 + phase) * 0.18;
         alpha = Math.max(0.55, Math.min(1.0, 1.0 + wobble * 0.25));
       }
       this.ctx.globalAlpha = alpha;

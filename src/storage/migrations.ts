@@ -102,6 +102,7 @@ export function migrateSessionState(saved: any): SessionState | null {
   // is preserved and the GM can morph it via the dropdown if they want.
   const SUPPORTED_KINDS: Record<string, boolean> = {
     fog: true, fire: true, river: true, ocean: true, light: true,
+    starfield: true, portal: true,
   };
   const coerceKind = (k: any): string => (typeof k === 'string' && SUPPORTED_KINDS[k]) ? k : 'fog';
   const rawFog = (cur.fog && Array.isArray(cur.fog.polygons)) ? cur.fog.polygons : [];

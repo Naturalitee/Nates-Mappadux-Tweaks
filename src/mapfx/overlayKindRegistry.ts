@@ -120,6 +120,14 @@ const SVG_LIGHT =
   '<path d="M5 19l2-2"/><path d="M17 7l2-2"/>' +
   '<circle cx="12" cy="12" r="4"/>';
 
+const SVG_STAR =
+  '<polygon points="12 2 14.85 8.66 22 9.27 16.5 14.13 18.18 21.34 12 17.5 5.82 21.34 7.5 14.13 2 9.27 9.15 8.66"/>';
+
+const SVG_PORTAL =
+  '<circle cx="12" cy="12" r="9"/>' +
+  '<circle cx="12" cy="12" r="5"/>' +
+  '<circle cx="12" cy="12" r="1.5"/>';
+
 // defaultRadius is now in CSS pixels — see the type doc above. Brush stays
 // visually the same size as you zoom in / out; the resulting map polygon
 // shrinks at higher zoom which gives fine-detail painting for free.
@@ -205,12 +213,39 @@ const LIGHT_SHADER_PARAMS: ShaderParamDef[] = [
   { id: 'particles', label: 'Particles', min: 0.0,  max: 1.0, step: 0.05, default: 0.4 },
 ];
 
+// Starfield shader params:
+//   • intensity — brightness of the stars (universal).
+//   • scale     — star density. Lower = larger / sparser stars, higher
+//     = many small stars per polygon.
+//   • speed     — warp travel rate. 0 = static starfield (no parallax
+//     motion); 4 = "starship at warp" feel.
+const STARFIELD_SHADER_PARAMS: ShaderParamDef[] = [
+  { id: 'intensity', label: 'Intensity', min: 0.05, max: 2.0, step: 0.05, default: 1.0 },
+  { id: 'scale',     label: 'Scale',     min: 0.25, max: 4.0, step: 0.05, default: 1.0 },
+  { id: 'speed',     label: 'Speed',     min: 0.0,  max: 4.0, step: 0.05, default: 1.0 },
+];
+
+// Portal shader params:
+//   • intensity — energy multiplier (universal).
+//   • scale     — portal disc size relative to the polygon. 1 fits
+//     the disc inside a typical polygon; higher pushes the rim
+//     outward (mask clips at the polygon edge); lower shrinks the
+//     disc to occupy just the centre.
+//   • speed     — how fast the energy swirls.
+const PORTAL_SHADER_PARAMS: ShaderParamDef[] = [
+  { id: 'intensity', label: 'Intensity', min: 0.05, max: 2.0, step: 0.05, default: 1.0 },
+  { id: 'scale',     label: 'Scale',     min: 0.25, max: 2.5, step: 0.05, default: 1.0 },
+  { id: 'speed',     label: 'Speed',     min: 0.0,  max: 4.0, step: 0.05, default: 1.0 },
+];
+
 export const OVERLAY_KIND_REGISTRY: Record<OverlayKind, OverlayKindEntry> = {
-  fog:    { id: 'fog',    label: 'Fog of War',      iconSvg: SVG_FOG,   defaultColor: '#000000', defaultRadius: 25, blend: 'normal', animated: false, selectByInterior: true,  allowColor: true,  z: 100 },
-  fire:   { id: 'fire',   label: 'Coloured Flames', iconSvg: SVG_FLAME, defaultColor: '#ff5a14', defaultRadius: 30, blend: 'screen', animated: true,  selectByInterior: false, allowColor: true,  z: 10, shader: 'fire',  shaderParams: FIRE_SHADER_PARAMS  },
-  river:  { id: 'river',  label: 'River',           iconSvg: SVG_WATER, defaultColor: '#5aa9d6', defaultRadius: 35, blend: 'normal', animated: true,  selectByInterior: false, allowColor: true,  z: 5,  shader: 'river', shaderParams: RIVER_SHADER_PARAMS },
-  ocean:  { id: 'ocean',  label: 'Ocean',           iconSvg: SVG_WATER, defaultColor: '#5fa9d6', defaultRadius: 60, blend: 'normal', animated: true,  selectByInterior: false, allowColor: true,  z: 5,  shader: 'ocean', shaderParams: OCEAN_SHADER_PARAMS },
-  light:  { id: 'light',  label: 'Magical Light',   iconSvg: SVG_LIGHT, defaultColor: '#ffd76b', defaultRadius: 35, blend: 'screen', animated: true,  selectByInterior: false, allowColor: true,  z: 8,  shader: 'light', shaderParams: LIGHT_SHADER_PARAMS },
+  fog:       { id: 'fog',       label: 'Fog of War',      iconSvg: SVG_FOG,    defaultColor: '#000000', defaultRadius: 25, blend: 'normal', animated: false, selectByInterior: true,  allowColor: true,  z: 100 },
+  fire:      { id: 'fire',      label: 'Coloured Flames', iconSvg: SVG_FLAME,  defaultColor: '#ff5a14', defaultRadius: 30, blend: 'screen', animated: true,  selectByInterior: false, allowColor: true,  z: 10, shader: 'fire',      shaderParams: FIRE_SHADER_PARAMS      },
+  river:     { id: 'river',     label: 'River',           iconSvg: SVG_WATER,  defaultColor: '#5aa9d6', defaultRadius: 35, blend: 'normal', animated: true,  selectByInterior: false, allowColor: true,  z: 5,  shader: 'river',     shaderParams: RIVER_SHADER_PARAMS     },
+  ocean:     { id: 'ocean',     label: 'Ocean',           iconSvg: SVG_WATER,  defaultColor: '#5fa9d6', defaultRadius: 60, blend: 'normal', animated: true,  selectByInterior: false, allowColor: true,  z: 5,  shader: 'ocean',     shaderParams: OCEAN_SHADER_PARAMS     },
+  light:     { id: 'light',     label: 'Magical Light',   iconSvg: SVG_LIGHT,  defaultColor: '#ffd76b', defaultRadius: 35, blend: 'screen', animated: true,  selectByInterior: false, allowColor: true,  z: 8,  shader: 'light',     shaderParams: LIGHT_SHADER_PARAMS     },
+  starfield: { id: 'starfield', label: 'Starfield',       iconSvg: SVG_STAR,   defaultColor: '#b07fd6', defaultRadius: 80, blend: 'screen', animated: true,  selectByInterior: false, allowColor: true,  z: 3,  shader: 'starfield', shaderParams: STARFIELD_SHADER_PARAMS },
+  portal:    { id: 'portal',    label: 'Magic Portal',    iconSvg: SVG_PORTAL, defaultColor: '#1a80ff', defaultRadius: 40, blend: 'screen', animated: true,  selectByInterior: false, allowColor: true,  z: 8,  shader: 'portal',    shaderParams: PORTAL_SHADER_PARAMS    },
 };
 
 /** Order for the kind dropdown — fog first (most-used + click-priority),
@@ -219,7 +254,7 @@ export const OVERLAY_KIND_REGISTRY: Record<OverlayKind, OverlayKindEntry> = {
  *  polygons overlap, the kind earlier in this list wins the click. */
 export const OVERLAY_KIND_ORDER: OverlayKind[] = [
   'fog',
-  'fire', 'river', 'ocean', 'light',
+  'fire', 'river', 'ocean', 'light', 'portal', 'starfield',
 ];
 
 /** Quick lookup with a fall-back. Unknown kinds fall through to fog so

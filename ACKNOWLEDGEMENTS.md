@@ -92,6 +92,8 @@ used under the [Creative Commons Attribution-NonCommercial-ShareAlike 3.0 Unport
 |--------|------|--------|
 | Coloured Flames | Promethean (4tB3zV) | https://www.shadertoy.com/view/4tB3zV |
 | River | A river (MsSGWK, Pierco fork) | https://www.shadertoy.com/view/MsSGWK |
+| Starfield | Shadertoy starfield demo *(author + URL pending)* | *to be supplied* |
+| Magic Portal | Shadertoy portal demo *(author + URL pending)* — noise primitive [hash33 + simplex noise](https://www.shadertoy.com/view/4sc3z2) | *to be supplied* |
 
 ### MIT-licensed shaders
 
