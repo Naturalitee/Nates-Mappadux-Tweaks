@@ -1,9 +1,10 @@
 import { StateManager } from './StateManager.ts';
 import { MapManager } from './MapManager.ts';
 import { FogEditor } from './FogEditor.ts';
-import { MapFXEditor } from './MapFXEditor.ts';
-import { MAPFX_REGISTRY, MAPFX_KIND_ORDER } from '../mapfx/mapfxKindRegistry.ts';
-import type { MapFXEntity, MapFXKind } from '../types.ts';
+import { OVERLAY_KIND_REGISTRY, OVERLAY_KIND_ORDER, overlayKind } from '../mapfx/overlayKindRegistry.ts';
+import type { OverlayKind, FogPolygon } from '../types.ts';
+import { offsetPolyline } from '../mapfx/polylineOffset.ts';
+import { subtractFromAll } from '../mapfx/polygonOps.ts';
 import { ViewportEditor } from './ViewportEditor.ts';
 import { MarkerEditor } from './MarkerEditor.ts';
 import { MapAssetModal } from './MapAssetModal.ts';
@@ -87,11 +88,12 @@ export class GMApp {
   private host:   Host;
   private renderer!:       Renderer;
   private fogEditor!:      FogEditor;
-  private mapFXEditor!:    MapFXEditor;
-  /** v2.12/M4 — currently selected MapFX entity id (or null). Used by the
-   *  renderer composite to dim unselected entities; click-to-select via the
-   *  selector-icon overlay updates this. */
-  private selectedMapFXEntityId: string | null = null;
+  /** v2.12 — currently selected overlay polygon id (or null). Non-fog kinds
+   *  select via the selector-icon overlay; fog kinds select via interior
+   *  click. Same field for both. */
+  private selectedOverlayId: string | null = null;
+  /** v2.12 — kind picked in the FoW & MapFX panel for new strokes/polygons. */
+  private activeOverlayKind: OverlayKind = 'fog';
   private viewportEditor!: ViewportEditor;
   private projectorEditor!: ProjectorViewportEditor;
 
@@ -594,26 +596,33 @@ export class GMApp {
     this._refreshMapFXSelectors();
   }
 
-  /** v2.12/M4 — push MapFX selector icons to the overlay at their current
-   *  screen positions. Called from _refreshRectOverlays so the icons track
-   *  camera pan/zoom for free. */
+  /** v2.12 — push selector icons to the overlay for every non-fog overlay
+   *  polygon at its centroid. Called from _refreshRectOverlays so the icons
+   *  track camera pan/zoom for free. Fog polygons use interior-click
+   *  selection (per their kind registry entry) so they get no icon. */
   private _refreshMapFXSelectors(): void {
     if (!this._markerOverlay) return;
-    const entities = this.state.getState().mapfx.entities;
-    const sel = this.selectedMapFXEntityId;
+    const polygons = this.state.getState().fog.polygons;
+    const sel = this.selectedOverlayId;
     const items: import('../rendering/MarkerOverlay.ts').MapFXSelectorItem[] = [];
-    for (const e of entities) {
-      const p = this.renderer.mapNormToCanvasCss(e.anchor.x, e.anchor.y);
+    for (const poly of polygons) {
+      const k = overlayKind(poly.kind);
+      if (k.selectByInterior) continue;  // fog — no icon needed
+      // Centroid in normalised coords.
+      let cx = 0, cy = 0;
+      for (const v of poly.vertices) { cx += v.x; cy += v.y; }
+      cx /= poly.vertices.length;
+      cy /= poly.vertices.length;
+      const p = this.renderer.mapNormToCanvasCss(cx, cy);
       if (!p) continue;
-      const k = MAPFX_REGISTRY[e.kind] ?? MAPFX_REGISTRY.fire;
       items.push({
-        id:       e.id,
+        id:       poly.id,
         anchorX:  p.x,
         anchorY:  p.y,
         iconSvg:  k.iconSvg,
         color:    k.defaultColor,
-        title:    e.label ?? k.label,
-        selected: sel === e.id,
+        title:    poly.label ?? k.label,
+        selected: sel === poly.id,
       });
     }
     this._markerOverlay.updateMapFXSelectors(items);
@@ -766,22 +775,19 @@ export class GMApp {
     this.state.setMarkers(markers);
   }
 
-  /** v2.12/M4 — Select / deselect a MapFX entity. Triggers a renderer
-   *  recomposite so the entity pops to full opacity, then refreshes the
-   *  selector-icon overlay so the trashcan handle appears. */
-  private _selectMapFXEntity(id: string | null): void {
-    this.selectedMapFXEntityId = id === this.selectedMapFXEntityId ? null : id;
-    const state = this.state.getState();
-    void this.renderer.updateMapFX(state.mapfx.entities, this.selectedMapFXEntityId);
+  /** v2.12 — Select / deselect an overlay polygon by id. Toggle behaviour:
+   *  same id clicks again = deselect. */
+  private _selectOverlayPolygon(id: string | null): void {
+    this.selectedOverlayId = id === this.selectedOverlayId ? null : id;
     this._refreshMapFXSelectors();
   }
 
-  /** v2.12/M4 — Remove a MapFX entity from state + broadcast. Selection
-   *  clears if the deleted entity was the active one. */
-  private _deleteMapFXEntity(id: string): void {
-    if (this.selectedMapFXEntityId === id) this.selectedMapFXEntityId = null;
-    this.state.removeMapFXEntity(id);
-    // The 'mapfx' branch in onStateChange handles renderer + broadcast.
+  /** v2.12 — Remove an overlay polygon from state + broadcast. Selection
+   *  clears if the deleted polygon was the active one. */
+  private _deleteOverlayPolygon(id: string): void {
+    if (this.selectedOverlayId === id) this.selectedOverlayId = null;
+    const fog = this.state.getState().fog;
+    this.state.setFog({ polygons: fog.polygons.filter((p) => p.id !== id) });
   }
 
   private _handleRectAspect(kind: 'player' | 'projector'): void {
@@ -1493,17 +1499,6 @@ export class GMApp {
       });
     }
 
-    // v2.12/M4 — MapFX entities. Re-composite the GM renderer; broadcast a
-    // full state push (cheap relative to map_change since the entity list
-    // is small + paint patches travel as base64 inside each entity).
-    if (changed.includes('mapfx') && !changed.includes('map')) {
-      void this.renderer.updateMapFX(state.mapfx.entities, this.selectedMapFXEntityId);
-      this.host.broadcast({
-        type: 'mapfx_update',
-        payload: state.mapfx,
-        ...(state.map ? { mapId: state.map.id } : {}),
-      });
-    }
 
     if (changed.includes('filter')) {
       // Honour the panel-header bypass switch — when off, the renderer
@@ -1563,11 +1558,9 @@ export class GMApp {
       void this._ensureLibIcons(broadcastMarkers).then((added) => {
         if (added) this._rebroadcastMarkersWithFreshIconData();
       });
-      // v2.12/M4 — push the new map's MapFX entities into the renderer.
-      // No broadcast here; the next map_change broadcast (in loadMap) carries
-      // mapfx alongside fog.
-      this.renderer.clearMapFX();
-      void this.renderer.updateMapFX(state.mapfx.entities, null);
+      // v2.12 — clear any existing selection on map switch; the fog state
+      // arrives via the 'fog' branch above.
+      this.selectedOverlayId = null;
     }
 
     if (changed.includes('markers')) {
@@ -1996,7 +1989,6 @@ export class GMApp {
       ...(asset?.imageWidth            ? { mapImageWidth:      asset.imageWidth     } : {}),
       ...(asset?.imageHeight           ? { mapImageHeight:     asset.imageHeight    } : {}),
       projectorViewport: nextProjVp,
-      mapfx:      this.state.getState().mapfx,
       // For animated handouts, the broadcast carries the STARTING frame
       // (background + noAnimate elements) so the player + projector
       // display the pre-reveal state. The handout_reveal message
@@ -2571,156 +2563,36 @@ export class GMApp {
       this.fogEditor.setBrushSettings({ radius: parseFloat(brushRadiusInput.value) });
     });
     document.querySelector('#fog-brush-clear')?.addEventListener('click', () => {
-      this.renderer.clearFogBrush();
+      // Clear all polygons of the active kind only. Lets the GM wipe their
+      // current fire / fog / smoke layer without nuking the others.
       const fog = this.state.getState().fog;
-      // Drop the brush field entirely (undefined isn't assignable under
-      // exactOptionalPropertyTypes; construct without it).
-      const next = { polygons: fog.polygons, ...(fog.brushColor ? { brushColor: fog.brushColor } : {}) };
-      this.state.setFog(next);
-      this.host.broadcast({
-        type: 'fog_update',
-        payload: this.state.getState().fog,
-        ...(this.state.getState().map?.id ? { mapId: this.state.getState().map!.id } : {}),
-      });
+      const kept = fog.polygons.filter((p) => p.kind !== this.activeOverlayKind);
+      this.state.setFog({ polygons: kept });
     });
 
-    // Spotlight removed in v2.12 — Brush in Reveal mode + a single click +
-    // a bigger radius covers the same job without a redundant button.
-
-    // ─── v2.12/M4 — MapFX editor wiring ──────────────────────────────────
-    this.mapFXEditor = new MapFXEditor(
-      canvas,
-      (cx, cy) => {
-        const rect = canvas.getBoundingClientRect();
-        if (rect.width === 0 || rect.height === 0) return null;
-        // Identity map-norm — markers / fog use the same canvasPxToMapNorm
-        // path; for MapFX we just need the basic px→norm with the renderer
-        // hook so pan/zoom is honoured.
-        const m = this.renderer.canvasCssToMapNorm(cx - rect.left, cy - rect.top);
-        return m ?? null;
-      },
-    );
-
-    // Populate the kind dropdown.
+    // ─── v2.12 unified — overlay kind picker ─────────────────────────────
+    // Single dropdown for what new strokes / polygons get tagged as. 'fog'
+    // is the default; everything else (fire / cold / smoke / …) is just
+    // another kind in the registry.
     const kindSelect = document.querySelector<HTMLSelectElement>('#mapfx-kind-select');
     if (kindSelect) {
       kindSelect.innerHTML = '';
-      for (const id of MAPFX_KIND_ORDER) {
+      for (const id of OVERLAY_KIND_ORDER) {
         const opt = document.createElement('option');
         opt.value = id;
-        opt.textContent = MAPFX_REGISTRY[id].label;
+        opt.textContent = OVERLAY_KIND_REGISTRY[id].label;
         kindSelect.appendChild(opt);
       }
-      kindSelect.value = 'fire';
-      this.mapFXEditor.setActiveKind('fire');
+      kindSelect.value = this.activeOverlayKind;
+      this._applyActiveKindToBrush();
+      this.fogEditor.setActiveKind(this.activeOverlayKind);
       kindSelect.addEventListener('change', () => {
-        this.mapFXEditor.setActiveKind(kindSelect.value as MapFXKind);
+        this.activeOverlayKind = kindSelect.value as OverlayKind;
+        this._applyActiveKindToBrush();
+        this.fogEditor.setActiveKind(this.activeOverlayKind);
+        this.fogEditor.setColor(overlayKind(this.activeOverlayKind).defaultColor);
       });
     }
-
-    const mapfxPaintBtn  = document.querySelector<HTMLButtonElement>('#mapfx-paint-btn');
-    const mapfxPolyBtn   = document.querySelector<HTMLButtonElement>('#mapfx-poly-btn');
-    const mapfxFinishBtn = document.querySelector<HTMLButtonElement>('#mapfx-finish-btn');
-
-    const setMapFXMode = (mode: 'off' | 'paint' | 'poly') => {
-      // Turn off competing modes so the canvas has a single owner.
-      if (mode !== 'off') {
-        this.fogEditor.disable();
-        this.fogEditor.setBrushActive(false);
-        if (brushBtn) brushBtn.classList.remove('btn--active');
-        if (brushControls) brushControls.hidden = true;
-      }
-      this.mapFXEditor.setMode(mode);
-      mapfxPaintBtn?.classList.toggle('btn--active', mode === 'paint');
-      mapfxPolyBtn?.classList.toggle('btn--active',  mode === 'poly');
-      if (mapfxFinishBtn) mapfxFinishBtn.hidden = mode !== 'poly';
-      this.markerEditor?.setPointerCapture(mode === 'off');
-    };
-    mapfxPaintBtn?.addEventListener('click', () => {
-      setMapFXMode(this.mapFXEditor.getMode() === 'paint' ? 'off' : 'paint');
-    });
-    mapfxPolyBtn?.addEventListener('click', () => {
-      setMapFXMode(this.mapFXEditor.getMode() === 'poly' ? 'off' : 'poly');
-    });
-    mapfxFinishBtn?.addEventListener('click', () => {
-      this.mapFXEditor.finishPolygon();
-    });
-
-    // Polygon mode adds vertices via clicks. When NOT in a MapFX mode,
-    // clicks on the canvas also serve as a "deselect MapFX entity" gesture
-    // — selector icons stopPropagation, so anything that bubbles here
-    // missed every icon.
-    canvas.addEventListener('click', (e) => {
-      if (this.mapFXEditor.getMode() === 'poly') {
-        const rect = canvas.getBoundingClientRect();
-        const m = this.renderer.canvasCssToMapNorm(e.clientX - rect.left, e.clientY - rect.top);
-        if (m) this.mapFXEditor.polyClick({ x: m.x, y: m.y });
-        return;
-      }
-      if (this.mapFXEditor.getMode() === 'off' && this.selectedMapFXEntityId) {
-        this._selectMapFXEntity(null);
-      }
-    });
-
-    // Delete key on a selected MapFX entity → remove it. Matches the marker
-    // / FoW polygon shortcut so keyboard flow is consistent.
-    window.addEventListener('keydown', (e) => {
-      if (!this.selectedMapFXEntityId) return;
-      const t = document.activeElement;
-      if (t instanceof HTMLInputElement || t instanceof HTMLSelectElement
-          || t instanceof HTMLTextAreaElement) return;
-      if (e.key === 'Delete' || e.key === 'Backspace') {
-        e.preventDefault();
-        this._deleteMapFXEntity(this.selectedMapFXEntityId);
-      } else if (e.key === 'Escape') {
-        this._selectMapFXEntity(null);
-      }
-    });
-
-    // Commit → state + broadcast. Live painting → renderer for instant
-    // feedback (replaced by the entity recomposite on commit).
-    this.mapFXEditor.setHandlers({
-      onCommit: (entity: MapFXEntity) => {
-        this.state.addMapFXEntity(entity);
-        // Auto-select the new entity so the selector icon + trashcan are
-        // immediately visible — discoverable workflow for first-time users.
-        this.selectedMapFXEntityId = entity.id;
-        // After committing, hop out of paint/poly so the user picks up a
-        // fresh action rather than accidentally double-creating.
-        // (Broadcast + renderer composite happen via the 'mapfx' state branch.)
-        setMapFXMode('off');
-      },
-      onLivePaint: (kind, points, radius) => {
-        const k = MAPFX_REGISTRY[kind] ?? MAPFX_REGISTRY.fire;
-        this.renderer.applyMapFXLiveStroke({
-          points,
-          radius,
-          mode:  'paint',
-          color: k.defaultColor,
-        });
-      },
-      onLivePaintEnd: () => {
-        // No-op — the entity commit triggers a clean recomposite that
-        // replaces the live preview pixels.
-      },
-      onCursor: (clientX, clientY) => {
-        if (clientX === null || clientY === null) {
-          this.fogEditor.setExternalBrushPreview(null);
-          return;
-        }
-        const rect = canvas.getBoundingClientRect();
-        const m = this.renderer.canvasCssToMapNorm(clientX - rect.left, clientY - rect.top);
-        if (!m) { this.fogEditor.setExternalBrushPreview(null); return; }
-        const kind = this.mapFXEditor.getActiveKind();
-        const k = MAPFX_REGISTRY[kind] ?? MAPFX_REGISTRY.fire;
-        this.fogEditor.setExternalBrushPreview({
-          pos:    { x: m.x, y: m.y },
-          radius: k.defaultRadius,
-          color:  k.defaultColor,
-          mode:   'paint',
-        });
-      },
-    });
 
     document.querySelector('#fog-delete-btn')?.addEventListener('click', () => {
       this.fogEditor.deleteSelected();
@@ -2733,48 +2605,52 @@ export class GMApp {
       this.fogEditor.setBrushSettings({ color: c });
     });
 
-    // v2.12/M3 — FoW brush mode handlers. Live paints into the renderer for
-    // instant feedback; end-of-stroke broadcasts the full delta to players +
-    // persists the brush PNG into fog state.
+    // v2.12 unified — brush handlers commit a polygon (paint) or carve
+    // through existing polygons (erase). Live preview is just the cursor
+    // outline drawn by FogEditor — the committed polygon shows up on the
+    // fog mesh after the state notify, no live-render hack needed.
     this.fogEditor.setBrushHandlers(
-      (settings, points) => {
-        // Paint just the new point(s) into the renderer — keeps the stroke
-        // visible under the cursor without re-decoding the snapshot.
-        this.renderer.applyFogBrushStroke({
-          points, radius: settings.radius, mode: settings.mode, color: settings.color,
-        });
+      (_settings, _points) => {
+        // No-op: live preview is the cursor outline + in-progress stroke
+        // drawn by FogEditor on its own canvas (set up below).
       },
       (settings, points) => {
-        void this._commitFogBrushStroke(settings, points);
+        this._commitOverlayBrushStroke(settings, points);
       },
     );
   }
 
-  /** Broadcast the completed stroke + flush the new PNG snapshot into state.
-   *  PNG export is async (toBlob) so this is a separate method. */
-  private async _commitFogBrushStroke(settings: import('../mapfx/BrushController.ts').BrushSettings, points: import('../types.ts').FogVertex[]): Promise<void> {
-    // Broadcast the stroke delta. Stable id lets players dedupe across BC + PeerJS.
-    const strokeId = generateId();
-    const mapId = this.state.getState().map?.id;
-    this.host.broadcast({
-      type:     'brush_stroke',
-      layer:    'fog',
-      points,
-      radius:   settings.radius,
-      mode:     settings.mode,
-      color:    settings.color,
-      strokeId,
-      ...(mapId ? { mapId } : {}),
-    });
-    // Re-encode the brush PNG and fold it into fog state — auto-save picks it
-    // up via the existing fog autosave path.
-    const brushPng = await this.renderer.exportFogBrush();
+  /** Push the active brush kind's defaults into the FogEditor's brush
+   *  settings (colour + radius). Called when the kind dropdown changes. */
+  private _applyActiveKindToBrush(): void {
+    const k = overlayKind(this.activeOverlayKind);
+    this.fogEditor.setBrushSettings({ color: k.defaultColor, radius: k.defaultRadius });
+  }
+
+  /** Brush stroke commit. Converts the polyline to a polygon (offset at
+   *  brush radius), then either pushes it as a new overlay polygon (paint)
+   *  or runs polygon-difference against every existing polygon (erase).
+   *  Each stroke = one polygon, no auto-merge with other strokes. */
+  private _commitOverlayBrushStroke(settings: import('../mapfx/BrushController.ts').BrushSettings, points: import('../types.ts').FogVertex[]): void {
+    if (points.length === 0) return;
+    const ring = offsetPolyline(points, settings.radius);
+    if (ring.length < 3) return;
     const fog = this.state.getState().fog;
-    this.state.setFog({
-      ...fog,
-      ...(brushPng ? { brush: brushPng } : {}),
-      brushColor: settings.color,
-    });
+    if (settings.mode === 'erase') {
+      const result = subtractFromAll(fog.polygons, ring);
+      this.state.setFog({ polygons: result });
+      return;
+    }
+    // Paint — new polygon of the active kind.
+    const k = overlayKind(this.activeOverlayKind);
+    const poly: FogPolygon = {
+      id:        generateId(),
+      kind:      this.activeOverlayKind,
+      vertices:  ring,
+      color:     settings.color || k.defaultColor,
+      createdAt: Date.now(),
+    };
+    this.state.setFog({ polygons: [...fog.polygons, poly] });
   }
 
   private bindFilterPanel(): void {
@@ -3323,9 +3199,10 @@ export class GMApp {
         onRectResizeDrag: (kind, clientX, clientY, phase) => this._handleRectResizeDrag(kind, clientX, clientY, phase),
         onRectAspectLock: (kind) => this._handleRectAspect(kind),
         onRectMaximise:   (kind) => this._handleRectMaximise(kind),
-        // v2.12/M4 — MapFX selector clicks
-        onMapFXSelect:    (id) => this._selectMapFXEntity(id),
-        onMapFXDelete:    (id) => this._deleteMapFXEntity(id),
+        // v2.12 unified — selector-icon click selects an overlay polygon
+        // (non-fog kinds; fog uses interior click via FogEditor).
+        onMapFXSelect:    (id) => this._selectOverlayPolygon(id),
+        onMapFXDelete:    (id) => this._deleteOverlayPolygon(id),
       });
       this.markerEditor.layer.setOverlay(overlay);
       this._markerOverlay = overlay;

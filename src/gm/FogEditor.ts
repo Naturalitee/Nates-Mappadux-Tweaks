@@ -1,4 +1,4 @@
-import type { FogPolygon, FogState, FogVertex } from '../types.ts';
+import type { FogPolygon, FogState, FogVertex, OverlayKind } from '../types.ts';
 import { generateId } from '../utils/id.ts';
 import type { Renderer } from '../rendering/Renderer.ts';
 import { BrushController, type BrushSettings } from '../mapfx/BrushController.ts';
@@ -35,6 +35,8 @@ export class FogEditor {
   private currentVertices: FogVertex[] = [];
   private selectedId: string | null = null;
   private activeColor = '#000000';
+  /** v2.12 — kind tagged on new polygon-mode polygons. */
+  private activeKind: OverlayKind = 'fog';
   private enabled = false;
 
   private lastPointer: { x: number; y: number } | null = null;
@@ -167,6 +169,11 @@ export class FogEditor {
 
   setColor(color: string): void {
     this.activeColor = color;
+  }
+
+  /** v2.12 — what kind to tag on new polygon-mode polygons. */
+  setActiveKind(kind: OverlayKind): void {
+    this.activeKind = kind;
   }
 
   setMapAspect(ratio: number): void {
@@ -387,9 +394,11 @@ export class FogEditor {
   private closePolygon(): void {
     if (this.currentVertices.length < 3) return;
     const poly: FogPolygon = {
-      id: generateId(),
-      vertices: [...this.currentVertices],
-      color: this.activeColor,
+      id:        generateId(),
+      kind:      this.activeKind,
+      vertices:  [...this.currentVertices],
+      color:     this.activeColor,
+      createdAt: Date.now(),
     };
     this.polygons.push(poly);
     this.currentVertices = [];
@@ -473,7 +482,11 @@ export class FogEditor {
     this.ctx.clearRect(0, 0, this.drawW, this.drawH);
 
     for (const poly of this.polygons) {
-      this.drawPolygon(poly.vertices, poly.color, poly.id === this.selectedId);
+      // Polygons now carry a kind; fall back to activeColor when the
+      // colour override isn't set (keeps backward compat with pre-kind
+      // saves migrated forward).
+      const colour = poly.color ?? this.activeColor;
+      this.drawPolygon(poly.vertices, colour, poly.id === this.selectedId);
     }
 
     if (this.currentVertices.length > 0) {
@@ -491,7 +504,7 @@ export class FogEditor {
     this._updateDeleteHandle();
   }
 
-  /** External callers (MapFXEditor via GMApp) drive the brush-size preview
+  /** External callers can drive the brush-size preview
    *  outline through this method so the cursor renders on the same fog
    *  canvas — no new DOM layer needed. Pass null to clear. */
   setExternalBrushPreview(preview: { pos: FogVertex; radius: number; color: string; mode: 'paint' | 'erase' } | null): void {

@@ -359,14 +359,6 @@ export class ProjectorApp {
           this.mapBlob = blob;
           void this.renderer.loadMap(blob, this.currentFog);
         }
-        // v2.12/M4 — clear-then-apply incoming MapFX state so the new map's
-        // entities are the only ones showing.
-        if (msg.mapfx) {
-          this.renderer.clearMapFX();
-          void this.renderer.updateMapFX(msg.mapfx.entities, null);
-        } else {
-          this.renderer.clearMapFX();
-        }
         void (async () => {
           if (msg.iconData?.length) await this._decodeIconData(msg.iconData);
           this._renderMarkers();
@@ -392,24 +384,6 @@ export class ProjectorApp {
       case 'fog_update': {
         this.currentFog = msg.payload;
         this.renderer.updateFog(msg.payload);
-        break;
-      }
-      case 'brush_stroke': {
-        // v2.12/M2 — apply live stroke deltas via the shared rasteriser.
-        if (msg.layer === 'fog') {
-          this.renderer.applyFogBrushStroke({
-            points: msg.points,
-            radius: msg.radius,
-            mode:   msg.mode,
-            color:  msg.color,
-          });
-        }
-        // MapFX in M4.
-        break;
-      }
-      case 'mapfx_update': {
-        // v2.12/M4 — full MapFX state push.
-        void this.renderer.updateMapFX(msg.payload.entities, null);
         break;
       }
       case 'marker_update': {

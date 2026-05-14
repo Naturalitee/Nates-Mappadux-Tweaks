@@ -5,11 +5,31 @@
  * time) and a final stroke-complete event with the full smoothed point list
  * (for broadcast + persistence).
  *
- * Used by FogEditor (FoW brush mode) and MapFXEditor (paint mode).
+ * Used by FogEditor (FoW + MapFX brush — the unified v2.12 overlay system).
  */
 
 import type { FogVertex } from '../types.ts';
-import { smoothPoints } from './strokeEngine.ts';
+
+/** Chaikin smoothing pass — softens pointer-event jitter without changing
+ *  the stroke's overall shape. Inlined here so the brush controller
+ *  doesn't depend on the (now-defunct) strokeEngine module. */
+function smoothPoints(points: FogVertex[], iterations: number = 1): FogVertex[] {
+  let pts = points.slice();
+  for (let it = 0; it < iterations; it++) {
+    if (pts.length < 3) return pts;
+    const next: FogVertex[] = [];
+    next.push(pts[0]!);
+    for (let i = 0; i < pts.length - 1; i++) {
+      const p0 = pts[i]!;
+      const p1 = pts[i + 1]!;
+      next.push({ x: 0.75 * p0.x + 0.25 * p1.x, y: 0.75 * p0.y + 0.25 * p1.y });
+      next.push({ x: 0.25 * p0.x + 0.75 * p1.x, y: 0.25 * p0.y + 0.75 * p1.y });
+    }
+    next.push(pts[pts.length - 1]!);
+    pts = next;
+  }
+  return pts;
+}
 
 export interface BrushSettings {
   /** Brush radius in normalised map units (1 = map width). */

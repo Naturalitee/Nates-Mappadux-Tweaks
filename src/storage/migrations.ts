@@ -86,6 +86,21 @@ export function migrateSessionState(saved: any): SessionState | null {
     returnPingVolume:    typeof savedTracker.returnPingVolume   === 'number' ? savedTracker.returnPingVolume   : baseTracker.returnPingVolume,
   };
 
+  // v2.12 overlay unification — pre-v2.12 polygons don't have a `kind` field;
+  // promote them to kind:'fog' so they keep rendering as black fog. Drop any
+  // intermediate dev-only fields (fog.brush, mapfx.*) — none of that v2.12
+  // dev state has been pushed.
+  const rawFog = (cur.fog && Array.isArray(cur.fog.polygons)) ? cur.fog.polygons : [];
+  const polygons = rawFog.map((p: any) => ({
+    id:        p?.id ?? '',
+    kind:      (p?.kind ?? 'fog'),
+    vertices:  Array.isArray(p?.vertices) ? p.vertices : [],
+    color:     typeof p?.color === 'string' ? p.color : undefined,
+    label:     typeof p?.label === 'string' ? p.label : undefined,
+    createdAt: typeof p?.createdAt === 'number' ? p.createdAt : Date.now(),
+  })).filter((p: any) => p.id && p.vertices.length >= 3);
+  const fog = { polygons };
+
   return {
     ...cur,
     // Merge view so newly-added fields (e.g. backgroundColor) fall back to defaults.
@@ -93,7 +108,6 @@ export function migrateSessionState(saved: any): SessionState | null {
     markers: Array.isArray(cur.markers) ? cur.markers : base.markers,
     audio,
     motionTracker,
-    // v2.12/M4 — MapFX entities. Pre-v2.12 saves don't have this field; seed empty.
-    mapfx:   (cur.mapfx && Array.isArray(cur.mapfx.entities)) ? cur.mapfx : base.mapfx,
+    fog,
   } as SessionState;
 }

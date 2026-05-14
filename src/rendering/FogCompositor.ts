@@ -1,125 +1,138 @@
 import * as THREE from 'three';
-import type { FogState } from '../types.ts';
-import { applyStroke } from '../mapfx/strokeEngine.ts';
+import type { FogState, FogPolygon } from '../types.ts';
+import { overlayKind } from '../mapfx/overlayKindRegistry.ts';
 
 /**
- * FogCompositor
+ * FogCompositor — v2.12 unified overlay system.
  *
- * Maintains an OffscreenCanvas that represents the fog-of-war layer.
- * Drawn polygons are opaque (in their declared colour); everything else is transparent.
- * The result is a Three.js CanvasTexture applied to the fog mesh plane.
+ * Renders a single texture for ALL overlay polygons (fog, fire, water,
+ * smoke, light, blood, …). One per-kind branch in the draw loop handles
+ * fill / blend / animation differences; everything else (texture lifecycle,
+ * UV mapping, Three integration) is shared.
  *
- * On fog change: re-draws the canvas and marks the texture for GPU upload.
- * On map change: resizes the canvas to match the new map dimensions.
+ * Each polygon is filled with its own colour (or its kind's default), with
+ * the kind's blend mode. Polygons sort by `kind.z` so fog renders on top
+ * of MapFX effects beneath, and within the same z by `createdAt` so newer
+ * paint covers older paint of the same kind.
  *
- * v2.12/M2 — also consumes the FoW brush layer (alpha-only PNG patch stored
- * in FogState.brush). The brush layer is loaded into a sibling canvas and
- * composited on top of the polygons each frame, so paint + polys compose
- * the same picture. Live brush strokes call `applyBrushStroke()` to
- * paint directly into the brush canvas without re-decoding the PNG.
+ * Animation: when any visible polygon has kind.animated = true, the
+ * Renderer's animation loop calls `tickAnimation(time)` so the opacity
+ * wobble can drive a per-frame redraw.
  */
 export class FogCompositor {
   private canvas: OffscreenCanvas;
   private ctx: OffscreenCanvasRenderingContext2D;
-  /** Sibling canvas holding the persistent FoW brush layer. Composited
-   *  onto the main fog canvas after the polygons each redraw. */
-  private brushCanvas: OffscreenCanvas;
-  private brushCtx:    OffscreenCanvasRenderingContext2D;
   readonly texture: THREE.CanvasTexture;
+
+  /** Last polygon list passed to redraw — kept so tickAnimation can
+   *  re-composite without the caller re-passing it. */
+  private lastPolygons: FogPolygon[] = [];
 
   constructor(width = 1024, height = 1024) {
     this.canvas = new OffscreenCanvas(width, height);
     const ctx = this.canvas.getContext('2d');
     if (!ctx) throw new Error('FogCompositor: OffscreenCanvas 2D context unavailable');
     this.ctx = ctx;
-    this.brushCanvas = new OffscreenCanvas(width, height);
-    const bctx = this.brushCanvas.getContext('2d');
-    if (!bctx) throw new Error('FogCompositor: brush 2D context unavailable');
-    this.brushCtx = bctx;
     this.texture = new THREE.CanvasTexture(this.canvas as unknown as HTMLCanvasElement);
-    // Canvas 2D always draws in sRGB.  Marking the texture SRGBColorSpace tells
-    // Three.js to decode it to linear before rendering, so OutputPass can
-    // re-encode to sRGB on the way out — preserving the exact picked colour.
-    // Without this, the raw sRGB value is treated as linear and OutputPass
-    // over-brightens it (e.g. #CBCBCB → #E6E6E6).
+    // Canvas 2D draws in sRGB. Tag the texture so Three decodes to linear
+    // before render; OutputPass re-encodes to sRGB on the way out and the
+    // GM's picked colours land exactly as picked.
     this.texture.colorSpace = THREE.SRGBColorSpace;
     this.texture.needsUpdate = true;
   }
 
-  /** Re-composite the fog layer from the current state. The brush canvas is
-   *  NOT reloaded here — it's loaded once via `setBrushSnapshot` on map
-   *  change and updated incrementally via `applyBrushStroke` thereafter. */
-  redraw(fog: FogState): void {
+  /** Re-composite the overlay layer from the current state. Optional `time`
+   *  parameter drives animated kinds; pass 0 for static composites. */
+  redraw(fog: FogState, time: number = 0): void {
+    this.lastPolygons = fog.polygons;
     const { width, height } = this.canvas;
     this.ctx.clearRect(0, 0, width, height);
 
-    for (const poly of fog.polygons) {
+    // Stable z + createdAt sort so the same polygon list always paints the
+    // same picture (sort key is total ordering — no flicker between frames).
+    const sorted = fog.polygons.slice().sort((a, b) => {
+      const za = overlayKind(a.kind).z;
+      const zb = overlayKind(b.kind).z;
+      if (za !== zb) return za - zb;
+      return a.createdAt - b.createdAt;
+    });
+
+    for (const poly of sorted) {
       if (poly.vertices.length < 3) continue;
+      const kind = overlayKind(poly.kind);
+
+      // Per-kind blend mode.
+      this.ctx.save();
+      switch (kind.blend) {
+        case 'screen':   this.ctx.globalCompositeOperation = 'screen';   break;
+        case 'multiply': this.ctx.globalCompositeOperation = 'multiply'; break;
+        default:         this.ctx.globalCompositeOperation = 'source-over';
+      }
+
+      // Animated kinds: small opacity wobble. Phase from id hash so siblings
+      // don't pulse in lockstep. Idle (time = 0) skips the wobble entirely.
+      let alpha = 1.0;
+      if (kind.animated && time > 0) {
+        const phase = _hashIdToPhase(poly.id);
+        let wobble: number;
+        if (kind.id === 'electric')   wobble = Math.sin(time * 14.0 + phase) * 0.35 + Math.sin(time * 23.0 + phase * 1.3) * 0.20;
+        else if (kind.id === 'fire')  wobble = Math.sin(time *  8.0 + phase) * 0.30 + Math.sin(time * 17.0 + phase * 1.7) * 0.15;
+        else if (kind.id === 'water') wobble = Math.sin(time *  2.5 + phase) * 0.20;
+        else                          wobble = Math.sin(time *  3.5 + phase) * 0.18;
+        alpha = Math.max(0.55, Math.min(1.0, 1.0 + wobble * 0.25));
+      }
+      this.ctx.globalAlpha = alpha;
+
+      const fill = poly.color || kind.defaultColor;
+      this.ctx.fillStyle   = fill;
+      this.ctx.strokeStyle = fill;
+      this.ctx.lineWidth   = 1;
 
       this.ctx.beginPath();
-      const first = poly.vertices[0]!;
-      this.ctx.moveTo(first.x * width, first.y * height);
-
+      const v0 = poly.vertices[0]!;
+      this.ctx.moveTo(v0.x * width, v0.y * height);
       for (let i = 1; i < poly.vertices.length; i++) {
         const v = poly.vertices[i]!;
         this.ctx.lineTo(v.x * width, v.y * height);
       }
-
       this.ctx.closePath();
-      this.ctx.fillStyle = poly.color;
       this.ctx.fill();
-      // Stroke with same colour to eliminate the sub-pixel antialiased fringe
-      this.ctx.strokeStyle = poly.color;
-      this.ctx.lineWidth = 1;
+      // Stroke the same colour to eat the sub-pixel AA fringe between fills.
       this.ctx.stroke();
+      this.ctx.restore();
     }
 
-    // Composite the FoW brush layer on top of the polygons (brush adds to
-    // the obscured area; polygon mode and brush mode stack together).
-    this.ctx.drawImage(this.brushCanvas as unknown as CanvasImageSource, 0, 0);
-
-    // Signal Three.js to re-upload the canvas to GPU on next render
     this.texture.needsUpdate = true;
   }
 
-  /** Replace the FoW brush canvas with a decoded PNG bitmap. Called when a
-   *  map loads or a full resync arrives. */
-  setBrushSnapshot(bitmap: CanvasImageSource | null): void {
-    const { width, height } = this.brushCanvas;
-    this.brushCtx.clearRect(0, 0, width, height);
-    if (bitmap) this.brushCtx.drawImage(bitmap, 0, 0, width, height);
-  }
-
-  /** Wipe the brush layer entirely — used by the FoW panel's "clear" action. */
-  clearBrush(): void {
-    this.brushCtx.clearRect(0, 0, this.brushCanvas.width, this.brushCanvas.height);
-  }
-
-  /** Apply a single brush stroke to the persistent brush canvas. Mode 'erase'
-   *  removes alpha (FoW "reveal" path); mode 'paint' adds to the obscured
-   *  area. Caller is responsible for triggering the subsequent redraw. */
-  applyBrushStroke(stroke: { points: { x: number; y: number }[]; radius: number; mode: 'paint' | 'erase'; color: string }): void {
-    applyStroke({ canvas: this.brushCanvas, ctx: this.brushCtx }, stroke);
-  }
-
-  /** Export the brush layer as base64 PNG (no `data:` prefix). */
-  async exportBrushPng(): Promise<string | null> {
-    try {
-      const blob = await this.brushCanvas.convertToBlob({ type: 'image/png' });
-      const buf  = await blob.arrayBuffer();
-      const bytes = new Uint8Array(buf);
-      let binary = '';
-      const chunk = 0x8000;
-      for (let i = 0; i < bytes.length; i += chunk) {
-        binary += String.fromCharCode.apply(null, Array.from(bytes.subarray(i, i + chunk)));
-      }
-      return btoa(binary);
-    } catch {
-      return null;
+  /** True if the current polygon set contains any animated kinds. The
+   *  Renderer uses this to decide whether to run a per-frame redraw. */
+  hasAnimatedPolygons(): boolean {
+    for (const p of this.lastPolygons) {
+      if (overlayKind(p.kind).animated) return true;
     }
+    return false;
+  }
+
+  /** Per-frame redraw with a fresh time value. Cheap relative to the
+   *  rasterise cost on map-load because no PNG decoding is involved —
+   *  it's all polygon path ops. */
+  tickAnimation(time: number): void {
+    if (this.lastPolygons.length === 0) return;
+    this.redraw({ polygons: this.lastPolygons }, time);
   }
 
   dispose(): void {
     this.texture.dispose();
   }
+}
+
+/** Stable id → phase in 0..2π so animated polygons don't pulse in sync. */
+function _hashIdToPhase(id: string): number {
+  let h = 2166136261;
+  for (let i = 0; i < id.length; i++) {
+    h ^= id.charCodeAt(i);
+    h = Math.imul(h, 16777619);
+  }
+  return ((h >>> 0) / 0xffffffff) * Math.PI * 2;
 }

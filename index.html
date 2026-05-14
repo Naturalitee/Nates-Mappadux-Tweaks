@@ -140,17 +140,14 @@
         </div>
         <hr class="fog-divider" />
         <div class="mapfx-toolbar">
-          <span class="mapfx-label">MapFX</span>
-          <select id="mapfx-kind-select" title="Effect type">
-            <!-- Filled from MAPFX_REGISTRY in JS. -->
+          <span class="mapfx-label">Kind</span>
+          <select id="mapfx-kind-select" title="What gets painted — fog, fire, water, light, etc.">
+            <!-- Filled from OVERLAY_KIND_ORDER in JS. -->
           </select>
-          <button id="mapfx-paint-btn"  class="btn btn--sm btn--ghost" title="Paint mode — drag to lay down an effect">Paint</button>
-          <button id="mapfx-poly-btn"   class="btn btn--sm btn--ghost" title="Polygon mode — click vertices to define an area">Polygon</button>
-          <button id="mapfx-finish-btn" class="btn btn--sm btn--ghost" hidden title="Finish the in-progress polygon">Done</button>
         </div>
         <p class="fog-hint">
-          Fog of War — Polygon: click vertices, click near first to close. Brush: drag to paint, "Reveal" mode to erase. Spotlight: one click reveals a circle.<br/>
-          MapFX — pick a kind, then Paint (drag) or Polygon (click vertices) to lay one down. Each effect gets a selector icon on the map; click it to select, trashcan to delete.
+          Pick a Kind, then Polygon (click vertices, click near first to close) or Brush (drag).<br/>
+          Erase carves through anything beneath it — fog and effects alike. Each stroke is one polygon; click a non-fog effect's icon to select it.
         </p>
       </div>
     </section>

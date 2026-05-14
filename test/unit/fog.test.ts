@@ -49,10 +49,13 @@ describe('FogState structure', () => {
   it('polygon has required fields', () => {
     const poly: FogPolygon = {
       id: 'test-id',
+      kind: 'fog',
       vertices: [{ x: 0, y: 0 }, { x: 1, y: 0 }, { x: 0.5, y: 1 }],
       color: '#000000',
+      createdAt: Date.now(),
     };
     expect(poly.vertices.length).toBeGreaterThanOrEqual(3);
     expect(poly.color).toMatch(/^#[0-9a-fA-F]{6}$/);
+    expect(poly.kind).toBe('fog');
   });
 });

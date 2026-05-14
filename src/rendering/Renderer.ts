@@ -4,11 +4,10 @@ import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { FogCompositor } from './FogCompositor.ts';
-import { MapFXCompositor } from './MapFXCompositor.ts';
 import { buildShaderObject, updateUniforms } from './ShaderMaterial.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
 import type { FilterDefinition } from '../filters/schema.ts';
-import type { FilterParamValues, FilterState, FogState, ViewState, MapFXEntity } from '../types.ts';
+import type { FilterParamValues, FilterState, FogState, ViewState } from '../types.ts';
 
 /**
  * Renderer
@@ -52,11 +51,9 @@ export class Renderer {
 
   // Layer meshes
   private mapMesh:      THREE.Mesh | null = null;
-  private mapFXMesh:    THREE.Mesh | null = null; // v2.12/M4
   private fogMesh:      THREE.Mesh | null = null;
   private mapTexture:   THREE.Texture | null = null;
   private fogCompositor: FogCompositor;
-  private mapFXCompositor: MapFXCompositor;  // v2.12/M4
 
   // Marker layer split as of v2.10.29:
   //   - Motion overlay (return blobs, scan rings) → single shared OffscreenCanvas
@@ -141,7 +138,6 @@ export class Renderer {
     this.camera.position.set(0, 0, 10);
 
     this.fogCompositor = new FogCompositor(1024, 1024);
-    this.mapFXCompositor = new MapFXCompositor(1024, 1024);
 
     this.composer = new EffectComposer(this.renderer);
     this.renderPass = new RenderPass(this.scene, this.camera);
@@ -258,12 +254,6 @@ export class Renderer {
         this.fogCompositor.dispose();
         this.fogCompositor = new FogCompositor(1024, 1024);
         this.fogCompositor.redraw(this.lastFogState);
-        // v2.12/M2 — the fresh compositor has an empty brush canvas. If the
-        // incoming fog carries a brush PNG, kick the async decode so the
-        // brush layer restores once the bitmap lands.
-        void this._applyBrushSnapshot(this.lastFogState.brush);
-        this.mapFXCompositor.dispose();
-        this.mapFXCompositor = new MapFXCompositor(1024, 1024);
 
         this.rebuildLayerMeshes();
         this.refreshCamera();
@@ -280,88 +270,7 @@ export class Renderer {
   updateFog(fog: FogState): void {
     this.lastFogState = fog;
     this.fogCompositor.redraw(fog);
-    // The brush snapshot (alpha PNG) only arrives via this path on map_change /
-    // full_state; live strokes call applyFogBrushStroke instead. Decode async
-    // so the polygon redraw doesn't block on PNG decode — the brush layer
-    // re-composites itself once setBrushSnapshot lands.
-    void this._applyBrushSnapshot(fog.brush);
     this.needsRender = true;
-  }
-
-  /** Replace the in-memory FoW brush bitmap from a base64 PNG. Pass an empty
-   *  string / undefined to clear. Fire-and-forget — caller doesn't await. */
-  private async _applyBrushSnapshot(base64Png: string | undefined): Promise<void> {
-    if (!base64Png) {
-      this.fogCompositor.clearBrush();
-      this.fogCompositor.redraw(this.lastFogState);
-      this.needsRender = true;
-      return;
-    }
-    try {
-      const img = await this._decodePng(base64Png);
-      this.fogCompositor.setBrushSnapshot(img);
-      this.fogCompositor.redraw(this.lastFogState);
-      this.needsRender = true;
-    } catch { /* malformed snapshot — leave brush layer untouched */ }
-  }
-
-  /** Live FoW brush stroke — paints directly into the brush canvas and
-   *  re-composites without touching the polygons. Caller is responsible
-   *  for broadcasting the stroke to players. */
-  applyFogBrushStroke(stroke: { points: { x: number; y: number }[]; radius: number; mode: 'paint' | 'erase'; color: string }): void {
-    this.fogCompositor.applyBrushStroke(stroke);
-    this.fogCompositor.redraw(this.lastFogState);
-    this.needsRender = true;
-  }
-
-  /** Wipe the FoW brush canvas. */
-  clearFogBrush(): void {
-    this.fogCompositor.clearBrush();
-    this.fogCompositor.redraw(this.lastFogState);
-    this.needsRender = true;
-  }
-
-  /** Export the current FoW brush layer as base64 PNG. Used by the GM when
-   *  persisting state / broadcasting a full snapshot. */
-  exportFogBrush(): Promise<string | null> {
-    return this.fogCompositor.exportBrushPng();
-  }
-
-  // ─── v2.12/M4 — MapFX entities ───────────────────────────────────────────
-
-  /** Push the latest MapFX state into the compositor and trigger a redraw.
-   *  Patch decode is async (PNGs) — texture refresh runs after it. */
-  async updateMapFX(entities: MapFXEntity[], selectedId: string | null): Promise<void> {
-    await this.mapFXCompositor.syncPatches(entities);
-    this.mapFXCompositor.redraw(entities, selectedId);
-    this.needsRender = true;
-  }
-
-  /** Clear the MapFX layer entirely. */
-  clearMapFX(): void {
-    this.mapFXCompositor.clear();
-    this.needsRender = true;
-  }
-
-  /** Paint a live in-progress MapFX stroke for instant feedback while the
-   *  GM is dragging. Overwritten by the next updateMapFX call once the
-   *  stroke is committed as an entity. */
-  applyMapFXLiveStroke(stroke: { points: { x: number; y: number }[]; radius: number; mode: 'paint' | 'erase'; color: string }): void {
-    this.mapFXCompositor.applyLiveStroke(stroke);
-    this.needsRender = true;
-  }
-
-  private _decodePng(base64Png: string): Promise<ImageBitmap | HTMLImageElement> {
-    const url = base64Png.startsWith('data:') ? base64Png : `data:image/png;base64,${base64Png}`;
-    if (typeof Image !== 'undefined') {
-      return new Promise((resolve, reject) => {
-        const img = new Image();
-        img.onload = () => resolve(img);
-        img.onerror = reject;
-        img.src = url;
-      });
-    }
-    return fetch(url).then((r) => r.blob()).then(createImageBitmap);
   }
 
   /**
@@ -372,7 +281,6 @@ export class Renderer {
   clearFog(): void {
     this.lastFogState = { polygons: [] };
     this.fogCompositor.redraw({ polygons: [] });
-    this.fogCompositor.clearBrush();
     this.needsRender = true;
   }
 
@@ -751,7 +659,6 @@ export class Renderer {
   dispose(): void {
     this.stop();
     this.fogCompositor.dispose();
-    this.mapFXCompositor.dispose();
     this.mapTexture?.dispose();
     this.markerTex?.dispose();
     this.mapBorderLine?.geometry.dispose();
@@ -765,19 +672,19 @@ export class Renderer {
   // ─── Private ───────────────────────────────────────────────────────────────
 
   private renderFrame(): void {
-    // Tick animated MapFX entities (fire flicker, electric crackle, etc.)
-    // even when nothing else is rendering — they need 60fps for the wobble
-    // to look natural. Cheap because patches are decoded once + cached.
-    const animatedMapFX = this.mapFXCompositor.hasAnimatedEntities();
+    // Tick animated overlay polygons (fire flicker, electric crackle, etc.).
+    // Cheap because the compositor just re-runs polygon path ops at a
+    // modulated alpha; no PNG decoding involved.
+    const animatedOverlay = this.fogCompositor.hasAnimatedPolygons();
 
     // Skip rendering if nothing has changed and there's no animation.
-    if (!this.needsRender && !this.isAnimatedFilter && !animatedMapFX) return;
+    if (!this.needsRender && !this.isAnimatedFilter && !animatedOverlay) return;
     this.needsRender = false;
 
     const elapsed = (performance.now() - this.startTime) / 1000;
 
-    if (animatedMapFX) {
-      this.mapFXCompositor.tickAnimation(elapsed);
+    if (animatedOverlay) {
+      this.fogCompositor.tickAnimation(elapsed);
     }
 
     // Tick time uniform only for animated filters (no-op for static ones)
@@ -805,7 +712,6 @@ export class Renderer {
   private rebuildLayerMeshes(): void {
     // Remove existing layers
     if (this.mapMesh)    { this.scene.remove(this.mapMesh);    this.mapMesh = null; }
-    if (this.mapFXMesh)  { this.scene.remove(this.mapFXMesh);  this.mapFXMesh = null; }
     if (this.fogMesh)    { this.scene.remove(this.fogMesh);    this.fogMesh = null; }
 
     // Remove previous border from gmScene
@@ -830,18 +736,8 @@ export class Renderer {
     this.mapMesh.position.z = 0;
     this.scene.add(this.mapMesh);
 
-    // v2.12/M4 — MapFX layer. Sits between map and fog so painted effects
-    // tint the map but fog can still hide them.
-    const mapFXMat = new THREE.MeshBasicMaterial({
-      map: this.mapFXCompositor.texture,
-      transparent: true,
-      depthWrite: false,
-    });
-    this.mapFXMesh = new THREE.Mesh(geo, mapFXMat);
-    this.mapFXMesh.position.z = 0.005;
-    this.scene.add(this.mapFXMesh);
-
-    // Fog layer — transparent, composited on top
+    // Fog layer — transparent, composited on top. Hosts ALL overlay
+    // polygons (fog + MapFX kinds) in the v2.12 unified system.
     const fogMat = new THREE.MeshBasicMaterial({
       map: this.fogCompositor.texture,
       transparent: true,
