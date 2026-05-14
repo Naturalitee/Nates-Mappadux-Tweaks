@@ -348,6 +348,13 @@ export class Renderer {
         fragmentShader: shader.fragment,
         transparent:    true,
         depthWrite:     false,
+        // Additive blending so the shader's radiance adds on top of the
+        // map (fire glows; mask-zero pixels contribute nothing). The
+        // shader still gets filtered by any whole-frame filter pass on
+        // the EffectComposer pipeline — the filter pass runs AFTER the
+        // scene composite, so it sees "map + shader plane(s)" as one
+        // image.
+        blending:       THREE.AdditiveBlending,
         uniforms: {
           uMask:      { value: maskTex },
           uNoise:     { value: shader.textures['uNoise'] ?? null },
