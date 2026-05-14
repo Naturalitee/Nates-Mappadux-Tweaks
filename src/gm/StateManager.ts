@@ -123,6 +123,21 @@ export class StateManager {
     this.setFog(next);
   }
 
+  /** v2.12 — change a polygon's colour. No-op if the polygon id isn't
+   *  found. Goes through setFog so the change broadcasts on the
+   *  fog_update path. */
+  setPolygonColor(polyId: string, color: string): void {
+    const fog = this.state.fog;
+    let touched = false;
+    const polygons = fog.polygons.map((p) => {
+      if (p.id !== polyId) return p;
+      touched = true;
+      return { ...p, color };
+    });
+    if (!touched) return;
+    this.setFog({ ...fog, polygons });
+  }
+
   /** v2.12 — patch shader-param values on a single polygon (for
    *  polygon-scoped params like river direction). No-op if the polygon
    *  id isn't found. Other polygons untouched. Goes through setFog so

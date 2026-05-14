@@ -2524,6 +2524,7 @@ export class GMApp {
           this._syncPanelToKind(poly.kind);
         } else {
           this._rebuildShaderParamsPanel();
+          this._applyKindToColourSwatch();
         }
         this._lastSelectedSyncedId = selectedId;
       } else if (!selectedId && this._lastSelectedSyncedId !== null) {
@@ -2531,6 +2532,7 @@ export class GMApp {
           this._syncPanelToKind('fog');
         } else {
           this._rebuildShaderParamsPanel();
+          this._applyKindToColourSwatch();
         }
         this._lastSelectedSyncedId = null;
       }
@@ -2625,9 +2627,19 @@ export class GMApp {
 
     document.querySelector<HTMLInputElement>('#fog-colour')?.addEventListener('input', (e) => {
       const c = (e.target as HTMLInputElement).value;
+      // Update the "next new polygon" draft + brush — same as before.
       this.fogEditor.setColor(c);
-      // Also drive the FoW brush colour so paint mode uses the same fill.
       this.fogEditor.setBrushSettings({ color: c });
+      // If a polygon of the active kind is selected, ALSO recolour it
+      // in the same state commit so the GM can repaint a placed
+      // polygon without having to delete + redraw.
+      const selectedId = this.fogEditor.getSelectedId();
+      if (selectedId) {
+        const poly = this.state.getState().fog.polygons.find((p) => p.id === selectedId);
+        if (poly && poly.kind === this.activeOverlayKind && overlayKind(poly.kind).allowColor) {
+          this.state.setPolygonColor(selectedId, c);
+        }
+      }
     });
 
     // v2.12 unified — brush + polygon commits go through the same paths.
@@ -2771,18 +2783,28 @@ export class GMApp {
     return row;
   }
 
-  /** Reflect the active kind in the colour swatch — set the swatch value
-   *  to the kind's default colour and grey it out if the kind doesn't
-   *  honour per-polygon colour overrides (fire/fog/smoke/water allow GM
-   *  tinting; identity-colour kinds like electric stay greyed out). */
+  /** Sync the colour swatch to the current selection + kind.
+   *    • A polygon of the active kind selected → swatch shows that
+   *      polygon's colour (or kind default if the polygon has none).
+   *    • No matching selection → swatch shows the kind default
+   *      ("next new polygon" colour, which the input handler also
+   *      writes through to the brush for paint-mode).
+   *  Greys out for identity-colour kinds (electric is always
+   *  electric-blue, etc.). */
   private _applyKindToColourSwatch(): void {
     const swatch = document.getElementById('fog-colour') as HTMLInputElement | null;
     if (!swatch) return;
     const k = overlayKind(this.activeOverlayKind);
-    swatch.value = k.defaultColor;
+    const selectedId = this.fogEditor.getSelectedId();
+    const selectedPoly = selectedId
+      ? this.state.getState().fog.polygons.find((p) => p.id === selectedId) ?? null
+      : null;
+    const editingPoly = selectedPoly && selectedPoly.kind === this.activeOverlayKind ? selectedPoly : null;
+    const value = editingPoly?.color ?? k.defaultColor;
+    swatch.value = value;
     swatch.disabled = !k.allowColor;
     swatch.title = k.allowColor
-      ? 'Colour for new shapes of this kind'
+      ? (editingPoly ? 'Colour of the selected polygon' : 'Colour for new shapes of this kind')
       : `Colour is fixed for ${k.label} — kind colour is part of its identity`;
   }
 
