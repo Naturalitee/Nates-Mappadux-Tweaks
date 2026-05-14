@@ -84,7 +84,7 @@ vec3 StarLayer(vec2 uv) {
 }
 
 void main() {
-  float maskAlpha = texture2D(uMask, vUv).r;
+  float maskAlpha = texture2D(uMask, vUv).a;
   if (maskAlpha < 0.01) {
     gl_FragColor = vec4(0.0);
     return;
