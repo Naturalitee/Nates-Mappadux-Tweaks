@@ -761,13 +761,20 @@ export class Renderer {
   // ─── Private ───────────────────────────────────────────────────────────────
 
   private renderFrame(): void {
-    // Skip rendering if nothing has changed and the active filter doesn't animate.
-    // This prevents expensive shaders (ballpoint, watercolour, etc.) from running
-    // at 60 fps when the scene is completely static.
-    if (!this.needsRender && !this.isAnimatedFilter) return;
+    // Tick animated MapFX entities (fire flicker, electric crackle, etc.)
+    // even when nothing else is rendering — they need 60fps for the wobble
+    // to look natural. Cheap because patches are decoded once + cached.
+    const animatedMapFX = this.mapFXCompositor.hasAnimatedEntities();
+
+    // Skip rendering if nothing has changed and there's no animation.
+    if (!this.needsRender && !this.isAnimatedFilter && !animatedMapFX) return;
     this.needsRender = false;
 
     const elapsed = (performance.now() - this.startTime) / 1000;
+
+    if (animatedMapFX) {
+      this.mapFXCompositor.tickAnimation(elapsed);
+    }
 
     // Tick time uniform only for animated filters (no-op for static ones)
     if (this.shaderPass?.uniforms['time']) {
