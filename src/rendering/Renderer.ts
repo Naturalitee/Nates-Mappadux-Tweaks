@@ -6,11 +6,12 @@ import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { FogCompositor } from './FogCompositor.ts';
 import { KindMaskCompositor } from './KindMaskCompositor.ts';
 import { buildShaderObject, updateUniforms } from './ShaderMaterial.ts';
+import { backdropById } from './backdrops/backdropRegistry.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
 import { overlayKind } from '../mapfx/overlayKindRegistry.ts';
 import { loadKindShader } from '../mapfx/shaders/shaderRegistry.ts';
 import type { FilterDefinition } from '../filters/schema.ts';
-import type { FilterParamValues, FilterState, FogState, ViewState, OverlayKind } from '../types.ts';
+import type { BackdropConfig, FilterParamValues, FilterState, FogState, ViewState, OverlayKind } from '../types.ts';
 
 /**
  * Renderer
@@ -44,11 +45,17 @@ export class Renderer {
   /**
    * Clip pass — placed between the filter shader and OutputPass.
    * Replaces pixels outside the GM-defined viewport rectangle with the
-   * background colour, so the player can never see map content the GM
-   * hasn't revealed regardless of screen aspect ratio.
+   * background colour (or an animated backdrop snippet from
+   * `backdrops/backdropRegistry.ts`), so the player can never see map
+   * content the GM hasn't revealed regardless of screen aspect ratio.
    * Defaults to full pass-through (uRect = 0,0,1,1) until setView() fires.
+   * Rebuilt by `setBackdrop()` when the GM picks a different backdrop —
+   * the snippet is inlined into the fragment shader.
    */
   private clipPass!: ShaderPass;
+  /** Currently-applied backdrop config (drives clipPass rebuild + per-
+   *  frame animation tick). Null = solid bg colour (default). */
+  private backdropConfig: BackdropConfig | null = null;
   private resolution: THREE.Vector2;
   private startTime = performance.now();
 
@@ -197,31 +204,7 @@ export class Renderer {
     // the active filter changes.
     this.outputPass = new OutputPass();
 
-    this.clipPass = new ShaderPass({
-      uniforms: {
-        tDiffuse: { value: null },
-        uRect:    { value: new THREE.Vector4(0, 0, 1, 1) }, // x1,y1,x2,y2 UV space
-        uBgColor: { value: new THREE.Vector3(0, 0, 0) },    // linear sRGB
-      },
-      vertexShader: /* glsl */`
-        varying vec2 vUv;
-        void main() {
-          vUv = uv;
-          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-        }`,
-      fragmentShader: /* glsl */`
-        uniform sampler2D tDiffuse;
-        uniform vec4 uRect;
-        uniform vec3 uBgColor;
-        varying vec2 vUv;
-        void main() {
-          if (vUv.x < uRect.x || vUv.x > uRect.z ||
-              vUv.y < uRect.y || vUv.y > uRect.w)
-            gl_FragColor = vec4(uBgColor, 1.0);
-          else
-            gl_FragColor = texture2D(tDiffuse, vUv);
-        }`,
-    });
+    this._buildClipPass();
 
     this.setFilter({ filterId: 'none', params: {} });
 
@@ -572,6 +555,10 @@ export class Renderer {
     this.composer.removePass(this.outputPass);
 
     this.shaderPass = new ShaderPass(shaderObj);
+    // GM-mode renderers ask for filter to be skipped — apply that to the
+    // freshly-built pass so toggling filter while GM is active doesn't
+    // accidentally re-enable the post-process shader.
+    this.shaderPass.enabled = this.filterEnabled;
     this.composer.addPass(this.clipPass);    // clip viewport → fill bars with bg
     this.composer.addPass(this.shaderPass); // filter sees full frame incl. bars
     this.composer.addPass(this.outputPass); // SRGB conversion last
@@ -580,6 +567,32 @@ export class Renderer {
   updateFilterParams(filterId: string, values: FilterParamValues): void {
     if (!this.shaderPass || !this.activeFilter || this.activeFilter.id !== filterId) return;
     updateUniforms(this.shaderPass.uniforms, this.activeFilter, values);
+    this.needsRender = true;
+  }
+
+  /**
+   * Apply (or clear) the per-pack animated backdrop. Pass null / { kind:
+   * 'none' } to revert to solid bg colour. Rebuilds the clip pass with
+   * the registered backdrop's GLSL snippet inlined into the "outside
+   * uRect" branch — inside the viewport the pass keeps showing the
+   * composed map untouched, so the map itself is never overlaid.
+   *
+   * Idempotent — calling with the current config is a cheap no-op.
+   * Cheap to call: the snippet's only cost is per-frame fragment work
+   * over the bars, plus a one-time program compile.
+   */
+  setBackdrop(config: BackdropConfig | null): void {
+    const next = config && config.kind !== 'none' ? config : null;
+    const sameKind = (this.backdropConfig?.kind ?? 'none') === (next?.kind ?? 'none');
+    const sameSpeed = (this.backdropConfig?.speed ?? 1.0) === (next?.speed ?? 1.0);
+    if (sameKind && sameSpeed) return;
+    const needsRebuild = !sameKind;
+    this.backdropConfig = next;
+    if (needsRebuild) this._buildClipPass();
+    // Push speed into the existing uniform if we kept the same kind.
+    if (this.clipPass.uniforms['uSpeed']) {
+      this.clipPass.uniforms['uSpeed']!.value = next?.speed ?? 1.0;
+    }
     this.needsRender = true;
   }
 
@@ -665,9 +678,17 @@ export class Renderer {
    * GM sees the raw composited scene without any shader effects —
    * they need an uncluttered view for fog drawing and map management.
    * Effects are only applied on the player renderer.
+   *
+   * v2.12 — instead of bypassing the composer entirely (which used to
+   * mean clipPass never ran on the GM), we now leave the composer
+   * chain in place and just toggle the filter shaderPass's enabled
+   * flag. The clipPass continues to run so per-pack animated
+   * backdrops render in the GM's letterbox area too.
    */
   setFilterEnabled(enabled: boolean): void {
     this.filterEnabled = enabled;
+    if (this.shaderPass) this.shaderPass.enabled = enabled;
+    this.needsRender = true;
   }
 
   /** Enable GM overlay rendering (separate scene, no filter shader) */
@@ -816,7 +837,43 @@ export class Renderer {
     this.camera.position.x = offsetX;
     this.camera.position.y = offsetY;
     this.camera.updateProjectionMatrix();
+    // GM mode: keep clip rect tracking the map plane on screen so the
+    // backdrop continues to fill bars correctly through pan/zoom.
+    if (!this.currentView) this._refreshGmClipRect();
     this.needsRender = true;
+  }
+
+  /**
+   * GM-mode clip rect — sets the clipPass's uRect to where the map plane
+   * projects on the screen given the current camera (frustum + zoom +
+   * position). Backdrop snippet draws everywhere outside this rect,
+   * solid map content draws inside. No-op when a player ViewState is
+   * active (setView() owns uRect in that mode).
+   *
+   * Math: map plane spans world [-mapAspect/2 .. +mapAspect/2] × [-0.5 ..
+   * +0.5]. Three.js's orthographic camera maps a world coord W to NDC
+   * via (W - camera.position) * zoom / (frustum-half-extent). Screen UV
+   * is (NDC + 1) / 2.
+   */
+  private _refreshGmClipRect(): void {
+    const cam = this.camera;
+    const hw  = (cam.right - cam.left) / 2;
+    const hh  = (cam.top   - cam.bottom) / 2;
+    if (hw <= 0 || hh <= 0) return;
+    const zoom = cam.zoom || 1;
+    const mapL = -this.aspectRatio / 2;
+    const mapR =  this.aspectRatio / 2;
+    const mapB = -0.5;
+    const mapT =  0.5;
+    const ndcL = (mapL - cam.position.x) * zoom / hw;
+    const ndcR = (mapR - cam.position.x) * zoom / hw;
+    const ndcB = (mapB - cam.position.y) * zoom / hh;
+    const ndcT = (mapT - cam.position.y) * zoom / hh;
+    const uvL = (ndcL + 1) / 2;
+    const uvR = (ndcR + 1) / 2;
+    const uvB = (ndcB + 1) / 2;
+    const uvT = (ndcT + 1) / 2;
+    this.clipPass.uniforms['uRect']!.value.set(uvL, uvB, uvR, uvT);
   }
 
   /**
@@ -938,15 +995,76 @@ export class Renderer {
 
   // ─── Private ───────────────────────────────────────────────────────────────
 
+  /**
+   * Build the clip pass — pass-through inside the viewport rectangle,
+   * solid bg / animated backdrop snippet outside. Called once from
+   * the constructor and again whenever setBackdrop() picks a new kind.
+   *
+   * If the pass already exists in the composer chain it's swapped out
+   * in place; otherwise the constructor will append it once setFilter()
+   * runs (which is always called from the constructor and rebuilds the
+   * pass order around clipPass / shaderPass / outputPass).
+   */
+  private _buildClipPass(): void {
+    const oldPass = this.clipPass;
+    const oldRect = (oldPass?.uniforms['uRect']?.value as THREE.Vector4 | undefined)?.clone();
+    const oldBg   = (oldPass?.uniforms['uBgColor']?.value as THREE.Vector3 | undefined)?.clone();
+
+    const entry = backdropById(this.backdropConfig?.kind ?? 'none');
+    const speed = this.backdropConfig?.speed ?? 1.0;
+
+    const pass = new ShaderPass({
+      uniforms: {
+        tDiffuse:    { value: null },
+        uRect:       { value: oldRect ?? new THREE.Vector4(0, 0, 1, 1) },
+        uBgColor:    { value: oldBg   ?? new THREE.Vector3(0, 0, 0) },
+        time:        { value: 0 },
+        uSpeed:      { value: speed },
+        uResolution: { value: new THREE.Vector2(this.resolution.x, this.resolution.y) },
+      },
+      vertexShader: /* glsl */`
+        varying vec2 vUv;
+        void main() {
+          vUv = uv;
+          gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+        }`,
+      fragmentShader: /* glsl */`
+        uniform sampler2D tDiffuse;
+        uniform vec4  uRect;
+        uniform vec3  uBgColor;
+        uniform float time;
+        uniform float uSpeed;
+        uniform vec2  uResolution;
+        varying vec2  vUv;
+        void main() {
+          if (vUv.x < uRect.x || vUv.x > uRect.z ||
+              vUv.y < uRect.y || vUv.y > uRect.w) {
+            ${entry.fragment}
+          } else {
+            gl_FragColor = texture2D(tDiffuse, vUv);
+          }
+        }`,
+    });
+
+    // Swap in place if the old pass was already wired into the composer.
+    if (oldPass && this.composer && this.composer.passes.includes(oldPass)) {
+      const idx = this.composer.passes.indexOf(oldPass);
+      this.composer.passes[idx] = pass;
+      oldPass.dispose?.();
+    }
+    this.clipPass = pass;
+  }
+
   private renderFrame(): void {
     // Tick animated overlay polygons (fire flicker, electric crackle, etc.).
     // Cheap because the compositor just re-runs polygon path ops at a
     // modulated alpha; no PNG decoding involved.
     const animatedOverlay = this.fogCompositor.hasAnimatedPolygons();
     const hasShaderPlanes = this.shaderPlanes.size > 0;
+    const animatedBackdrop = this.backdropConfig !== null;
 
     // Skip rendering if nothing has changed and there's no animation.
-    if (!this.needsRender && !this.isAnimatedFilter && !animatedOverlay && !hasShaderPlanes) return;
+    if (!this.needsRender && !this.isAnimatedFilter && !animatedOverlay && !hasShaderPlanes && !animatedBackdrop) return;
     this.needsRender = false;
 
     const elapsed = (performance.now() - this.startTime) / 1000;
@@ -965,16 +1083,19 @@ export class Renderer {
       this.shaderPass.uniforms['time']!.value = elapsed;
     }
 
+    // Tick clip-pass time uniform — drives animated backdrop snippets.
+    if (this.clipPass.uniforms['time']) {
+      this.clipPass.uniforms['time']!.value = elapsed;
+    }
+
     this.renderer.clear();
 
-    if (this.filterEnabled) {
-      // Player mode: full EffectComposer pipeline — scene → RenderPass → ShaderPass → screen
-      this.composer.render();
-    } else {
-      // GM mode: render scene directly, no post-processing shader
-      // GM needs a clean, unfiltered view for fog drawing and map management
-      this.renderer.render(this.scene, this.camera);
-    }
+    // Both GM and Player render through the composer chain. In GM mode
+    // the filter shaderPass is disabled (setFilterEnabled) so the
+    // composed image goes scene → clipPass → outputPass with the
+    // filter skipped — visually identical to a direct scene render
+    // but keeps the clipPass active for the per-pack animated backdrop.
+    this.composer.render();
 
     // GM overlay always renders on top of whichever mode, bypassing filter
     if (this.gmOverlayEnabled) {
@@ -1101,6 +1222,9 @@ export class Renderer {
     if (this.shaderPass?.uniforms['resolution']) {
       this.shaderPass.uniforms['resolution']!.value.set(pw, ph);
     }
+    if (this.clipPass.uniforms['uResolution']) {
+      this.clipPass.uniforms['uResolution']!.value.set(pw, ph);
+    }
 
     this.refreshCamera();
     this.needsRender = true;
@@ -1145,5 +1269,7 @@ export class Renderer {
     this.camera.top    =  hh;
     this.camera.bottom = -hh;
     this.camera.updateProjectionMatrix();
+    // Keep GM clip rect tracking the map plane (resize / map switch path).
+    this._refreshGmClipRect();
   }
 }

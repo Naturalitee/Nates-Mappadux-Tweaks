@@ -1072,7 +1072,7 @@ export class GMApp {
     // Apply any persisted theme so the GM lands on the customised look from
     // the moment the UI is interactive.
     const initialSession = await loadSession();
-    applyTheme(initialSession?.theme);
+    applyTheme(initialSession?.theme, this.renderer);
 
     this.renderer.start();
     this.setStatus('Ready', 'ok');
@@ -4448,7 +4448,7 @@ export class GMApp {
       await this._reloadLibIcons();
       await this.populateMapList();
       void this._refreshPackNameInput();
-      applyTheme(undefined); // back to default theme
+      applyTheme(undefined, this.renderer); // back to default theme
       this.setStatus('New pack ready — empty workspace', 'ok');
     } catch (err) {
       this.setStatus(`New pack failed: ${(err as Error).message}`, 'error');
@@ -4516,15 +4516,16 @@ export class GMApp {
       packName:    session?.packName ?? '',
       splash:      session?.splash,
       theme:       session?.theme,
+      renderer:    this.renderer,
       ...(opts.startInEdit ? { startInEdit: true } : {}),
     });
     if (!result || !session) return;
-    const hasTheme = !!result.theme.mode || !!result.theme.accent;
+    const hasTheme = !!result.theme.mode || !!result.theme.accent || !!result.theme.backdrop;
     const next = { ...session, splash: result.splash };
     if (hasTheme) next.theme = result.theme;
     else delete next.theme;
     await saveSession(next);
-    applyTheme(hasTheme ? result.theme : undefined);
+    applyTheme(hasTheme ? result.theme : undefined, this.renderer);
   }
 
   /** Save the current workspace as a plain (unencrypted) `.mappadux` pack.
@@ -4655,7 +4656,7 @@ export class GMApp {
       void this._refreshPackNameInput();
       // Re-apply theme so any creator-supplied look from the bundle takes effect.
       const importedSession = await loadSession();
-      applyTheme(importedSession?.theme);
+      applyTheme(importedSession?.theme, this.renderer);
 
       // Retrofit pass — auto-detect grid scale on any map in the loaded pack
       // that doesn't already carry one. Manually-calibrated maps and no-grid

@@ -1082,12 +1082,31 @@ export interface StoredSession {
   theme?: ThemeConfig;
 }
 
-/** Per-pack UI theme. Both fields optional — unset = Mappadux defaults
- *  (dark mode, cyan accent). */
+/** Per-pack UI theme. All fields optional — unset = Mappadux defaults
+ *  (dark mode, cyan accent, no backdrop). */
 export interface ThemeConfig {
   mode?:   'dark' | 'light';
   /** CSS color string (`#rrggbb` or named). Used as `--accent`. */
   accent?: string;
+  /**
+   * v2.12 — animated backdrop rendered in the letterbox / pillarbox
+   * area surrounding the map. Lets the GM dress dead bars in something
+   * thematic (drifting stars for sci-fi, ember haze for fire scenes…).
+   * Per-pack so creators can ship a branded vibe; unset = solid bg
+   * colour as before. The backdrop never overlays the map itself —
+   * only the bars — so calibrated tabletop projection stays clean.
+   */
+  backdrop?: BackdropConfig;
+}
+
+/** A choice of animated backdrop + tuning knobs. */
+export interface BackdropConfig {
+  /** Backdrop id from `src/rendering/backdrops/backdropRegistry.ts`.
+   *  'none' = solid bg colour (default). */
+  kind:   string;
+  /** Optional speed scalar 0..2; backdrop registry decides what it means.
+   *  Defaults to 1.0 if unset. */
+  speed?: number;
 }
 
 /** A single labelled link shown in the splash/About dialog (Patreon,
