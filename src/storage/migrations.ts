@@ -90,16 +90,30 @@ export function migrateSessionState(saved: any): SessionState | null {
   // promote them to kind:'fog' so they keep rendering as black fog. Drop any
   // intermediate dev-only fields (fog.brush, mapfx.*) — none of that v2.12
   // dev state has been pushed.
+  //
+  // Preserve `holes` (donut shapes) and `shaderParams` (per-poly tuning) so
+  // a reload doesn't reset the GM's work. Bug fix 2026-05-14: earlier the
+  // field-by-field rebuild was silently dropping both.
   const rawFog = (cur.fog && Array.isArray(cur.fog.polygons)) ? cur.fog.polygons : [];
-  const polygons = rawFog.map((p: any) => ({
-    id:        p?.id ?? '',
-    kind:      (p?.kind ?? 'fog'),
-    vertices:  Array.isArray(p?.vertices) ? p.vertices : [],
-    color:     typeof p?.color === 'string' ? p.color : undefined,
-    label:     typeof p?.label === 'string' ? p.label : undefined,
-    createdAt: typeof p?.createdAt === 'number' ? p.createdAt : Date.now(),
-  })).filter((p: any) => p.id && p.vertices.length >= 3);
-  const fog = { polygons };
+  const polygons = rawFog.map((p: any) => {
+    const out: any = {
+      id:        p?.id ?? '',
+      kind:      (p?.kind ?? 'fog'),
+      vertices:  Array.isArray(p?.vertices) ? p.vertices : [],
+      createdAt: typeof p?.createdAt === 'number' ? p.createdAt : Date.now(),
+    };
+    if (typeof p?.color === 'string') out.color = p.color;
+    if (typeof p?.label === 'string') out.label = p.label;
+    if (Array.isArray(p?.holes))      out.holes = p.holes;
+    if (p?.shaderParams && typeof p.shaderParams === 'object') out.shaderParams = p.shaderParams;
+    return out;
+  }).filter((p: any) => p.id && p.vertices.length >= 3);
+  const fog: any = { polygons };
+  // Carry the kind-level shaderParams draft forward too. Without this the
+  // GM's "next new polygon" tuning resets to defaults on every reload.
+  if (cur.fog?.shaderParams && typeof cur.fog.shaderParams === 'object') {
+    fog.shaderParams = cur.fog.shaderParams;
+  }
 
   return {
     ...cur,
