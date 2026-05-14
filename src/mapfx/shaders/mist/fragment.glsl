@@ -30,6 +30,7 @@ uniform vec3      uColor;
 uniform float     uIntensity;
 uniform float     uScale;
 uniform float     uSpeed;
+uniform float     uDirection; // radians, compass (0 = north)
 
 varying vec2 vUv;
 
@@ -80,10 +81,15 @@ void main() {
   vec2 st = vec2(vUv.x * uAspect, vUv.y);
   vec2 pos = st * (3.0 / max(uScale, 0.01));
 
-  // First FBM produces a drifting motion vector. Time signs match
-  // the original — gives the wisps a consistent diagonal drift.
+  // First FBM produces a drifting motion vector. The original used a
+  // fixed diagonal drift (-0.5, -0.3); we expose direction as a per-
+  // poly slider so the GM can pick which way the smoke/mist is
+  // blowing — wind-driven sea fret rolling in from the coast, swamp
+  // gas creeping south, etc. Compass convention to match river:
+  // 0 = north (wisps drift toward the top of the map).
   float t = time * uSpeed;
-  vec2 motion = vec2(fbm(pos + vec2(t * -0.5, t * -0.3)));
+  vec2 d = vec2(sin(uDirection), cos(uDirection));
+  vec2 motion = vec2(fbm(pos + d * t * 0.5));
 
   // Second FBM, sampled at the warped position, is the final mist
   // density. The original baked an INTENSITY=2 multiplier here for

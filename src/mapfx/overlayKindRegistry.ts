@@ -265,16 +265,22 @@ const THUNDERCLOUD_SHADER_PARAMS: ShaderParamDef[] = [
   { id: 'lightning', label: 'Lightning', min: 0.0,  max: 2.0, step: 0.05, default: 1.0 },
 ];
 
-// Mist shader params:
+// Smoke/Mist shader params:
 //   • intensity — output multiplier (universal). Doubles for the
 //     original INTENSITY constant absorbed from deusnovus's shader.
 //   • scale     — wisp feature size; original ZOOM=3 baked in.
 //   • speed     — drift rate. 0 = motionless mist; 4 = wind-driven
 //     storm front.
+//   • direction — flow direction in radians, compass convention.
+//     0 = north (wisps drift toward the top of the map). Per-poly
+//     natural: a wind-driven sea fret might roll in from one side
+//     while swamp gas creeps in a different direction on the same
+//     map.
 const MIST_SHADER_PARAMS: ShaderParamDef[] = [
-  { id: 'intensity', label: 'Intensity', min: 0.05, max: 2.0, step: 0.05, default: 1.0 },
-  { id: 'scale',     label: 'Scale',     min: 0.2,  max: 4.0, step: 0.05, default: 1.0 },
-  { id: 'speed',     label: 'Speed',     min: 0.0,  max: 4.0, step: 0.05, default: 1.0 },
+  { id: 'intensity', label: 'Intensity', min: 0.05, max: 2.0,        step: 0.05,     default: 1.0 },
+  { id: 'scale',     label: 'Scale',     min: 0.2,  max: 4.0,        step: 0.05,     default: 1.0 },
+  { id: 'speed',     label: 'Speed',     min: 0.0,  max: 4.0,        step: 0.05,     default: 1.0 },
+  { id: 'direction', label: 'Direction', min: 0.0,  max: 6.2831853,  step: 0.087266, default: 0.0 },
 ];
 
 export const OVERLAY_KIND_REGISTRY: Record<OverlayKind, OverlayKindEntry> = {
@@ -290,7 +296,7 @@ export const OVERLAY_KIND_REGISTRY: Record<OverlayKind, OverlayKindEntry> = {
   // near-white blue tint matching real lightning; GM picks violet
   // for magical, green for eldritch, etc.
   thundercloud: { id: 'thundercloud', label: 'Thundercloud',    iconSvg: SVG_THUNDERCLOUD, defaultColor: '#dde4ff', defaultRadius: 60, blend: 'normal', animated: true,  selectByInterior: false, allowColor: true,  z: 25, shader: 'thundercloud', shaderParams: THUNDERCLOUD_SHADER_PARAMS },
-  mist:         { id: 'mist',         label: 'Mist',            iconSvg: SVG_MIST,         defaultColor: '#9aa3b5', defaultRadius: 60, blend: 'normal', animated: true,  selectByInterior: false, allowColor: true,  z: 22, shader: 'mist',         shaderParams: MIST_SHADER_PARAMS         },
+  mist:         { id: 'mist',         label: 'Smoke / Mist',    iconSvg: SVG_MIST,         defaultColor: '#9aa3b5', defaultRadius: 60, blend: 'normal', animated: true,  selectByInterior: false, allowColor: true,  z: 22, shader: 'mist',         shaderParams: MIST_SHADER_PARAMS         },
 };
 
 /** Order for the kind dropdown — fog first (most-used + click-priority),
