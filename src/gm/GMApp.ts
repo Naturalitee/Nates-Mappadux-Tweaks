@@ -2759,9 +2759,23 @@ export class GMApp {
     container.appendChild(hdr);
 
     for (const p of defs) {
-      const fromPoly = editingPoly && typeof polyValues[p.id] === 'number' ? polyValues[p.id]! : undefined;
-      const fromDraft = typeof draft[p.id] === 'number' ? draft[p.id]! : undefined;
-      const current = fromPoly ?? fromDraft ?? p.default;
+      // Resolution differs by edit target:
+      //   • Editing a polygon: show that polygon's stored value, falling
+      //     back to the registry default (= what the renderer actually
+      //     uses for this poly at render time). NEVER fall through to
+      //     the kind draft — the draft is for "next new polygon" and
+      //     would otherwise leak across into existing polygons that the
+      //     GM hadn't tuned.
+      //   • Editing the next-new draft (no selection): show the draft
+      //     value, falling back to the registry default.
+      let current: number;
+      if (editingPoly) {
+        const v = polyValues[p.id];
+        current = typeof v === 'number' && Number.isFinite(v) ? v : p.default;
+      } else {
+        const v = draft[p.id];
+        current = typeof v === 'number' && Number.isFinite(v) ? v : p.default;
+      }
       container.appendChild(this._buildShaderSliderRow(p, k.label, current, (v) => {
         // Always update the kind draft so subsequent new polygons
         // inherit the latest value. When a polygon is selected, ALSO
