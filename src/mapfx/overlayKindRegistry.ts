@@ -175,7 +175,7 @@ const FIRE_SHADER_PARAMS: ShaderParamDef[] = [
 
 export const OVERLAY_KIND_REGISTRY: Record<OverlayKind, OverlayKindEntry> = {
   fog:      { id: 'fog',      label: 'Fog of War',    iconSvg: SVG_FOG,       defaultColor: '#000000', defaultRadius: 25, blend: 'normal',   animated: false, selectByInterior: true,  allowColor: true,  z: 100 },
-  fire:     { id: 'fire',     label: 'Fire',          iconSvg: SVG_FLAME,     defaultColor: '#ff5a14', defaultRadius: 30, blend: 'screen',   animated: true,  selectByInterior: false, allowColor: true,  z: 10, shader: 'fire', shaderParams: FIRE_SHADER_PARAMS },
+  fire:     { id: 'fire',     label: 'Coloured Flames', iconSvg: SVG_FLAME,   defaultColor: '#ff5a14', defaultRadius: 30, blend: 'screen',   animated: true,  selectByInterior: false, allowColor: true,  z: 10, shader: 'fire', shaderParams: FIRE_SHADER_PARAMS },
   cold:     { id: 'cold',     label: 'Ice / Cold',    iconSvg: SVG_SNOWFLAKE, defaultColor: '#9fd6ff', defaultRadius: 30, blend: 'screen',   animated: false, selectByInterior: false, allowColor: false, z: 10  },
   smoke:    { id: 'smoke',    label: 'Smoke',         iconSvg: SVG_SMOKE,     defaultColor: '#9aa3ad', defaultRadius: 50, blend: 'normal',   animated: true,  selectByInterior: false, allowColor: true,  z: 20  },
   light:    { id: 'light',    label: 'Magical Light', iconSvg: SVG_LIGHT,     defaultColor: '#ffd76b', defaultRadius: 35, blend: 'screen',   animated: false, selectByInterior: false, allowColor: false, z: 5   },
