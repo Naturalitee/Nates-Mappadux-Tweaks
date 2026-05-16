@@ -200,11 +200,38 @@ export class Renderer {
     };
     const vid = video as WithRvfc;
     this._videoLastFrameAt = performance.now();
-    if (typeof vid.requestVideoFrameCallback !== 'function') return;
+    const debug = (() => {
+      try { return localStorage.getItem('mappadux_debug_video') === '1'; }
+      catch { return false; }
+    })();
+    let frameCount = 0;
+    let lastLogAt = performance.now();
+    if (typeof vid.requestVideoFrameCallback !== 'function') {
+      if (debug) {
+        // eslint-disable-next-line no-console
+        console.warn('[video-map] requestVideoFrameCallback unsupported — playback may stall when window is small');
+      }
+      return;
+    }
     const cb = () => {
       if (this.mapVideo !== video) return; // superseded by a newer load
       this.needsRender = true;
       this._videoLastFrameAt = performance.now();
+      frameCount++;
+      // Log a heartbeat every ~2 s of playback so the console doesn't
+      // flood but stalls are still visible by their absence.
+      if (debug && (performance.now() - lastLogAt) > 2000) {
+        // eslint-disable-next-line no-console
+        console.log(`[video-map] rVFC heartbeat`, {
+          frames: frameCount,
+          t: performance.now().toFixed(0),
+          ct: video.currentTime?.toFixed(2),
+          paused: video.paused,
+          ended: video.ended,
+          rs: video.readyState,
+        });
+        lastLogAt = performance.now();
+      }
       this._videoFrameCbId = (this.mapVideo as WithRvfc).requestVideoFrameCallback!(cb);
     };
     this._videoFrameCbId = vid.requestVideoFrameCallback(cb);
@@ -220,10 +247,21 @@ export class Renderer {
       if (v.paused || v.ended) return;
       const elapsed = performance.now() - this._videoLastFrameAt;
       if (elapsed > 1500) {
+        if (debug) {
+          // eslint-disable-next-line no-console
+          console.warn(`[video-map] WATCHDOG: no frames for ${elapsed.toFixed(0)} ms — calling play()`, {
+            ct: v.currentTime?.toFixed(2),
+            paused: v.paused,
+            rs: v.readyState,
+            ns: v.networkState,
+          });
+        }
         // Nudge — the browser sometimes wakes the decoder back up
         // when play() is called fresh. Don't fight it if play
         // returns a rejection (autoplay policy etc.).
-        void v.play().catch(() => {});
+        void v.play().catch((err) => {
+          if (debug) console.error('[video-map] watchdog play() rejected', err);
+        });
         this._videoLastFrameAt = performance.now();
       }
     }, 500);
@@ -283,6 +321,35 @@ export class Renderer {
       video.loop = true;
       video.muted = true;
       video.playsInline = true;
+
+      // v2.12.9 — diagnostic logging behind a localStorage flag so the
+      // user can turn it on while debugging animated maps without
+      // forcing it on everyone. Set `localStorage.mappadux_debug_video
+      // = '1'` in DevTools to enable, reload.
+      const debug = (() => {
+        try { return localStorage.getItem('mappadux_debug_video') === '1'; }
+        catch { return false; }
+      })();
+      const log = (label: string, extra?: Record<string, unknown>) => {
+        if (!debug) return;
+        const base: Record<string, unknown> = {
+          t: performance.now().toFixed(0),
+          ct: video.currentTime?.toFixed(2),
+          rs: video.readyState,
+          ns: video.networkState,
+          paused: video.paused,
+          ended: video.ended,
+          dur: video.duration,
+        };
+        if (extra) Object.assign(base, extra);
+        // eslint-disable-next-line no-console
+        console.log(`[video-map] ${label}`, base);
+      };
+      log('created');
+      ['loadedmetadata', 'loadeddata', 'canplay', 'canplaythrough', 'playing',
+       'pause', 'waiting', 'stalled', 'suspend', 'ended', 'error', 'emptied'].forEach((ev) => {
+        video.addEventListener(ev, () => log(ev));
+      });
       // No crossOrigin attribute — blob URLs are same-origin to the
       // page that created them; setting it to 'anonymous' has been
       // known to confuse some browsers' resource fetch path for
