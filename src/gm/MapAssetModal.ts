@@ -23,8 +23,15 @@ const LICENSE_OPTIONS: string[] = [
   'Other',
 ];
 
-const ALLOWED_TYPES = new Set(['image/png', 'image/jpeg', 'image/webp']);
-const MAX_BYTES = 50 * 1024 * 1024;
+const ALLOWED_TYPES = new Set([
+  // Still images.
+  'image/png', 'image/jpeg', 'image/webp',
+  // Animated maps — accepted as map assets since v2.12. Kept in lockstep
+  // with MapManager.importFile's allow-list; both validators have to
+  // agree or the drop-zone rejects a file the importer would have taken.
+  'video/webm', 'video/mp4',
+]);
+const MAX_BYTES = 200 * 1024 * 1024;
 
 type MapPickedCallback = (map: StoredMap) => void;
 
@@ -652,7 +659,7 @@ export class MapAssetModal {
 
   private _handleUploadFile(file: File): void {
     if (!ALLOWED_TYPES.has(file.type)) {
-      alert(`Unsupported file type: ${file.type}. Use PNG, JPG, or WebP.`);
+      alert(`Unsupported file type: ${file.type}. Use PNG, JPG, WebP, WebM, or MP4.`);
       return;
     }
     if (file.size > MAX_BYTES) {
