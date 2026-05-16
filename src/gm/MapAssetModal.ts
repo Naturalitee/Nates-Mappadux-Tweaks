@@ -324,20 +324,20 @@ export class MapAssetModal {
 
     const storeBtnHtml = (asset.locallyStored || isTextMap)
       ? ''
-      : `<button class="btn btn--ghost btn--xs map-store-btn" title="Download and keep a local copy">Store</button>`;
+      : `<button class="btn btn--ghost btn--xs map-store-btn" title="Download the image bytes and keep a local copy. After storing, this asset travels with your bundle (.mappadux) exports so other GMs or other devices get the actual map, not just a broken link.">Store</button>`;
     const downloadBtnHtml = (asset.locallyStored && !isTextMap)
-      ? `<button class="btn btn--ghost btn--xs map-download-btn" title="Download this map image">⬇</button>`
+      ? `<button class="btn btn--ghost btn--xs map-download-btn" title="Save this map image to your downloads folder — useful for archiving outside Mappadux or sharing the raw file.">⬇</button>`
       : '';
     // Text maps get an Edit button + a Copy button (use one as a
     // template); image maps get the Scale button (when not yet
     // calibrated and not opted out of grids).
     const scaleOrEditBtnHtml = isTextMap
-      ? `<button class="btn btn--ghost btn--xs map-edit-textmap-btn" title="Edit this handout's body, font, and layout">Edit</button>`
+      ? `<button class="btn btn--ghost btn--xs map-edit-textmap-btn" title="Open the handout editor — edit the body text, fonts, layout, banner image, and reveal animation.">Edit</button>`
       : (asset.pixelsPerSquare || asset.noGrid)
         ? ''
-        : `<button class="btn btn--ghost btn--xs map-scale-btn" title="Calibrate map scale (pixels per 5' square)">Scale</button>`;
+        : `<button class="btn btn--ghost btn--xs map-scale-btn" title="Calibrate this map to physical 1″/25 mm squares so the projector can render it at true table scale. Optional for handouts and world maps.">Scale</button>`;
     const copyTextMapBtnHtml = isTextMap
-      ? `<button class="btn btn--ghost btn--xs map-copy-textmap-btn" title="Duplicate this handout — use one as a template for new ones">Copy</button>`
+      ? `<button class="btn btn--ghost btn--xs map-copy-textmap-btn" title="Duplicate this handout with a fresh id. Lets you use a polished handout as a template for the next one without overwriting it.">Copy</button>`
       : '';
 
     // For handouts: show the aspect ratio rather than the rasterised
@@ -370,8 +370,8 @@ export class MapAssetModal {
           ${copyTextMapBtnHtml}
           ${storeBtnHtml}
           ${downloadBtnHtml}
-          <button class="btn btn--primary btn--xs map-use-btn">Use</button>
-          <button class="btn btn--danger btn--xs map-del-btn" title="Remove from library">✕</button>
+          <button class="btn btn--primary btn--xs map-use-btn" title="Add a new map instance backed by this asset to your map list. The asset stays in the library — you can reuse it for multiple maps (e.g. the same dungeon image for two different encounters with their own fog and markers).">Use</button>
+          <button class="btn btn--danger btn--xs map-del-btn" title="Remove the asset from your library. Any maps still using it will become &quot;missing&quot; until you Fix Missing Map.">✕</button>
         </div>
       </div>
       <div class="sound-row-edit" hidden>

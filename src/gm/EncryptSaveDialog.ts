@@ -68,7 +68,7 @@ export class EncryptSaveDialog {
     intro.style.color = 'var(--text-secondary)';
     intro.style.margin = '0';
     intro.textContent =
-      'Choose a password. The pack will be encrypted with AES-GCM before the save dialog opens; recipients will need this password to load it.';
+      'Choose a password. The pack will be encrypted with AES-GCM before the save dialog opens; recipients will need this password to load it. The encrypted file still contains every map, sound and image — just sealed so only people with the password can open it.';
     body.appendChild(intro);
 
     const pw1 = document.createElement('input');

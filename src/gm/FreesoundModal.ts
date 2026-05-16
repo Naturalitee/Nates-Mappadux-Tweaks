@@ -303,10 +303,10 @@ export class FreesoundModal {
     // Show a Store button only when the asset isn't yet locally stored.
     const storeBtnHtml = asset.locallyStored
       ? ''
-      : `<button class="btn btn--ghost btn--xs sound-store-btn" title="Download and keep a local copy">Store</button>`;
+      : `<button class="btn btn--ghost btn--xs sound-store-btn" title="Download the audio bytes and keep a local copy. After storing, this sound travels with your bundle (.mappadux) exports so other GMs or other devices get the actual audio, not just a broken link.">Store</button>`;
     // Download button — only meaningful when we already have the blob locally.
     const downloadBtnHtml = asset.locallyStored
-      ? `<button class="btn btn--ghost btn--xs sound-download-btn" title="Download this sound">⬇</button>`
+      ? `<button class="btn btn--ghost btn--xs sound-download-btn" title="Save this audio file to your downloads folder — useful for archiving outside Mappadux or sharing the raw file.">⬇</button>`
       : '';
 
     // Freesound attributions are locked (the API supplies them); Upload + Web Link
@@ -314,7 +314,7 @@ export class FreesoundModal {
     // affordance sits next to the licence text since that's what it edits.
     const editable = asset.source !== 'freesound';
     const editIconHtml = editable
-      ? `<button class="sound-edit-btn" title="Edit licence + attribution">✎</button>`
+      ? `<button class="sound-edit-btn" title="Edit licence and attribution. Helps you stay credit-clean when sharing bundles or projecting attributions.">✎</button>`
       : '';
 
     const row = document.createElement('div');
@@ -330,11 +330,11 @@ export class FreesoundModal {
           </span>
         </div>
         <div class="sound-row-actions">
-          <button class="btn btn--ghost btn--xs sound-preview-btn" data-url="">▶ Preview</button>
+          <button class="btn btn--ghost btn--xs sound-preview-btn" data-url="" title="Listen to this sound right here without committing to it — preview audio plays in the library, not on player views.">▶ Preview</button>
           ${storeBtnHtml}
           ${downloadBtnHtml}
-          <button class="btn btn--primary btn--xs sound-use-btn">Use</button>
-          <button class="btn btn--danger btn--xs sound-del-btn" title="Remove from library">✕</button>
+          <button class="btn btn--primary btn--xs sound-use-btn" title="Assign this sound to the current target — a soundboard slot when opened from the soundboard, or attach to a marker when opened from there.">Use</button>
+          <button class="btn btn--danger btn--xs sound-del-btn" title="Remove the asset from your library. Any soundboard slots or markers still pointing at it will go silent.">✕</button>
         </div>
       </div>
       ${editable ? `
