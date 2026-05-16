@@ -235,17 +235,16 @@ export class Renderer {
     };
     const vid = video as WithRvfc;
     this._videoLastFrameAt = performance.now();
-    const debug = (() => {
+    const verbose = (() => {
       try { return localStorage.getItem('mappadux_debug_video') === '1'; }
       catch { return false; }
     })();
     let frameCount = 0;
+    let lastFrameCount = 0;
     let lastLogAt = performance.now();
     if (typeof vid.requestVideoFrameCallback !== 'function') {
-      if (debug) {
-        // eslint-disable-next-line no-console
-        console.warn('[video-map] requestVideoFrameCallback unsupported — playback may stall when window is small');
-      }
+      // eslint-disable-next-line no-console
+      console.warn('[video-map] requestVideoFrameCallback unsupported — playback may stall when window is not focused');
       return;
     }
     const cb = () => {
@@ -267,18 +266,20 @@ export class Renderer {
       this.needsRender = true;
       this._videoLastFrameAt = performance.now();
       frameCount++;
-      // Log a heartbeat every ~2 s of playback so the console doesn't
-      // flood but stalls are still visible by their absence.
-      if (debug && (performance.now() - lastLogAt) > 2000) {
+      // Heartbeat at 5 s intervals — always-on (not gated by the
+      // verbose flag) so the GM can confirm playback is active just
+      // by glancing at the console. Reports the per-second fps based
+      // on frames delivered since the last heartbeat — a steady
+      // 24-60 means healthy; near-zero means the decoder is throttled
+      // or stalled. Verbose flag adds per-state breadcrumbs on top.
+      const elapsedSec = (performance.now() - lastLogAt) / 1000;
+      if (elapsedSec >= 5) {
+        const fps = ((frameCount - lastFrameCount) / elapsedSec).toFixed(1);
         // eslint-disable-next-line no-console
-        console.log(`[video-map] rVFC heartbeat`, {
-          frames: frameCount,
-          t: performance.now().toFixed(0),
-          ct: video.currentTime?.toFixed(2),
-          paused: video.paused,
-          ended: video.ended,
-          rs: video.readyState,
-        });
+        console.log(`[video-map] heartbeat — ${fps} fps over ${elapsedSec.toFixed(1)}s`,
+          verbose ? { totalFrames: frameCount, currentTime: video.currentTime?.toFixed(2), readyState: video.readyState } : '',
+        );
+        lastFrameCount = frameCount;
         lastLogAt = performance.now();
       }
       this._videoFrameCbId = (this.mapVideo as WithRvfc).requestVideoFrameCallback!(cb);
@@ -289,6 +290,8 @@ export class Renderer {
     // 1.5 s while the video isn't paused / ended, the browser has
     // throttled or stalled the decoder. Re-kick play() to wake it
     // back up. Fires at 2 Hz; cheap. Cleared in _stopVideoFramePump.
+    // Always logs the warning — silent watchdog firing is the kind
+    // of thing the user needs to see to diagnose stalls.
     if (this._videoWatchdogId !== null) clearInterval(this._videoWatchdogId);
     this._videoWatchdogId = setInterval(() => {
       const v = this.mapVideo;
@@ -296,20 +299,19 @@ export class Renderer {
       if (v.paused || v.ended) return;
       const elapsed = performance.now() - this._videoLastFrameAt;
       if (elapsed > 1500) {
-        if (debug) {
-          // eslint-disable-next-line no-console
-          console.warn(`[video-map] WATCHDOG: no frames for ${elapsed.toFixed(0)} ms — calling play()`, {
-            ct: v.currentTime?.toFixed(2),
-            paused: v.paused,
-            rs: v.readyState,
-            ns: v.networkState,
-          });
-        }
+        // eslint-disable-next-line no-console
+        console.warn(`[video-map] WATCHDOG: no frames for ${elapsed.toFixed(0)} ms — calling play()`, {
+          currentTime: v.currentTime?.toFixed(2),
+          paused: v.paused,
+          readyState: v.readyState,
+          networkState: v.networkState,
+        });
         // Nudge — the browser sometimes wakes the decoder back up
         // when play() is called fresh. Don't fight it if play
         // returns a rejection (autoplay policy etc.).
         void v.play().catch((err) => {
-          if (debug) console.error('[video-map] watchdog play() rejected', err);
+          // eslint-disable-next-line no-console
+          console.error('[video-map] watchdog play() rejected', err);
         });
         this._videoLastFrameAt = performance.now();
       }
