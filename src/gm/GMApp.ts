@@ -2770,10 +2770,21 @@ export class GMApp {
 
     // Tolerance slider — re-runs the flood-fill on the last fill's
     // seed position and replaces that polygon's vertices live.
-    document.querySelector<HTMLInputElement>('#fog-fill-tolerance')?.addEventListener('input', (e) => {
+    //   • 'input' (live drag): fast mode (fixed 80-vert cap) so the
+    //     polygon redraws sub-frame as the user scrubs.
+    //   • 'change' (release / commit): dynamic mode upgrades the
+    //     polygon — picks the honest vertex count for the shape the
+    //     GM landed on. Costs 5-15 ms; invisible against a release.
+    const tolSlider = document.querySelector<HTMLInputElement>('#fog-fill-tolerance');
+    tolSlider?.addEventListener('input', (e) => {
       const tolerance = parseFloat((e.target as HTMLInputElement).value);
       if (!Number.isFinite(tolerance)) return;
-      this._reflowLastFill(tolerance);
+      this._reflowLastFill(tolerance, 'fast');
+    });
+    tolSlider?.addEventListener('change', (e) => {
+      const tolerance = parseFloat((e.target as HTMLInputElement).value);
+      if (!Number.isFinite(tolerance)) return;
+      this._reflowLastFill(tolerance, 'dynamic');
     });
   }
 
@@ -3189,7 +3200,11 @@ export class GMApp {
    *  Clicking again starts a fresh fill. */
   private _commitOverlayFill(action: 'paint' | 'erase', mapPos: import('../types.ts').FogVertex): void {
     const tol = this._currentFillTolerance();
-    const polyVerts = this._runFloodFill(mapPos, tol);
+    // Initial click commit — afford the 5-15 ms for adaptive
+    // simplification so the polygon lands with the honest vertex
+    // count for its shape (smooth blobs settle to ~40, jagged
+    // silhouettes get up to 500).
+    const polyVerts = this._runFloodFill(mapPos, tol, 'dynamic');
     if (!polyVerts) {
       // Bad seed (off-map, tiny region, or no map loaded). Leave the
       // action mode active so the GM can try clicking a different
@@ -3240,10 +3255,10 @@ export class GMApp {
    *  polygon's vertices. No-op if there's no last fill or the seed
    *  no longer flood-fills cleanly at the new tolerance (e.g.
    *  tolerance 0 on a noisy map gives nothing). */
-  private _reflowLastFill(tolerance: number): void {
+  private _reflowLastFill(tolerance: number, mode: 'fast' | 'dynamic' = 'fast'): void {
     const last = this._lastFillState;
     if (!last) return;
-    const polyVerts = this._runFloodFill({ x: last.seedX, y: last.seedY }, tolerance);
+    const polyVerts = this._runFloodFill({ x: last.seedX, y: last.seedY }, tolerance, mode);
     if (!polyVerts) return;
     const fog = this.state.getState().fog;
     const polygons = fog.polygons.map((p) =>
@@ -3262,13 +3277,28 @@ export class GMApp {
 
   /** Run flood-fill at the given map-norm position with the given
    *  tolerance. Returns vertices in map-norm space, or null on
-   *  failure (no map loaded, seed off-map, fill too small). */
-  private _runFloodFill(mapPos: import('../types.ts').FogVertex, tolerance: number): import('../types.ts').FogVertex[] | null {
+   *  failure (no map loaded, seed off-map, fill too small).
+   *
+   *  `mode` selects the simplification strategy:
+   *    • 'fast' — fixed 80-vertex cap. Used during live slider drag
+   *      so feedback is predictable and sub-frame.
+   *    • 'dynamic' — adaptive ladder (40 → 80 → 200 → 500), stops at
+   *      the smallest cap where bumping higher only changes coverage
+   *      by < 1% IoU. Used on initial click commit and slider
+   *      release. Adds 5-15 ms; invisible against a click. */
+  private _runFloodFill(
+    mapPos: import('../types.ts').FogVertex,
+    tolerance: number,
+    mode: 'fast' | 'dynamic' = 'fast',
+  ): import('../types.ts').FogVertex[] | null {
     const imgData = this.renderer.getMapImageData();
     if (!imgData) return null;
     const seedX = Math.round(mapPos.x * (imgData.width - 1));
     const seedY = Math.round(mapPos.y * (imgData.height - 1));
-    const result = floodFillToPolygon(imgData, seedX, seedY, { tolerance });
+    const opts = mode === 'dynamic'
+      ? { tolerance, dynamic: true }
+      : { tolerance };
+    const result = floodFillToPolygon(imgData, seedX, seedY, opts);
     if (!result || result.pixels.length < 3) return null;
     // Convert image-pixel vertices back to map-normalised coords.
     const verts: import('../types.ts').FogVertex[] = result.pixels.map((p) => ({

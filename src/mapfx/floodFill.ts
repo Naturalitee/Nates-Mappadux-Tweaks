@@ -30,10 +30,24 @@ export interface FloodOptions {
   /** Colour distance threshold, 0..1. Multiplied internally by the
    *  max possible RGB distance (~442 in standard 0..255 space). */
   tolerance:  number;
-  /** Maximum vertex count after simplification. Default 80. The
+  /** Fixed cap mode — maximum vertex count after simplification. The
    *  Douglas-Peucker step iteratively raises the simplification
-   *  epsilon until the output is below this cap. */
+   *  epsilon until the output is below this cap. Used during live
+   *  slider drag for predictable fast feedback. Default 80.
+   *  Ignored when `dynamic` is true. */
   maxVertices?: number;
+  /** Dynamic-cap mode (v2.12.2). Tries an ascending ladder of caps,
+   *  rasterizes each candidate polygon back to a binary mask, and
+   *  measures intersection-over-union against the ground-truth
+   *  flood-fill mask. Stops at the smallest cap where bumping
+   *  higher only nudges IoU by less than `dynamicEpsilon` (default
+   *  0.01 = 1%) — i.e. the lower cap already captured the shape
+   *  honestly and extra vertices are noise. Used on slider release
+   *  and initial click commit. Adds ~5-15ms total to the run. */
+  dynamic?:        boolean;
+  /** Threshold for "negligible IoU change" when `dynamic` is on.
+   *  Default 0.01 (1%). */
+  dynamicEpsilon?: number;
 }
 
 /**
@@ -71,14 +85,115 @@ export function floodFillToPolygon(
   const contour = _traceContour(mask, width, height);
   if (contour.length < 4) return null;
 
-  const cap = opts.maxVertices ?? 80;
-  const simplified = _simplifyToCap(contour, cap);
+  const bbox = { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 };
+  let simplified: { x: number; y: number }[];
+  if (opts.dynamic) {
+    simplified = _simplifyAdaptive(contour, mask, width, bbox, opts.dynamicEpsilon ?? 0.01);
+  } else {
+    const cap = opts.maxVertices ?? 80;
+    simplified = _simplifyToCap(contour, cap);
+  }
   void data; // silence unused-variable lint; data is read by the helpers
   return {
     pixels: simplified,
-    bbox: { x: minX, y: minY, w: maxX - minX + 1, h: maxY - minY + 1 },
+    bbox,
     area,
   };
+}
+
+// ─── Adaptive vertex-cap selection (v2.12.2) ─────────────────────────────
+//
+// Ladder of caps, rasterize each candidate's polygon mask, compare via
+// IoU to the ground-truth flood-fill mask, and stop at the smallest cap
+// where the next rung only nudges IoU by < epsilon.
+//
+// Falls through to 500 if every rung still meaningfully improves —
+// genuinely fiddly silhouettes deserve their vertex budget.
+const _CAP_LADDER = [40, 80, 200, 500] as const;
+
+function _simplifyAdaptive(
+  contour: { x: number; y: number }[],
+  groundMask: Uint8Array,
+  width: number,
+  bbox: { x: number; y: number; w: number; h: number },
+  epsilon: number,
+): { x: number; y: number }[] {
+  // Tiny contours have no headroom to simplify — short-circuit.
+  if (contour.length <= _CAP_LADDER[0]) return _simplifyToCap(contour, _CAP_LADDER[0]);
+
+  let prevIoU = -1;
+  let prevPoly: { x: number; y: number }[] = [];
+  for (let li = 0; li < _CAP_LADDER.length; li++) {
+    const cap = _CAP_LADDER[li]!;
+    const candidate = _simplifyToCap(contour, cap);
+    const iou = _polyMaskIoU(candidate, groundMask, width, bbox);
+    if (li > 0 && iou - prevIoU < epsilon) {
+      // The previous rung already captured the shape; this rung only
+      // added <epsilon% more correct coverage. Keep the cheaper one.
+      return prevPoly;
+    }
+    prevIoU = iou;
+    prevPoly = candidate;
+    // Saturation cutoff: if IoU is already this close to 1, stop
+    // unconditionally — no rung above could measurably improve.
+    if (iou >= 1 - epsilon * 0.5) return candidate;
+  }
+  return prevPoly;
+}
+
+/**
+ * Rasterize the candidate polygon onto a binary mask sized to the
+ * bbox, then walk it against the ground-truth flood-fill mask and
+ * return intersection-over-union over the polygon's bbox region.
+ *
+ * Cost: ~bbox.w × bbox.h pixels per call. For typical fills (a few
+ * hundred pixels each side) this runs in 1-3ms.
+ */
+function _polyMaskIoU(
+  poly: { x: number; y: number }[],
+  groundMask: Uint8Array,
+  groundWidth: number,
+  bbox: { x: number; y: number; w: number; h: number },
+): number {
+  if (poly.length < 3) return 0;
+  // OffscreenCanvas isn't guaranteed in every browser; fall back to a
+  // DOM canvas. Both expose 2d contexts that fill paths identically.
+  let canvas: OffscreenCanvas | HTMLCanvasElement;
+  try {
+    canvas = new OffscreenCanvas(bbox.w, bbox.h);
+  } catch {
+    canvas = document.createElement('canvas');
+    canvas.width = bbox.w;
+    canvas.height = bbox.h;
+  }
+  const ctx = canvas.getContext('2d', { willReadFrequently: true }) as
+    | OffscreenCanvasRenderingContext2D
+    | CanvasRenderingContext2D
+    | null;
+  if (!ctx) return 0;
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.moveTo(poly[0]!.x - bbox.x, poly[0]!.y - bbox.y);
+  for (let i = 1; i < poly.length; i++) ctx.lineTo(poly[i]!.x - bbox.x, poly[i]!.y - bbox.y);
+  ctx.closePath();
+  ctx.fill();
+  const cand = ctx.getImageData(0, 0, bbox.w, bbox.h);
+
+  let inter = 0, union = 0;
+  for (let dy = 0; dy < bbox.h; dy++) {
+    const gy = bbox.y + dy;
+    if (gy < 0) continue;
+    for (let dx = 0; dx < bbox.w; dx++) {
+      const gx = bbox.x + dx;
+      const g = groundMask[gy * groundWidth + gx] === 1 ? 1 : 0;
+      // Polygon mask: any non-zero alpha counts. Canvas2D fills opaque
+      // white inside the path; outside stays alpha=0.
+      const c = cand.data[(dy * bbox.w + dx) * 4 + 3]! > 0 ? 1 : 0;
+      if (g === 1 && c === 1) inter++;
+      if (g === 1 || c === 1) union++;
+    }
+  }
+  return union > 0 ? inter / union : 0;
 }
 
 // ─── Scanline flood-fill ─────────────────────────────────────────────────
