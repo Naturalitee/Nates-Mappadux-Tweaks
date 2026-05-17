@@ -413,6 +413,14 @@ export class PlayerApp {
       case 'view_update': {
         this.lastView = msg.payload;
         this.renderer.setView(msg.payload);
+        // Backdrop is part of view but the renderer holds it on a
+        // separate code path (rebuilds the clip-pass when the kind
+        // changes; pushes uniforms when params change). map_change
+        // and full_state both fire setBackdrop alongside setView for
+        // exactly this reason; live view edits need the same pair so
+        // bg-colour / backdrop / backdrop-param tweaks in the GM
+        // reach the player without forcing a reconnect.
+        this.renderer.setBackdrop(msg.payload.backdrop ?? null);
         // Re-render markers in case the view change should also retrigger
         // sprite resizing decisions (e.g. DPR change after window move).
         this.markerSprites.render(this.currentMarkers, this.playerIconCache);
