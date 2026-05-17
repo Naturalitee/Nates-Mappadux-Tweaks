@@ -1,60 +1,34 @@
-// Starfield — adapted from "StarField practice" by Deadtotem (2020-08-13)
-//   https://www.shadertoy.com/view/tllfRX
-//   Used under Shadertoy default licence (CC-BY-NC-SA 3.0) — see
-//   ACKNOWLEDGEMENTS.md.
+// Starfield — adapted from "StarField practice" by Deadtotem (2020).
+// Used under CC-BY-NC-SA 3.0 — see ACKNOWLEDGEMENTS.md.
 //
-// Adaptation notes:
-//   • iTime → time; iResolution → uAspect.
-//   • The original's mouse-driven view offset is replaced with an
-//     explicit uDirection slider (0..π). The slider sweeps through
-//     "stars approaching head-on" (0), through "stars flying past
-//     sideways" (π/2), to "stars receding behind you" (π). Forward
-//     component (cos) drives the depth-warp rate; lateral component
-//     (sin) drives a horizontal scroll. Same effect the mouse drag
-//     gave the original Shadertoy, now under explicit GM control.
-//   • Per-poly plane: each vUv pixel maps to a starfield coordinate
-//     centred on the polygon. The CanvasView constant (was 20) is
-//     scaled by uScale so the GM picks star density.
-//   • The 8 parallax layers create a "flying through stars" warp;
-//     uSpeed scales the warp rate, original Velocity = 0.025.
-//   • Star colour: the original hard-coded a violet/lilac palette via
-//     `color * vec3(.9,.59,.9+size)`. Replaced with a more neutral
-//     per-star hue variance that's then multiplied by uColor — the
-//     GM picks the palette. The kind's default colour is set to a
-//     purple in the registry so the unmodified look is the original
-//     violet vibe.
-//   • Output uses additive blending — stars add light on top of
-//     whatever the map shows beneath, so painting a starfield over
-//     dark map regions reads as "sky" and over lit regions just
-//     adds sparkles.
+// One source for MapFX (polygon-masked) and Backdrop (full-bars via
+// the wrapper). Direction + glow + speed + colour all live as
+// shader params; the marker block below is what the backdrop
+// wrapper lifts into the clip-pass.
 
-uniform sampler2D uMask;
-uniform float     time;
-uniform float     uAspect;
-uniform vec3      uColor;
-uniform float     uIntensity;
-uniform float     uScale;
-uniform float     uSpeed;
-uniform float     uDirection; // 0..π — 0 approaching, π/2 sideways, π receding
-uniform float     uGlow;      // 0..1 — pinpoint stars (0) to full haloed orbs (1)
+// === BEGIN backdrop-shareable ===
+uniform float time;
+uniform float uAspect;
+uniform vec3  uColor;
+uniform float uIntensity;
+uniform float uScale;
+uniform float uSpeed;
+uniform float uDirection; // 0..π — 0 approaching, π/2 sideways, π receding
+uniform float uGlow;      // 0..1 — pinpoint stars (0) to full haloed orbs (1)
 
-varying vec2 vUv;
+#define _SF_NUM_LAYERS 8
+#define _SF_TAU 6.28318
+#define _SF_GLOW 0.025
+#define _SF_CANVAS 20.0
 
-#define NUM_LAYERS 8
-#define TAU 6.28318
-#define STAR_GLOW 0.025
-#define CANVAS_VIEW 20.0
-
-float Star(vec2 uv, float flare) {
+float _sf_star(vec2 uv, float flare) {
   float d = length(uv);
-  // Glow control: at uGlow=0 we want crisp pinpoints, so the halo
-  // collapses to a near-sharp falloff. At uGlow=1 we keep the
-  // original 1/d radial halo. Rays only contribute proportional to
-  // glow so pinpoint mode reads as clean dots. Same curve as the
-  // backdrop variant — both render identically now.
+  // At uGlow=0 we collapse to crisp pinpoints; at uGlow=1 we keep
+  // the original 1/d radial halo. Rays only contribute proportional
+  // to glow so pinpoint mode reads as clean dots.
   float halo = mix(
-    smoothstep(0.08, 0.0, d),               // pinpoint at glow=0
-    sin(STAR_GLOW * 1.2) / max(d, 1e-4),    // haloed at glow=1
+    smoothstep(0.08, 0.0, d),
+    sin(_SF_GLOW * 1.2) / max(d, 1e-4),
     uGlow
   );
   float rays = max(0.0, 0.5 - abs(uv.x * uv.y * 1000.0));
@@ -63,35 +37,67 @@ float Star(vec2 uv, float flare) {
   return m;
 }
 
-float Hash21(vec2 p) {
+float _sf_hash21(vec2 p) {
   p = fract(p * vec2(123.34, 456.21));
   p += dot(p, p + 45.32);
   return fract(p.x * p.y);
 }
 
-vec3 StarLayer(vec2 uv) {
+vec3 _sf_layer(vec2 uv) {
   vec3 col = vec3(0.0);
   vec2 gv = fract(uv);
   vec2 id = floor(uv);
   for (int y = -1; y <= 1; y++) {
     for (int x = -1; x <= 1; x++) {
       vec2 offs = vec2(float(x), float(y));
-      float n  = Hash21(id + offs);
+      float n    = _sf_hash21(id + offs);
       float size = fract(n);
-      float star = Star(gv - offs - vec2(n, fract(n * 34.0)) + 0.5, smoothstep(0.1, 0.9, size) * 0.46);
-      // Per-star hue variance — kept narrow so the GM's uColor pick
-      // dominates the overall palette. The original used a stronger
-      // hard-coded violet mix; we leave that decision to the GM.
-      vec3 baseColor = sin(vec3(0.5, 0.6, 0.7) * fract(n * 2345.2) * TAU) * 0.25 + 0.75;
+      float star = _sf_star(gv - offs - vec2(n, fract(n * 34.0)) + 0.5,
+                            smoothstep(0.1, 0.9, size) * 0.46);
+      // Per-star hue variance, narrow enough that uColor dominates.
+      vec3 baseColor = sin(vec3(0.5, 0.6, 0.7) * fract(n * 2345.2) * _SF_TAU) * 0.25 + 0.75;
       baseColor *= vec3(0.95, 0.9, 0.95 + size * 0.1);
       vec3 color = baseColor * uColor;
       // Per-star twinkle.
-      star *= sin(time * 0.6 + n * TAU) * 0.5 + 0.5;
+      star *= sin(time * 0.6 + n * _SF_TAU) * 0.5 + 0.5;
       col += star * size * color;
     }
   }
   return col;
 }
+
+vec4 fxEffect(vec2 uv) {
+  // Centered + aspect-corrected so stars stay round and parallax
+  // doesn't squash on rectangular regions.
+  uv -= 0.5;
+  uv.x *= uAspect;
+
+  // Direction sweep: cos drives forward depth-warp rate (positive
+  // at 0 = approaching, negative at π = receding); sin drives
+  // lateral horizontal scroll (π/2 = pure sideways flight).
+  float forward = cos(uDirection);
+  float lateral = sin(uDirection);
+
+  // Warp travel rate. Original Velocity = 0.025; uScale tunes
+  // density, uSpeed tunes rate.
+  float t = time * uSpeed * 0.025 * forward;
+  vec2 lateralOffset = vec2(lateral * time * uSpeed * 0.8, 0.0);
+
+  vec3 col = vec3(0.0);
+  for (int li = 0; li < _SF_NUM_LAYERS; li++) {
+    float i = float(li) / float(_SF_NUM_LAYERS);
+    float depth = fract(i + t);
+    float scale = mix(_SF_CANVAS / max(uScale, 0.01), 0.5, depth);
+    float fade  = depth * smoothstep(1.0, 0.9, depth);
+    col += _sf_layer(uv * scale + i * 453.2 - time * 0.05 + lateralOffset) * fade;
+  }
+
+  return vec4(col * uIntensity, 1.0);
+}
+// === END backdrop-shareable ===
+
+uniform sampler2D uMask;
+varying vec2 vUv;
 
 void main() {
   float maskAlpha = texture2D(uMask, vUv).a;
@@ -99,45 +105,8 @@ void main() {
     gl_FragColor = vec4(0.0);
     return;
   }
-
-  // Centered UV with aspect correction so circles look round and
-  // the parallax warp doesn't squash on non-square polygons.
-  vec2 uv = (vUv - 0.5);
-  uv.x *= uAspect;
-
-  // Direction sweep — uDirection in radians, 0..π.
-  //   cos(uDirection) drives the depth-warp rate (positive at 0 =
-  //     stars approach, negative at π = stars recede).
-  //   sin(uDirection) drives a lateral horizontal scroll (peaks at
-  //     π/2 = pure sideways flight, no convergence).
-  // At intermediate angles the two combine for the "angled flight
-  // past stars" feel.
-  float forward = cos(uDirection);
-  float lateral = sin(uDirection);
-
-  // Warp travel rate. Original Velocity = 0.025 (≈ 40s per full
-  // depth cycle). uSpeed scales it; forward sign drives the
-  // approach/recede direction. Range now extends to 10 so "warp
-  // speed" reads as proper warp speed.
-  float t = time * uSpeed * 0.025 * forward;
-
-  // Lateral scroll for sideways / angled flight. Coefficient
-  // picked so uSpeed=1 / direction=π/2 moves stars across the
-  // polygon at roughly one star-cell per second — comfortable to
-  // watch without being twitchy.
-  vec2 lateralOffset = vec2(lateral * time * uSpeed * 0.8, 0.0);
-
-  vec3 col = vec3(0.0);
-  for (int li = 0; li < NUM_LAYERS; li++) {
-    float i = float(li) / float(NUM_LAYERS);
-    float depth = fract(i + t);
-    float scale = mix(CANVAS_VIEW / max(uScale, 0.01), 0.5, depth);
-    float fade = depth * smoothstep(1.0, 0.9, depth);
-    col += StarLayer(uv * scale + i * 453.2 - time * 0.05 + lateralOffset) * fade;
-  }
-
-  // Additive blend on the material: stars add over the map.
-  // Pre-multiply by maskAlpha so polygon coverage modulates the
-  // additive contribution naturally.
-  gl_FragColor = vec4(col * uIntensity * maskAlpha, maskAlpha);
+  vec4 c = fxEffect(vUv);
+  // Additive blend; pre-multiply by maskAlpha so polygon coverage
+  // modulates the contribution naturally at the polygon edges.
+  gl_FragColor = vec4(c.rgb * maskAlpha, maskAlpha);
 }
