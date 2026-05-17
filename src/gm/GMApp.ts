@@ -3110,6 +3110,38 @@ export class GMApp {
       : (inherit ? `${k.label} — about to paint (inherited)` : `${k.label} — next new polygon`);
     root.appendChild(hdr);
 
+    // ─── Per-kind colour (when the kind opts in via allowColor) ──────
+    // Mirrors the inline #fog-colour swatch behaviour but lives in
+    // the popover so the GM can tune all aspects of an effect in one
+    // focused place. Kinds with allowColor: false skip this row —
+    // their colour is the kind's identity (e.g. aurora's dual-colour
+    // params replace a single-swatch).
+    if (k.allowColor) {
+      const swatch = document.getElementById('fog-colour') as HTMLInputElement | null;
+      const currentColor =
+        editingPoly && editingPoly.color ? editingPoly.color :
+        inherit                          ? inherit.color :
+        (swatch?.value ?? k.defaultColor);
+      const colourDef: import('../mapfx/overlayKindRegistry.ts').ColorParamDef = {
+        id: 'color', label: 'Colour', type: 'color', default: k.defaultColor,
+      };
+      const colourRow = this._buildShaderColorRow(
+        colourDef, k.label, currentColor,
+        (hex) => {
+          // Match the inline #fog-colour handler: brush + per-poly +
+          // inheritance snapshot all stay in sync. Also nudges the
+          // inline swatch so the two stay visually identical.
+          this.fogEditor.setColor(hex);
+          this.fogEditor.setBrushSettings({ color: hex });
+          if (editingPoly) this.state.setPolygonColor(editingPoly.id, hex);
+          if (this._pendingPaintInherit) this._pendingPaintInherit.color = hex;
+          const inlineSwatch = document.getElementById('fog-colour') as HTMLInputElement | null;
+          if (inlineSwatch) inlineSwatch.value = hex;
+        },
+      );
+      root.appendChild(colourRow);
+    }
+
     // ─── Edge Fade (universal, applies to every kind) ────────────────
     const kindDefault = k.defaultEdgeFade ?? DEFAULT_EDGE_FADE;
     let edgeFadeValue: number;

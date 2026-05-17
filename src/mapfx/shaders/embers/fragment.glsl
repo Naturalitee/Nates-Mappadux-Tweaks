@@ -52,7 +52,11 @@ vec4 fxEffect(vec2 uv) {
     vec3 heat = uColor * (0.7 + h * 0.6);
     // Far layers dimmer than near ones to sell the parallax.
     float layerFade = 1.0 - fi * 0.08;
-    col += ember * heat * 0.18 * layerFade;
+    // Per-layer multiplier: 0.4 reads as bright sparks against both
+    // a dark backdrop (additive over uBgColor=#000) AND a typical
+    // map texture (additive over varied terrain). Previous 0.18 was
+    // calibrated for backdrop-only and disappeared on MapFX use.
+    col += ember * heat * 0.4 * layerFade;
   }
 
   // Additive contribution. Alpha component is unused by additive
