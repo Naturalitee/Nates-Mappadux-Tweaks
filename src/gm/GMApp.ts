@@ -721,6 +721,38 @@ export class GMApp {
     this._markerOverlay?.updateMapFXSelectors([]);
   }
 
+  /** v2.12 — mark kind-dropdown options whose kind has at least one
+   *  polygon in the current map's fog state. Lets the GM see at a
+   *  glance which effects are already in use on the active map —
+   *  handy when reopening a map mid-session or when morphing a
+   *  selected polygon between kinds.
+   *
+   *  Two complementary cues:
+   *    • Inline `style.color` on the option element — works in the
+   *      dropdown popup on most browsers (Chrome, Firefox); ignored
+   *      in the collapsed select view.
+   *    • A '●' prefix glyph on the option label — works in both
+   *      states everywhere, since it's actual text content.
+   *
+   *  Called from initial selector build + every fog state change
+   *  (paint, erase, kind morph, etc.). */
+  private _refreshKindSelectorUsage(): void {
+    const kindSelect = document.querySelector<HTMLSelectElement>('#mapfx-kind-select');
+    if (!kindSelect) return;
+    const fog = this.state.getState().fog;
+    const inUse = new Set<string>();
+    for (const p of fog.polygons) inUse.add(p.kind);
+    for (const opt of Array.from(kindSelect.querySelectorAll<HTMLOptionElement>('option'))) {
+      const id = opt.dataset['kindId'] as OverlayKind | undefined;
+      if (!id) continue;
+      const used = inUse.has(id);
+      const label = OVERLAY_KIND_REGISTRY[id].label;
+      const rendered = id === 'fog' ? _toUnicodeBold(label) : label;
+      opt.textContent = used ? `● ${rendered}` : rendered;
+      opt.style.color = used ? '#4ade80' : '';
+    }
+  }
+
   /** Off-screen viewport indicators — small edge-pinned pills with a
    *  directional arrow that appear when the GM has panned / zoomed away
    *  far enough that a viewport rect's bounding box no longer overlaps
@@ -1598,6 +1630,8 @@ export class GMApp {
       this.fogEditor.syncPolygons(state.fog.polygons);
       // Selector icons for non-fog kinds redraw from state.
       this._refreshMapFXSelectors();
+      // Mark in-use kinds in the dropdown with a green ● prefix.
+      this._refreshKindSelectorUsage();
       this.host.broadcast({
         type: 'fog_update',
         payload: state.fog,
@@ -1669,6 +1703,11 @@ export class GMApp {
       // v2.12 — clear any existing selection on map switch; the fog state
       // arrives via the 'fog' branch above.
       this.selectedOverlayId = null;
+      // Map switch carries a fresh fog state inside the same notify
+      // (which suppresses the standalone fog branch above), so the
+      // kind-dropdown in-use markers won't refresh from there —
+      // refresh them here instead.
+      this._refreshKindSelectorUsage();
     }
 
     if (changed.includes('markers')) {
@@ -2829,6 +2868,7 @@ export class GMApp {
       for (const id of OVERLAY_KIND_ORDER) {
         const opt = document.createElement('option');
         opt.value = id;
+        opt.dataset['kindId'] = id;
         const label = OVERLAY_KIND_REGISTRY[id].label;
         // Visually distinguish Fog of War from the MapFX kinds. Most
         // browsers ignore CSS on <option>, so we lean on Mathematical
@@ -2842,6 +2882,7 @@ export class GMApp {
       this._applyKindToColourSwatch();
       this._applyEdgeFadeSlider();
       this._rebuildShaderParamsPanel();
+      this._refreshKindSelectorUsage();
       this.fogEditor.setActiveKind(this.activeOverlayKind);
       kindSelect.addEventListener('change', () => {
         const newKind = kindSelect.value as OverlayKind;
