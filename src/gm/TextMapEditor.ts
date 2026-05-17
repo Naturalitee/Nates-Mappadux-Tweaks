@@ -307,7 +307,15 @@ export class TextMapEditor {
     const page = document.createElement('div');
     page.className = 'txt-map-page';
     page.id = 'txt-map-page';
-    page.style.backgroundColor = this.cfg.backgroundColor;
+    // 'transparent' uses a CSS checkerboard class so the editor
+    // visualises the paper as "empty alpha" (the image-editor
+    // convention) instead of leaking the host page colour through.
+    // Solid colours go through inline style as before.
+    if (this.cfg.backgroundColor === 'transparent') {
+      page.classList.add('txt-map-page--transparent');
+    } else {
+      page.style.backgroundColor = this.cfg.backgroundColor;
+    }
     page.style.color = this.cfg.textColor;
     page.style.fontFamily = `'${this.cfg.fontFamily}', serif`;
     canvasWrap.appendChild(page);
@@ -546,7 +554,17 @@ export class TextMapEditor {
       (swatch as HTMLInputElement).disabled = transCheck.checked;
       const next = transCheck.checked ? 'transparent' : lastSolid;
       this.cfg.backgroundColor = next;
-      if (this.pageEl) this.pageEl.style.background = next;
+      if (this.pageEl) {
+        if (transCheck.checked) {
+          // Drop any inline solid colour so the checkerboard from
+          // .txt-map-page--transparent can show through.
+          this.pageEl.style.background = '';
+          this.pageEl.classList.add('txt-map-page--transparent');
+        } else {
+          this.pageEl.classList.remove('txt-map-page--transparent');
+          this.pageEl.style.background = next;
+        }
+      }
     });
 
     row.appendChild(swatchSlot);

@@ -3092,6 +3092,19 @@ option.select-option--add {
   position: relative;
   line-height: 1.45;
 }
+/* Transparent-paper preview: standard image-editor checkerboard so
+ * the GM sees the alpha at a glance instead of the host page colour
+ * leaking through. Two crossed gradients at 10px scale read as a
+ * 20x20 light/dark grey grid. The rasterised PNG is unaffected — the
+ * pattern is preview-only. */
+.txt-map-page--transparent {
+  background-color: #ffffff;
+  background-image:
+    linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc),
+    linear-gradient(45deg, #ccc 25%, transparent 25%, transparent 75%, #ccc 75%, #ccc);
+  background-position: 0 0, 10px 10px;
+  background-size: 20px 20px;
+}
 .txt-map-page-content {
   width: 100%;
   height: 100%;
