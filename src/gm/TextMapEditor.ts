@@ -11,7 +11,7 @@ import {
 } from '../maps/textMapElements.ts';
 import { ImageAssetStore } from '../images/ImageAssetStore.ts';
 import { ImageAssetModal } from '../images/ImageAssetModal.ts';
-import { ensureFontsLoaded, registerLocalFontsFromAssets } from '../images/fontCatalog.ts';
+import { ensureFontsLoaded, registerLocalFontsFromAssets, BUNDLED_FONTS } from '../images/fontCatalog.ts';
 import { generateId } from '../utils/id.ts';
 import { sanitizeSplashHtml } from '../utils/sanitizeHtml.ts';
 import { pickTextboxEmptyHint } from '../utils/emptyHints.ts';
@@ -65,7 +65,19 @@ const DEFAULT_CONFIG: TextMapConfig = {
   elements:        [],
 };
 
-const FALLBACK_FONTS: ReadonlyArray<string> = ['Cinzel', 'Georgia', 'Times New Roman'];
+// Floor of the font dropdown — always present regardless of what the
+// ImageAssetStore returns. Derived from BUNDLED_FONTS (the canonical
+// 12-font catalog seeded into the Small Asset Library on first run)
+// plus the two system serifs every browser has. Earlier this was a
+// 3-string FALLBACK_FONTS list used only when the asset store was
+// empty, which meant any deployment where seeding hadn't run (or
+// where Delete All Data fired between seedings) silently lost the
+// other 9 bundled families from the dropdown.
+const BASE_FONTS: ReadonlyArray<string> = [
+  ...BUNDLED_FONTS.map((f) => f.family),
+  'Georgia',
+  'Times New Roman',
+];
 
 // Inline Lucide-style SVGs used for the clipboard + edit icon buttons.
 // Stroked monochrome, currentColor, 14px viewport — matches the rest of
@@ -241,12 +253,28 @@ export class TextMapEditor {
     // separately. Mirror that here so what you see in the editor is
     // what the GM main view shows.
     const usedFamilies = new Set<string>(families);
+    // BASE_FONTS (12 bundled + 2 system serifs) are ALWAYS present.
+    // The Google Fonts request below needs them too so the editor
+    // renders previews even if the IDB seed missed them on this
+    // install. System serifs (Georgia / Times New Roman) ship with
+    // the OS so ensureFontsLoaded filters them out harmlessly.
+    for (const f of BASE_FONTS) usedFamilies.add(f);
     if (this.cfg.fontFamily) usedFamilies.add(this.cfg.fontFamily);
     for (const el of this.cfg.elements ?? []) {
       if (el.type === 'text' && el.fontFamily) usedFamilies.add(el.fontFamily);
     }
     ensureFontsLoaded(Array.from(usedFamilies));
-    this.libraryFonts = families.length > 0 ? families : FALLBACK_FONTS.slice();
+    // Dropdown = BASE_FONTS first (guaranteed floor — the 12 bundled
+    // catalog families plus the two system serifs), then any user-
+    // added font assets in the Image Library. Dedup preserves first-
+    // seen order so the floor sits at the top and user additions
+    // follow underneath.
+    const seen = new Set<string>();
+    const merged: string[] = [];
+    for (const f of [...BASE_FONTS, ...families]) {
+      if (!seen.has(f)) { seen.add(f); merged.push(f); }
+    }
+    this.libraryFonts = merged;
     this._renderElementToolbar();
   }
 
@@ -1198,7 +1226,7 @@ export class TextMapEditor {
     // was removed, library not yet seeded, etc.). Without this the
     // dropdown silently snaps to its first option and the GM loses
     // track of what font the element is actually using.
-    const fontList = (this.libraryFonts.length > 0 ? this.libraryFonts : FALLBACK_FONTS).slice();
+    const fontList = (this.libraryFonts.length > 0 ? this.libraryFonts : BASE_FONTS).slice();
     if (currentFamily && !fontList.includes(currentFamily)) fontList.unshift(currentFamily);
     for (const f of fontList) {
       const o = document.createElement('option');
@@ -1322,14 +1350,44 @@ export class TextMapEditor {
     el.html = body.innerHTML;
   }
 
+  /** Pick a text element to copy font params off when creating a new
+   *  one. Selected text wins (the GM has just been tuning it, so it
+   *  IS the "current style"); otherwise the most recent text element
+   *  on the page (the GM was last working on it). Returns null when
+   *  the page has no text elements yet. */
+  private _pickFontInheritanceSource(): TextMapTextElement | null {
+    if (this.selectedId) {
+      const sel = this.elements.find((e) => e.id === this.selectedId);
+      if (sel && sel.type === 'text') return sel;
+    }
+    for (let i = this.elements.length - 1; i >= 0; i--) {
+      const e = this.elements[i];
+      if (e && e.type === 'text') return e;
+    }
+    return null;
+  }
+
   private _addNewText(): void {
     const el = newTextElement();
-    // Inherit the last font + colour the GM picked on any text
-    // element this session, so adding several boxes in a row doesn't
-    // require re-picking on each one. Page-level defaults still apply
-    // when nothing's been chosen yet.
-    if (this._lastFontChosen)  el.fontFamily = this._lastFontChosen;
-    if (this._lastColorChosen) el.color      = this._lastColorChosen;
+    // Inherit font parameters from the currently selected text
+    // element, or fall back to the most recent text element on
+    // this page. Lets the GM tap '+ Text' repeatedly to add boxes
+    // that match the look they've already established without
+    // re-picking on each one. When the page has no text elements
+    // yet, fall through to the session-wide last-picked scalars
+    // (carries picks made on a now-deleted element). Page defaults
+    // apply when both miss. B/I/U live inline in `html` and can't
+    // carry to an empty new element.
+    const source = this._pickFontInheritanceSource();
+    if (source) {
+      if (source.fontFamily !== undefined) el.fontFamily = source.fontFamily;
+      if (source.fontScale  !== undefined) el.fontScale  = source.fontScale;
+      if (source.color      !== undefined) el.color      = source.color;
+      if (source.textAlign  !== undefined) el.textAlign  = source.textAlign;
+    } else {
+      if (this._lastFontChosen)  el.fontFamily = this._lastFontChosen;
+      if (this._lastColorChosen) el.color      = this._lastColorChosen;
+    }
     this.elements.push(el);
     const node = this._mountElement(el);
     this._select(el.id);
