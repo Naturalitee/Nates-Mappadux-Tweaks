@@ -25,7 +25,7 @@
  */
 
 import type { BackdropEntry } from './backdropRegistry.ts';
-import type { OverlayKindEntry } from '../../mapfx/overlayKindRegistry.ts';
+import type { OverlayKindEntry, BlendMode } from '../../mapfx/overlayKindRegistry.ts';
 
 const BEGIN_MARKER = '// === BEGIN backdrop-shareable ===';
 const END_MARKER   = '// === END backdrop-shareable ===';
@@ -92,12 +92,27 @@ export function buildBackdropFromMapFx(opts: BuildBackdropFromMapFxOpts): Backdr
   const helpers = extractFxBlock(opts.shaderText, opts.kindId);
 
   // The fragment snippet runs inside the clip-pass `if (outside-
-  // viewport)` branch. It calls fxEffect with vUv and composites
-  // the additive result over the pack's background colour.
+  // viewport)` branch. Composite mode mirrors the MapFX blend mode:
+  //   • screen   — additive (uBgColor + col); same maths as the
+  //                MapFX additive blend at maskAlpha=1.
+  //   • normal   — alpha composite (mix uBgColor → col by alpha);
+  //                gives volumetric kinds (firestorm, mist) their
+  //                "smoke obscures the bg" reading.
+  //   • multiply — uBgColor * col (darkening kinds; not currently
+  //                used by any registered effect but supported).
+  const blend: BlendMode = opts.kind.blend;
+  let composite: string;
+  if (blend === 'normal') {
+    composite = 'gl_FragColor = vec4(mix(uBgColor, _fx.rgb, _fx.a), 1.0);';
+  } else if (blend === 'multiply') {
+    composite = 'gl_FragColor = vec4(uBgColor * _fx.rgb, 1.0);';
+  } else {
+    composite = 'gl_FragColor = vec4(uBgColor + _fx.rgb, 1.0);';
+  }
   const fragment = /* glsl */`
     {
       vec4 _fx = fxEffect(vUv);
-      gl_FragColor = vec4(uBgColor + _fx.rgb, 1.0);
+      ${composite}
     }
   `;
 
