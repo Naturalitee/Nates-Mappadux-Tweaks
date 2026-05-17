@@ -1719,6 +1719,7 @@ export class Renderer {
         uniform vec2  uResolution;
         ${paramDeclarations.join('\n        ')}
         varying vec2  vUv;
+        ${entry.helpers ?? ''}
         void main() {
           if (vUv.x < uRect.x || vUv.x > uRect.z ||
               vUv.y < uRect.y || vUv.y > uRect.w) {

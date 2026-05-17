@@ -132,6 +132,25 @@ Modifications made to "A river" (Pierco fork):
 - Added per-poly uniforms: `uColor` (water hue tint), `uIntensity` (output multiplier), `uScale` (wave feature density), `uSpeed` (flow rate), `uDirection` (flow direction in radians, compass convention with 0 = north). Each is a slider in the GM panel.
 - Output uses normal alpha blending (not additive) — a real river has a definite surface that obscures what's strictly under it, modulated by refraction. Additive would have just brightened the bed.
 
+## Animated Backdrops
+
+The animated backdrops that fill the letterbox / pillarbox bars
+around the map. Same attribution rules as MapFX — Mappadux remains
+free, attribution stays.
+
+| Backdrop | Name | Author | Licence | Source |
+|----------|------|--------|---------|--------|
+| Starfield | StarField practice (tllfRX) — adapted as backdrop | Deadtotem (2020) | CC BY-NC-SA 3.0 | https://www.shadertoy.com/view/tllfRX |
+| Aurora | Original — drifting curtain bands, GM-tunable colours | Mappadux | — | — |
+| Embers | Original — parallax cell-grid sparks, GM-tunable tint | Mappadux | — | — |
+| Smooth Fog | Smooth Fog Shader (7ldGWf) — remix of [pontino's Fog Shader](https://www.shadertoy.com/view/tst3zr) | deusnovus (2021) | CC BY-NC-SA 3.0 | https://www.shadertoy.com/view/7ldGWf |
+| Firestorm | GPU hacks #07 - DirectX 12 (wtB3RG) — ported the GLSL portion only, 128-step raymarch reduced to 48 steps for browser cost | PrzemyslawZaworski (2019) | CC BY-NC-SA 3.0 | https://www.shadertoy.com/view/wtB3RG |
+
+Modifications:
+- Aurora / Embers — written in-house for Mappadux.
+- Smooth Fog — same algorithm as the MapFX *Mist* effect (credited above), exposed here as a full-bars backdrop with GM-tunable fog colour, background, and density. `INTENSITY` and the two hardcoded colours promoted to uniforms; aspect-correct UV so cells don't squash on tall/wide bars.
+- Firestorm — kept only the GLSL fragment from the Shadertoy entry (the surrounding C/HLSL DirectX 12 reference code is irrelevant for our use). Reduced the raymarch from 128 to 48 steps with a wider step length, exposed the hot-core + smoke colours and an overall intensity. Marked "(heavy)" in the dropdown so the GM knows it's the most expensive backdrop.
+
 ### Under evaluation *(may be removed before v2.12 ships)*
 
 The following shader is saved in the source tree for evaluation only and is

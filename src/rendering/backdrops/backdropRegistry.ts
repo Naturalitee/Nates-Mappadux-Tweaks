@@ -19,9 +19,11 @@
  * and `fragment` strings, register it in BACKDROPS.
  */
 
-import { STARFIELD_BACKDROP } from './starfield.ts';
-import { AURORA_BACKDROP }    from './aurora.ts';
-import { EMBERS_BACKDROP }    from './embers.ts';
+import { STARFIELD_BACKDROP }  from './starfield.ts';
+import { AURORA_BACKDROP }     from './aurora.ts';
+import { EMBERS_BACKDROP }     from './embers.ts';
+import { SMOOTH_FOG_BACKDROP } from './smoothFog.ts';
+import { FIRESTORM_BACKDROP }  from './firestorm.ts';
 
 export interface BackdropEntry {
   /** Stable id stored on the pack's ThemeConfig.backdrop.kind. */
@@ -34,15 +36,25 @@ export interface BackdropEntry {
    * v2.12 — optional GM-tunable shader parameters. Each entry becomes
    * a uniform in the clip pass fragment shader using the standard
    * `u<PascalCase>` naming (e.g. id 'tint' → uniform vec3 uTint).
-   * Sliders/toggles bind as `float`, colour params as `vec3`. The
-   * backdrop's GLSL snippet must declare matching uniforms at the top
-   * of the snippet (inside the snippet's block scope works) or use
-   * the values via Three's uniform-injection by name.
+   * Sliders/toggles bind as `float`, colour params as `vec3`.
    *
    * Reuses the MapFX ShaderParamDef discriminated union so the same
    * panel-row helpers render controls for both subsystems.
    */
   params?:  import('../../mapfx/overlayKindRegistry.ts').ShaderParamDef[];
+  /**
+   * v2.12 — optional GLSL injected at top scope (before `void main()`)
+   * for backdrops that need helper functions (noise, FBM, raymarch
+   * step, etc.). The `fragment` snippet itself is dropped inside the
+   * `if (outside-viewport)` branch of main and so cannot define its
+   * own functions. Top-scope content lives here instead and can be
+   * called freely from the fragment snippet.
+   *
+   * Don't redeclare the built-in uniforms (tDiffuse, uRect, uBgColor,
+   * time, uSpeed, uResolution) or any param uniforms — those are
+   * injected automatically by the clip-pass builder.
+   */
+  helpers?: string;
 }
 
 export const BACKDROPS: BackdropEntry[] = [
@@ -50,6 +62,8 @@ export const BACKDROPS: BackdropEntry[] = [
   STARFIELD_BACKDROP,
   AURORA_BACKDROP,
   EMBERS_BACKDROP,
+  SMOOTH_FOG_BACKDROP,
+  FIRESTORM_BACKDROP,
 ];
 
 export function backdropById(id: string): BackdropEntry {
