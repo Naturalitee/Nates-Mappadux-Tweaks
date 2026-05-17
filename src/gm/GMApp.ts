@@ -353,6 +353,14 @@ export class GMApp {
    *  Triggers the post-host-ready About auto-open (first-time intro). */
   private _didSeedDefault = false;
 
+  /** v2.12 — tracks whether the AboutDialog is currently mounted. The
+   *  MOTD startup check defers to the next session whenever this is
+   *  true at the moment it'd fire — avoids stacking two popups on a
+   *  new user. Set true by openAboutDialog before the dialog promise
+   *  is awaited; cleared in a finally so abnormal resolutions still
+   *  reset the flag. */
+  private _aboutOpen = false;
+
   constructor() {
     this.host = new Host({
       onReady: (code) => this.onHostReady(code),
@@ -1192,11 +1200,18 @@ export class GMApp {
     void this._refreshPackNameInput();
 
     // First-run intro: if the default bundle was just seeded, pop the About
-    // dialog so a new user sees what they've landed on.
-    if (this._didSeedDefault) {
-      this._didSeedDefault = false;
+    // dialog so a new user sees what they've landed on. Snapshot the flag
+    // BEFORE clearing it so _maybeShowMotd can read it after the
+    // auto-About kick-off.
+    const wasSeeded = this._didSeedDefault;
+    if (wasSeeded) {
       void this.openAboutDialog({});
     }
+    // MOTD popup: one-off message gate driven by src/motd/motd.ts.
+    // Runs after the seed/About decision so it can defer when About
+    // is open. Internally checks _didSeedDefault to silently mark
+    // first-installers as caught up.
+    void this._maybeShowMotd().finally(() => { this._didSeedDefault = false; });
   }
 
   private onPeerConnected(id: string): void {
@@ -5054,20 +5069,58 @@ export class GMApp {
    *  session, renders, and on Save persists the edited splash and theme
    *  back. Theme is also live-applied during edit so the user previews. */
   private async openAboutDialog(opts: { startInEdit?: boolean }): Promise<void> {
-    const session = await loadSession();
-    const result = await new AboutDialog().open({
-      packName:    session?.packName ?? '',
-      splash:      session?.splash,
-      theme:       session?.theme,
-      ...(opts.startInEdit ? { startInEdit: true } : {}),
-    });
-    if (!result || !session) return;
-    const hasTheme = !!result.theme.mode || !!result.theme.accent;
-    const next = { ...session, splash: result.splash };
-    if (hasTheme) next.theme = result.theme;
-    else delete next.theme;
-    await saveSession(next);
-    applyTheme(hasTheme ? result.theme : undefined);
+    this._aboutOpen = true;
+    try {
+      const session = await loadSession();
+      const result = await new AboutDialog().open({
+        packName:    session?.packName ?? '',
+        splash:      session?.splash,
+        theme:       session?.theme,
+        ...(opts.startInEdit ? { startInEdit: true } : {}),
+      });
+      if (!result || !session) return;
+      const hasTheme = !!result.theme.mode || !!result.theme.accent;
+      const next = { ...session, splash: result.splash };
+      if (hasTheme) next.theme = result.theme;
+      else delete next.theme;
+      await saveSession(next);
+      applyTheme(hasTheme ? result.theme : undefined);
+    } finally {
+      this._aboutOpen = false;
+    }
+  }
+
+  /** v2.12 — one-off "Message of the Day" popup. Runs once at startup
+   *  per the rules in src/motd/motd.ts:
+   *
+   *    • First install (`_didSeedDefault` true)        → silently mark
+   *      the current MOTD version as seen and skip the popup. The
+   *      auto-About dialog is the welcome message in that case.
+   *    • About dialog currently open                   → defer to the
+   *      next session. Don't mark seen.
+   *    • CURRENT_MOTD.version === '' (disabled)        → no-op.
+   *    • Stored 'seen' version === CURRENT_MOTD.version → already shown,
+   *      no-op.
+   *    • Otherwise                                     → show the
+   *      MOTD modal; on dismiss, record the current version as seen
+   *      so it doesn't reappear until the next bump. */
+  private async _maybeShowMotd(): Promise<void> {
+    const { CURRENT_MOTD } = await import('../motd/motd.ts');
+    if (!CURRENT_MOTD.version) return;
+    const { getLastSeenMotdVersion, setLastSeenMotdVersion } =
+      await import('../storage/localSettings.ts');
+    if (this._didSeedDefault) {
+      // First-install path — About is about to auto-open (or was just
+      // dismissed). Don't bombard with a second popup; mark the MOTD
+      // as already seen so the next session lands clean.
+      setLastSeenMotdVersion(CURRENT_MOTD.version);
+      return;
+    }
+    if (getLastSeenMotdVersion() === CURRENT_MOTD.version) return;
+    if (this._aboutOpen) return; // defer to next session
+    const { showMotdDialog } = await import('./MotdDialog.ts');
+    await showMotdDialog(CURRENT_MOTD);
+    setLastSeenMotdVersion(CURRENT_MOTD.version);
   }
 
   /** Save the current workspace as a plain (unencrypted) `.mappadux` pack.

@@ -59,6 +59,24 @@ export function setLocalPlayerStaticOnly(enabled: boolean): void {
   } catch { /* private mode etc. — no-op */ }
 }
 
+/** Last MOTD version the user dismissed. Compared against
+ *  CURRENT_MOTD.version on startup — when they differ (and the dialog
+ *  isn't suppressed for first-install / About-open reasons) the MOTD
+ *  popup fires once and the new version is recorded here. Cleared by
+ *  Delete All Data, which means the next session shows the current
+ *  MOTD again. */
+export const MOTD_SEEN_VERSION_KEY = 'dmr_motd_seen_version';
+
+export function getLastSeenMotdVersion(): string | null {
+  try { return localStorage.getItem(MOTD_SEEN_VERSION_KEY); }
+  catch { return null; }
+}
+
+export function setLastSeenMotdVersion(version: string): void {
+  try { localStorage.setItem(MOTD_SEEN_VERSION_KEY, version); }
+  catch { /* private mode etc. — no-op */ }
+}
+
 /** Known API key entries kept in localStorage. Used by Settings to list +
  *  delete credentials separately from other local state. */
 export const API_KEY_ENTRIES: Array<{ key: string; label: string }> = [
