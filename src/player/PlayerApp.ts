@@ -374,6 +374,21 @@ export class PlayerApp {
         // has already moved on to a different map.
         if (!mapBlob) break;
         if (msg.mapId !== this.currentMapId) break;
+        // v2.12.16 — same-machine bypass. When the Player window
+        // is a popup on the GM's own machine (LocalChannel signal
+        // reached this Guest, meaning we're in the same browser),
+        // Chrome's same-process decoder throttle makes 4K animated
+        // playback unworkable in the secondary window. Stay on
+        // the static snapshot — the GM is the one looking at the
+        // animation in their own window, and same-machine players
+        // are rare enough that a frozen frame is an acceptable
+        // compromise here. Different-device players (phone, LAN
+        // laptop) never enter this branch and get the animation.
+        if (this.guest.isSameMachineSession()) {
+          // eslint-disable-next-line no-console
+          console.info('[video-map] same-machine player — staying on snapshot, skipping video bundle swap.');
+          break;
+        }
         const videoBuf = mapBlob;
         this.lastMapBlob = videoBuf;
         void this.renderer.loadMap(videoBuf, this.lastFog).then(() => {

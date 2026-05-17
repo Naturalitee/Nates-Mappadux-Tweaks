@@ -158,6 +158,10 @@ export class ProjectorApp {
     // Renderer: filters off by default (D8 will gate this), no fog opacity reduction.
     this.renderer = new Renderer(this.rendererCanvas);
     this.renderer.setFilterEnabled(false);
+    // v2.12.16 — projector is the table view; stutter on animated
+    // maps is preferable to a paused frame with a "go fullscreen"
+    // banner staring at the players. Let it run regardless.
+    this.renderer.setVideoStallEscalation(false);
     this.markerTexture = new MarkerTexture();
     this.markerSprites = new MarkerSprites();
     this.renderer.setMarkerCanvas(this.markerTexture.canvas);

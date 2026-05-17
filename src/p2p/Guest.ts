@@ -35,12 +35,25 @@ export class Guest {
   private _reconnectAttempt = 0;
   private _reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 
+  /** v2.12.x — set to true the first time a message arrives via
+   *  LocalChannel (BroadcastChannel). BroadcastChannel only works
+   *  within the same browser, so a single message from the GM via
+   *  this path proves the Player is running in the same browser as
+   *  the GM — i.e. it's a popup on the GM's own machine. Player
+   *  views on separate devices (real player at the table on a phone,
+   *  laptop on the LAN, etc.) connect via PeerJS only and never see
+   *  this flag flip. */
+  private _isSameMachineSession = false;
+
+  isSameMachineSession(): boolean { return this._isSameMachineSession; }
+
   constructor(events: GuestEvents) {
     this.events = events;
     this.local = new LocalChannel();
 
     // Listen for state updates pushed by the GM (fog/filter/view changes)
     this.local.onMessage((msg) => {
+      this._isSameMachineSession = true;
       // BroadcastChannel uses structured cloning — mapBlob arrives inside the msg object.
       // Extract it so PlayerApp receives it via the standard (msg, mapBlob) signature.
       if (msg.type === 'full_state' || msg.type === 'map_change' || msg.type === 'handout_reveal' || msg.type === 'video_bundle') {

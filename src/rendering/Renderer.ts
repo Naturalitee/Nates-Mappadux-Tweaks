@@ -103,6 +103,16 @@ export class Renderer {
   /** v2.12.x — bound fullscreenchange handler, kept so we can remove
    *  it cleanly on dispose. */
   private _onFullscreenChange: (() => void) | null = null;
+  /** v2.12.x — when false, the renderer never pauses video maps on
+   *  detected stall and never shows the "fullscreen for smooth
+   *  playback" overlay. Projector mode sets this off: the projector
+   *  is the table view; stutter is preferable to a frozen frame
+   *  with a banner over it. Default true (Player + GM behaviour). */
+  private _videoStallEscalationEnabled = true;
+  /** v2.12.x — id of the timer that fades the stall overlay out
+   *  after a short stay (we tell the user once, then trust them to
+   *  fix it; spamming an immovable banner is worse than the bug). */
+  private _videoStallOverlayFadeTimer: ReturnType<typeof setTimeout> | null = null;
   /** Lazily-built ImageData cache for the loaded map's pixels. Used
    *  by the Magic Wand fill (src/mapfx/floodFill.ts) which needs to
    *  read the map's raw pixels to flood-fill from a click point.
@@ -337,7 +347,11 @@ export class Renderer {
         // auto-resume on fullscreenchange. 4 strikes ≈ 6-8 s of
         // sustained no-progress before we declare it.
         this._videoStallStrikes++;
-        if (this._videoStallStrikes >= 4 && !this._isFullscreen()) {
+        if (
+          this._videoStallEscalationEnabled &&
+          this._videoStallStrikes >= 4 &&
+          !this._isFullscreen()
+        ) {
           // eslint-disable-next-line no-console
           console.warn('[video-map] sustained stall — pausing until fullscreen');
           v.pause();
@@ -380,16 +394,79 @@ export class Renderer {
     div.style.maxWidth = '90%';
     div.style.textAlign = 'center';
     div.style.lineHeight = '1.4';
-    div.textContent = '▶ Animated map paused. Fullscreen this window (F11) for smooth playback.';
+    div.style.opacity   = '1';
+    div.style.transition = 'opacity 700ms ease';
+    div.textContent = '▶ Animated map paused. Fullscreen this window (F11) MAY help.';
     document.body.appendChild(div);
     this._videoStallOverlay = div;
+    // Fade out + remove after 5 s — the user has seen the message
+    // once, drilling them with an immovable banner is worse than the
+    // stall it advertises. After the fade the renderer just accepts
+    // whatever framerate the browser allows; the video element is
+    // still paused so no extra GPU work either.
+    if (this._videoStallOverlayFadeTimer !== null) clearTimeout(this._videoStallOverlayFadeTimer);
+    this._videoStallOverlayFadeTimer = setTimeout(() => {
+      const el = this._videoStallOverlay;
+      if (!el) return;
+      el.style.opacity = '0';
+      setTimeout(() => this._hideVideoStallOverlay(), 800);
+    }, 5000);
   }
 
   private _hideVideoStallOverlay(): void {
+    if (this._videoStallOverlayFadeTimer !== null) {
+      clearTimeout(this._videoStallOverlayFadeTimer);
+      this._videoStallOverlayFadeTimer = null;
+    }
     if (!this._videoStallOverlay) return;
     this._videoStallOverlay.remove();
     this._videoStallOverlay = null;
   }
+
+  /** Public toggle for the stall-escalation path. Projector calls
+   *  this with `false` so the table-view never pauses on stutter —
+   *  drops in framerate are preferable to a still frame with a
+   *  banner over it for the players sitting at the table. */
+  setVideoStallEscalation(enabled: boolean): void {
+    this._videoStallEscalationEnabled = enabled;
+    if (!enabled) this._hideVideoStallOverlay();
+  }
+
+  // ─── Animated-map fallback sketch (future work) ────────────────────────
+  //
+  // The same-machine player popup + secondary-window decoder throttle on
+  // Chrome is structurally hard to solve from JS. If we want to push past
+  // the current "pause until fullscreen" patch-over, the cascade of
+  // increasingly heavy fallbacks looks roughly like:
+  //
+  // Tier 1 (we're here): rVFC pump + watchdog + intersection-observer-
+  //   visible video element + DOM-attached. Works fully when the window
+  //   has resource priority (focused / fullscreen / sole window).
+  //
+  // Tier 2: Picture-in-Picture as the playback surface.
+  //   Call video.requestPictureInPicture() — Chrome treats PiP as a
+  //   foreground-priority surface and gives it full decode budget.
+  //   Trade-off: PiP UI is visible, intrusive on the user's desktop.
+  //   Maybe wired to a button: "Pop out for smooth playback".
+  //
+  // Tier 3: WebCodecs decode loop.
+  //   Bypass HTMLVideoElement entirely. Use VideoDecoder + MP4Box.js /
+  //   webm-muxer for demux + decode on a worker thread. Push frames as
+  //   ImageBitmaps to the texture. Full control over scheduling, no
+  //   browser-level throttling. Heavy implementation but the architectural
+  //   "right answer" for in-app video that needs deterministic behaviour.
+  //
+  // Tier 4: Pre-process video on import.
+  //   Transcode 4K → 1080p on upload using WebCodecs encode loop. Cap
+  //   bitrate, cap resolution. The library record stores the transcoded
+  //   version. Mappadux philosophy still works (no server) — encode
+  //   happens in the GM's browser at import time. Adds a "preparing
+  //   animated map…" step but pays off on every subsequent playback.
+  //
+  // Cascade order in a future release could be: try Tier 1, detect stall,
+  // offer Tier 2 button to user; on opt-in once, remember the preference
+  // per asset; Tier 3 / 4 only if we ever decide the feature really
+  // needs to be window-size-independent without UI intervention.
 
   private _stopVideoFramePump(): void {
     if (this.mapVideo && this._videoFrameCbId !== null) {
