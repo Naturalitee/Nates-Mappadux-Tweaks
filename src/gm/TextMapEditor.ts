@@ -66,18 +66,22 @@ const DEFAULT_CONFIG: TextMapConfig = {
 };
 
 // Floor of the font dropdown — always present regardless of what the
-// ImageAssetStore returns. Derived from BUNDLED_FONTS (the canonical
-// 12-font catalog seeded into the Small Asset Library on first run)
-// plus the two system serifs every browser has. Earlier this was a
-// 3-string FALLBACK_FONTS list used only when the asset store was
-// empty, which meant any deployment where seeding hadn't run (or
-// where Delete All Data fired between seedings) silently lost the
-// other 9 bundled families from the dropdown.
-const BASE_FONTS: ReadonlyArray<string> = [
-  ...BUNDLED_FONTS.map((f) => f.family),
-  'Georgia',
-  'Times New Roman',
-];
+// ImageAssetStore returns. Two slices:
+//
+//   • BASE_FONTS_GOOGLE — the 12 BUNDLED_FONTS families. These are
+//     real Google Fonts entries; ensureFontsLoaded() builds a css2
+//     <link> that fetches them at runtime.
+//
+//   • BASE_FONTS_SYSTEM — operating-system serifs that ship with
+//     every browser. They MUST NOT be sent to Google's css2 API:
+//     when an unknown family lands in the request the whole
+//     stylesheet response can come back 400 and even the valid
+//     families fail to load. Caught 2026-05-17 on beta when v2.13.1
+//     dropdown listed all 14 names but only the OS serifs rendered
+//     (no console error — the css2 fetch failed silently).
+const BASE_FONTS_GOOGLE: ReadonlyArray<string> = BUNDLED_FONTS.map((f) => f.family);
+const BASE_FONTS_SYSTEM: ReadonlyArray<string> = ['Georgia', 'Times New Roman'];
+const BASE_FONTS: ReadonlyArray<string> = [...BASE_FONTS_GOOGLE, ...BASE_FONTS_SYSTEM];
 
 // Inline Lucide-style SVGs used for the clipboard + edit icon buttons.
 // Stroked monochrome, currentColor, 14px viewport — matches the rest of
@@ -252,16 +256,22 @@ export class TextMapEditor {
     // looked correct because the rasterizer pulls page + element fonts
     // separately. Mirror that here so what you see in the editor is
     // what the GM main view shows.
+    // Pre-load Google Fonts for the 12 bundled catalog families so
+    // the editor renders their preview glyphs even when the IDB seed
+    // missed on this install. System serifs (BASE_FONTS_SYSTEM) are
+    // deliberately EXCLUDED from the request — see the comment on
+    // BASE_FONTS_SYSTEM above for why a stray "Times New Roman" in
+    // the css2 URL can sink the whole stylesheet.
     const usedFamilies = new Set<string>(families);
-    // BASE_FONTS (12 bundled + 2 system serifs) are ALWAYS present.
-    // The Google Fonts request below needs them too so the editor
-    // renders previews even if the IDB seed missed them on this
-    // install. System serifs (Georgia / Times New Roman) ship with
-    // the OS so ensureFontsLoaded filters them out harmlessly.
-    for (const f of BASE_FONTS) usedFamilies.add(f);
-    if (this.cfg.fontFamily) usedFamilies.add(this.cfg.fontFamily);
+    for (const f of BASE_FONTS_GOOGLE) usedFamilies.add(f);
+    if (this.cfg.fontFamily && !BASE_FONTS_SYSTEM.includes(this.cfg.fontFamily)) {
+      usedFamilies.add(this.cfg.fontFamily);
+    }
     for (const el of this.cfg.elements ?? []) {
-      if (el.type === 'text' && el.fontFamily) usedFamilies.add(el.fontFamily);
+      if (el.type === 'text' && el.fontFamily
+          && !BASE_FONTS_SYSTEM.includes(el.fontFamily)) {
+        usedFamilies.add(el.fontFamily);
+      }
     }
     ensureFontsLoaded(Array.from(usedFamilies));
     // Dropdown = BASE_FONTS first (guaranteed floor — the 12 bundled
