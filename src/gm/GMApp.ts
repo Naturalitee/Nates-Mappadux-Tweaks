@@ -2172,7 +2172,11 @@ export class GMApp {
     // fog even if another loadMap call races ahead of this one's decode.
     this.renderer.loadMap(blob, fog);
 
-    this.setStatus(map.name, 'ok');
+    // Clear the status bar on a successful load. The map name was
+    // duplicated here while loadMap completed, but the active map
+    // name is already shown in the Map Selection dropdown at the top
+    // of the sidebar — no need to repeat it at the bottom edge too.
+    this.setStatus('', 'ok');
 
     // Auto-reveal: if this handout has the reveal animation set to
     // autoReveal, fire it once after the map_change message has had a
