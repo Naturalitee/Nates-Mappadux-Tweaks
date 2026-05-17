@@ -1569,6 +1569,11 @@ option.select-option--add {
   width: 90px;
   flex: 0 0 auto;
 }
+/* Kind row carries the most control density of the panel (dropdown,
+ * colour swatch, sparkle FX button). Drop the 90px label slot so the
+ * dropdown starts right after "Kind" — alignment with rows below is
+ * worth less than the extra ~50px the dropdown gets here. */
+.fog-row--kind > .fog-row-label { width: auto; }
 .fog-row--kind > select { flex: 1 1 auto; min-width: 0; }
 .fog-row--kind > input[type="color"] { flex: 0 0 32px; }
 .fog-row--kind > input[type="color"]:disabled {
