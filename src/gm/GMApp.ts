@@ -4884,10 +4884,17 @@ export class GMApp {
     this.hamburger.addDivider();
 
     // Asset Libraries group.
+    // Same modal as the "+ Add New Map" dropdown sentinel — route both
+    // through openAddMapDialog so a newly-created handout / uploaded
+    // image / picked library entry lands on the map dropdown AND
+    // becomes the active map regardless of which entry point opened
+    // the library. Earlier this used a no-op onPick ("browse-only"),
+    // which meant creating a new handout from here saved the map to
+    // IDB but left the dropdown stale and nothing selected.
     this.hamburger.addItem({
       label: 'Map Asset Library…',
       icon: 'map',
-      onSelect: () => { this.mapAssetModal.open(() => { /* browse-only */ }); },
+      onSelect: () => { this.openAddMapDialog(); },
     });
     this.hamburger.addItem({
       label: 'Audio Asset Library…',
