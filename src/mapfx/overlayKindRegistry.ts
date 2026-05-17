@@ -34,6 +34,11 @@ export type BlendMode =
   | 'normal'   // standard alpha blend
   | 'screen'   // additive — for light / fire
   | 'multiply' // subtractive — for shadow / fear
+  | 'maketransparent' // punches alpha holes in the framebuffer; the
+                      // clip-pass then mixes the active backdrop in
+                      // wherever the GM has painted, letting the
+                      // backdrop bleed through ANY map (not just
+                      // transparent textmaps).
   ;
 
 /**
@@ -216,6 +221,13 @@ const SVG_EMBERS =
   '<path d="M7 15v-2"/>' +
   '<path d="M12 10v-3"/>' +
   '<path d="M17 5v-2"/>';
+
+// Make Transparent — a stylised "window" / cutout: a frame with a
+// transparency-grid hint inside it.
+const SVG_TRANSPARENT =
+  '<rect x="3" y="3" width="18" height="18" rx="2"/>' +
+  '<path d="M3 12h18"/>' +
+  '<path d="M12 3v18"/>';
 
 // Noise / static — a scatter of dots in a rough grid, reads as TV
 // static at icon size.
@@ -485,6 +497,14 @@ export const OVERLAY_KIND_REGISTRY: Record<OverlayKind, OverlayKindEntry> = {
   // (haunted screen, magical interference) and as a chaotic
   // backdrop.
   noise:        { id: 'noise',        label: 'Noise',           iconSvg: SVG_NOISE,        defaultColor: '#ffffff', defaultRadius: 40, blend: 'screen', animated: true,  selectByInterior: false, allowColor: true,  z: 6,  shader: 'noise',        shaderParams: NOISE_SHADER_PARAMS        },
+  // Make Transparent: punches alpha holes in the map. The clip-pass
+  // sees the holes and mixes the active backdrop in behind. Lets
+  // GMs reveal the backdrop through ANY map (not just transparent
+  // textmaps): paint a "window" into the surrounding scenery, a
+  // glass floor revealing what's below, a magical view-through to
+  // elsewhere. MapFX-only; doesn't make sense as a backdrop (the
+  // bars have nothing to make transparent).
+  transparent:  { id: 'transparent',  label: 'Make Transparent', iconSvg: SVG_TRANSPARENT,  defaultColor: '#000000', defaultRadius: 30, blend: 'maketransparent', animated: false, selectByInterior: true,  allowColor: false, z: 1,  shader: 'transparent' },
 };
 
 /** Order for the kind dropdown — fog first (most-used + click-priority),
@@ -492,7 +512,7 @@ export const OVERLAY_KIND_REGISTRY: Record<OverlayKind, OverlayKindEntry> = {
  *  doubles as click-selection priority (see FogEditor.trySelect): when
  *  polygons overlap, the kind earlier in this list wins the click. */
 export const OVERLAY_KIND_ORDER: OverlayKind[] = [
-  'fog',
+  'fog', 'transparent',
   'fire', 'firestorm', 'embers', 'river', 'ocean', 'light',
   'mist', 'thundercloud', 'noise',
   'aurora', 'portal', 'starfield',

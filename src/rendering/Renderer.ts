@@ -1077,11 +1077,15 @@ export class Renderer {
         // the map. River + opaque-surface kinds use normal alpha so
         // the shader output (which already samples the underlying
         // map for refraction) reads as a real surface that obscures
-        // the bare map. Multiply for darkening kinds.
+        // the bare map. Multiply for darkening kinds. 'maketransparent'
+        // uses CustomBlending to leave RGB untouched and multiply the
+        // destination alpha by (1 - srcAlpha) — punches alpha holes
+        // in the map so the clip-pass mixes the backdrop in behind.
         const threeBlend =
-          k.blend === 'multiply' ? THREE.MultiplyBlending :
-          k.blend === 'normal'   ? THREE.NormalBlending   :
-                                   THREE.AdditiveBlending;
+          k.blend === 'multiply'        ? THREE.MultiplyBlending :
+          k.blend === 'normal'          ? THREE.NormalBlending   :
+          k.blend === 'maketransparent' ? THREE.CustomBlending   :
+                                          THREE.AdditiveBlending;
         const material = new THREE.ShaderMaterial({
           vertexShader:   shader.vertex,
           fragmentShader: shader.fragment,
@@ -1090,6 +1094,16 @@ export class Renderer {
           blending:       threeBlend,
           uniforms:       baseUniforms,
         });
+        if (k.blend === 'maketransparent') {
+          // RGB: dst' = 0*src + 1*dst = dst (leave map colour alone)
+          material.blendEquation    = THREE.AddEquation;
+          material.blendSrc         = THREE.ZeroFactor;
+          material.blendDst         = THREE.OneFactor;
+          // Alpha: dstA' = 0*srcA + (1-srcA)*dstA — scales by mask.
+          material.blendEquationAlpha = THREE.AddEquation;
+          material.blendSrcAlpha      = THREE.ZeroFactor;
+          material.blendDstAlpha      = THREE.OneMinusSrcAlphaFactor;
+        }
         const geo = new THREE.PlaneGeometry(planeW, planeH);
         const mesh = new THREE.Mesh(geo, material);
         mesh.position.set(planeX, planeY, slotZ);
