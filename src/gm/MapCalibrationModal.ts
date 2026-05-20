@@ -300,6 +300,8 @@ export class MapCalibrationModal {
       const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup',   up);
+        // v2.14.3 — drag-end makes the line the master; H, V, DPI follow.
+        syncInputsFromLine();
       };
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup',   up);
@@ -431,21 +433,75 @@ export class MapCalibrationModal {
       const otherN = Math.max(1, Math.round(srcN * ratio));
       otherInput.value = String(otherN);
     };
-    gridHInput.addEventListener('input', () => { autoFillCounterpart('h'); updateGridFeedback(); });
-    gridVInput.addEventListener('input', () => { autoFillCounterpart('v'); updateGridFeedback(); });
+    // v2.14.3 — line ↔ H/V ↔ DPI master-follower. The last control the
+    // user touched is the master; the other two follow. Implementation
+    // is two helpers + carefully threaded calls:
+    //   • repositionLineFromPps — given a pps, re-centre the ruler line
+    //     horizontally across the map middle with length N × pps. Used
+    //     when H/V or DPI is the master.
+    //   • syncInputsFromLine — given the current line endpoints, derive
+    //     pps = distance / N and back-fill H, V, and the DPI dropdown.
+    //     Used when the line (or N) is the master.
+    // N stays where the user typed it (default 10) — independent control.
+    const distInput = overlay.querySelector<HTMLInputElement>('.calibration-distance-input')!;
+    const currentN = () => {
+      const n = parseFloat(distInput.value);
+      return Number.isFinite(n) && n > 0 ? n : 10;
+    };
+    const repositionLineFromPps = (pps: number) => {
+      if (!Number.isFinite(pps) || pps <= 0) return;
+      const N = currentN();
+      const cx = this.imgW / 2;
+      const cy = this.imgH / 2;
+      // Clamp the line so it never extends past the map bounds.
+      const half = Math.min((N * pps) / 2, cx - 1);
+      if (half <= 0) return;
+      this.a = { x: cx - half, y: cy };
+      this.b = { x: cx + half, y: cy };
+      redraw();
+    };
+    const syncInputsFromLine = () => {
+      const dist = Math.hypot(this.b.x - this.a.x, this.b.y - this.a.y);
+      const N = currentN();
+      if (dist < 1) return;
+      const pps = dist / N;
+      // Programmatic .value assignment doesn't fire 'input' — safe.
+      gridHInput.value = String(Math.max(1, Math.round(this.imgW / pps)));
+      gridVInput.value = String(Math.max(1, Math.round(this.imgH / pps)));
+      updateGridFeedback();
+    };
+
+    gridHInput.addEventListener('input', () => {
+      autoFillCounterpart('h'); updateGridFeedback();
+      const g = solveGrid();
+      if (g.ok && g.pps !== null) repositionLineFromPps(g.pps);
+    });
+    gridVInput.addEventListener('input', () => {
+      autoFillCounterpart('v'); updateGridFeedback();
+      const g = solveGrid();
+      if (g.ok && g.pps !== null) repositionLineFromPps(g.pps);
+    });
 
     // v2.14.2 — picking a DPI back-fills H × V using the map's actual
     // pixel dimensions. Round to the nearest integer; if the map's
     // aspect doesn't divide cleanly by the picked DPI, updateGridFeedback
     // will warn "H not whole" etc. so the GM knows the assumption
     // doesn't quite fit (and can switch to the ruler or another DPI).
+    // v2.14.3 — DPI also drives the line (since it's the master here).
     dpiSelect.addEventListener('change', () => {
       const dpi = parseFloat(dpiSelect.value);
       if (!Number.isFinite(dpi) || dpi <= 0) return;
       gridHInput.value = String(Math.max(1, Math.round(this.imgW / dpi)));
       gridVInput.value = String(Math.max(1, Math.round(this.imgH / dpi)));
       updateGridFeedback();
+      repositionLineFromPps(dpi);
     });
+
+    // v2.14.3 — N is the line's "how many squares does this represent"
+    // input. Changing it doesn't move the line, but it does change the
+    // implied pps (same physical line, different square count), so
+    // H/V/DPI re-derive.
+    distInput.addEventListener('input', () => { syncInputsFromLine(); });
 
     updateGridFeedback();
 
