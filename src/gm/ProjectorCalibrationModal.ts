@@ -81,7 +81,7 @@ export class ProjectorCalibrationModal {
       <div class="pcal-frame">
         <header class="pcal-topbar">
           <div class="pcal-titlewrap">
-            <h3>Projector Calibration</h3>
+            <h3>Display Calibration</h3>
             <p class="pcal-step-blurb"></p>
           </div>
           <div class="pcal-topbar-actions">

@@ -141,8 +141,11 @@ export interface RectOverlayItem {
   /** v2.14.3 — view-broadcast indicator. Mirrors the panel-header
    *  bypass toggle ('on' = view IS broadcast / seen; 'off' = view
    *  shows the faff placeholder). Click toggles the same state, so
-   *  the eye and the header switch stay in sync. */
-  viewBroadcast?: 'on' | 'off';
+   *  the eye and the header switch stay in sync. v2.14.5 adds
+   *  'no-target' for the case where nothing is connected on the
+   *  other end — the eye dims to indicate "no one is watching
+   *  anyway" regardless of bypass state. */
+  viewBroadcast?: 'on' | 'off' | 'no-target';
   /** v2.14.3 — Show Grid icon (Scaled View only for v2.14.3; Player
    *  View grid in a later release). 'on' = grid overlay active;
    *  'off' = grid hidden. Undefined = icon not shown (e.g. map not
@@ -253,7 +256,7 @@ interface RectElements {
   lastMaximise:  'normal' | 'maximised' | null;
   lastAspect:    'apply'  | 'undo'      | null;
   lastRatioLock: 'locked' | 'unlocked'  | null;
-  lastBroadcast: 'on'     | 'off'       | null;
+  lastBroadcast: 'on'     | 'off'       | 'no-target' | null;
   lastShowGrid:  'on'     | 'off'       | null;
 }
 
@@ -594,12 +597,17 @@ export class MarkerOverlay {
     });
     if (r.viewBroadcastBtn && wantBroadcast && item.viewBroadcast !== r.lastBroadcast) {
       r.lastBroadcast = item.viewBroadcast!;
-      const on = item.viewBroadcast === 'on';
-      r.viewBroadcastBtn.title = on
-        ? 'View is being broadcast (eye open). Click to mute — players see the faff placeholder.'
-        : 'View is muted (eye closed). Players see the faff placeholder. Click to resume broadcast.';
-      r.viewBroadcastBtn.classList.toggle('marker-handle--rect-view-broadcast--off', !on);
-      r.viewBroadcastBtn.innerHTML = on
+      const state = item.viewBroadcast!;
+      const open = state === 'on';
+      const noTarget = state === 'no-target';
+      r.viewBroadcastBtn.title = noTarget
+        ? 'No client connected — nothing to broadcast to. Open a Player window or invite someone to scan the QR.'
+        : open
+          ? 'View is being broadcast (eye open). Click to mute — clients see the faff placeholder.'
+          : 'View is muted (eye closed). Clients see the faff placeholder. Click to resume broadcast.';
+      r.viewBroadcastBtn.classList.toggle('marker-handle--rect-view-broadcast--off', state === 'off');
+      r.viewBroadcastBtn.classList.toggle('marker-handle--rect-view-broadcast--no-target', noTarget);
+      r.viewBroadcastBtn.innerHTML = state !== 'off'
         ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
              <path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/>

@@ -41,19 +41,20 @@ const definition: FilterDefinition = {
     { type: 'slider', id: 'brightness',    label: 'Brightness',         min: 0.5,  max: 1.5,  step: 0.05, default: 1.0,  group: 'paper' },
 
     // Ruling — numeric select so the value injects as a float uniform.
-    //   0 = blank          1 = lined (horizontal rules)
-    //   2 = graph (blue)   3 = graph (black)
+    //   0 = blank   1 = lined (horizontal rules)   2 = grid (both axes)
+    // Colour is its own picker below — no need for "graph-blue" /
+    // "graph-black" preset variants on the style picker.
     { type: 'select', id: 'rulingStyle',   label: 'Ruling',
       options: [
         { value: 0, label: 'Blank' },
         { value: 1, label: 'Lined' },
-        { value: 2, label: 'Graph — blue'  },
-        { value: 3, label: 'Graph — black' },
+        { value: 2, label: 'Grid'  },
       ],
       default: 0, group: 'ruling',
     },
+    { type: 'color',  id: 'rulingColor',   label: 'Line Colour',        default: '#6688cc', group: 'ruling' },
     { type: 'slider', id: 'rulingSpacing', label: 'Line Spacing',       min: 12,   max: 80,   step: 1,    default: 28,   group: 'ruling' },
-    { type: 'slider', id: 'rulingOpacity', label: 'Line Opacity',       min: 0,    max: 1,    step: 0.01, default: 0.4,  group: 'ruling' },
+    { type: 'slider', id: 'rulingOpacity', label: 'Line Opacity',       min: 0,    max: 1,    step: 0.01, default: 0.85, group: 'ruling' },
 
     // Marks
     { type: 'slider', id: 'inkBlots',      label: 'Ink Blots',          min: 0,    max: 1,    step: 0.01, default: 0.0,  group: 'marks' },

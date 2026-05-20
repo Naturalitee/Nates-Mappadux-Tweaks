@@ -1,5 +1,69 @@
 # Changelog
 
+## v2.14.5 — 2026-05-20
+
+### General bug hunt from beta testing
+
+A fix-everything-Alex-spotted patch. Most touches are surface
+(chrome positions, copy, single-line behaviour fixes); the calibration
+modal got a small UX pass too.
+
+**Viewport chrome — eye icon repositioned.** The view-broadcast eye
+moved from "floating above the rect" to ON the rect's top frame,
+between the Move and Maximise icons (left: 30px). Maximise shifted
+to left: 60px so all three sit in a tidy row. The eye also gained
+a third state: **greyed** when nothing is connected on the other
+end (no Player window open, or no Scaled View connected) — clicking
+still works for pre-setting, but the visual signals "no audience".
+
+**Hold-Screen QR on the Scaled View too.** The "Not connected,
+yet?" panel that v2.14.4 added to the Player view now also appears
+on the Scaled View / projector hold screen. Both QRs point at the
+PLAYER URL (the same URL late-joiners scan to join as a player),
+not the projector's URL.
+
+**Calibration modal — DPI dropdown sticks, Current: updates live.**
+Picking a DPI from the dropdown now keeps the dropdown showing
+your picked value, even when the H × V back-fill produces a pps
+that's slightly off the chosen DPI (the round-trip rounding used
+to clear the dropdown). The "Current:" line at the bottom now
+tracks what would actually be saved as you change inputs, instead
+of frozen on the saved-at-open-time value.
+
+**Polygon-mode FoW Paint is sticky for real.** Pre-v2.14.5
+`FogEditor.closePolygon` always called its own `this.disable()`
+after committing, which clobbered the GMApp-side re-arm. The
+disable() now only runs in the legacy fallback (no
+polygon-complete handler set) — when the handler IS set, the
+handler owns the post-commit state. Polygon mode now keeps Paint
+lit and lets you queue another polygon, matching brush mode.
+
+**"Projector" → "Display" in the Scaled View user-facing copy.**
+The side-panel label, dropdown picker title, calibration modal
+heading, and launch / monitor button text all now say "Display"
+or "Scaled View" instead of "Projector". The underlying internal
+names (ProjectorApp, ProjectorViewport, calibrationStorage, etc.)
+are unchanged.
+
+**Contemporary Paper filter polish.**
+  - **Torn edges** now paint **black** where the page is torn
+    away, instead of dropping alpha to 0 (which let whatever sat
+    behind bleed through as white patches).
+  - **Ruling picker simplified** to Blank / Lined / Grid. The
+    blue / black variants are now a single **Line Colour** picker
+    — pick whatever colour you want.
+  - **Lines are much more visible** by default: opacity floor
+    raised, line width grows mildly with spacing so wider grids
+    don't look like razor-thin scratches.
+
+### Known carry-over (deferred to a later release)
+
+- **Player View Show Grid icon (#13)** — needs new player-side
+  grid rendering that resizes with the map view. Not in v2.14.5.
+- **Grid on Scaled View monitor windows** — needs data flow from
+  primary projector to monitors so they can draw a proportionally-
+  scaled grid. Not in v2.14.5.
+
 ## v2.14.4 — 2026-05-20
 
 ### Viewport cluster polish, new filter, Hold-Screen QR

@@ -134,9 +134,7 @@ export class MapCalibrationModal {
               </select>
             </div>
           </div>
-          <span class="calibration-current">${asset.pixelsPerSquare
-            ? `Current: ${asset.pixelsPerSquare.toFixed(1)} map-px per square`
-            : 'Not yet calibrated'}</span>
+          <span class="calibration-current"></span>
           <div class="calibration-actions">
             <button class="btn btn--ghost calibration-cancel">Cancel</button>
             <button class="btn btn--primary calibration-save">Save</button>
@@ -380,6 +378,25 @@ export class MapCalibrationModal {
       dpiSelect.value = match ? String(match.dpi) : '';
     };
 
+    // v2.14.5 — live "Current:" line tracks the pending pps as inputs
+    // change, instead of frozen on the saved value at open-time. Helps
+    // the GM see what would actually be saved before they click Save.
+    const currentEl = overlay.querySelector<HTMLElement>('.calibration-current');
+    const refreshCurrent = (pendingPps: number | null) => {
+      if (!currentEl) return;
+      if (pendingPps !== null && Number.isFinite(pendingPps) && pendingPps > 0) {
+        const m = matchCommonDpi(pendingPps);
+        currentEl.textContent = m
+          ? `Will save: ${pendingPps.toFixed(1)} map-px / square · ${m.label} DPI`
+          : `Will save: ${pendingPps.toFixed(1)} map-px / square`;
+      } else if (asset.pixelsPerSquare) {
+        currentEl.textContent = `Current: ${asset.pixelsPerSquare.toFixed(1)} map-px per square`;
+      } else {
+        currentEl.textContent = 'Not yet calibrated';
+      }
+    };
+    refreshCurrent(null);
+
     const updateGridFeedback = () => {
       const g = solveGrid();
       gridFeedback.classList.remove('is-ok', 'is-warn');
@@ -392,6 +409,7 @@ export class MapCalibrationModal {
           gridFeedback.textContent = '';
         }
         syncDpiSelectFromPps(null);
+        refreshCurrent(g.hPps ?? g.vPps ?? null);
         return;
       }
       // Both filled — judge cleanliness and match.
@@ -412,6 +430,7 @@ export class MapCalibrationModal {
         gridFeedback.classList.add('is-warn');
       }
       syncDpiSelectFromPps(g.pps);
+      refreshCurrent(g.pps);
     };
     // v2.14.2 — when the user fills one of H / V and leaves the other
     // empty, auto-fill the empty side assuming a square (1:1) pixel
@@ -488,12 +507,17 @@ export class MapCalibrationModal {
     // will warn "H not whole" etc. so the GM knows the assumption
     // doesn't quite fit (and can switch to the ruler or another DPI).
     // v2.14.3 — DPI also drives the line (since it's the master here).
+    // v2.14.5 — pin the picked DPI in the dropdown AFTER the round-trip
+    // (H/V derived from DPI may render a pps that's just outside the
+    // matchCommonDpi tolerance because of rounding, which would clear
+    // the dropdown otherwise).
     dpiSelect.addEventListener('change', () => {
       const dpi = parseFloat(dpiSelect.value);
       if (!Number.isFinite(dpi) || dpi <= 0) return;
       gridHInput.value = String(Math.max(1, Math.round(this.imgW / dpi)));
       gridVInput.value = String(Math.max(1, Math.round(this.imgH / dpi)));
       updateGridFeedback();
+      dpiSelect.value = String(dpi);
       repositionLineFromPps(dpi);
     });
 

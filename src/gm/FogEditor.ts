@@ -547,24 +547,25 @@ export class FogEditor {
     if (this.polygonCompleteHandler) {
       // GMApp interprets the vertices according to the current action —
       // paint adds, erase carves. State sync brings the new polygons back
-      // into FogEditor.polygons via syncPolygons.
+      // into FogEditor.polygons via syncPolygons. v2.14.5 — the handler
+      // is responsible for whether to re-arm or exit; don't clobber it
+      // with a forced disable() like the legacy path does below.
       this.polygonCompleteHandler(this.polygonAction, vertices);
-    } else {
-      // Legacy fallback: push directly to local polygons + emit.
-      const poly: FogPolygon = {
-        id:        generateId(),
-        kind:      this.activeKind,
-        vertices,
-        color:     this.activeColor,
-        createdAt: Date.now(),
-      };
-      this.polygons.push(poly);
-      this.setSelection(poly.id);
-      this.updateMarchState();
-      this.emit();
+      return;
     }
-    // Auto-exit draw mode — disable() redraws and emits the updated mode,
-    // so the action button deactivates and selection is restored.
+    // Legacy fallback: push directly to local polygons + emit, then
+    // auto-exit draw mode so the action button deactivates.
+    const poly: FogPolygon = {
+      id:        generateId(),
+      kind:      this.activeKind,
+      vertices,
+      color:     this.activeColor,
+      createdAt: Date.now(),
+    };
+    this.polygons.push(poly);
+    this.setSelection(poly.id);
+    this.updateMarchState();
+    this.emit();
     this.disable();
   }
 

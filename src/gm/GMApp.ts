@@ -727,7 +727,17 @@ export class GMApp {
     // chrome (resize / aspect / maximise) shows only while selected.
     const playerBounds = this.viewportEditor?.getRectBounds() ?? null;
     const playerBroadcastEl = document.querySelector<HTMLInputElement>('#player-broadcast-toggle');
-    const playerBroadcast: 'on' | 'off' = playerBroadcastEl?.checked === false ? 'off' : 'on';
+    // v2.14.5 — the eye reflects three states: 'on' (broadcasting and
+    // someone is connected), 'off' (broadcasting bypassed), 'no-target'
+    // (no client connected, so broadcast state is moot — eye dims).
+    // Player count = remote PeerJS players (excluding projector peers)
+    // + local same-browser player windows.
+    const projectorPeerIds = new Set(this._projectorPeerByClientId.values());
+    const remotePlayers    = Math.max(0, this.host.connectedCount - projectorPeerIds.size);
+    const totalPlayers     = remotePlayers + this.host.localPlayerCount;
+    const playerBroadcast: 'on' | 'off' | 'no-target' = totalPlayers === 0
+      ? 'no-target'
+      : (playerBroadcastEl?.checked === false ? 'off' : 'on');
     // v2.14.4 — does the player rect's current W:H match 16:9 in physical
     // (map-aspect-corrected) space? Drives the 16:9 button's colour state.
     // Use a forgiving tolerance because viewNW / viewNH are floats and a
@@ -769,7 +779,12 @@ export class GMApp {
     const projBounds = this.projectorEditor?.getRectBounds() ?? null;
     const projMaxAvailable = projSelected && this._isActiveMapCalibrated();
     const projBroadcastEl = document.querySelector<HTMLInputElement>('#projection-broadcast-toggle');
-    const projBroadcast: 'on' | 'off' = projBroadcastEl?.checked === false ? 'off' : 'on';
+    // v2.14.5 — same three-state eye logic; 'no-target' when no
+    // projector window is connected.
+    const projConnected = this.projectorConnections.size > 0;
+    const projBroadcast: 'on' | 'off' | 'no-target' = !projConnected
+      ? 'no-target'
+      : (projBroadcastEl?.checked === false ? 'off' : 'on');
     // v2.14.3 — Show Grid icon on the Scaled View rect, only on calibrated
     // maps (a 1" grid is meaningless without a known pixels-per-square).
     const projGridState: 'on' | 'off' | undefined = this._isActiveMapCalibrated()
@@ -1474,6 +1489,10 @@ export class GMApp {
       ?.classList.toggle('panel-header--no-connection', totalPlayers === 0);
     document.querySelector('#projection-panel .panel-header')
       ?.classList.toggle('panel-header--no-connection', projTotal === 0);
+
+    // v2.14.5 — refresh the rect chrome so the eye-icon "no-target"
+    // greying updates in lock-step with the panel-header fade.
+    this._refreshRectOverlays();
 
     // Hover tooltip on the session-meta line listing what we know about each
     // connected peer. Players are anonymous PeerJS peers today (real names
@@ -2631,7 +2650,7 @@ export class GMApp {
       sel.appendChild(opt);
     }
 
-    appendAddOption(sel, '+ Calibrate New Projector…');
+    appendAddOption(sel, '+ Calibrate New Display…');
 
     // Selected option reflects the LIVE state only — when nothing's running,
     // default to "No Projection" so picking the previously-active setup
@@ -2819,7 +2838,7 @@ export class GMApp {
     const el        = document.getElementById('projector-status');
     const hasPrimary = this.projectorConnections.size > 0;
     if (launchBtn) {
-      launchBtn.textContent = hasPrimary ? 'Open Projector Monitor…' : 'Open Projector Screen…';
+      launchBtn.textContent = hasPrimary ? 'Open Scaled View Monitor…' : 'Open Scaled View…';
       launchBtn.classList.toggle('btn--primary', !hasPrimary);
       launchBtn.classList.toggle('btn--ghost',    hasPrimary);
     }

@@ -21,7 +21,8 @@ uniform float uPaperGrain;
 uniform float uPaperScale;
 uniform float uBrightness;
 
-uniform float uRulingStyle;     // 0=blank, 1=lined, 2=graph-blue, 3=graph-black
+uniform float uRulingStyle;     // 0=blank, 1=lined (horizontal), 2=grid
+uniform vec3  uRulingColor;
 uniform float uRulingSpacing;
 uniform float uRulingOpacity;
 
@@ -76,35 +77,26 @@ void main() {
 
   // ── 3. Ruling overlay ────────────────────────────────────────────────
   // Spacing is in physical pixels so the lines look consistent across
-  // resolutions. Lined = horizontal-only blue rules; graph = both axes.
+  // resolutions. Lined = horizontal-only rules; Grid = both axes.
+  // Colour is whatever the user picked. Line width grows mildly with
+  // spacing so wider grids don't look like razor-thin scratches.
   if (uRulingStyle > 0.5 && uRulingOpacity > 0.001) {
     vec2 pxCoord = vUv * resolution;
     float spacing = max(4.0, uRulingSpacing);
-    // Distance to nearest gridline on each axis, in pixels.
-    float dx = abs(mod(pxCoord.x, spacing) - spacing * 0.5) - (spacing * 0.5 - 0.7);
-    float dy = abs(mod(pxCoord.y, spacing) - spacing * 0.5) - (spacing * 0.5 - 0.7);
+    float halfLine = max(0.6, spacing * 0.02);  // line half-width in px
+    float dx = abs(mod(pxCoord.x, spacing) - spacing * 0.5) - (spacing * 0.5 - halfLine);
+    float dy = abs(mod(pxCoord.y, spacing) - spacing * 0.5) - (spacing * 0.5 - halfLine);
     float lineMask = 0.0;
-    bool isLined  = uRulingStyle > 0.5 && uRulingStyle < 1.5;
-    bool isGraph  = uRulingStyle > 1.5;
+    bool isLined = uRulingStyle > 0.5 && uRulingStyle < 1.5;
+    bool isGrid  = uRulingStyle > 1.5;
     if (isLined) {
-      // Only horizontal rules (vary along Y).
-      lineMask = smoothstep(0.7, -0.7, dy);
-    } else if (isGraph) {
-      // Both axes.
-      lineMask = max(smoothstep(0.7, -0.7, dx), smoothstep(0.7, -0.7, dy));
+      lineMask = smoothstep(halfLine, -halfLine, dy);
+    } else if (isGrid) {
+      lineMask = max(smoothstep(halfLine, -halfLine, dx), smoothstep(halfLine, -halfLine, dy));
     }
-    vec3 lineColor;
-    if (uRulingStyle > 2.5) {
-      // Graph black.
-      lineColor = vec3(0.08);
-    } else if (uRulingStyle > 1.5) {
-      // Graph blue (school exercise-book blue).
-      lineColor = vec3(0.40, 0.55, 0.85);
-    } else {
-      // Lined blue.
-      lineColor = vec3(0.40, 0.55, 0.85);
-    }
-    col = mix(col, lineColor, lineMask * uRulingOpacity * 0.55);
+    // Direct mix - no extra 0.55 attenuation. uRulingOpacity goes
+    // 0..1 so the user gets the full range and lines actually show.
+    col = mix(col, uRulingColor, lineMask * uRulingOpacity);
   }
 
   // ── 4. Ink blots + smudges ───────────────────────────────────────────
@@ -133,25 +125,25 @@ void main() {
   }
 
   // ── 6. Torn edges ────────────────────────────────────────────────────
-  // Ragged opacity mask that eats into the image at the borders. The
-  // noise threshold drifts with vUv distance-to-edge so the tear stays
-  // confined to the perimeter and gets wilder as torn ramps up.
-  float alpha = src.a;
+  // Ragged BLACK mask that eats into the image at the borders. v2.14.5
+  // — previously this dropped alpha to 0, which let whatever sat behind
+  // the filter pass through (the user saw white patches where the next
+  // pass / clear colour bled in). Torn means torn; the page just isn't
+  // there. Hard black reads cleanly against any underlying letterbox.
   if (uTorn > 0.001) {
     vec2 d = min(vUv, 1.0 - vUv);
     float edgeDist = min(d.x, d.y);                  // 0 at edge → 0.5 at centre
     float band = 0.03 + 0.10 * uTorn;
     if (edgeDist < band) {
       float n = fbm2(vUv * 18.0);
-      // Closer to edge -> easier to tear away.
       float t = 1.0 - (edgeDist / band);
       float tear = step(0.55 - uTorn * 0.35, n * t);
-      alpha *= 1.0 - tear;
+      col = mix(col, vec3(0.0), tear);
     }
   }
 
   // ── Brightness + clamp ───────────────────────────────────────────────
   col *= uBrightness;
   col = clamp(col, 0.0, 1.0);
-  gl_FragColor = vec4(col, alpha);
+  gl_FragColor = vec4(col, src.a);
 }

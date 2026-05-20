@@ -425,18 +425,24 @@ body.projector-view .marker-overlay {
   color: #fff;
 }
 
-/* v2.14.3 — view-broadcast eye icon. Sits just outside the rect, above
-   the top-left move handle. Mirrors the panel-header bypass toggle.
-   Red tint when broadcast is OFF (matching the marker "hidden" badge). */
+/* v2.14.3 — view-broadcast eye icon. v2.14.5 moved to top:0, left:30
+   so it sits ON THE FRAME between the Move and Maximise icons.
+   Red tint when broadcast is OFF (matching the marker "hidden" badge).
+   Greyed when nothing on the other end is connected (no targets to
+   broadcast to, regardless of bypass state). */
 .marker-handle--rect-view-broadcast {
-  top: -30px;
-  left: 0;
+  top: 0;
+  left: 30px;
   cursor: pointer;
 }
 .marker-handle--rect-view-broadcast--off {
   background: rgba(220, 38, 38, 0.92);
   border-color: #fff;
   color: #fff;
+}
+.marker-handle--rect-view-broadcast--no-target {
+  opacity: 0.45;
+  cursor: default;
 }
 
 /* v2.14.3 — aspect-ratio LOCK toggle. Sits above the resize handle in
@@ -454,12 +460,15 @@ body.projector-view .marker-overlay {
   color: #fff;
 }
 
-/* Maximise / aspect-lock buttons — top edge, in a row to the right of the
-   move handle. Move centre at (0,0); each subsequent 26 px circle is
-   offset by 30 px (handle width + 4 px gap). */
+/* v2.14.5 — top-edge button row, moved-handle-anchored:
+     left:0  Move
+     left:30 View-broadcast eye
+     left:60 Maximise
+   The eye lives on the frame between Move and Maximise (Alex's call —
+   the prior "top:-30, outside the rect" position looked detached). */
 .marker-handle--rect-maximise {
   top: 0;
-  left: 30px;
+  left: 60px;
   cursor: pointer;
 }
 /* v2.14.4 — 16:9 snap button. Moved to the bottom-right viewport

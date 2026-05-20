@@ -533,9 +533,31 @@ export class ProjectorApp {
       el.className = 'faff-overlay';
       el.innerHTML =
         '<img class="faff-overlay__logo" src="/icons/icon-192.png" alt="Mappadux" />' +
-        '<div class="faff-overlay__message"></div>';
+        '<div class="faff-overlay__message"></div>' +
+        '<div class="faff-overlay__connect">' +
+          '<div class="faff-overlay__connect-label">Not connected, yet?</div>' +
+          '<canvas class="faff-overlay__qr" width="160" height="160"></canvas>' +
+          '<div class="faff-overlay__url"></div>' +
+        '</div>';
       document.body.appendChild(el);
       this._faffOverlayEl = el;
+      // v2.14.5 — same recruitment-poster QR as the player hold screen.
+      // The QR points at the PLAYER URL (not the projector's), since
+      // late-joiners scan it to join as a player. Same origin + room
+      // code, just a different path.
+      const qrCanvas = el.querySelector<HTMLCanvasElement>('.faff-overlay__qr');
+      const urlEl    = el.querySelector<HTMLElement>('.faff-overlay__url');
+      const room = window.location.hash.replace(/^#/, '');
+      const playerUrl = `${window.location.origin}/player${room ? '#' + room : ''}`;
+      if (urlEl) urlEl.textContent = playerUrl;
+      if (qrCanvas) {
+        void import('qrcode').then(({ default: QRCode }) =>
+          QRCode.toCanvas(qrCanvas, playerUrl, {
+            width: 160,
+            color: { dark: '#c8d8e8', light: '#0a0e1a' },
+          })
+        ).catch(() => { /* QR is non-critical */ });
+      }
     }
     const msgEl = this._faffOverlayEl.querySelector<HTMLElement>('.faff-overlay__message');
     if (msgEl) msgEl.textContent = message;
