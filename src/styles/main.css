@@ -462,10 +462,32 @@ body.projector-view .marker-overlay {
   left: 30px;
   cursor: pointer;
 }
+/* v2.14.4 — 16:9 snap button. Moved to the bottom-right viewport
+   chrome cluster (above the ratio-lock, which sits above the resize)
+   so all the rect's aspect controls live in the same area. */
 .marker-handle--rect-aspect {
-  top: 0;
-  left: 60px;
+  top: calc(100% - 60px);
+  left: 100%;
   cursor: pointer;
+}
+/* Current rect IS 16:9 — green to signal "you're here already". */
+.marker-handle--rect-aspect--current {
+  background: rgba(34, 197, 94, 0.92);
+  border-color: #fff;
+  color: #fff;
+}
+/* Current IS 16:9 but ratio-lock is engaged — the snap is moot
+   (you're at 16:9 already and locked), so ghost the green. */
+.marker-handle--rect-aspect--ghosted {
+  background: rgba(34, 197, 94, 0.45);
+  border-color: rgba(255, 255, 255, 0.6);
+  color: rgba(255, 255, 255, 0.7);
+}
+/* Current is NOT 16:9 and ratio-lock is engaged — clicking the snap
+   would fight the lock, so disabled-grey. */
+.marker-handle--rect-aspect--disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
 }
 
 /* Selection ring — dashed rectangle around the icon body, plus a small

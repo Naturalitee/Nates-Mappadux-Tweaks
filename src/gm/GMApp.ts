@@ -728,6 +728,21 @@ export class GMApp {
     const playerBounds = this.viewportEditor?.getRectBounds() ?? null;
     const playerBroadcastEl = document.querySelector<HTMLInputElement>('#player-broadcast-toggle');
     const playerBroadcast: 'on' | 'off' = playerBroadcastEl?.checked === false ? 'off' : 'on';
+    // v2.14.4 — does the player rect's current W:H match 16:9 in physical
+    // (map-aspect-corrected) space? Drives the 16:9 button's colour state.
+    // Use a forgiving tolerance because viewNW / viewNH are floats and a
+    // pixel of slop on either side shouldn't drop the indicator.
+    const playerView = this.state.snapshot().view;
+    let playerIs16x9 = false;
+    if (playerView && playerSelected) {
+      const mapAspect = this.mapAspectRatio || 1;
+      const physW = playerView.viewNW * mapAspect;
+      const physH = playerView.viewNH;
+      if (physH > 1e-6) {
+        const ratio = physW / physH;
+        playerIs16x9 = Math.abs(ratio - 16 / 9) < 0.01;
+      }
+    }
     this._markerOverlay.updateRect('player', playerBounds
       ? {
           ...playerBounds,
@@ -739,9 +754,10 @@ export class GMApp {
           viewBroadcast: playerBroadcast,
           ...(playerSelected ? {
             aspectLock:      this._playerAspectUndo ? 'undo' : 'apply',
+            aspectIs16x9:    playerIs16x9,
             maximise:        this._playerMaxRestore ? 'maximised' : 'normal',
             // v2.14.3 — continuous aspect-ratio lock toggle.
-            aspectRatioLock: (this.state.snapshot().view?.aspectLocked) ? 'locked' : 'unlocked',
+            aspectRatioLock: (playerView?.aspectLocked) ? 'locked' : 'unlocked',
           } : {}),
         }
       : null,

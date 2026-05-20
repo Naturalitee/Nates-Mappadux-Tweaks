@@ -127,6 +127,11 @@ export interface RectOverlayItem {
   /** Player-only: show aspect-lock button. `pendingUndo` swaps the icon
    *  to "undo" so a second click reverts to the pre-snap bounds. */
   aspectLock?: 'apply' | 'undo';
+  /** v2.14.4 — whether the rect's current W:H matches 16:9 (in physical /
+   *  map-aspect-corrected space). Drives the green/ghosted colour state
+   *  of the 16:9 button. Independent of `aspectLock` (which is the
+   *  pending action, apply vs undo). */
+  aspectIs16x9?: boolean;
   /** v2.14.3 — player-only: continuous-resize aspect lock toggle.
    *  When 'locked', the resize handle preserves the rect's current
    *  aspect ratio. When 'unlocked' (or undefined), resize is free.
@@ -535,6 +540,20 @@ export class MarkerOverlay {
              <polyline points="3 4 3 9 8 9"/>
            </svg>`
         : `<span style="font: 700 8px/1 system-ui,sans-serif; letter-spacing:-0.5px;">16:9</span>`;
+    }
+    // v2.14.4 — colour-state modifiers for the 16:9 button. Read from
+    // aspectIs16x9 + aspectRatioLock, both of which can change without
+    // aspectLock changing, so this runs independently of the cache key.
+    if (r.aspectBtn && wantAspect) {
+      const is16x9    = !!item.aspectIs16x9;
+      const isLocked  = item.aspectRatioLock === 'locked';
+      // Green when current IS 16:9 and the lock is off. Ghosted-green
+      // when current IS 16:9 AND the lock is on (the lock would block
+      // a click, but the indicator still earns its green). Greyed when
+      // current is NOT 16:9 AND the lock is on (lock blocks snap).
+      r.aspectBtn.classList.toggle('marker-handle--rect-aspect--current',  is16x9 && !isLocked);
+      r.aspectBtn.classList.toggle('marker-handle--rect-aspect--ghosted',  is16x9 && isLocked);
+      r.aspectBtn.classList.toggle('marker-handle--rect-aspect--disabled', !is16x9 && isLocked);
     }
 
     // v2.14.3 — Show Grid icon (Scaled View). Active state changes
