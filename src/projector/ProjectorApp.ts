@@ -189,6 +189,14 @@ export class ProjectorApp {
       this.markerTexture.setAspectRatio(aspect);
       this.markerSprites.setAspectRatio(aspect);
       this._renderMarkers();
+      // v2.14.8 — recompute the calibrated view now that the renderer
+      // knows the new map's aspect ratio. _applyView is also called
+      // synchronously inside the map_change handler, but at that point
+      // the texture is still decoding and renderer.aspectRatio is
+      // whatever the *previous* map left behind, so setView produced
+      // a frustum sized to the old aspect. Re-fire here once the new
+      // aspect lands.
+      this._applyView();
     };
     this.renderer.start();
 
@@ -199,6 +207,19 @@ export class ProjectorApp {
       this._sendHello();
       this._applyView();
     });
+    // v2.14.8 — also recompute on every canvas resize. The window
+    // 'resize' event may be debounced or fire AFTER the Renderer's
+    // own ResizeObserver, in which case the renderer's refreshCamera
+    // re-applies a stale viewNW (computed from the old window dims)
+    // against the new canvas size — that's player-style fit-to-window
+    // scaling and defeats the whole point of calibrated Scaled View.
+    // Listening here makes viewNW recompute synchronously alongside
+    // every canvas size change so calibration holds during interactive
+    // drags.
+    try {
+      const ro = new ResizeObserver(() => this._applyView());
+      ro.observe(this.rendererCanvas);
+    } catch { /* ResizeObserver unsupported — window.resize fallback still fires */ }
 
     // Notify the GM on window close so it can drop our slot from its
     // connection map and re-shuffle monitor roles cleanly (BroadcastChannel

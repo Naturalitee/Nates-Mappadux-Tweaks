@@ -1,5 +1,47 @@
 # Changelog
 
+## v2.14.8 — 2026-05-20
+
+### Fix: Scaled View calibration lost on window resize
+
+A nasty regression Alex caught — the whole point of Scaled View is
+that resizing the projector window changes WHICH part of the map
+fills the window, but keeps each map pixel at the calibrated
+physical size (1″ on the map = 1″ on the table). Instead the
+projector was scaling the map content with the window, defeating
+the calibration.
+
+Root cause was an ordering issue between the Renderer's internal
+`ResizeObserver` (which fires on every canvas resize and re-applies
+the *currently stored* view) and the projector's `window.resize`
+listener (which is what actually recomputes `viewNW` from new
+dimensions). During an interactive drag, the renderer's RO could
+fire before the new view was computed, paint with stale `viewNW`
+against the new canvas size — which is exactly fit-to-window
+player-style scaling.
+
+Fix: register a second `ResizeObserver` in ProjectorApp on the
+renderer canvas. It fires *after* the renderer's own RO in the
+same RO batch (so before any paint) and re-calls `_applyView()`
+to drive a fresh `viewNW`. The renderer's stale-view setView still
+runs first, but the final `setView` before rAF carries the
+correct camera frustum, so the next paint is calibrated.
+
+The grid overlay was unaffected (it's drawn against the projector's
+own calibration in CSS pixels, not via the Three.js camera), which
+is why "the grid lines stay the right size" while the map scaled.
+
+**Also — map-switch path was paying the same cost.** `_applyView()`
+fires synchronously inside the `map_change` handler, but at that
+point `renderer.loadMap(blob)` has only kicked off; the texture
+is still decoding and `renderer.aspectRatio` still carries the
+PREVIOUS map's aspect, so the frustum gets sized wrong on the
+first paint of the new map. Wired `_applyView()` into the
+`onMapLoaded` callback as well, so the camera re-fits the new
+map's aspect the moment the texture lands. Likely the root cause
+of "returning to a map doesn't update the projection view
+correctly".
+
 ## v2.14.7 — 2026-05-20
 
 ### Contemporary Paper ruling inversion (real fix this time)
