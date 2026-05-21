@@ -1,5 +1,36 @@
 # Changelog
 
+## v2.14.9 — 2026-05-20
+
+### Scaled View calibration — actual root cause this time
+
+v2.14.8 fixed two real bugs (resize-ordering + map-switch aspect)
+but Alex's screenshots showed the calibration was still wrong.
+The remaining cause was a `Math.min(1, ...)` clamp in
+`_computeViewState`:
+
+```
+const viewNW = Math.min(1, wMap / this.mapImageWidth);
+const viewNH = Math.min(1, hMap / this.mapImageHeight);
+```
+
+The intent was "viewNW is a fraction of the visible map". But the
+moment the projector window grew bigger than what calibration
+would fill with the *entire* map (i.e. `wMap > mapImageWidth`),
+`viewNW` capped at 1 — the renderer then showed the full map
+fit-to-window, which is exactly the player-style scaling Alex saw.
+The grid stayed correct because it draws in CSS pixels against
+the projector's own calibration, independent of the camera.
+
+Fix: drop the clamp. When the window is bigger than the calibrated
+map footprint, `viewNW` is allowed to exceed 1 and the camera
+frustum spans wider than the map plane. The map renders at its
+calibrated physical size and the world beyond the plane reads as
+the background colour — empty space surrounds the map instead of
+the map stretching to fill the window. Calibration now holds at
+any window size; the only thing that changes is how much of the
+map (or how much padding) fits in view.
+
 ## v2.14.8 — 2026-05-20
 
 ### Fix: Scaled View calibration lost on window resize

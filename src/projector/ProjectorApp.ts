@@ -679,13 +679,24 @@ export class ProjectorApp {
 
     // 'scaled' — derive from calibration. Falls back to fit-to-window if any
     // input is missing (which D9 will surface as a clear warning).
+    //
+    // v2.14.9 — viewNW / viewNH are intentionally NOT clamped to 1. When
+    // the projector window is bigger than what calibration would fill
+    // with the entire map, we WANT viewNW > 1: the camera frustum then
+    // spans wider than the map plane, the map renders at its calibrated
+    // physical size, and the empty world beyond the plane reads as
+    // background colour. The previous Math.min(1, ...) clamp silently
+    // dropped back to fit-to-window the moment the window exceeded the
+    // map's calibrated footprint — that's the bug Alex caught where
+    // resizing the window resized the map content instead of revealing
+    // more (or less) of it.
     if (this.setup && this.mapPixelsPerSquare && this.mapImageWidth > 0 && this.mapImageHeight > 0) {
       const eff    = this._effectiveDims();
       const ratio  = this.mapPixelsPerSquare / this.setup.pixelsPerSquare;
       const wMap   = eff.w * ratio;
       const hMap   = eff.h * ratio;
-      const viewNW = Math.min(1, wMap / this.mapImageWidth);
-      const viewNH = Math.min(1, hMap / this.mapImageHeight);
+      const viewNW = wMap / this.mapImageWidth;
+      const viewNH = hMap / this.mapImageHeight;
       return {
         centerX: this.projectorViewport.centerX,
         centerY: this.projectorViewport.centerY,
