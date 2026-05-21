@@ -1,7 +1,7 @@
 import { Guest } from '../p2p/Guest.ts';
 import { generateId } from '../utils/id.ts';
-import { bindFullscreenButton } from '../utils/fullscreen.ts';
-import QRCode from 'qrcode';
+import { Viewer } from '../viewers/Viewer.ts';
+import { PROFILE_PLAYER } from '../viewers/profiles.ts';
 import { decodeImageBitmap } from '../utils/decodeImageBitmap.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { MarkerTexture } from '../rendering/MarkerTexture.ts';
@@ -59,7 +59,11 @@ export class PlayerApp {
   private _posAudioEls  = new Map<string, HTMLAudioElement>();
   /** assetId → URL so re-plays (late join / random fires) don't need the data resent */
   private _posAssetUrls = new Map<string, string>();
-  private _muteIndicatorEl: HTMLElement | null = null;
+  /** v2.15 — shared viewer chrome (lifecycle close, fullscreen button,
+   *  faff hold-screen with QR, mute indicator). The PlayerApp keeps
+   *  rendering / P2P / message dispatch for now; later phases will
+   *  fold more of the surface into Viewer too. */
+  private viewer!: Viewer;
   // ── Motion-tracker overlay (rings + return blobs broadcast by the GM) ──────
   private _trackerScans: MotionOverlayScan[] = [];
   private _trackerBlobs: MotionOverlayBlob[] = [];
@@ -106,21 +110,13 @@ export class PlayerApp {
   private _heartbeatInterval: number | null = null;
 
   async init(): Promise<void> {
-    const fsBtn = document.getElementById('player-fullscreen-btn');
-    if (fsBtn) bindFullscreenButton(fsBtn);
-
-    // v2.14.2 — listen for the GM's "I am closing" lifecycle signal so
-    // this spawned popup self-closes when the main Mappadux window
-    // shuts down. Same-origin BroadcastChannel; only fires on local
-    // popups (network player tabs don't share the channel).
-    try {
-      const lifecycle = new BroadcastChannel('mappadux:lifecycle');
-      lifecycle.onmessage = (e) => {
-        if (e?.data?.kind === 'gm-closing') {
-          try { window.close(); } catch { /* no-op */ }
-        }
-      };
-    } catch { /* BroadcastChannel unavailable — popup stays open, harmless */ }
+    // v2.15 — shared chrome (lifecycle close, fullscreen button, faff
+    // overlay + QR, mute indicator) is owned by Viewer now. Profile-
+    // driven so future viewer kinds slot in without forking files.
+    this.viewer = new Viewer(PROFILE_PLAYER, {
+      fullscreenBtn: document.getElementById('player-fullscreen-btn'),
+    });
+    this.viewer.init();
 
     this.renderer = new Renderer(
       document.querySelector<HTMLCanvasElement>('#renderer-canvas')!,
@@ -196,7 +192,7 @@ export class PlayerApp {
     document.addEventListener('contextmenu', (e) => e.preventDefault());
 
     // Show "Muted" indicator immediately — player starts muted
-    this._showMuteIndicator();
+    this.viewer.showMuteIndicator(this.sbMuted);
   }
 
   private _recoverRenderer(): void {
@@ -583,7 +579,7 @@ export class PlayerApp {
 
       case 'view_placeholder': {
         if (msg.target !== 'player') break;
-        this._showFaffOverlay(msg.show, msg.message);
+        this.viewer.showFaffOverlay(msg.show, msg.message);
         break;
       }
 
@@ -741,7 +737,7 @@ export class PlayerApp {
 
   private _toggleMute(): void {
     this._applyMute(!this.sbMuted);
-    this._showMuteIndicator();
+    this.viewer.showMuteIndicator(this.sbMuted);
   }
 
   /**
@@ -775,67 +771,9 @@ export class PlayerApp {
     }
   }
 
-  private _faffOverlayEl: HTMLElement | null = null;
-
-  /** Renders the "Hold on while the GM faffs…" placeholder over the map.
-   *  The map continues to update underneath so resuming is instant.
-   *
-   *  v2.14.4 — also surfaces a "Not connected, yet?" QR + URL panel
-   *  below the message. The currently-connected player's own URL is
-   *  the same URL latecomers would scan, so we can render it from
-   *  window.location with no extra state. Helps the GM's second
-   *  screen and any already-connected player help bring others in. */
-  private _showFaffOverlay(show: boolean, message: string): void {
-    if (!show) {
-      this._faffOverlayEl?.remove();
-      this._faffOverlayEl = null;
-      return;
-    }
-    if (!this._faffOverlayEl) {
-      const el = document.createElement('div');
-      el.className = 'faff-overlay';
-      el.innerHTML =
-        '<img class="faff-overlay__logo" src="/icons/icon-192.png" alt="Mappadux" />' +
-        '<div class="faff-overlay__message"></div>' +
-        '<div class="faff-overlay__connect">' +
-          '<div class="faff-overlay__connect-label">Not connected, yet?</div>' +
-          '<canvas class="faff-overlay__qr" width="160" height="160"></canvas>' +
-          '<div class="faff-overlay__url"></div>' +
-        '</div>';
-      document.body.appendChild(el);
-      this._faffOverlayEl = el;
-      // Render the QR once — the URL doesn't change for the session.
-      const qrCanvas = el.querySelector<HTMLCanvasElement>('.faff-overlay__qr');
-      const urlEl    = el.querySelector<HTMLElement>('.faff-overlay__url');
-      const url = window.location.href;
-      if (urlEl) urlEl.textContent = url;
-      if (qrCanvas) {
-        // Same palette as the GM panel's QR (light fg on dark bg) so it
-        // reads consistently in either screen.
-        void QRCode.toCanvas(qrCanvas, url, {
-          width: 160,
-          color: { dark: '#c8d8e8', light: '#0a0e1a' },
-        }).catch(() => { /* QR is non-critical */ });
-      }
-    }
-    const msgEl = this._faffOverlayEl.querySelector<HTMLElement>('.faff-overlay__message');
-    if (msgEl) msgEl.textContent = message;
-  }
-
-  private _showMuteIndicator(): void {
-    if (!this._muteIndicatorEl) {
-      const el = document.createElement('div');
-      el.className = 'mute-indicator';
-      document.body.appendChild(el);
-      this._muteIndicatorEl = el;
-    }
-    const el = this._muteIndicatorEl;
-    el.textContent = this.sbMuted ? '🔇 Muted' : '🔊 Audio on';
-    el.classList.remove('mute-indicator--hiding');
-    if (!this.sbMuted) {
-      setTimeout(() => { this._muteIndicatorEl?.classList.add('mute-indicator--hiding'); }, 1500);
-    }
-  }
+  // v2.15 — _showFaffOverlay, _showMuteIndicator, _faffOverlayEl,
+  // _muteIndicatorEl all lifted into Viewer. Callers use
+  // this.viewer.showFaffOverlay / this.viewer.showMuteIndicator.
 
   // ─── Positional audio ─────────────────────────────────────────────────────
 

@@ -10,6 +10,8 @@ import {
 } from './calibrationStorage.ts';
 import { ProjectorCalibrationModal } from '../gm/ProjectorCalibrationModal.ts';
 import { bindFullscreenButton } from '../utils/fullscreen.ts';
+import { Viewer } from '../viewers/Viewer.ts';
+import { PROFILE_SCALED } from '../viewers/profiles.ts';
 import { decodeImageBitmap } from '../utils/decodeImageBitmap.ts';
 import { generateId } from '../utils/id.ts';
 import {
@@ -65,6 +67,11 @@ export class ProjectorApp {
   private noMapEl!:         HTMLElement;
   private uncalWarnEl!:     HTMLElement;
   private rendererCanvas!:  HTMLCanvasElement;
+  /** v2.15 — shared chrome (lifecycle close, faff hold-screen with
+   *  QR). Fullscreen + monitor-badge / calibration-warning stay
+   *  ProjectorApp-local for now because of the rebind-on-monitor
+   *  quirk and the projector-specific overlay surface. */
+  private viewer!: Viewer;
   private fsUnbind:         (() => void) | null = null;
   private fsBtn:            HTMLElement | null = null;
   private idleTimer:        ReturnType<typeof setTimeout> | null = null;
@@ -109,16 +116,13 @@ export class ProjectorApp {
     this.setupLabelEl    = this.controlsEl.querySelector<HTMLElement>('.projector-setup-label')!;
     this.rendererCanvas  = document.getElementById('renderer-canvas') as HTMLCanvasElement;
 
-    // v2.14.2 — self-close when the GM window broadcasts its closing
-    // signal. Same-origin only; remote viewers don't share the channel.
-    try {
-      const lifecycle = new BroadcastChannel('mappadux:lifecycle');
-      lifecycle.onmessage = (e) => {
-        if (e?.data?.kind === 'gm-closing') {
-          try { window.close(); } catch { /* no-op */ }
-        }
-      };
-    } catch { /* BroadcastChannel unavailable — window stays open */ }
+    // v2.15 — shared chrome (lifecycle close, faff overlay + QR) via
+    // Viewer. Fullscreen stays ProjectorApp-local because of the
+    // monitor-mode rebind ProjectorApp does later in this file.
+    // ProjectorApp tells Viewer "skip the fullscreen binding" by
+    // passing fullscreenBtn: null even though the profile flag is true.
+    this.viewer = new Viewer(PROFILE_SCALED, { fullscreenBtn: null });
+    this.viewer.init();
 
     // 1" grid overlay — sits above the renderer, below the black-out.
     this.gridCanvas = document.createElement('canvas');
@@ -507,7 +511,7 @@ export class ProjectorApp {
       }
       case 'view_placeholder': {
         if (msg.target !== 'projector') break;
-        this._showFaffOverlay(msg.show, msg.message);
+        this.viewer.showFaffOverlay(msg.show, msg.message);
         break;
       }
       case 'view_update': {
@@ -538,51 +542,9 @@ export class ProjectorApp {
     }
   }
 
-  private _faffOverlayEl: HTMLElement | null = null;
-
-  /** Renders the "Hold on while the GM faffs…" placeholder over the
-   *  projector output. The map continues to update underneath so the
-   *  resume is instant. */
-  private _showFaffOverlay(show: boolean, message: string): void {
-    if (!show) {
-      this._faffOverlayEl?.remove();
-      this._faffOverlayEl = null;
-      return;
-    }
-    if (!this._faffOverlayEl) {
-      const el = document.createElement('div');
-      el.className = 'faff-overlay';
-      el.innerHTML =
-        '<img class="faff-overlay__logo" src="/icons/icon-192.png" alt="Mappadux" />' +
-        '<div class="faff-overlay__message"></div>' +
-        '<div class="faff-overlay__connect">' +
-          '<div class="faff-overlay__connect-label">Not connected, yet?</div>' +
-          '<canvas class="faff-overlay__qr" width="160" height="160"></canvas>' +
-          '<div class="faff-overlay__url"></div>' +
-        '</div>';
-      document.body.appendChild(el);
-      this._faffOverlayEl = el;
-      // v2.14.5 — same recruitment-poster QR as the player hold screen.
-      // The QR points at the PLAYER URL (not the projector's), since
-      // late-joiners scan it to join as a player. Same origin + room
-      // code, just a different path.
-      const qrCanvas = el.querySelector<HTMLCanvasElement>('.faff-overlay__qr');
-      const urlEl    = el.querySelector<HTMLElement>('.faff-overlay__url');
-      const room = window.location.hash.replace(/^#/, '');
-      const playerUrl = `${window.location.origin}/player${room ? '#' + room : ''}`;
-      if (urlEl) urlEl.textContent = playerUrl;
-      if (qrCanvas) {
-        void import('qrcode').then(({ default: QRCode }) =>
-          QRCode.toCanvas(qrCanvas, playerUrl, {
-            width: 160,
-            color: { dark: '#c8d8e8', light: '#0a0e1a' },
-          })
-        ).catch(() => { /* QR is non-critical */ });
-      }
-    }
-    const msgEl = this._faffOverlayEl.querySelector<HTMLElement>('.faff-overlay__message');
-    if (msgEl) msgEl.textContent = message;
-  }
+  // v2.15 — _showFaffOverlay + _faffOverlayEl lifted into Viewer.
+  // PROFILE_SCALED.chrome.qrTarget = 'player' so the QR points at
+  // /player#room, just like the local implementation used to.
 
   /**
    * Apply (or skip) the current filter on the renderer based on the
