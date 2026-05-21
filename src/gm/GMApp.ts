@@ -2893,8 +2893,17 @@ export class GMApp {
 
     // Wire context-sensitive toolbar.
     this.fogEditor.setOnModeChange(({ drawing, hasSelection, selectedId }) => {
-      // Restore marker interaction whenever draw mode ends.
-      this.markerEditor?.setPointerCapture(!drawing);
+      // v2.14.12 — markers stay disabled whenever ANY fog editing tool
+      // is armed, not just polygon-mode `drawing`. Pre-fix the callback
+      // only checked `drawing` (FogEditor.enabled, which is polygon
+      // mode), so a state cascade triggered while brush or fill was
+      // armed (e.g. tolerance-slider drag re-firing emitMode via
+      // syncPolygons) would silently flip markers pointer-events back
+      // to auto. The markers canvas then absorbed the next click,
+      // reading as "fill no longer accepting input" even though
+      // PAINTING was still lit and `_actionInProgress` was true.
+      const fogEditing = drawing || this._actionInProgress;
+      this.markerEditor?.setPointerCapture(!fogEditing);
       // Polygon commits go through _commitOverlayPolygon → _endAction so
       // the action buttons reset; nothing to do here besides marker
       // pointer-capture handling above.

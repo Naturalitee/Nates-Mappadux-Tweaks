@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.14.12 — 2026-05-20
+
+### Fix: tolerance slider knocking fill out
+
+v2.14.11 patched the click-event path that was re-enabling markers
+pointer capture after a fill commit. Alex caught the same root
+cause hitting a different trigger: dragging the Tolerance slider
+re-fires `state.setFog` → `syncPolygons` → `emitMode` → GMApp's
+`onModeChange` callback. The callback ran
+`markerEditor.setPointerCapture(!drawing)` — `drawing` is
+`FogEditor.enabled` (polygon mode), `false` in fill mode, so the
+markers canvas flipped back to `pointer-events: auto`. Next canvas
+click hit the markers canvas instead of triggering another fill.
+PAINTING stayed lit (correctly — fill was still armed
+internally), but Alex's experience was "I'm out of paint mode".
+
+Root-cause fix: widen the callback's "fog is editing" check to
+include `_actionInProgress`. Markers stay disabled whenever ANY
+fog tool is armed (polygon / brush / fill), not just polygon mode.
+The slider can refine the last fill without disturbing the
+re-armed state, and another canvas click lays the next fill.
+
 ## v2.14.11 — 2026-05-20
 
 ### Fix: Fill re-arm losing pointer capture after first commit
