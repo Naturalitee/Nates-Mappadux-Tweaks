@@ -1,5 +1,37 @@
 # Changelog
 
+## v2.14.11 — 2026-05-20
+
+### Fix: Fill re-arm losing pointer capture after first commit
+
+Alex caught this on v2.14.10 testing: PAINTING stayed lit after a
+fill, the slider continued working, but the cursor reverted from
+`cell` (the fill `+`) to `grab` (the GM canvas pan cursor), and a
+second canvas click did nothing. Two clicks on PAINTING / Paint /
+PAINTING were needed to re-engage.
+
+Root cause: after `_commitOverlayFill` completes its re-arm, the
+SAME pointer's `click` event fires immediately afterwards (the
+pointerdown's `preventDefault()` doesn't always suppress the
+synthesized click). The FogEditor's click handler called
+`handlePointerTap` → `trySelect`, which **selected the polygon
+that was just filled**. Selection fired `emitMode` with
+`hasSelection: true`. The GMApp's `onModeChange` callback then ran
+`markerEditor.setPointerCapture(!drawing)` — `drawing` is `false`
+in fill mode, so this flipped the markers canvas back to
+`pointer-events: auto`. The markers canvas sits above the fog
+canvas, so the user lost the `cell` cursor and the next click hit
+the markers canvas instead of triggering another fill.
+
+The actual re-arm logic in `_endActionAndRearm` was working
+correctly all along; the click event's side effect was silently
+undoing the pointer-capture release.
+
+Fix: the FogEditor `click` and `touchend` handlers now short-
+circuit when `fillActive` is true, matching the existing guard for
+`brushActive`. Fill clicks are owned by the pointerdown path
+exclusively — no fall-through to the legacy polygon-tap selection.
+
 ## v2.14.10 — 2026-05-20
 
 ### Three fix-needed items from Alex's structured v2.15-scope review

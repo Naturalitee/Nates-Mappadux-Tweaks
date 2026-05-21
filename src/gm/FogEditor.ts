@@ -425,7 +425,18 @@ export class FogEditor {
 
   private bindEvents(): void {
     this.canvas.addEventListener('click',       (e) => {
-      if (this.brushActive) return; // brush owns the canvas — no polygon taps
+      // v2.14.11 — fill must also short-circuit the polygon-tap path.
+      // Pre-fix the click event still fired after a fill pointerdown
+      // (the pointerdown handler's preventDefault doesn't always
+      // suppress the synthesized click), so trySelect ran on the
+      // just-placed fill polygon, selection-emitMode fired, and the
+      // GMApp's onModeChange callback flipped markerEditor pointer-
+      // capture back on. Result: the user lost the cell cursor + the
+      // fog canvas stopped receiving clicks, reading as "Fill is no
+      // longer armed for another click" even though PAINTING stayed
+      // lit. The actual re-arm worked; the click-event side-effect
+      // immediately undid the pointer-capture release.
+      if (this.brushActive || this.fillActive) return;
       this.handlePointerTap(this.eventToNorm(e));
     });
     this.canvas.addEventListener('contextmenu', (e) => { e.preventDefault(); this.cancelCurrent(); });
@@ -445,7 +456,7 @@ export class FogEditor {
 
     this.canvas.addEventListener('touchend', (e) => {
       e.preventDefault();
-      if (this.brushActive) return; // brush ignores tap-to-add-poly
+      if (this.brushActive || this.fillActive) return; // brush + fill own the canvas
       const t = e.changedTouches[0];
       if (t) {
         const pos = this.touchToNorm(t);
