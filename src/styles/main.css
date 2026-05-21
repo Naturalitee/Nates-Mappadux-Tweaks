@@ -4064,6 +4064,27 @@ option.select-option--add {
   color: var(--text);
 }
 .upload-drop-label { margin: 0; pointer-events: none; }
+
+/* v2.14.10 — when the Paint or Erase action is armed, the button
+   gets the is-active class. Swap its label to a present-continuous
+   "PAINTING" / "ERASING" so the live state reads at a glance — the
+   green colour change wasn't enough signal on its own for the
+   sticky Polygon/Brush/Fill flow. We render the new label via a
+   ::before with the original text hidden so the button width
+   stays predictable.  */
+#fog-paint-btn.is-active,
+#fog-erase-btn.is-active {
+  font-size: 0;          /* hide the original text */
+  letter-spacing: 0;
+}
+#fog-paint-btn.is-active::before,
+#fog-erase-btn.is-active::before {
+  font-size: 0.75rem;
+  letter-spacing: 0.08em;
+  font-weight: 700;
+}
+#fog-paint-btn.is-active::before { content: 'PAINTING'; }
+#fog-erase-btn.is-active::before { content: 'ERASING'; }
 .upload-storage-hint {
   margin: var(--space-xs) 0 0 0;
   font-size: var(--font-size-sm);

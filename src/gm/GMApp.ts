@@ -1113,6 +1113,13 @@ export class GMApp {
     if (!view) return;
     const next = { ...view, aspectLocked: !view.aspectLocked };
     this.state.setView(next);
+    // v2.14.10 — keep the viewportEditor's local copy of the view in
+    // sync. Subsequent rect-drag handlers spread from
+    // `viewportEditor.getView()` when building the new view; without
+    // this sync the aspectLocked field is dropped on the first drag
+    // and state.view.aspectLocked silently flips back to undefined —
+    // hence Alex's "lock unselects itself the moment you resize".
+    this.viewportEditor.setView(next);
     this._refreshRectOverlays();
   }
 
@@ -3708,12 +3715,14 @@ export class GMApp {
       const result = subtractFromAll(fog.polygons, polyVerts);
       this.state.setFog({ polygons: result });
       // Erase doesn't have a "last fill" to mutate via tolerance —
-      // each erase commits. v2.14.6 — Fill (paint and erase) is
-      // single-shot, not sticky: flood-fill is destructive enough
-      // that the GM wants to see a button-cleared "committed" cue
-      // and re-engage deliberately for the next fill.
+      // each erase commits. v2.14.10 — back to sticky (was single-shot
+      // in 2.14.6). Single-shot lost tolerance-slider fine-tuning
+      // after each commit; sticky keeps the slider live until the GM
+      // explicitly clicks Paint/Erase to exit. Paint button gains a
+      // "PAINTING" / "ERASING" label when active (CSS, see below) so
+      // the live state is unmistakable.
       this._lastFillState = null;
-      this._endAction();
+      this._endActionAndRearm('erase');
       return;
     }
     // Paint — inheritance + draft + default chain like the other commits.
@@ -3743,12 +3752,12 @@ export class GMApp {
     // and doesn't care whether the fill action is "live" — the
     // refinement workflow stays intact after the button clears.
     this._lastFillState = { polyId: poly.id, seedX: mapPos.x, seedY: mapPos.y, action };
-    // v2.14.6 — Fill is single-shot, not sticky. preserveFillState
-    // keeps _lastFillState alive across the clear so the Tolerance
-    // slider can still refine the just-placed polygon, but the
-    // Paint button visibly un-greens to confirm "fill committed".
-    // Click Paint again to fill another region.
-    this._endAction({ preserveFillState: true });
+    // v2.14.10 — back to sticky. Tolerance slider keeps refining the
+    // last fill; further canvas clicks lay another fill. Click Paint
+    // again (or switch Drawing Mode) to exit. preserveFillState
+    // survives the re-arm so the slider keeps the same target until
+    // the next fill click replaces it.
+    this._endActionAndRearm('paint', { preserveFillState: true });
   }
 
   /** v2.12 — re-run the last fill at a new tolerance and replace the

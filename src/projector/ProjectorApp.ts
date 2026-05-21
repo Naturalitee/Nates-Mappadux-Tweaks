@@ -817,10 +817,25 @@ export class ProjectorApp {
     ctx.clearRect(0, 0, w, h);
 
     if (!this.projectorViewport.gridEnabled) return;
-    if (this.role === 'monitor') return; // monitors don't show the calibration grid
-    if (!this.setup) return;
 
-    const spacing = this.setup.pixelsPerSquare;
+    // v2.14.10 — grid spacing. Primary uses its own calibration directly
+    // (setup.pixelsPerSquare CSS px per inch). Monitor mirrors the
+    // primary's crop fit-to-window, so its grid must scale by the same
+    // factor the map content does:
+    //   spacing = mapPxPerSq * monitorCanvasW / (primaryViewNW * mapImageWidth)
+    // Reading: 1 inch on the map = mapPxPerSq map-pixels. The primary
+    // shows wMap = primaryViewNW * mapImageWidth map-px across its
+    // canvas; the monitor squeezes that same wMap into its own canvas
+    // width. Solve for "how many monitor CSS px = mapPxPerSq map-px"
+    // and you have the monitor's per-inch spacing.
+    let spacing: number;
+    if (this.role === 'monitor') {
+      if (!this.mapPixelsPerSquare || this.mapImageWidth <= 0 || this.primaryViewNW <= 0) return;
+      spacing = (this.mapPixelsPerSquare * w) / (this.primaryViewNW * this.mapImageWidth);
+    } else {
+      if (!this.setup) return;
+      spacing = this.setup.pixelsPerSquare;
+    }
     if (spacing < 2) return; // sanity
 
     ctx.strokeStyle = this.projectorViewport.gridColor;

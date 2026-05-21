@@ -1,5 +1,48 @@
 # Changelog
 
+## v2.14.10 — 2026-05-20
+
+### Three fix-needed items from Alex's structured v2.15-scope review
+
+**#7 — Grid on Scaled View monitor windows.** Monitors mirror the
+primary's crop fit-to-window, so their grid spacing scales by the
+ratio of monitor-canvas to primary-crop. Derivable on the monitor
+from values it already has:
+
+```
+monitorSpacing = mapPxPerSq * monitorCanvasW / (primaryViewNW * mapImageWidth)
+```
+
+`primaryViewNW * mapImageWidth` is the map-pixel width the primary
+is showing. The monitor squeezes that same width into its own
+canvas, so dividing it into the monitor's canvas width gives map-px
+per monitor-CSS-px; multiply by `mapPxPerSq` to get monitor-CSS-px
+per inch (= grid spacing). No new P2P messages needed — the
+monitor already has `primaryViewNW`, `mapPxPerSq`, and
+`mapImageWidth` from the existing relay path.
+
+**#10 — Aspect-ratio lock actually locks now.** Two bugs in one:
+the constraint code was correct but `state.view.aspectLocked` was
+being silently dropped after each resize-drag move. The resize
+handler builds the new view by spreading from
+`viewportEditor.getView()`, which never had `aspectLocked` written
+to it — only `state.view` did. So on every move event,
+`state.setView(next)` overwrote state with a view missing the
+`aspectLocked` field. The lock disengaged on the first move,
+which is exactly Alex's "unselects itself the moment you resize".
+Fix: when the lock toggles, also mirror it into the
+`viewportEditor` so subsequent `...getView()` spreads carry it.
+
+**#14 — Fill is sticky again, with a clearer "armed" cue.** v2.14.6
+went single-shot to give a "committed" cue after the destructive
+flood-fill. The downside was you lost the tolerance-slider
+fine-tune flow Alex wanted — slide tolerance, see the fill update,
+slide more, click for next fill. Back to sticky. To make the
+armed state unambiguous (since the sticky button alone wasn't
+enough signal), the Paint and Erase buttons now swap their label
+to **PAINTING** / **ERASING** when active, via CSS `::before`
+content keyed off the `is-active` class.
+
 ## v2.14.9 — 2026-05-20
 
 ### Scaled View calibration — actual root cause this time
