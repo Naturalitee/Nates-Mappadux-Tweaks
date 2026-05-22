@@ -110,38 +110,40 @@ export class PlayerApp {
   private _heartbeatInterval: number | null = null;
 
   async init(): Promise<void> {
-    // v2.15 — shared chrome (lifecycle close, fullscreen button, faff
-    // overlay + QR, mute indicator) is owned by Viewer now. Profile-
-    // driven so future viewer kinds slot in without forking files.
+    // v2.15 — Viewer owns the chrome (lifecycle, fullscreen, faff
+    // overlay, mute indicator) AND the rendering pipeline (Renderer,
+    // marker layer, transition engine). PlayerApp drives the P2P side
+    // and the post-map-load callback chain; the rest comes out of
+    // Viewer via readonly fields. Profile-driven so future viewer
+    // kinds slot in without forking these init paths.
     this.viewer = new Viewer(PROFILE_PLAYER, {
-      fullscreenBtn: document.getElementById('player-fullscreen-btn'),
+      fullscreenBtn:        document.getElementById('player-fullscreen-btn'),
+      rendererCanvas:       document.querySelector<HTMLCanvasElement>('#renderer-canvas')!,
+      markerOverlayEl:      document.getElementById('marker-overlay'),
+      transitionCanvas:     document.querySelector<HTMLCanvasElement>('#transition-canvas'),
+      preserveDrawingBuffer: true,
     });
     this.viewer.init();
 
-    this.renderer = new Renderer(
-      document.querySelector<HTMLCanvasElement>('#renderer-canvas')!,
-      { preserveDrawingBuffer: true },
-    );
-    this.markerTexture = new MarkerTexture();
-    this.markerSprites = new MarkerSprites();
-    this.renderer.setMarkerCanvas(this.markerTexture.canvas);
-    this.renderer.setMarkerSpriteGroup(this.markerSprites.group);
+    // Alias the pipeline pieces locally so the existing `this.renderer`
+    // / `this.markerTexture` / etc. call sites elsewhere in this file
+    // don't need touching. Future cleanup can switch them all to
+    // `this.viewer.renderer` direct access.
+    this.renderer        = this.viewer.renderer;
+    this.markerTexture   = this.viewer.markerTexture;
+    this.markerSprites   = this.viewer.markerSprites;
+    this.markerOverlay   = this.viewer.markerOverlay;
+    this.transitionEngine = this.viewer.transitionEngine!;
 
-    const overlayEl = document.getElementById('marker-overlay');
-    this.markerOverlay = new MarkerOverlay(overlayEl ?? document.body);
-
-    this.transitionEngine = new TransitionEngine(
-      document.querySelector<HTMLCanvasElement>('#transition-canvas')!,
-    );
-    this.renderer.onMapLoaded = (aspect) => {
-      this.markerTexture.setAspectRatio(aspect);
-      this.markerSprites.setAspectRatio(aspect);
+    // Post-map-load: marker re-render + overlay refresh. Viewer has
+    // already pushed the new aspect ratio into MarkerTexture +
+    // MarkerSprites before invoking this hook.
+    this.viewer.onMapLoaded(() => {
       this.markerTexture.render(this.currentMarkers, this.playerIconCache);
       this.markerSprites.render(this.currentMarkers, this.playerIconCache);
       this._updateMarkerOverlay();
       this.renderer.markMarkersDirty();
-    };
-    this.renderer.start();
+    });
 
     this.renderer.onContextLost = () => {
       this._contextLost = true;

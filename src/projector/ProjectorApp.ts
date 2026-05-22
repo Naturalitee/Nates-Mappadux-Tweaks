@@ -1,6 +1,5 @@
 import { Guest } from '../p2p/Guest.ts';
 import { Renderer } from '../rendering/Renderer.ts';
-import { MarkerTexture } from '../rendering/MarkerTexture.ts';
 import { MarkerSprites } from '../rendering/MarkerSprites.ts';
 import { MarkerOverlay, type OverlayItem } from '../rendering/MarkerOverlay.ts';
 import { getMarkerAspect } from '../rendering/MarkerLayer.ts';
@@ -52,7 +51,9 @@ export class ProjectorApp {
   private guest: Guest | null = null;
   private setup: ProjectorSetup | null = null;
   private renderer!: Renderer;
-  private markerTexture!: MarkerTexture;
+  // markerTexture is owned by Viewer and pushed into the renderer's
+  // internals on construction; ProjectorApp never touches it directly
+  // (only markerSprites is needed for the sprite-render path).
   private markerSprites!: MarkerSprites;
   private markerOverlay!: MarkerOverlay;
 
@@ -116,14 +117,6 @@ export class ProjectorApp {
     this.setupLabelEl    = this.controlsEl.querySelector<HTMLElement>('.projector-setup-label')!;
     this.rendererCanvas  = document.getElementById('renderer-canvas') as HTMLCanvasElement;
 
-    // v2.15 — shared chrome (lifecycle close, faff overlay + QR) via
-    // Viewer. Fullscreen stays ProjectorApp-local because of the
-    // monitor-mode rebind ProjectorApp does later in this file.
-    // ProjectorApp tells Viewer "skip the fullscreen binding" by
-    // passing fullscreenBtn: null even though the profile flag is true.
-    this.viewer = new Viewer(PROFILE_SCALED, { fullscreenBtn: null });
-    this.viewer.init();
-
     // 1" grid overlay — sits above the renderer, below the black-out.
     this.gridCanvas = document.createElement('canvas');
     this.gridCanvas.className = 'projector-grid';
@@ -175,34 +168,45 @@ export class ProjectorApp {
     window.addEventListener('keydown',     wakeControls);
     wakeControls();
 
-    // Renderer: filters off by default (D8 will gate this), no fog opacity reduction.
-    this.renderer = new Renderer(this.rendererCanvas);
-    this.renderer.setFilterEnabled(false);
-    // v2.12.16 — projector is the table view; stutter on animated
-    // maps is preferable to a paused frame with a "go fullscreen"
-    // banner staring at the players. Let it run regardless.
-    this.renderer.setVideoStallEscalation(false);
-    this.markerTexture = new MarkerTexture();
-    this.markerSprites = new MarkerSprites();
-    this.renderer.setMarkerCanvas(this.markerTexture.canvas);
-    this.renderer.setMarkerSpriteGroup(this.markerSprites.group);
+    // v2.15 — Viewer owns the chrome (lifecycle, faff overlay) AND the
+    // rendering pipeline (Renderer, marker layer). ProjectorApp drives
+    // the P2P + message dispatch + projector-specific overlays (grid,
+    // calibration warning, monitor badge). Fullscreen stays
+    // ProjectorApp-local because of the monitor-mode rebind quirk;
+    // pass fullscreenBtn: null so Viewer skips its own binding.
+    //
+    // Renderer config differs from the player profile:
+    //   - initialFilterEnabled=false → Disable-Filter is opt-in on
+    //     projector (the Scaled View should default to clean output).
+    //   - videoStallEscalation=false → at the table, a stuttering
+    //     animated map beats a "tap fullscreen" banner.
+    //   - transitionCanvas=null → cut-to-frame per profile.
+    this.viewer = new Viewer(PROFILE_SCALED, {
+      fullscreenBtn:        null,
+      rendererCanvas:       this.rendererCanvas,
+      markerOverlayEl:      document.getElementById('marker-overlay'),
+      transitionCanvas:     null,
+      initialFilterEnabled: false,
+      videoStallEscalation: false,
+    });
+    this.viewer.init();
 
-    const overlayEl = document.getElementById('marker-overlay');
-    this.markerOverlay = new MarkerOverlay(overlayEl ?? document.body);
-    this.renderer.onMapLoaded = (aspect) => {
-      this.markerTexture.setAspectRatio(aspect);
-      this.markerSprites.setAspectRatio(aspect);
+    // Alias the pipeline pieces locally so existing call sites in the
+    // rest of this file (this.renderer.X / this.markerSprites.X /
+    // etc.) keep working without touching them all.
+    this.renderer       = this.viewer.renderer;
+    this.markerSprites  = this.viewer.markerSprites;
+    this.markerOverlay  = this.viewer.markerOverlay;
+
+    // Post-map-load: render markers + re-apply calibrated view now
+    // that the renderer knows the new map's aspect ratio. _applyView
+    // also fires synchronously inside the map_change handler, but at
+    // that point the texture is still decoding and renderer.aspectRatio
+    // still carries the previous map's aspect — that's the v2.14.8 fix.
+    this.viewer.onMapLoaded(() => {
       this._renderMarkers();
-      // v2.14.8 — recompute the calibrated view now that the renderer
-      // knows the new map's aspect ratio. _applyView is also called
-      // synchronously inside the map_change handler, but at that point
-      // the texture is still decoding and renderer.aspectRatio is
-      // whatever the *previous* map left behind, so setView produced
-      // a frustum sized to the old aspect. Re-fire here once the new
-      // aspect lands.
       this._applyView();
-    };
-    this.renderer.start();
+    });
 
     this._refreshSetup();
 
