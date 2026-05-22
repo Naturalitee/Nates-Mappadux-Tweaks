@@ -12,6 +12,7 @@ import { bindFullscreenButton } from '../utils/fullscreen.ts';
 import { Viewer } from '../viewers/Viewer.ts';
 import { PROFILE_SCALED } from '../viewers/profiles.ts';
 import { computeView } from '../viewers/strategies/computeView.ts';
+import { drawGrid } from '../viewers/strategies/drawGrid.ts';
 import { decodeImageBitmap } from '../utils/decodeImageBitmap.ts';
 import { generateId } from '../utils/id.ts';
 import {
@@ -734,78 +735,26 @@ export class ProjectorApp {
     }
   }
 
-  /**
-   * Draw the 1" grid overlay. The grid is anchored to the projector's
-   * calibration only — it knows nothing about the map. Lines are spaced at
-   * setup.pixelsPerSquare CSS pixels, centred on the window so the middle
-   * of the projection always sits on a grid intersection.
-   * Hidden when grid is disabled, no calibration, or projector is blacked out.
-   */
+  /** v2.15 Phase 3c — grid drawing dispatched to the shared
+   *  drawGrid strategy. Primary uses 'projector-calibrated', monitor
+   *  uses 'monitor-proportional'. The strategy handles canvas sizing,
+   *  clearing, the gridEnabled gate, and the actual line stroking. */
   private _drawGrid(): void {
-    const cv = this.gridCanvas;
-    // Effective dims account for rotation — grid CSS box is sized like the
-    // canvas so they share the same rotation transform and stay aligned.
     const eff = this._effectiveDims();
-    const w  = eff.w;
-    const h  = eff.h;
-    const dpr = window.devicePixelRatio || 1;
-    cv.width  = Math.round(w * dpr);
-    cv.height = Math.round(h * dpr);
-    cv.style.width  = `${w}px`;
-    cv.style.height = `${h}px`;
-
-    const ctx = cv.getContext('2d');
-    if (!ctx) return;
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
-    ctx.clearRect(0, 0, w, h);
-
-    if (!this.projectorViewport.gridEnabled) return;
-
-    // v2.14.10 — grid spacing. Primary uses its own calibration directly
-    // (setup.pixelsPerSquare CSS px per inch). Monitor mirrors the
-    // primary's crop fit-to-window, so its grid must scale by the same
-    // factor the map content does:
-    //   spacing = mapPxPerSq * monitorCanvasW / (primaryViewNW * mapImageWidth)
-    // Reading: 1 inch on the map = mapPxPerSq map-pixels. The primary
-    // shows wMap = primaryViewNW * mapImageWidth map-px across its
-    // canvas; the monitor squeezes that same wMap into its own canvas
-    // width. Solve for "how many monitor CSS px = mapPxPerSq map-px"
-    // and you have the monitor's per-inch spacing.
-    let spacing: number;
-    if (this.role === 'monitor') {
-      if (!this.mapPixelsPerSquare || this.mapImageWidth <= 0 || this.primaryViewNW <= 0) return;
-      spacing = (this.mapPixelsPerSquare * w) / (this.primaryViewNW * this.mapImageWidth);
-    } else {
-      if (!this.setup) return;
-      spacing = this.setup.pixelsPerSquare;
-    }
-    if (spacing < 2) return; // sanity
-
-    ctx.strokeStyle = this.projectorViewport.gridColor;
-    ctx.lineWidth = 1;
-    ctx.beginPath();
-
-    const cx = w / 2;
-    const cy = h / 2;
-    // Vertical lines, walking out from the centre in both directions.
-    for (let x = cx; x <= w + spacing; x += spacing) {
-      ctx.moveTo(Math.round(x) + 0.5, 0);
-      ctx.lineTo(Math.round(x) + 0.5, h);
-    }
-    for (let x = cx - spacing; x >= -spacing; x -= spacing) {
-      ctx.moveTo(Math.round(x) + 0.5, 0);
-      ctx.lineTo(Math.round(x) + 0.5, h);
-    }
-    // Horizontal lines.
-    for (let y = cy; y <= h + spacing; y += spacing) {
-      ctx.moveTo(0, Math.round(y) + 0.5);
-      ctx.lineTo(w, Math.round(y) + 0.5);
-    }
-    for (let y = cy - spacing; y >= -spacing; y -= spacing) {
-      ctx.moveTo(0, Math.round(y) + 0.5);
-      ctx.lineTo(w, Math.round(y) + 0.5);
-    }
-    ctx.stroke();
+    drawGrid(this.gridCanvas, {
+      kind:               this.role === 'monitor' ? 'monitor-proportional' : 'projector-calibrated',
+      effectiveW:         eff.w,
+      effectiveH:         eff.h,
+      enabled:            this.projectorViewport.gridEnabled,
+      color:              this.projectorViewport.gridColor,
+      setup:              this.setup,
+      mapPixelsPerSquare: this.mapPixelsPerSquare,
+      mapImageWidth:      this.mapImageWidth,
+      mapImageHeight:     this.mapImageHeight,
+      primaryViewNW:      this.primaryViewNW,
+      primaryViewNH:      this.primaryViewNH,
+      view:               null,
+    });
   }
 
   private _showStatus(text: string, visible: boolean = true): void {
