@@ -1,5 +1,35 @@
 # Changelog
 
+## v2.14.20 — 2026-05-22
+
+### Mute toggle becomes a real button — no more click-anywhere
+
+The Player View has historically piggybacked on the autoplay
+unblock: clicking ANYWHERE toggled mute. Cute when it was the only
+interaction the player had, awful now that pan/zoom is live —
+every drag-and-release ended up muting/unmuting the audio.
+
+New behaviour: the mute indicator is now a two-state element.
+
+**Pre-interaction** (page just loaded, audio still muted): big
+top-right prompt — "🔇 Muted — tap anywhere to start audio".
+Non-interactive itself; the document-wide click handler is a
+ONE-SHOT that unmutes on the first user gesture and then removes
+itself. This satisfies the autoplay policy without staking out
+the whole canvas as a mute toggle.
+
+**Post-interaction**: the same element collapses to an icon-only
+button (`🔊` / `🔇`) in the same top-right slot. Fully visible
+for 5s after each state change, then fades to 0.25 opacity to
+match the Fullscreen button. Hover brings it back to 1. Clicking
+it toggles mute — and ONLY clicking it.
+
+New `ViewerOpts.onMuteToggle` callback hands button clicks back
+to `PlayerApp._toggleMute`. New `Viewer.markMuteInteractive()`
+flips the indicator into its post-interaction state.
+
+No faff (beta push).
+
 ## v2.14.19 — 2026-05-22
 
 ### Player zoom/pan — gesture capture fix

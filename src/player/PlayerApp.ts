@@ -156,6 +156,11 @@ export class PlayerApp {
       markerOverlayEl:      document.getElementById('marker-overlay'),
       transitionCanvas:     document.querySelector<HTMLCanvasElement>('#transition-canvas'),
       preserveDrawingBuffer: true,
+      // v2.14.20 — once the player has had their first interaction
+      // (canvas tap to unmute), the icon-only mute button takes over
+      // as the toggle source. This callback hands control back to
+      // PlayerApp's mute pipeline.
+      onMuteToggle: () => this._toggleMute(),
     });
     this.viewer.init();
 
@@ -239,12 +244,20 @@ export class PlayerApp {
       }
     });
 
-    // Left-click toggles mute (first click also satisfies browser autoplay policy).
-    // Guard: don't toggle while the connect panel is visible.
-    document.addEventListener('click', () => {
-      if (!this.connectPanel.hidden) return;
+    // v2.14.20 — The document-wide click handler only services the
+    // VERY FIRST interaction: it unmutes (satisfying the browser's
+    // autoplay policy) and hands the toggle role over to the
+    // mute-indicator button. After that, clicks on the canvas no
+    // longer toggle mute — the icon-only button top-right is the
+    // single source of truth. Without this gate, every pan/zoom
+    // tap-and-release was muting/unmuting the player.
+    const firstClick = () => {
+      if (!this.connectPanel.hidden) return; // not connected yet — wait
       this._toggleMute();
-    });
+      this.viewer.markMuteInteractive();
+      document.removeEventListener('click', firstClick);
+    };
+    document.addEventListener('click', firstClick);
 
     // Prevent the browser context menu on right-click (keep canvas clean)
     document.addEventListener('contextmenu', (e) => e.preventDefault());

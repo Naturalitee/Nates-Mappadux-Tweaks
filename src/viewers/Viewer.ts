@@ -68,6 +68,12 @@ export interface ViewerOpts {
    *  the table, a stuttering animation beats a blocking banner.
    *  Default true (the player behaviour). */
   videoStallEscalation?: boolean;
+  /** v2.14.20 — callback fired when the user clicks the
+   *  mute-indicator button (post-first-interaction state). PlayerApp
+   *  routes this back into its _toggleMute path so the button is the
+   *  ONLY mute toggle once audio is live; the document-wide
+   *  click-to-unmute only services the very first interaction. */
+  onMuteToggle?: () => void;
 }
 
 /** Callback that fires whenever a new map texture finishes loading.
@@ -102,11 +108,22 @@ export class Viewer {
   /** Lazily-created faff overlay DOM. Lives on document.body so it
    *  covers the whole viewport regardless of canvas layout. */
   private _faffOverlayEl: HTMLElement | null = null;
-  /** Lazily-created mute-indicator toast. Player profile only. */
-  private _muteIndicatorEl: HTMLElement | null = null;
+  /** Lazily-created mute-indicator button. Player profile only.
+   *  v2.14.20 — was a toast (pointer-events: none); now a real button
+   *  the player can click to toggle mute once audio is live. */
+  private _muteIndicatorEl: HTMLButtonElement | null = null;
   /** Pending fade timer for the mute indicator; cleared on rapid
-   *  toggles so the toast doesn't ghost-disappear. */
+   *  toggles so the button doesn't ghost-disappear. v2.14.20: same
+   *  timer drives the post-interaction 5s "fully visible" window
+   *  before fading to 0.25 (no fade pre-interaction). */
   private _muteFadeTimer: ReturnType<typeof setTimeout> | null = null;
+  /** True once the player has interacted (first click anywhere) and
+   *  audio playback is live. Pre-interaction the indicator is a big
+   *  non-interactive prompt; post-interaction it's a small button. */
+  private _muteInteractive = false;
+  /** Latest known mute state — needed so markMuteInteractive can
+   *  re-render the button without the caller having to re-pass it. */
+  private _muteState = true;
   /** Subscribers to onMapLoaded. Fan-out happens in the renderer's
    *  own onMapLoaded callback that Viewer installs during init(). */
   private _onMapLoadedHooks: OnMapLoadedFn[] = [];
@@ -196,31 +213,76 @@ export class Viewer {
     if (msgEl) msgEl.textContent = message;
   }
 
-  /** Render the mute-indicator toast (player-only). Profiles where
-   *  the flag is false get a no-op so call sites stay branchless. */
+  /** Render the mute-indicator (player-only). Profiles where the
+   *  flag is false get a no-op so call sites stay branchless.
+   *
+   *  Two visual states:
+   *   • Pre-interaction (initial) — large "🔇 Muted — tap to start
+   *     audio" prompt. Non-interactive (pointer-events: none); the
+   *     canvas-tap handles the first unmute so any click anywhere
+   *     satisfies autoplay policy.
+   *   • Post-interaction — small icon-only button anchored top-right.
+   *     Fully visible for 5s after each state change, then fades to
+   *     0.25 opacity (matches the fullscreen button). Clicking
+   *     toggles mute via the onMuteToggle opt callback. */
   showMuteIndicator(muted: boolean): void {
     if (!this.profile.chrome.muteIndicator) return;
+    this._muteState = muted;
     if (!this._muteIndicatorEl) {
-      const el = document.createElement('div');
+      const el = document.createElement('button');
+      el.type = 'button';
       el.className = 'mute-indicator';
+      el.addEventListener('click', (e) => {
+        // Only the post-interaction button is the toggle source.
+        // Pre-interaction the canvas-tap handles it.
+        if (!this._muteInteractive) return;
+        e.stopPropagation();
+        this.opts.onMuteToggle?.();
+      });
       document.body.appendChild(el);
       this._muteIndicatorEl = el;
     }
+    this._renderMuteIndicator();
+  }
+
+  /** v2.14.20 — flip the indicator to its interactive state. Called
+   *  by PlayerApp after the first canvas-tap unmute. Re-renders
+   *  using the cached `_muteState` so the caller doesn't have to
+   *  re-pass it. */
+  markMuteInteractive(): void {
+    if (this._muteInteractive) return;
+    this._muteInteractive = true;
+    this._renderMuteIndicator();
+  }
+
+  private _renderMuteIndicator(): void {
     const el = this._muteIndicatorEl;
-    el.textContent = muted ? '🔇 Muted' : '🔊 Audio on';
-    el.classList.remove('mute-indicator--hiding');
-    // Auto-fade the "Audio on" state — muted stays visible so the
-    // user knows the page is silent. Cancel any pending fade so
-    // rapid toggles don't end up with a half-faded indicator.
+    if (!el) return;
+    const muted = this._muteState;
+    el.classList.toggle('mute-indicator--initial',     !this._muteInteractive);
+    el.classList.toggle('mute-indicator--interactive',  this._muteInteractive);
+    el.classList.toggle('mute-indicator--muted',  muted);
+    el.classList.toggle('mute-indicator--audible', !muted);
+    if (this._muteInteractive) {
+      // Icon-only post-interaction. Speaker / muted speaker glyph.
+      el.textContent = muted ? '🔇' : '🔊';
+      el.title = muted ? 'Audio muted — click to unmute' : 'Audio on — click to mute';
+    } else {
+      // Pre-interaction prompt — large, encourages first tap.
+      el.textContent = muted ? '🔇 Muted — tap anywhere to start audio' : '🔊 Audio on';
+      el.title = '';
+    }
+    // Reset the 5s "fully visible" window on every state change.
+    el.classList.remove('mute-indicator--idle');
     if (this._muteFadeTimer !== null) {
       clearTimeout(this._muteFadeTimer);
       this._muteFadeTimer = null;
     }
-    if (!muted) {
+    if (this._muteInteractive) {
       this._muteFadeTimer = setTimeout(() => {
-        this._muteIndicatorEl?.classList.add('mute-indicator--hiding');
+        this._muteIndicatorEl?.classList.add('mute-indicator--idle');
         this._muteFadeTimer = null;
-      }, 1500);
+      }, 5000);
     }
   }
 

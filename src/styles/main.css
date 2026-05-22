@@ -4898,23 +4898,50 @@ option.select-option--add {
 }
 .upload-actions { display: flex; gap: var(--space-sm); }
 
-/* Player mute indicator */
+/* v2.14.20 — Player mute indicator. Two visual states:
+   • .mute-indicator--initial    : big pre-first-tap prompt.
+                                   Non-interactive; canvas-click
+                                   handles the first unmute.
+   • .mute-indicator--interactive: small icon-only button anchored
+                                   top-right. Full opacity for 5s
+                                   after each state change, then
+                                   fades to 0.25 (mirrors the
+                                   fullscreen button). Hover → 1. */
 .mute-indicator {
   position: fixed;
   top: 16px;
   right: 16px;
-  background: rgba(10,14,26,0.88);
+  background: rgba(10, 14, 26, 0.88);
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   color: var(--text);
   font-size: 0.85rem;
   padding: 6px 14px;
-  pointer-events: none;
   z-index: 999;
+  cursor: pointer;
+  font-family: inherit;
+  line-height: 1;
   transition: opacity 1s ease;
 }
-.mute-indicator--hiding {
-  opacity: 0;
+.mute-indicator--initial {
+  /* Big prompt — sits in the same top-right slot but un-clickable so
+     the document-level first-tap handler can drive the unmute. */
+  pointer-events: none;
+  font-size: 0.95rem;
+  padding: 10px 18px;
+}
+.mute-indicator--interactive {
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  font-size: 1.1rem;
+  padding: 6px 10px;
+  opacity: 1;
+}
+.mute-indicator--interactive.mute-indicator--idle {
+  opacity: 0.25;
+}
+.mute-indicator--interactive:hover {
+  opacity: 1;
 }
 
 /* ── Scrollbars ─────────────────────────────────────────────────────────── */
