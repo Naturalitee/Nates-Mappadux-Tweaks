@@ -648,6 +648,20 @@ body.player-view #renderer-canvas {
   display: block;
 }
 
+/* v2.14.17 — Player-side 1" grid overlay. Sits above renderer-canvas
+   but below transition-canvas so map-change animations cover the
+   grid mid-transition. Inert by default; PlayerApp clears + redraws
+   it when the GM toggles the player-grid feature on. */
+#player-grid {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 8;
+  display: block;
+}
+
 #status {
   position: absolute;
   bottom: var(--space-lg);

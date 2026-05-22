@@ -52,6 +52,18 @@ export interface ViewState {
    * free. Toggled via the lock icon in the rect's chrome cluster.
    */
   aspectLocked?: boolean;
+  /**
+   * v2.14.17 — Player-side 1″ grid overlay. When true, the player
+   * window draws a calibrated 1″ grid scaled to its current view
+   * (map-relative — the grid moves with the map as the GM zooms or
+   * the browser resizes). Only meaningful when the active map is
+   * calibrated; viewers skip the draw if mapPixelsPerSquare isn't
+   * set. Toggled via the Show Grid icon in the Player rect chrome.
+   */
+  playerGridEnabled?: boolean;
+  /** v2.14.17 — Colour of the player-side grid. Defaults to white
+   *  when unset (matches the projector-side grid default). */
+  playerGridColor?: string;
 }
 
 // ─── Fog of War / Overlay (v2.12 unified system) ─────────────────────────────

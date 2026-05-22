@@ -2,6 +2,7 @@ import { Guest } from '../p2p/Guest.ts';
 import { generateId } from '../utils/id.ts';
 import { Viewer } from '../viewers/Viewer.ts';
 import { PROFILE_PLAYER } from '../viewers/profiles.ts';
+import { drawGrid } from '../viewers/strategies/drawGrid.ts';
 import { decodeImageBitmap } from '../utils/decodeImageBitmap.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { MarkerTexture } from '../rendering/MarkerTexture.ts';
@@ -64,6 +65,17 @@ export class PlayerApp {
    *  rendering / P2P / message dispatch for now; later phases will
    *  fold more of the surface into Viewer too. */
   private viewer!: Viewer;
+  /** v2.14.17 — map calibration + dimensions threaded through from the
+   *  GM via full_state / map_change. Needed by the map-relative grid
+   *  drawing strategy when the GM has Show Grid turned on for the
+   *  Player View. */
+  private mapPixelsPerSquare: number | null = null;
+  private mapImageWidth:      number        = 0;
+  private mapImageHeight:     number        = 0;
+  /** v2.14.17 — Player-side grid overlay canvas. Drawn into whenever
+   *  the GM's view broadcast carries playerGridEnabled=true and the
+   *  active map is calibrated. */
+  private playerGridCanvas: HTMLCanvasElement | null = null;
   // ── Motion-tracker overlay (rings + return blobs broadcast by the GM) ──────
   private _trackerScans: MotionOverlayScan[] = [];
   private _trackerBlobs: MotionOverlayBlob[] = [];
@@ -143,7 +155,17 @@ export class PlayerApp {
       this.markerSprites.render(this.currentMarkers, this.playerIconCache);
       this._updateMarkerOverlay();
       this.renderer.markMarkersDirty();
+      // v2.14.17 — redraw the player-side grid on map load too. The
+      // new map may bring a different mapPixelsPerSquare /
+      // mapImageWidth, which the map-relative strategy needs.
+      this._refreshPlayerGrid();
     });
+
+    // v2.14.17 — bind the player-side grid canvas + redraw on window
+    // resize. The grid is map-relative (scales with view + canvas)
+    // so resizes change visible spacing.
+    this.playerGridCanvas = document.querySelector<HTMLCanvasElement>('#player-grid');
+    window.addEventListener('resize', () => this._refreshPlayerGrid());
 
     this.renderer.onContextLost = () => {
       this._contextLost = true;
@@ -195,6 +217,29 @@ export class PlayerApp {
 
     // Show "Muted" indicator immediately — player starts muted
     this.viewer.showMuteIndicator(this.sbMuted);
+  }
+
+  /** v2.14.17 — Refresh the player-side 1″ grid overlay. Drawn via
+   *  the shared map-relative strategy so spacing tracks the current
+   *  view fraction. No-op when the GM has the grid off, when the
+   *  active map isn't calibrated, or when the canvas isn't bound. */
+  private _refreshPlayerGrid(): void {
+    if (!this.playerGridCanvas) return;
+    const view = this.lastView;
+    drawGrid(this.playerGridCanvas, {
+      kind:               'map-relative',
+      effectiveW:         window.innerWidth,
+      effectiveH:         window.innerHeight,
+      enabled:            !!view?.playerGridEnabled,
+      color:              view?.playerGridColor ?? '#ffffff',
+      setup:              null,
+      mapPixelsPerSquare: this.mapPixelsPerSquare,
+      mapImageWidth:      this.mapImageWidth,
+      mapImageHeight:     this.mapImageHeight,
+      primaryViewNW:      1,
+      primaryViewNH:      1,
+      view:               view ?? null,
+    });
   }
 
   private _recoverRenderer(): void {
@@ -274,6 +319,11 @@ export class PlayerApp {
         this.currentMapId   = msg.payload.map?.id ?? null;
         this.currentMarkers = msg.payload.markers ?? [];
         this.sbSlots        = msg.payload.audio?.slots ?? [];
+        // v2.14.17 — pick up calibration + dimensions for the
+        // player-side grid renderer.
+        if (msg.mapPixelsPerSquare !== undefined) this.mapPixelsPerSquare = msg.mapPixelsPerSquare;
+        if (msg.mapImageWidth      !== undefined) this.mapImageWidth      = msg.mapImageWidth;
+        if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
         if (mapBlob) {
           this.lastMapBlob = mapBlob;
           this.lastFog     = msg.payload.fog ?? { polygons: [] };
@@ -303,6 +353,10 @@ export class PlayerApp {
         this.currentMapId = msg.payload.id;
         if (msg.markers !== undefined) this.currentMarkers = msg.markers;
         if (msg.audio?.slots)          this.sbSlots = msg.audio.slots;
+        // v2.14.17 — refresh calibration + dimensions for the new map.
+        if (msg.mapPixelsPerSquare !== undefined) this.mapPixelsPerSquare = msg.mapPixelsPerSquare;
+        if (msg.mapImageWidth      !== undefined) this.mapImageWidth      = msg.mapImageWidth;
+        if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
         // Stop any playing audio from the previous map
         this._stopAllSoundboard();
         this._stopAllPositional();
@@ -460,6 +514,10 @@ export class PlayerApp {
         this.markerSprites.render(this.currentMarkers, this.playerIconCache);
         this._updateMarkerOverlay();
         this.renderer.markMarkersDirty();
+        // v2.14.17 — redraw the player-side grid (if enabled). View
+        // changes can flip the gridEnabled flag or change viewNW
+        // (which the map-relative strategy uses to derive spacing).
+        this._refreshPlayerGrid();
         break;
       }
 

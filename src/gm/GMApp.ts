@@ -753,6 +753,13 @@ export class GMApp {
         playerIs16x9 = Math.abs(ratio - 16 / 9) < 0.01;
       }
     }
+    // v2.14.17 — Show Grid icon on the Player View rect, only on
+    // calibrated maps. Player-side grid (map-relative) is independent
+    // of the Scaled View grid (calibrated CSS-px); they have their
+    // own state and own icon toggle.
+    const playerGridState: 'on' | 'off' | undefined = this._isActiveMapCalibrated()
+      ? ((playerView?.playerGridEnabled) ? 'on' : 'off')
+      : undefined;
     this._markerOverlay.updateRect('player', playerBounds
       ? {
           ...playerBounds,
@@ -762,6 +769,7 @@ export class GMApp {
           // v2.14.3 — eye icon shows regardless of selection; the
           // broadcast state matters at a glance.
           viewBroadcast: playerBroadcast,
+          ...(playerGridState ? { showGrid: playerGridState } : {}),
           ...(playerSelected ? {
             aspectLock:      this._playerAspectUndo ? 'undo' : 'apply',
             aspectIs16x9:    playerIs16x9,
@@ -1068,20 +1076,35 @@ export class GMApp {
    * calibrated.
    */
   /**
-   * v2.14.3 — Show Grid icon click on the Scaled View rect. Mirrors
-   * the side-panel "Show grid" toggle by flipping the projector
-   * viewport's gridEnabled flag and pushing it through the same
-   * broadcast path. No-op on the player rect (no player-side grid
-   * in v2.14.3 — see #13 carry-over).
+   * v2.14.17 — Show Grid icon click on a viewport rect.
+   *
+   *   - Scaled View rect (projector): mirrors the side-panel "Show
+   *     grid" toggle by flipping projectorViewport.gridEnabled. The
+   *     existing checkbox change handler does the broadcast.
+   *   - Player View rect: flips ViewState.playerGridEnabled. State
+   *     update broadcasts via the normal view path; PlayerApp's
+   *     drawGrid call honours it on the receiving end.
    */
   private _handleRectShowGrid(kind: 'player' | 'projector'): void {
-    if (kind !== 'player' && kind !== 'projector') return;
-    if (kind === 'player') return;
-    const cb = document.querySelector<HTMLInputElement>('#projection-grid-toggle');
-    if (!cb) return;
-    cb.checked = !cb.checked;
-    cb.dispatchEvent(new Event('change'));
-    this._refreshRectOverlays();
+    if (kind === 'projector') {
+      const cb = document.querySelector<HTMLInputElement>('#projection-grid-toggle');
+      if (!cb) return;
+      cb.checked = !cb.checked;
+      cb.dispatchEvent(new Event('change'));
+      this._refreshRectOverlays();
+      return;
+    }
+    if (kind === 'player') {
+      const view = this.state.snapshot().view;
+      if (!view) return;
+      const next = { ...view, playerGridEnabled: !view.playerGridEnabled };
+      this.state.setView(next);
+      // Mirror into viewportEditor's local copy so subsequent
+      // ...getView() spreads (resize, move) preserve the field —
+      // same pattern as the aspectLocked fix in v2.14.10.
+      this.viewportEditor.setView(next);
+      this._refreshRectOverlays();
+    }
   }
 
   /**

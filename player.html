@@ -18,6 +18,12 @@
   <!-- Transition overlay canvas — drawn on by TransitionEngine during map changes -->
   <canvas id="transition-canvas"></canvas>
 
+  <!-- v2.14.17 — 1" grid overlay (map-relative). Drawn when the GM
+       has toggled Show Grid on the Player View rect AND the active
+       map is calibrated. Spacing scales with the player's view crop
+       so the grid moves with the map on window resize / zoom. -->
+  <canvas id="player-grid"></canvas>
+
   <!-- HTML screen-space layer for marker labels — stays readable independent
        of the map's render scale. -->
   <div id="marker-overlay" class="marker-overlay"></div>
