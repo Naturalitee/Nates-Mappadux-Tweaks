@@ -94,11 +94,17 @@ export class MapCalibrationModal {
             <h3>Calibrate &ldquo;${this._esc(asset.filename)}&rdquo;</h3>
             <p>Drag the two crosses to two points whose grid distance you know. Scroll or pinch to zoom, drag empty space to pan. Then enter how many 1&Prime;/25 mm squares the line spans.</p>
           </div>
+          <label class="calibration-toggle-grid" title="Overlay a 1″/25 mm grid on the map at the current calibration. Useful for eyeballing the calculated spacing against any visible grid drawn on the map itself.">
+            <input type="checkbox" class="calibration-grid-overlay-toggle" />
+            <span>Show grid</span>
+          </label>
           <button class="btn btn--ghost btn--xs calibration-reset" title="Reset zoom and pan">Reset View</button>
         </header>
         <div class="calibration-canvas-wrap">
           <svg class="calibration-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
             <image class="calibration-image" href="${this.blobUrl ?? ''}" x="0" y="0" width="${this.imgW}" height="${this.imgH}" />
+            <!-- v2.14.17 — grid overlay group, populated by _updateCalGrid when the Show Grid toggle is on. -->
+            <g class="calibration-grid-overlay"></g>
             <line class="calibration-line calibration-line-base" />
             <line class="calibration-line calibration-line-ants" />
             <g class="calibration-handle" data-handle="a"></g>
@@ -294,12 +300,17 @@ export class MapCalibrationModal {
         if (which === 'a') this.a = { x: cx, y: cy };
         else                this.b = { x: cx, y: cy };
         redraw();
+        // v2.14.17 — live grid update during drag so the GM can
+        // align the calculated 1″ spacing against the map's own
+        // gridlines visually.
+        updateCalGrid();
       };
       const up = () => {
         window.removeEventListener('pointermove', move);
         window.removeEventListener('pointerup',   up);
         // v2.14.3 — drag-end makes the line the master; H, V, DPI follow.
         syncInputsFromLine();
+        updateCalGrid();
       };
       window.addEventListener('pointermove', move);
       window.addEventListener('pointerup',   up);
@@ -490,15 +501,55 @@ export class MapCalibrationModal {
       updateGridFeedback();
     };
 
+    // v2.14.17 — Show Grid overlay during calibration. Toggle in the
+    // header; redraws on every input that changes pps (line drag, N
+    // input, H/V edits, DPI pick). Lets the GM eyeball the calculated
+    // 1″ spacing against any visible grid drawn on the map itself.
+    const gridOverlayG    = overlay.querySelector<SVGGElement>('.calibration-grid-overlay')!;
+    const gridOverlayCb   = overlay.querySelector<HTMLInputElement>('.calibration-grid-overlay-toggle')!;
+    const derivePps = (): number | null => {
+      const dist = Math.hypot(this.b.x - this.a.x, this.b.y - this.a.y);
+      const N = currentN();
+      if (dist <= 0 || N <= 0) return null;
+      return dist / N;
+    };
+    const updateCalGrid = () => {
+      gridOverlayG.innerHTML = '';
+      if (!gridOverlayCb.checked) return;
+      const pps = derivePps();
+      if (!pps || pps < 2) return;
+      const cx = this.imgW / 2;
+      const cy = this.imgH / 2;
+      const lines: string[] = [];
+      // Vertical lines from centre outward.
+      for (let x = cx; x <= this.imgW; x += pps) {
+        lines.push(`<line x1="${x}" y1="0" x2="${x}" y2="${this.imgH}" />`);
+      }
+      for (let x = cx - pps; x >= 0; x -= pps) {
+        lines.push(`<line x1="${x}" y1="0" x2="${x}" y2="${this.imgH}" />`);
+      }
+      // Horizontal lines from centre outward.
+      for (let y = cy; y <= this.imgH; y += pps) {
+        lines.push(`<line x1="0" y1="${y}" x2="${this.imgW}" y2="${y}" />`);
+      }
+      for (let y = cy - pps; y >= 0; y -= pps) {
+        lines.push(`<line x1="0" y1="${y}" x2="${this.imgW}" y2="${y}" />`);
+      }
+      gridOverlayG.innerHTML = lines.join('');
+    };
+    gridOverlayCb.addEventListener('change', updateCalGrid);
+
     gridHInput.addEventListener('input', () => {
       autoFillCounterpart('h'); updateGridFeedback();
       const g = solveGrid();
       if (g.ok && g.pps !== null) repositionLineFromPps(g.pps);
+      updateCalGrid();
     });
     gridVInput.addEventListener('input', () => {
       autoFillCounterpart('v'); updateGridFeedback();
       const g = solveGrid();
       if (g.ok && g.pps !== null) repositionLineFromPps(g.pps);
+      updateCalGrid();
     });
 
     // v2.14.2 — picking a DPI back-fills H × V using the map's actual
@@ -519,13 +570,14 @@ export class MapCalibrationModal {
       updateGridFeedback();
       dpiSelect.value = String(dpi);
       repositionLineFromPps(dpi);
+      updateCalGrid();
     });
 
     // v2.14.3 — N is the line's "how many squares does this represent"
     // input. Changing it doesn't move the line, but it does change the
     // implied pps (same physical line, different square count), so
     // H/V/DPI re-derive.
-    distInput.addEventListener('input', () => { syncInputsFromLine(); });
+    distInput.addEventListener('input', () => { syncInputsFromLine(); updateCalGrid(); });
 
     updateGridFeedback();
 

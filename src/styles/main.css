@@ -4163,6 +4163,34 @@ option.select-option--add {
 }
 .calibration-header h3 { margin: 0 0 2px; font-size: 0.95rem; }
 .calibration-header p  { margin: 0; font-size: 0.7rem; color: var(--text-dim); }
+
+/* v2.14.17 — Show Grid toggle in the calibration modal header. Sits
+   between the description and the Reset View button. */
+.calibration-toggle-grid {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  cursor: pointer;
+  user-select: none;
+}
+.calibration-toggle-grid input { margin: 0; cursor: pointer; }
+
+/* v2.14.17 — Grid overlay drawn onto the map preview during
+   calibration. Lines in image coordinates; lime-green so it reads
+   clearly on both light and dark map backgrounds. */
+.calibration-grid-overlay line {
+  stroke: #5af07a;
+  stroke-width: 1;
+  /* The SVG's viewBox is set in image-pixel units. A stroke-width of
+     1 here scales with the user's zoom, which is what we want — the
+     gridlines should sit at the same map-pixel locations regardless
+     of how far the user has zoomed in. */
+  vector-effect: non-scaling-stroke;
+  opacity: 0.75;
+  pointer-events: none;
+}
 .calibration-canvas-wrap {
   position: relative;
   flex: 1;
