@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.14.14 — 2026-05-22
+
+### Fix: Scaled View defaults to scaled mode on a calibrated map
+
+`setMapAssetCalibration` auto-flips `projectorViewport.mode` to
+`'full'` when the GM switches to an uncalibrated map, but never
+flipped back when the GM later switched to a calibrated map. So
+opening a Scaled View while the stored mode was `'full'` showed
+the calibrated map fit-to-window instead of at table scale.
+
+Fix: a one-shot `_ensureCalibratedMapStartsScaled()` helper runs
+right before each Scaled View window opens (both the primary
+dropdown-pick path and the Open Scaled View Monitor button). If
+the active map is calibrated and the stored mode is `'full'`, it
+flips back to `'scaled'` before broadcasting the viewport update,
+so the new window comes up at table scale.
+
+No faff (beta push).
+
 ## v2.14.13 — 2026-05-22
 
 ### Viewer refactor (under-the-hood, no behaviour change)

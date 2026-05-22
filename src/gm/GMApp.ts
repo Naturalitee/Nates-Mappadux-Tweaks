@@ -2580,8 +2580,28 @@ export class GMApp {
     document.getElementById('projection-monitor-btn')?.addEventListener('click', () => {
       const room = this.host.roomCode;
       if (!room) { this.setStatus('Waiting for P2P… try again in a moment.', 'warn'); return; }
+      this._ensureCalibratedMapStartsScaled();
       window.open(`/projector.html#${room}`, '_blank', 'noopener,popup,width=1280,height=800');
     });
+  }
+
+  /** Force the projector viewport into 'scaled' mode if the active map
+   *  is calibrated and the current stored mode is 'full'. Called right
+   *  before opening any Scaled View window so the new view defaults
+   *  to calibrated rather than inheriting a stale 'full' that was set
+   *  earlier (e.g. when the user had an uncalibrated map loaded —
+   *  setMapAssetCalibration auto-flips to 'full' on uncalibrated, but
+   *  never flips back when the GM switches to a calibrated map). */
+  private _ensureCalibratedMapStartsScaled(): void {
+    if (!this._isActiveMapCalibrated()) return;
+    const currentVp = this.state.snapshot().projectorViewport ?? defaultProjectorViewport();
+    if (currentVp.mode === 'scaled') return;
+    const next: ProjectorViewport = { ...currentVp, mode: 'scaled' };
+    this.state.setProjectorViewport(next);
+    this.projectorEditor.setViewport(next);
+    this.host.broadcast({ type: 'projector_viewport_update', payload: next });
+    this.refreshProjectionModeButtons();
+    this._refreshRectOverlays();
   }
 
   /**
@@ -2618,6 +2638,7 @@ export class GMApp {
     const room = this.host.roomCode;
     if (!room) { this.setStatus('Waiting for P2P… try again in a moment.', 'warn'); return; }
     setActiveSetupId(v);
+    this._ensureCalibratedMapStartsScaled();
     window.open(`/projector.html#${room}`, '_blank', 'noopener,popup,width=1280,height=800');
   }
 
