@@ -1,5 +1,62 @@
 # Changelog
 
+## v2.14.13 — 2026-05-22
+
+### Viewer refactor (under-the-hood, no behaviour change)
+
+Five-commit refactor preparing the ground for the v2.15.0 Map
+Compositor work. PlayerApp + ProjectorApp had drifted into ~80%
+duplicate logic with three behavioural variants (player /
+scaled-primary / scaled-monitor). Every cross-cutting fix landed
+twice, and adding new viewer kinds meant editing both files.
+
+The refactor introduces a single `Viewer` class driven by a
+`ViewerProfile` (a capability template: broadcast target, view
+source, resize behaviour, grid kind, filter gate, transition
+mode, chrome flags, etc.). Three baseline profiles cover today:
+`player`, `scaled`, `scaled-monitor`. One class + profile data
+per the "simplify where possible" steer.
+
+**Phase 1** (`1fa7379`) — types + profile constants. Inert.
+
+**Phase 2** (`169aacd`) — chrome surface (lifecycle BroadcastChannel
+close, fullscreen button, faff hold-screen with QR, mute indicator)
+lifted from both apps into Viewer.
+
+**Phase 3a** (`dd294f7`) — Renderer + MarkerOverlay + MarkerSprites
++ MarkerTexture + TransitionEngine construction lifted into Viewer.
+Profile-driven options handle the differences (Player's
+preserveDrawingBuffer, Projector's initialFilterEnabled=false /
+videoStallEscalation=false, cut-to-frame vs full transitions).
+Viewer fans out `onMapLoaded` to subscribers after updating the
+marker pipeline aspect.
+
+**Phase 3b** (`f70b668`) — `computeView` strategies extracted to
+`src/viewers/strategies/computeView.ts`. Three implementations:
+`broadcast` (Player pass-through, reserved), `calibrated` (Scaled
+primary's calibration math — the v2.14.9 unclamped form), and
+`mirror-primary` (Scaled monitor). ProjectorApp dispatches by
+role; identical behaviour.
+
+**Phase 3c** (`9c24711`) — `drawGrid` strategies extracted to
+`src/viewers/strategies/drawGrid.ts`. Four implementations: `none`,
+`projector-calibrated`, `monitor-proportional`, and **new**
+`map-relative`. The last one's the renderer for the Player View
+grid (#13 in the v2.15 scope) — wiring a grid canvas + flipping
+`PROFILE_PLAYER.grid.kind` will finish #13 in a small follow-up.
+
+Both apps behave identically to v2.14.12. Design memo + phase plan
+in project memory ([[project_dmr_viewer_refactor_design]]).
+
+Remaining v2.15.0 work after this lands:
+  - #13 Player View grid (small follow-up, renderer ready)
+  - #1 Player zoom/pan (adds a new computeView strategy)
+  - #9 Multi-upload + bulk attribution (Compositor-adjacent)
+  - Map Compositor headline + Swap-Map-Asset sub-feature
+  - Profile-switching at runtime (small Viewer addition)
+
+No faff (beta push).
+
 ## v2.14.12 — 2026-05-20
 
 ### Fix: tolerance slider knocking fill out
