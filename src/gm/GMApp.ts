@@ -2576,8 +2576,15 @@ export class GMApp {
       if (!asset) return;
       const cal = new MapCalibrationModal();
       await cal.open(asset);
-      // Pick up the new value into the projector editor.
-      void this.refreshProjectorMapInfo();
+      // DEBUG (v2.14.21) — chasing post-save 11s freeze: user saw
+      // cal-save timers report 56ms, but the UI was stuck for 11s
+      // before the GM screen came back. Means the heavy work is in
+      // refreshProjectorMapInfo or something it triggers.
+      const t0 = performance.now();
+      console.log('[gm-postcal] cal.open resolved — starting refreshProjectorMapInfo');
+      await this.refreshProjectorMapInfo();
+      const t1 = performance.now();
+      console.log(`[gm-postcal] refreshProjectorMapInfo total ${(t1 - t0).toFixed(0)}ms`);
     });
 
     // Unified Projector dropdown. Acts as launcher, off-switch, and setup
@@ -4542,7 +4549,17 @@ export class GMApp {
    * the active map changes (or its calibration is updated).
    */
   private async refreshProjectorMapInfo(): Promise<void> {
+    // DEBUG (v2.14.21) — per-step timers to localise the post-save freeze.
+    const TS = (label: string, prev: number): number => {
+      const now = performance.now();
+      const dt = now - prev;
+      if (dt > 3) console.log(`[gm-rpmi] ${label}: ${dt.toFixed(0)}ms`);
+      return now;
+    };
+    let t = performance.now();
+    const t0 = t;
     const mapState = this.state.snapshot().map;
+    t = TS('state.snapshot', t);
     const warnEl = document.getElementById('projection-map-cal-warning');
     if (!mapState) {
       this.projectorEditor.setMapPixelsPerSquare(null);
@@ -4551,9 +4568,11 @@ export class GMApp {
       this._lastMapAssetMeta = null;
       if (warnEl) warnEl.hidden = true;
       this._broadcastRoles(false);
+      console.log(`[gm-rpmi] EARLY EXIT (no map) total=${(performance.now() - t0).toFixed(0)}ms`);
       return;
     }
     const asset = await this.maps.getAsset(mapState.id);
+    t = TS('maps.getAsset', t);
     if (!asset) {
       this.projectorEditor.setMapPixelsPerSquare(null);
       this.projectorEditor.setMapImageWidth(0);
@@ -4561,11 +4580,15 @@ export class GMApp {
       this._lastMapAssetMeta = null;
       if (warnEl) warnEl.hidden = true;
       this._broadcastRoles(false);
+      console.log(`[gm-rpmi] EARLY EXIT (no asset) total=${(performance.now() - t0).toFixed(0)}ms`);
       return;
     }
     this.projectorEditor.setMapPixelsPerSquare(asset.pixelsPerSquare ?? null);
+    t = TS('projectorEditor.setMapPixelsPerSquare', t);
     this.projectorEditor.setMapImageWidth(asset.imageWidth ?? 0);
+    t = TS('projectorEditor.setMapImageWidth', t);
     this.host.updateMapAssetInfo(asset.pixelsPerSquare, asset.imageWidth, asset.imageHeight);
+    t = TS('host.updateMapAssetInfo', t);
     this._lastMapAssetMeta = (asset.pixelsPerSquare && asset.imageWidth && asset.imageHeight)
       ? { pixelsPerSquare: asset.pixelsPerSquare, imageWidth: asset.imageWidth, imageHeight: asset.imageHeight }
       : null;
@@ -4582,8 +4605,10 @@ export class GMApp {
       ...(asset.gridOffsetX     !== undefined ? { gridOffsetX:        asset.gridOffsetX     } : {}),
       ...(asset.gridOffsetY     !== undefined ? { gridOffsetY:        asset.gridOffsetY     } : {}),
     });
+    t = TS('host.broadcast(map_meta_update)', t);
     // Monitors care about the primary's resulting view fraction — push it so they re-crop.
     this._broadcastRoles(false);
+    t = TS('_broadcastRoles', t);
     // If the new active map is uncalibrated and the projector is currently
     // in 'scaled' mode, flip to 'full' — scaled requires pixelsPerSquare
     // to render meaningfully. The Full Map button lock (in
@@ -4599,12 +4624,15 @@ export class GMApp {
       }
     }
     this.refreshProjectionModeButtons();
+    t = TS('refreshProjectionModeButtons', t);
     // The projector rect's bounds depend on mapPixelsPerSquare we only
     // resolved a moment ago (asset metadata is read async from IndexedDB),
     // so getRectBounds() returned null during renderer.onMapLoaded's
     // refresh. Re-push now that the calibration data has landed —
     // otherwise the green chrome stays missing after a map swap.
     this._refreshRectOverlays();
+    TS('_refreshRectOverlays', t);
+    console.log(`[gm-rpmi] DONE total=${(performance.now() - t0).toFixed(0)}ms`);
   }
 
   private setStatus(msg: string, level: 'ok' | 'warn' | 'error'): void {
