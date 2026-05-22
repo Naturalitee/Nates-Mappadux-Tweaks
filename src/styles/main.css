@@ -4333,6 +4333,26 @@ option.select-option--add {
 }
 .player-fullscreen-btn:hover { opacity: 1; }
 
+/* v2.14.18 — Reset-view button. Sits just above the Fullscreen button,
+   visible only once the player has zoomed/panned away from the GM crop.
+   Same low-key chrome so it doesn't distract from the map. */
+.player-reset-view-btn {
+  position: fixed;
+  bottom: 50px; right: 12px;
+  z-index: 100;
+  background: rgba(0, 0, 0, 0.6);
+  color: var(--text);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: 6px 10px;
+  font-size: 0.75rem;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  opacity: 0.55;
+  transition: opacity 0.25s;
+}
+.player-reset-view-btn:hover { opacity: 1; }
+
 /* Projector view standalone styles */
 .projector-view { background: #000; color: var(--text); margin: 0; overflow: hidden; }
 .projector-view #renderer-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }

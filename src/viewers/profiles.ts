@@ -46,7 +46,9 @@ export const PROFILE_PLAYER: ViewerProfile = {
     qrTarget:            'self',
   },
   markerLabel: { rule: 'showLabel-only' },
-  interact:    { panZoom: false, resetViewBtn: false },  // flip true to enable #1 player zoom/pan
+  // v2.14.18 — player zoom/pan with bounds enabled. PlayerApp owns
+  // the interaction handlers and the clamped-broadcast view math.
+  interact:    { panZoom: true, resetViewBtn: true },
 };
 
 /** Primary Scaled View — calibrated table-scale display. The first

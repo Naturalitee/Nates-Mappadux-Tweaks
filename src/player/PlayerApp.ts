@@ -3,6 +3,7 @@ import { generateId } from '../utils/id.ts';
 import { Viewer } from '../viewers/Viewer.ts';
 import { PROFILE_PLAYER } from '../viewers/profiles.ts';
 import { drawGrid } from '../viewers/strategies/drawGrid.ts';
+import { attachGestures } from '../utils/Gestures.ts';
 import { decodeImageBitmap } from '../utils/decodeImageBitmap.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { MarkerTexture } from '../rendering/MarkerTexture.ts';
@@ -79,6 +80,24 @@ export class PlayerApp {
    *  the GM's view broadcast carries playerGridEnabled=true and the
    *  active map is calibrated. */
   private playerGridCanvas: HTMLCanvasElement | null = null;
+  /** v2.14.18 — Player-side zoom + pan within the GM-defined crop.
+   *  `_broadcastView` is the GM's most recent view (the outer bounds);
+   *  `_localOverride` is the player's chosen sub-rect (or null if
+   *  they're matching the GM exactly). The rendered view is the
+   *  override clamped to fit inside the broadcast. */
+  private _broadcastView: ViewState | null = null;
+  private _localOverride: { centerX: number; centerY: number; viewNW: number; viewNH: number } | null = null;
+  /** Snapshot of the override at gesture start — gesture deltas are
+   *  cumulative, so we re-derive the override from the snapshot each
+   *  pointermove rather than integrating per-frame deltas. */
+  private _gestureSnap: {
+    override: { centerX: number; centerY: number; viewNW: number; viewNH: number };
+    midX: number;
+    midY: number;
+  } | null = null;
+  private _resetViewBtn: HTMLButtonElement | null = null;
+  /** Minimum override width/height in map-norm units (caps zoom-in). */
+  private static readonly MIN_OVERRIDE_VIEW = 0.05;
   // ── Motion-tracker overlay (rings + return blobs broadcast by the GM) ──────
   private _trackerScans: MotionOverlayScan[] = [];
   private _trackerBlobs: MotionOverlayBlob[] = [];
@@ -170,6 +189,18 @@ export class PlayerApp {
     this.playerGridCanvas = document.querySelector<HTMLCanvasElement>('#player-grid');
     window.addEventListener('resize', () => this._refreshPlayerGrid());
 
+    // v2.14.18 — bind the Reset View button + wire pan/zoom gestures
+    // on the renderer canvas. The button stays hidden until the
+    // player has actually deviated from the GM's broadcast view.
+    this._resetViewBtn = document.getElementById('player-reset-view-btn') as HTMLButtonElement | null;
+    this._resetViewBtn?.addEventListener('click', (e) => {
+      // Don't let this click bubble to the document-level mute toggle.
+      e.stopPropagation();
+      this._localOverride = null;
+      this._applyEffectiveView();
+    });
+    this._attachPlayerGestures();
+
     this.renderer.onContextLost = () => {
       this._contextLost = true;
       this.setStatus('Renderer lost — recovering…');
@@ -247,18 +278,195 @@ export class PlayerApp {
     });
   }
 
+  /** v2.14.18 — Apply the broadcast view + any local zoom override
+   *  to the renderer. Called on view_update / full_state / map_change,
+   *  and on every override mutation (wheel, drag, pinch, reset). */
+  private _applyEffectiveView(): void {
+    const bv = this._broadcastView;
+    if (!bv) return;
+
+    // Clamp the override to fit inside the broadcast bounds. If there's
+    // no override the broadcast view IS the effective view.
+    let effective: ViewState;
+    if (this._localOverride) {
+      this._clampOverride(bv);
+      const ov = this._localOverride;
+      effective = {
+        ...bv,
+        centerX: ov.centerX,
+        centerY: ov.centerY,
+        viewNW:  ov.viewNW,
+        viewNH:  ov.viewNH,
+      };
+    } else {
+      effective = bv;
+    }
+
+    this.lastView = effective;
+    this.renderer.setView(effective);
+    this.renderer.setBackdrop(effective.backdrop ?? null);
+    this.markerSprites.render(this.currentMarkers, this.playerIconCache);
+    this._updateMarkerOverlay();
+    this.renderer.markMarkersDirty();
+    this._refreshPlayerGrid();
+
+    // Reset-view button visibility follows the override state. A small
+    // tolerance avoids flashing the button if the override just
+    // happens to coincide with the broadcast (e.g. after clamping).
+    if (this._resetViewBtn) {
+      const showReset = !!this._localOverride;
+      this._resetViewBtn.hidden = !showReset;
+    }
+  }
+
+  /** Mutate `_localOverride` so its rect fits inside the broadcast
+   *  view rect. viewNW/viewNH get clamped to [MIN, broadcast.viewN*];
+   *  center is clamped so the override rect stays within bounds. */
+  private _clampOverride(bv: ViewState): void {
+    const ov = this._localOverride;
+    if (!ov) return;
+    const minSize = PlayerApp.MIN_OVERRIDE_VIEW;
+    ov.viewNW = Math.min(bv.viewNW, Math.max(minSize, ov.viewNW));
+    ov.viewNH = Math.min(bv.viewNH, Math.max(minSize, ov.viewNH));
+    const dx = (bv.viewNW - ov.viewNW) / 2;
+    const dy = (bv.viewNH - ov.viewNH) / 2;
+    ov.centerX = Math.min(bv.centerX + dx, Math.max(bv.centerX - dx, ov.centerX));
+    ov.centerY = Math.min(bv.centerY + dy, Math.max(bv.centerY - dy, ov.centerY));
+  }
+
+  /** Wire pointer / wheel / pinch handlers on the renderer canvas. */
+  private _attachPlayerGestures(): void {
+    const canvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
+    if (!canvas) return;
+    attachGestures(canvas, {
+      onWheel: (e) => this._zoomAtClient(e.clientX, e.clientY, e.factor),
+      onDrag:  (e) => {
+        // Only treat mouse / pen / touch single-finger drags as pans.
+        // (attachGestures also exposes pointerType — currently we accept
+        // all of them; tap-to-mute still survives because attachGestures
+        // doesn't fire onDrag until the pointer actually moves.)
+        if (e.phase === 'start') {
+          this._gestureSnap = {
+            override: this._currentOverrideSnapshot(),
+            midX: e.clientX, midY: e.clientY,
+          };
+          return;
+        }
+        if (!this._gestureSnap || !this._broadcastView) return;
+        const canvasRect = canvas.getBoundingClientRect();
+        const bv = this._broadcastView;
+        const snap = this._gestureSnap.override;
+        // dx/dy is cumulative from start. Convert client-px → view-norm,
+        // negate (dragging the map right shifts the view-center LEFT).
+        const dnx = -e.dx / canvasRect.width  * snap.viewNW;
+        const dny = -e.dy / canvasRect.height * snap.viewNH;
+        this._localOverride = {
+          centerX: snap.centerX + dnx,
+          centerY: snap.centerY + dny,
+          viewNW:  snap.viewNW,
+          viewNH:  snap.viewNH,
+        };
+        // Skip applying for tiny pre-threshold drags (< 1px) so a
+        // genuine tap-to-mute click doesn't get clobbered by a stray
+        // sub-pixel pointermove between down and up.
+        if (e.phase === 'move' && Math.hypot(e.dx, e.dy) < 1) return;
+        this._clampOverride(bv);
+        this._applyEffectiveView();
+        if (e.phase === 'end') this._gestureSnap = null;
+      },
+      onTwoFinger: (e) => {
+        if (e.phase === 'start') {
+          this._gestureSnap = {
+            override: this._currentOverrideSnapshot(),
+            midX: e.midX, midY: e.midY,
+          };
+          return;
+        }
+        if (!this._gestureSnap || !this._broadcastView) return;
+        const canvasRect = canvas.getBoundingClientRect();
+        const snap = this._gestureSnap.override;
+        // Scale around the original centroid (in client px). e.scale is
+        // cumulative — fingers spread → >1 → zoom IN → smaller view.
+        const u0 = (this._gestureSnap.midX - canvasRect.left) / canvasRect.width;
+        const v0 = (this._gestureSnap.midY - canvasRect.top)  / canvasRect.height;
+        const wx0 = snap.centerX - snap.viewNW / 2 + u0 * snap.viewNW;
+        const wy0 = snap.centerY - snap.viewNH / 2 + v0 * snap.viewNH;
+        const newW = snap.viewNW / e.scale;
+        const newH = snap.viewNH / e.scale;
+        // Also account for centroid drift since gesture start (panDx/Dy).
+        const dnx = -e.panDx / canvasRect.width  * snap.viewNW;
+        const dny = -e.panDy / canvasRect.height * snap.viewNH;
+        this._localOverride = {
+          viewNW:  newW,
+          viewNH:  newH,
+          centerX: wx0 - (u0 - 0.5) * newW + dnx,
+          centerY: wy0 - (v0 - 0.5) * newH + dny,
+        };
+        this._clampOverride(this._broadcastView);
+        this._applyEffectiveView();
+        if (e.phase === 'end') this._gestureSnap = null;
+      },
+    });
+  }
+
+  /** Snapshot the current effective view as an override seed — used
+   *  when the player starts a gesture from the GM-matching state. */
+  private _currentOverrideSnapshot(): { centerX: number; centerY: number; viewNW: number; viewNH: number } {
+    if (this._localOverride) {
+      const ov = this._localOverride;
+      return { centerX: ov.centerX, centerY: ov.centerY, viewNW: ov.viewNW, viewNH: ov.viewNH };
+    }
+    const bv = this._broadcastView!;
+    return { centerX: bv.centerX, centerY: bv.centerY, viewNW: bv.viewNW, viewNH: bv.viewNH };
+  }
+
+  /** Zoom around a client-px point. factor < 1 = zoom IN, >1 = zoom OUT. */
+  private _zoomAtClient(clientX: number, clientY: number, factor: number): void {
+    if (!this._broadcastView) return;
+    const canvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const u = (clientX - rect.left) / rect.width;
+    const v = (clientY - rect.top)  / rect.height;
+    const cur = this._currentOverrideSnapshot();
+    const wx0 = cur.centerX - cur.viewNW / 2 + u * cur.viewNW;
+    const wy0 = cur.centerY - cur.viewNH / 2 + v * cur.viewNH;
+    const newW = cur.viewNW * factor;
+    const newH = cur.viewNH * factor;
+    this._localOverride = {
+      viewNW:  newW,
+      viewNH:  newH,
+      centerX: wx0 - (u - 0.5) * newW,
+      centerY: wy0 - (v - 0.5) * newH,
+    };
+    this._clampOverride(this._broadcastView);
+    // If the wheel-out has restored the override to match the broadcast
+    // exactly, drop it back to null so the Reset button hides itself.
+    const bv = this._broadcastView;
+    const ov = this._localOverride;
+    const eps = 1e-4;
+    if (
+      Math.abs(ov.viewNW - bv.viewNW) < eps &&
+      Math.abs(ov.viewNH - bv.viewNH) < eps &&
+      Math.abs(ov.centerX - bv.centerX) < eps &&
+      Math.abs(ov.centerY - bv.centerY) < eps
+    ) {
+      this._localOverride = null;
+    }
+    this._applyEffectiveView();
+  }
+
   private _recoverRenderer(): void {
     if (this.lastMapBlob) {
       // Re-feed the cached state — recreates all GPU resources from scratch.
       void this.renderer.loadMap(this.lastMapBlob, this.lastFog).then(() => {
         if (this.lastFilter) this.renderer.setFilter(this.lastFilter);
-        if (this.lastView) {
-          this.renderer.setView(this.lastView);
-          this.renderer.setBackdrop(this.lastView.backdrop ?? null);
+        // Re-apply through the effective-view path so any active zoom
+        // override survives context loss.
+        if (this._broadcastView || this.lastView) {
+          if (!this._broadcastView && this.lastView) this._broadcastView = this.lastView;
+          this._applyEffectiveView();
         }
-        this.markerSprites.render(this.currentMarkers, this.playerIconCache);
-        this._updateMarkerOverlay();
-        this.renderer.markMarkersDirty();
         this.setStatus('');
       });
     } else if (this.roomCode) {
@@ -341,10 +549,12 @@ export class PlayerApp {
           this.lastFog = msg.payload.fog ?? { polygons: [] };
         }
         if (msg.payload.filter) this.lastFilter = msg.payload.filter;
-        if (msg.payload.view)   this.lastView   = msg.payload.view;
+        if (msg.payload.view) {
+          this._broadcastView = msg.payload.view;
+          this.lastView = msg.payload.view;
+        }
         this.renderer.setFilter(msg.payload.filter);
-        this.renderer.setView(msg.payload.view);
-        this.renderer.setBackdrop(msg.payload.view?.backdrop ?? null);
+        this._applyEffectiveView();
         void (async () => {
           if (msg.iconData?.length)         await this._decodeIconData(msg.iconData);
           if (msg.soundboardAssets?.length) this._cacheSoundboardAssets(msg.soundboardAssets);
@@ -402,8 +612,12 @@ export class PlayerApp {
               await this.renderer.loadMap(blob, fog);
               if (filter) this.renderer.setFilter(filter);
               if (view) {
-                this.renderer.setView(view);
-                this.renderer.setBackdrop(view.backdrop ?? null);
+                // v2.14.18 — fresh map = fresh broadcast bounds.
+                // Drop any zoom override so the player starts on the
+                // GM-prescribed view of the new map.
+                this._broadcastView = view;
+                this._localOverride = null;
+                this._applyEffectiveView();
               }
             });
           })();
@@ -457,8 +671,11 @@ export class PlayerApp {
               await this.renderer.loadMap(finalBlob, fog);
               if (filter) this.renderer.setFilter(filter);
               if (view) {
-                this.renderer.setView(view);
-                this.renderer.setBackdrop(view.backdrop ?? null);
+                // Handout reveal stays on the same map_id — preserve
+                // any in-flight player override; just refresh bounds
+                // in case the GM updated the broadcast crop alongside.
+                this._broadcastView = view;
+                this._applyEffectiveView();
               }
             }, preSnap, revealCanvas);
           } finally {
@@ -487,7 +704,10 @@ export class PlayerApp {
         this.lastMapBlob = videoBuf;
         void this.renderer.loadMap(videoBuf, this.lastFog).then(() => {
           if (this.lastFilter) this.renderer.setFilter(this.lastFilter);
-          if (this.lastView)   this.renderer.setView(this.lastView);
+          // video_bundle is a static→video swap on the SAME map, so
+          // keep any active override and re-apply it via the effective
+          // view path.
+          this._applyEffectiveView();
         });
         break;
       }
@@ -510,25 +730,14 @@ export class PlayerApp {
 
 
       case 'view_update': {
-        this.lastView = msg.payload;
-        this.renderer.setView(msg.payload);
-        // Backdrop is part of view but the renderer holds it on a
-        // separate code path (rebuilds the clip-pass when the kind
-        // changes; pushes uniforms when params change). map_change
-        // and full_state both fire setBackdrop alongside setView for
-        // exactly this reason; live view edits need the same pair so
-        // bg-colour / backdrop / backdrop-param tweaks in the GM
-        // reach the player without forcing a reconnect.
-        this.renderer.setBackdrop(msg.payload.backdrop ?? null);
-        // Re-render markers in case the view change should also retrigger
-        // sprite resizing decisions (e.g. DPR change after window move).
-        this.markerSprites.render(this.currentMarkers, this.playerIconCache);
-        this._updateMarkerOverlay();
-        this.renderer.markMarkersDirty();
-        // v2.14.17 — redraw the player-side grid (if enabled). View
-        // changes can flip the gridEnabled flag or change viewNW
-        // (which the map-relative strategy uses to derive spacing).
-        this._refreshPlayerGrid();
+        // v2.14.18 — GM's view becomes the new broadcast bounds.
+        // Any active player-side zoom override is preserved and
+        // re-clamped to fit the new bounds inside _applyEffectiveView
+        // (so panning/cropping by the GM doesn't snap the player out
+        // of their local zoom). Backdrop, marker re-render, and grid
+        // refresh all happen inside _applyEffectiveView.
+        this._broadcastView = msg.payload;
+        this._applyEffectiveView();
         break;
       }
 

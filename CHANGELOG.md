@@ -1,5 +1,39 @@
 # Changelog
 
+## v2.14.18 — 2026-05-22
+
+### Player View zoom + pan (#1)
+
+The next v2.15-scope item: players can now zoom and pan their own
+screens, but only within the crop the GM has prescribed. Small-screen
+players get to lean in on detail without the GM having to broadcast
+a new view to everybody.
+
+Wheel-zoom centres on the cursor; click-drag pans; pinch-zoom + two-
+finger pan on touch. All deltas are clamped against the GM's
+broadcast `viewNW/H` and centre so the player can never see anything
+outside what the GM has shared. Minimum override size caps at 5%
+of the broadcast width (~20× zoom-in from a full crop).
+
+A low-key `↺ Reset view` button appears bottom-right whenever the
+player has deviated from the GM's view — click to snap back. The
+button also hides automatically if the player wheel-zooms all the
+way back to the broadcast rect.
+
+GM view changes mid-session preserve the player's local override
+(re-clamping it into the new bounds), so the GM nudging the camera
+doesn't yank a zoomed-in player out of their detail view. A
+`map_change` clears the override — fresh map = fresh view.
+
+PROFILE_PLAYER.interact now declares `panZoom: true, resetViewBtn:
+true`. PlayerApp routes every view application (full_state,
+map_change, view_update, handout_reveal, video_bundle, context
+recovery) through a single `_applyEffectiveView` that composes
+broadcast + override and updates the renderer, markers, grid, and
+reset-button visibility atomically.
+
+No faff (beta push).
+
 ## v2.14.17 — 2026-05-22
 
 ### Player View grid, calibration show-grid + border nudge
