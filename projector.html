@@ -15,6 +15,13 @@
 
   <canvas id="renderer-canvas"></canvas>
 
+  <!-- Transition overlay — used by TransitionEngine when the GM has
+       enabled animations on the Scaled View (Settings → Scaled View
+       → Enable transitions). The canvas is inert until the engine
+       paints into it; it sits above the renderer-canvas and inherits
+       its rotation via projector-view's data-rot CSS. -->
+  <canvas id="transition-canvas"></canvas>
+
   <!-- HTML screen-space layer for marker labels — stays readable independent
        of the map's render scale. -->
   <div id="marker-overlay" class="marker-overlay"></div>

@@ -1,5 +1,37 @@
 # Changelog
 
+## v2.14.16 — 2026-05-22
+
+### Settings: enable transitions & animations on Scaled View
+
+The Scaled View has always cut straight to the final frame on a
+map switch or handout reveal — the rationale being that animated
+transitions on a physical table screen feel jarring during play.
+The post-refactor Viewer abstraction made this a profile flag,
+which means it's now a setting the GM can flip per-session
+without a code change.
+
+  - New Settings → Scaled View section with an "Enable transitions
+    & animations" toggle. Off by default.
+  - Backed by a `mappadux:scaled_view_transitions` localStorage
+    flag (per-machine, like the other performance/display
+    preferences).
+  - ProjectorApp reads the flag at boot, swaps PROFILE_SCALED's
+    transitions.mode to 'full' for this session, and passes the
+    new `#transition-canvas` element from projector.html through
+    to Viewer. Viewer constructs the TransitionEngine.
+  - map_change and handout_reveal handlers now check
+    `viewer.transitionEngine` — when present, they route through
+    the engine (with the same _pendingMapLoad serialisation
+    Player uses to avoid the "reveal snaps to end" race). When
+    absent (default), they cut to frame as before.
+
+Toggle in Settings → Scaled View applies to the NEXT Scaled View
+window the GM opens — existing windows keep their current
+behaviour until reopened.
+
+No faff (beta push).
+
 ## v2.14.15 — 2026-05-22
 
 ### Monitor badge: above the grid, renamed Scaled View Monitor

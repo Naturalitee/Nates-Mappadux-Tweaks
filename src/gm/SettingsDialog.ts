@@ -5,6 +5,8 @@ import {
   setVideoCap1080Enabled,
   isLocalPlayerStaticOnly,
   setLocalPlayerStaticOnly,
+  isScaledViewTransitionsEnabled,
+  setScaledViewTransitionsEnabled,
   getUiScale,
   setUiScale,
   applyUiScale,
@@ -83,6 +85,8 @@ export class SettingsDialog {
     body.appendChild(this._buildStorageSection());
     // ── Display section ──────────────────────────────────────────────────
     body.appendChild(this._buildDisplaySection());
+    // ── Scaled View section ──────────────────────────────────────────────
+    body.appendChild(this._buildScaledViewSection());
     // ── Performance section ──────────────────────────────────────────────
     body.appendChild(this._buildPerformanceSection());
     // ── API Keys section ─────────────────────────────────────────────────
@@ -285,6 +289,27 @@ export class SettingsDialog {
 
     row.append(label, slider);
     sec.appendChild(row);
+    return sec;
+  }
+
+  // ─── Scaled View ────────────────────────────────────────────────────────
+
+  private _buildScaledViewSection(): HTMLElement {
+    const sec = mkSection(
+      'Scaled View',
+      'Behaviour overrides for the Scaled View (table-scale) window. Changes apply when you next open a Scaled View window — existing windows keep their current behaviour until reopened.',
+    );
+
+    sec.appendChild(this._buildPerfToggle({
+      title: 'Enable transitions & animations',
+      help:
+        'Off by default. The Scaled View cuts straight to each new frame so the table screen never visibly shudders mid-session — animated handout reveals and map-change transitions feel jarring on a physical table display. ' +
+        'Tick this to opt the Scaled View back into the same animated transition pipeline the Player view uses (typing reveals, map-change CRT collapses, etc.).<br><br>' +
+        '<em>When to enable:</em> table screens used for immersive reveals (story handouts, dramatic map switches). <em>Leave off for:</em> battlemap-only Scaled Views where instant updates beat visual flair.',
+      get: isScaledViewTransitionsEnabled,
+      set: setScaledViewTransitionsEnabled,
+    }));
+
     return sec;
   }
 

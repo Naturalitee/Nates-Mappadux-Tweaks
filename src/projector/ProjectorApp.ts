@@ -13,6 +13,9 @@ import { Viewer } from '../viewers/Viewer.ts';
 import { PROFILE_SCALED } from '../viewers/profiles.ts';
 import { computeView } from '../viewers/strategies/computeView.ts';
 import { drawGrid } from '../viewers/strategies/drawGrid.ts';
+import { isScaledViewTransitionsEnabled } from '../storage/localSettings.ts';
+import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
+import type { TransitionConfig } from '../types.ts';
 import { decodeImageBitmap } from '../utils/decodeImageBitmap.ts';
 import { generateId } from '../utils/id.ts';
 import {
@@ -87,6 +90,17 @@ export class ProjectorApp {
 
   // Cached pieces of state needed to compute our viewport.
   private mapBlob:           ArrayBuffer | null = null;
+  /** v2.14.16 — last loaded map blob, kept for the handout_reveal
+   *  starting-frame snapshot when Scaled View transitions are on.
+   *  Mirrors PlayerApp.lastMapBlob's purpose. */
+  private lastMapBlob:       ArrayBuffer | null = null;
+  /** v2.14.16 — promise chain that serialises in-flight map loads so a
+   *  follow-up handout_reveal awaits the preceding map_change's
+   *  texture decode before swapping again. Same mechanism PlayerApp
+   *  added in v2.14.0 to fix the "reveal snaps to end" race. Only
+   *  used when Scaled View transitions are enabled; cut-to-frame
+   *  path doesn't need serialisation. */
+  private _pendingMapLoad: Promise<void> = Promise.resolve();
   /** v2.12.x — current map id, tracked off map_change so the two-phase
    *  video_bundle follow-up can guard against stale deliveries after
    *  the GM has swapped to a different map mid-transfer. */
@@ -183,11 +197,27 @@ export class ProjectorApp {
     //   - videoStallEscalation=false → at the table, a stuttering
     //     animated map beats a "tap fullscreen" banner.
     //   - transitionCanvas=null → cut-to-frame per profile.
-    this.viewer = new Viewer(PROFILE_SCALED, {
+    // v2.14.16 — Scaled View transitions are opt-in via Settings. When
+    // enabled, pass the transition canvas to Viewer so the engine gets
+    // constructed; the message handlers below check viewer.transitionEngine
+    // and delegate to it for handout_reveal / map_change.
+    const transitionsOn = isScaledViewTransitionsEnabled();
+    const transitionCanvas = transitionsOn
+      ? document.querySelector<HTMLCanvasElement>('#transition-canvas') ?? null
+      : null;
+    // PROFILE_SCALED defaults to cut-to-frame; flip to 'full' for this
+    // session when the opt-in is on. Viewer requires both
+    // profile.transitions.mode === 'full' AND a transitionCanvas to
+    // actually instantiate a TransitionEngine.
+    const profile = transitionsOn
+      ? { ...PROFILE_SCALED, transitions: { mode: 'full' as const } }
+      : PROFILE_SCALED;
+
+    this.viewer = new Viewer(profile, {
       fullscreenBtn:        null,
       rendererCanvas:       this.rendererCanvas,
       markerOverlayEl:      document.getElementById('marker-overlay'),
-      transitionCanvas:     null,
+      transitionCanvas,
       initialFilterEnabled: false,
       videoStallEscalation: false,
     });
@@ -414,8 +444,27 @@ export class ProjectorApp {
           if (prevFilterEnabled !== this.projectorViewport.filterEnabled) this._applyFilter();
         }
         if (blob) {
-          this.mapBlob = blob;
-          void this.renderer.loadMap(blob, this.currentFog);
+          const finalBlob = blob;
+          this.mapBlob = finalBlob;
+          // v2.14.16 — when Scaled View transitions are enabled, route
+          // through the TransitionEngine + serialise behind any
+          // in-flight load (mirrors PlayerApp's v2.14.0 _pendingMapLoad
+          // race fix). When disabled (default), cut straight to the new
+          // texture as before.
+          if (this.viewer.transitionEngine) {
+            const fog = this.currentFog;
+            const prior = this._pendingMapLoad;
+            this._pendingMapLoad = (async () => {
+              await prior;
+              await this._runTransition(msg.transition, async () => {
+                await this.renderer.loadMap(finalBlob, fog);
+              });
+              this.lastMapBlob = finalBlob;
+            })();
+          } else {
+            void this.renderer.loadMap(finalBlob, this.currentFog);
+            this.lastMapBlob = finalBlob;
+          }
         }
         void (async () => {
           if (msg.iconData?.length) await this._decodeIconData(msg.iconData);
@@ -426,16 +475,45 @@ export class ProjectorApp {
         break;
       }
       case 'handout_reveal': {
-        // Projector currently lacks a TransitionEngine + overlay canvas
-        // (player has them; projector goes straight from blob → texture).
-        // For now the projector cuts to the FINAL frame instantly on
-        // reveal — the player view shows the full animation, the
-        // projector just updates the displayed handout. Follow-up:
-        // mirror the player's transition path on the projector by
-        // adding an overlay canvas + TransitionEngine.
-        if (blob) {
-          this.mapBlob = blob;
-          void this.renderer.loadMap(blob, this.currentFog);
+        // v2.14.16 — when Scaled View transitions are enabled, use the
+        // same in-scene reveal-overlay path PlayerApp uses (snapshot
+        // the previous map's frame, paint the transition above it,
+        // swap to the new texture under the cover). When disabled,
+        // cut to the final frame as before.
+        if (!blob) break;
+        if (msg.mapId !== this.currentMapId) break; // stale message
+        const finalBlob = blob;
+        if (this.viewer.transitionEngine) {
+          const startBlob = this.lastMapBlob;
+          const fog = this.currentFog;
+          this.mapBlob = finalBlob;
+          const prior = this._pendingMapLoad;
+          this._pendingMapLoad = (async () => {
+            await prior;
+            let preSnap: ImageBitmap | undefined;
+            if (startBlob) {
+              try {
+                preSnap = await createImageBitmap(new Blob([startBlob], { type: 'image/png' }));
+              } catch { preSnap = undefined; }
+            }
+            const rendererCanvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas')!;
+            const revealCanvas = this.renderer.beginRevealOverlay(
+              rendererCanvas.clientWidth  || window.innerWidth,
+              rendererCanvas.clientHeight || window.innerHeight,
+            );
+            try {
+              await this._runTransition(msg.transition, async () => {
+                await this.renderer.loadMap(finalBlob, fog);
+              }, preSnap, revealCanvas);
+            } finally {
+              this.renderer.endRevealOverlay();
+            }
+            this.lastMapBlob = finalBlob;
+          })();
+        } else {
+          this.mapBlob = finalBlob;
+          void this.renderer.loadMap(finalBlob, this.currentFog);
+          this.lastMapBlob = finalBlob;
         }
         break;
       }
@@ -761,5 +839,27 @@ export class ProjectorApp {
     if (!this.statusEl) return;
     this.statusEl.textContent = text;
     this.statusEl.hidden = !visible || !text;
+  }
+
+  /** v2.14.16 — Run a transition through the Viewer's TransitionEngine.
+   *  Mirrors PlayerApp.runTransition with the same engine API. Only
+   *  called when transitions are enabled (otherwise the caller cuts to
+   *  the final frame and skips this entirely). No-ops gracefully if
+   *  the engine isn't set up. */
+  private async _runTransition(
+    config: TransitionConfig | undefined,
+    applyChange: () => Promise<void>,
+    preSnapshot?: ImageBitmap,
+    overlayOverride?: HTMLCanvasElement,
+  ): Promise<void> {
+    if (!this.viewer.transitionEngine) {
+      await applyChange();
+      return;
+    }
+    const id     = config?.transitionId ?? 'none';
+    const def    = transitionRegistry.getOrFallback(id);
+    const params = config?.params ?? transitionRegistry.defaultParams(id);
+    const canvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas')!;
+    await this.viewer.transitionEngine.run(def, params, canvas, applyChange, preSnapshot, overlayOverride);
   }
 }

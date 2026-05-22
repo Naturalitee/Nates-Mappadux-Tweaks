@@ -59,6 +59,27 @@ export function setLocalPlayerStaticOnly(enabled: boolean): void {
   } catch { /* private mode etc. — no-op */ }
 }
 
+/** v2.14.16 — Scaled View transitions opt-in. The Scaled View
+ *  defaults to cut-to-frame (instant map / handout reveal) because
+ *  the table screen feels too jarring when animations play on it.
+ *  Set this flag to opt the Scaled View back into full transitions
+ *  (matching the Player view). Applied at ProjectorApp init time —
+ *  the user must reopen the Scaled View window for the change to
+ *  take effect. Default off. */
+export const SCALED_VIEW_TRANSITIONS_KEY = 'mappadux:scaled_view_transitions';
+
+export function isScaledViewTransitionsEnabled(): boolean {
+  try { return localStorage.getItem(SCALED_VIEW_TRANSITIONS_KEY) === '1'; }
+  catch { return false; }
+}
+
+export function setScaledViewTransitionsEnabled(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.setItem(SCALED_VIEW_TRANSITIONS_KEY, '1');
+    else         localStorage.removeItem(SCALED_VIEW_TRANSITIONS_KEY);
+  } catch { /* private mode etc. — no-op */ }
+}
+
 /** UI scale for the left sidebar. Stored as a number (1.0 = 100%);
  *  values outside MIN/MAX clamp on read. Applied via CSS `zoom` so the
  *  whole box model scales uniformly — fonts, padding, borders, icon
