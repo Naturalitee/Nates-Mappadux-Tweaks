@@ -29,6 +29,15 @@ export class MapCalibrationModal {
   /** Current SVG viewBox: [x, y, w, h]. Zoom = imgW / vbW. */
   private vb: [number, number, number, number] = [0, 0, 1, 1];
 
+  /** v2.14.18 — grid offset in map pixels (the border-nudge value).
+   *  Loaded from asset.gridOffsetX/Y on open; mutated by arrow-key
+   *  nudges; persisted alongside other calibration data on save. */
+  private gridOffsetX = 0;
+  private gridOffsetY = 0;
+  /** v2.14.18 — keydown handler for arrow-key nudge; attached on
+   *  open, removed on close. */
+  private _onKeyDown: ((e: KeyboardEvent) => void) | null = null;
+
   /** Open the calibration UI; resolves once the modal closes. */
   async open(asset: MapAsset): Promise<void> {
     const blob = await MapAssetStore.getBlob(asset);
@@ -41,6 +50,10 @@ export class MapCalibrationModal {
     this.imgW = dims.width;
     this.imgH = dims.height;
     this.vb   = [0, 0, this.imgW, this.imgH];
+
+    // v2.14.18 — restore stored grid offset, if any.
+    this.gridOffsetX = asset.gridOffsetX ?? 0;
+    this.gridOffsetY = asset.gridOffsetY ?? 0;
 
     // Pick up where the last calibration left off if we have it; otherwise
     // a default horizontal line spanning ~50% of the image width.
@@ -62,6 +75,10 @@ export class MapCalibrationModal {
   }
 
   private close(): void {
+    if (this._onKeyDown) {
+      window.removeEventListener('keydown', this._onKeyDown);
+      this._onKeyDown = null;
+    }
     if (this.overlay) this.overlay.remove();
     this.overlay = null;
     if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
@@ -94,7 +111,7 @@ export class MapCalibrationModal {
             <h3>Calibrate &ldquo;${this._esc(asset.filename)}&rdquo;</h3>
             <p>Drag the two crosses to two points whose grid distance you know. Scroll or pinch to zoom, drag empty space to pan. Then enter how many 1&Prime;/25 mm squares the line spans.</p>
           </div>
-          <label class="calibration-toggle-grid" title="Overlay a 1″/25 mm grid on the map at the current calibration. Useful for eyeballing the calculated spacing against any visible grid drawn on the map itself.">
+          <label class="calibration-toggle-grid" title="Overlay a 1″/25 mm grid on the map at the current calibration. Useful for eyeballing the calculated spacing against any visible grid drawn on the map itself. Arrow keys nudge the grid to align with bordered maps (Shift+arrow for 10px steps; Esc resets the nudge).">
             <input type="checkbox" class="calibration-grid-overlay-toggle" />
             <span>Show grid</span>
           </label>
@@ -518,8 +535,13 @@ export class MapCalibrationModal {
       if (!gridOverlayCb.checked) return;
       const pps = derivePps();
       if (!pps || pps < 2) return;
-      const cx = this.imgW / 2;
-      const cy = this.imgH / 2;
+      // v2.14.18 — grid origin = centre + offset (mod pps so the
+      // walk stays in a bounded band; mathematically equivalent to
+      // walking from any congruent base position).
+      const modX = ((this.gridOffsetX % pps) + pps) % pps;
+      const modY = ((this.gridOffsetY % pps) + pps) % pps;
+      const cx = this.imgW / 2 + modX;
+      const cy = this.imgH / 2 + modY;
       const lines: string[] = [];
       // Vertical lines from centre outward.
       for (let x = cx; x <= this.imgW; x += pps) {
@@ -538,6 +560,33 @@ export class MapCalibrationModal {
       gridOverlayG.innerHTML = lines.join('');
     };
     gridOverlayCb.addEventListener('change', updateCalGrid);
+
+    // v2.14.18 — arrow-key nudge for the grid offset. Only listens
+    // while the calibration modal is open AND Show Grid is on.
+    // Shift+arrow nudges 10px; plain arrow nudges 1px. Esc resets
+    // the offset to (0, 0). Handler removed on close().
+    this._onKeyDown = (ev: KeyboardEvent) => {
+      if (!gridOverlayCb.checked) return;
+      // Don't fight focused inputs — arrow keys in number inputs
+      // mean "increment/decrement value".
+      const tag = (document.activeElement?.tagName ?? '').toLowerCase();
+      if (tag === 'input' || tag === 'select' || tag === 'textarea') return;
+      const step = ev.shiftKey ? 10 : 1;
+      let consumed = true;
+      switch (ev.key) {
+        case 'ArrowLeft':  this.gridOffsetX -= step; break;
+        case 'ArrowRight': this.gridOffsetX += step; break;
+        case 'ArrowUp':    this.gridOffsetY -= step; break;
+        case 'ArrowDown':  this.gridOffsetY += step; break;
+        case 'Escape':     this.gridOffsetX = 0; this.gridOffsetY = 0; break;
+        default: consumed = false;
+      }
+      if (consumed) {
+        ev.preventDefault();
+        updateCalGrid();
+      }
+    };
+    window.addEventListener('keydown', this._onKeyDown);
 
     gridHInput.addEventListener('input', () => {
       autoFillCounterpart('h'); updateGridFeedback();
@@ -595,6 +644,10 @@ export class MapCalibrationModal {
           gridSquares:      { h: parseInt(gridHInput.value, 10), v: parseInt(gridVInput.value, 10) },
           scaleConfidence:  'manual',
           noGrid:           false,
+          // v2.14.18 — border-nudge offset travels alongside the
+          // calibration value so every viewer aligns the same way.
+          gridOffsetX:      this.gridOffsetX,
+          gridOffsetY:      this.gridOffsetY,
         });
         this.close();
         return;
@@ -617,6 +670,10 @@ export class MapCalibrationModal {
         scaleConfidence: 'manual',
         // Re-calibrating a map clears any prior "no grid" opt-out.
         noGrid: false,
+        // v2.14.18 — border-nudge offset travels alongside the
+        // calibration value so every viewer aligns the same way.
+        gridOffsetX:    this.gridOffsetX,
+        gridOffsetY:    this.gridOffsetY,
       });
       this.close();
     });

@@ -1,5 +1,43 @@
 # Changelog
 
+## v2.14.17 — 2026-05-22
+
+### Player View grid, calibration show-grid + border nudge
+
+Three v2.15-scope items in one beta cut. Two minor (the grid +
+nudge in MapCalibrationModal); one bigger (#13 — the Player
+View grid that the Phase 3c refactor pre-built the renderer for).
+
+**Player View grid icon + renderer (#13).** New Show Grid icon on
+the orange Player View rect chrome (matching the Scaled View
+one), only on calibrated maps. Toggle drives the new
+`ViewState.playerGridEnabled` flag; broadcast on the standard
+view_update path; PlayerApp draws via the `map-relative` strategy
+from Phase 3c. Grid is genuinely map-relative — spacing scales
+with the GM's broadcast view fraction so the lines move with the
+map on window resize / GM zoom. Independent of the Scaled View
+grid (which stays at fixed CSS-px per inch).
+
+**Show Grid toggle during calibration.** New checkbox in
+MapCalibrationModal header. When ticked, overlays a lime-green
+1″ grid on the map preview using the current pps. Lets the GM
+eyeball the calculated spacing against any grid drawn on the map
+itself before committing. Redraws live on line drag, H/V input,
+DPI pick, and N (squares) input change.
+
+**Border-offset nudge.** New `gridOffsetX/Y` field on MapAsset.
+With Show Grid on, arrow keys nudge the calibration grid by 1
+map-pixel (Shift+arrow for 10); Esc resets. The saved offset
+travels alongside `mapPixelsPerSquare` in every broadcast path
+(`full_state`, `map_change`, `map_meta_update`) and the drawGrid
+strategies now honour it — `projector-calibrated`,
+`monitor-proportional`, and `map-relative` all convert the
+map-pixel offset into their own CSS-px scale before walking the
+gridlines. Lets bordered maps align the in-app grid with the
+map's own drawn gridlines once and have it stick across viewers.
+
+No faff (beta push).
+
 ## v2.14.16 — 2026-05-22
 
 ### Settings: enable transitions & animations on Scaled View

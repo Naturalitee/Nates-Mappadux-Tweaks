@@ -108,6 +108,9 @@ export class ProjectorApp {
   private mapPixelsPerSquare: number | null     = null;
   private mapImageWidth:     number             = 0;
   private mapImageHeight:    number             = 0;
+  /** v2.14.18 — grid offset for the active map (border-nudge alignment). */
+  private gridOffsetX:       number             = 0;
+  private gridOffsetY:       number             = 0;
   private projectorViewport: ProjectorViewport  = defaultProjectorViewport();
   private currentFog:        FogState           = { polygons: [] };
   private currentMarkers:    Marker[]           = [];
@@ -404,6 +407,8 @@ export class ProjectorApp {
         if (msg.mapPixelsPerSquare !== undefined) this.mapPixelsPerSquare = msg.mapPixelsPerSquare;
         if (msg.mapImageWidth      !== undefined) this.mapImageWidth      = msg.mapImageWidth;
         if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
+        if (msg.gridOffsetX        !== undefined) this.gridOffsetX        = msg.gridOffsetX;
+        if (msg.gridOffsetY        !== undefined) this.gridOffsetY        = msg.gridOffsetY;
         if (blob) this.mapBlob = blob;
         if (this.mapBlob) {
           void this.renderer.loadMap(this.mapBlob, this.currentFog);
@@ -433,6 +438,8 @@ export class ProjectorApp {
         if (msg.mapPixelsPerSquare !== undefined) this.mapPixelsPerSquare = msg.mapPixelsPerSquare;
         if (msg.mapImageWidth      !== undefined) this.mapImageWidth      = msg.mapImageWidth;
         if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
+        if (msg.gridOffsetX        !== undefined) this.gridOffsetX        = msg.gridOffsetX;
+        if (msg.gridOffsetY        !== undefined) this.gridOffsetY        = msg.gridOffsetY;
         // Viewport (rotation / mode / grid / filterEnabled) also belongs to
         // the incoming map. Apply the same way projector_viewport_update
         // would so we don't hold over the prior map's rotation.
@@ -571,6 +578,8 @@ export class ProjectorApp {
         if (msg.mapPixelsPerSquare !== undefined) this.mapPixelsPerSquare = msg.mapPixelsPerSquare;
         if (msg.mapImageWidth      !== undefined) this.mapImageWidth      = msg.mapImageWidth;
         if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
+        if (msg.gridOffsetX        !== undefined) this.gridOffsetX        = msg.gridOffsetX;
+        if (msg.gridOffsetY        !== undefined) this.gridOffsetY        = msg.gridOffsetY;
         this._applyView();
         break;
       }
@@ -832,6 +841,8 @@ export class ProjectorApp {
       primaryViewNW:      this.primaryViewNW,
       primaryViewNH:      this.primaryViewNH,
       view:               null,
+      gridOffsetX:        this.gridOffsetX,
+      gridOffsetY:        this.gridOffsetY,
     });
   }
 

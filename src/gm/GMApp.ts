@@ -2412,6 +2412,8 @@ export class GMApp {
       ...(asset?.pixelsPerSquare       ? { mapPixelsPerSquare: asset.pixelsPerSquare } : {}),
       ...(asset?.imageWidth            ? { mapImageWidth:      asset.imageWidth     } : {}),
       ...(asset?.imageHeight           ? { mapImageHeight:     asset.imageHeight    } : {}),
+      ...(asset?.gridOffsetX           ? { gridOffsetX:        asset.gridOffsetX    } : {}),
+      ...(asset?.gridOffsetY           ? { gridOffsetY:        asset.gridOffsetY    } : {}),
       projectorViewport: nextProjVp,
       // For animated handouts, the broadcast carries the STARTING frame
       // (background + noAnimate elements) so the player + projector
@@ -4577,6 +4579,8 @@ export class GMApp {
       ...(asset.pixelsPerSquare !== undefined ? { mapPixelsPerSquare: asset.pixelsPerSquare } : {}),
       ...(asset.imageWidth      !== undefined ? { mapImageWidth:      asset.imageWidth      } : {}),
       ...(asset.imageHeight     !== undefined ? { mapImageHeight:     asset.imageHeight     } : {}),
+      ...(asset.gridOffsetX     !== undefined ? { gridOffsetX:        asset.gridOffsetX     } : {}),
+      ...(asset.gridOffsetY     !== undefined ? { gridOffsetY:        asset.gridOffsetY     } : {}),
     });
     // Monitors care about the primary's resulting view fraction — push it so they re-crop.
     this._broadcastRoles(false);

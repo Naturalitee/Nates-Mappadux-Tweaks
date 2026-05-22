@@ -491,6 +491,10 @@ export interface MsgFullState {
   mapPixelsPerSquare?: number;
   mapImageWidth?:      number;
   mapImageHeight?:     number;
+  /** v2.14.18 — grid offset for the active map. Drives 1″ overlay
+   *  alignment in every viewer that draws the grid. */
+  gridOffsetX?:        number;
+  gridOffsetY?:        number;
 }
 
 export interface MsgViewUpdate {
@@ -540,6 +544,9 @@ export interface MsgMapChange {
   mapPixelsPerSquare?: number;
   mapImageWidth?:      number;
   mapImageHeight?:     number;
+  /** v2.14.18 — grid offset for the incoming map. */
+  gridOffsetX?:        number;
+  gridOffsetY?:        number;
   /** Projector viewport for the incoming map (rotation, mode, grid, filter
    *  toggle, etc.). Carried in map_change so the projector window applies
    *  the new map's saved viewport instead of holding over the prior map's. */
@@ -772,6 +779,10 @@ export interface MsgMapMetaUpdate {
   mapPixelsPerSquare?: number;
   mapImageWidth?:      number;
   mapImageHeight?:     number;
+  /** v2.14.18 — grid offset; refreshed alongside pps when the GM
+   *  recalibrates a live map. */
+  gridOffsetX?:        number;
+  gridOffsetY?:        number;
 }
 
 /**
@@ -978,6 +989,21 @@ export interface MapAsset {
    * calibrationLine so the ruler still has its own memory.
    */
   gridSquares?: { h: number; v: number };
+  /**
+   * v2.14.18 — Grid offset in map pixels, applied to every viewer's
+   * 1″ overlay so the gridlines align with a map's drawn border or
+   * pre-existing grid. (0, 0) = grid starts on the map's centre (the
+   * default); positive values shift the grid right / down by that
+   * many map-pixels. The visible result is mod-pps anyway — viewers
+   * reduce the offset to its canonical [0, pps) range when drawing.
+   *
+   * Set in the Map Calibration modal via arrow-key nudge (or
+   * drag-nudge later); persists alongside calibrationLine /
+   * gridSquares. Broadcast in the same map metadata payload that
+   * carries mapPixelsPerSquare to player + projector viewers.
+   */
+  gridOffsetX?: number;
+  gridOffsetY?: number;
   /**
    * Provenance + confidence behind `pixelsPerSquare`. Drives the library
    * badge and retrofit behaviour:

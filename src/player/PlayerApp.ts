@@ -72,6 +72,9 @@ export class PlayerApp {
   private mapPixelsPerSquare: number | null = null;
   private mapImageWidth:      number        = 0;
   private mapImageHeight:     number        = 0;
+  /** v2.14.18 — grid offset for the active map (border-nudge alignment). */
+  private gridOffsetX:        number        = 0;
+  private gridOffsetY:        number        = 0;
   /** v2.14.17 — Player-side grid overlay canvas. Drawn into whenever
    *  the GM's view broadcast carries playerGridEnabled=true and the
    *  active map is calibrated. */
@@ -239,6 +242,8 @@ export class PlayerApp {
       primaryViewNW:      1,
       primaryViewNH:      1,
       view:               view ?? null,
+      gridOffsetX:        this.gridOffsetX,
+      gridOffsetY:        this.gridOffsetY,
     });
   }
 
@@ -321,9 +326,12 @@ export class PlayerApp {
         this.sbSlots        = msg.payload.audio?.slots ?? [];
         // v2.14.17 — pick up calibration + dimensions for the
         // player-side grid renderer.
+        // v2.14.18 — gridOffsetX/Y travel in the same payload.
         if (msg.mapPixelsPerSquare !== undefined) this.mapPixelsPerSquare = msg.mapPixelsPerSquare;
         if (msg.mapImageWidth      !== undefined) this.mapImageWidth      = msg.mapImageWidth;
         if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
+        if (msg.gridOffsetX        !== undefined) this.gridOffsetX        = msg.gridOffsetX;
+        if (msg.gridOffsetY        !== undefined) this.gridOffsetY        = msg.gridOffsetY;
         if (mapBlob) {
           this.lastMapBlob = mapBlob;
           this.lastFog     = msg.payload.fog ?? { polygons: [] };
@@ -354,9 +362,12 @@ export class PlayerApp {
         if (msg.markers !== undefined) this.currentMarkers = msg.markers;
         if (msg.audio?.slots)          this.sbSlots = msg.audio.slots;
         // v2.14.17 — refresh calibration + dimensions for the new map.
+        // v2.14.18 — and the grid offset.
         if (msg.mapPixelsPerSquare !== undefined) this.mapPixelsPerSquare = msg.mapPixelsPerSquare;
         if (msg.mapImageWidth      !== undefined) this.mapImageWidth      = msg.mapImageWidth;
         if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
+        if (msg.gridOffsetX        !== undefined) this.gridOffsetX        = msg.gridOffsetX;
+        if (msg.gridOffsetY        !== undefined) this.gridOffsetY        = msg.gridOffsetY;
         // Stop any playing audio from the previous map
         this._stopAllSoundboard();
         this._stopAllPositional();

@@ -67,6 +67,12 @@ export interface DrawGridContext {
    *  zooms in to half the map width, the grid lines double in CSS-px
    *  spacing on the viewer's canvas. */
   view: ViewState | null;
+
+  /** v2.14.18 — grid offset in MAP pixels (positive shifts right / down).
+   *  Each strategy converts these into its own CSS-px-on-canvas
+   *  equivalent using its scale factor. Default 0/0 (grid centred). */
+  gridOffsetX?: number;
+  gridOffsetY?: number;
 }
 
 /** Common bookkeeping shared by all strategies: size + clear the grid
@@ -97,13 +103,21 @@ function strokeCentredGrid(
   h: number,
   spacing: number,
   color: string,
+  offsetX = 0,
+  offsetY = 0,
 ): void {
   if (spacing < 2) return; // sanity — sub-pixel grids alias to noise
   ctx.strokeStyle = color;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  const cx = w / 2;
-  const cy = h / 2;
+  // v2.14.18 — offset shifts the grid origin from canvas centre.
+  // Modulo by spacing so the offset stays in a [-spacing/2, spacing/2)
+  // band (the visible pattern is periodic; without the mod we'd
+  // walk extra iterations for no visual change).
+  const modX = ((offsetX % spacing) + spacing) % spacing;
+  const modY = ((offsetY % spacing) + spacing) % spacing;
+  const cx = w / 2 + modX;
+  const cy = h / 2 + modY;
   for (let x = cx; x <= w + spacing; x += spacing) {
     ctx.moveTo(Math.round(x) + 0.5, 0);
     ctx.lineTo(Math.round(x) + 0.5, h);
@@ -123,6 +137,18 @@ function strokeCentredGrid(
   ctx.stroke();
 }
 
+/** Convert a map-pixel offset into the equivalent offset in CSS
+ *  pixels on a canvas that draws `spacing` CSS-px per `mapPxPerSq`
+ *  map-pixels. Returns 0 if any input is missing. */
+function mapOffsetToCss(
+  offsetMapPx: number | undefined,
+  spacing: number,
+  mapPxPerSq: number | null,
+): number {
+  if (!offsetMapPx || !mapPxPerSq || mapPxPerSq <= 0 || spacing <= 0) return 0;
+  return offsetMapPx * (spacing / mapPxPerSq);
+}
+
 /** 'projector-calibrated' — fixed CSS-px-per-inch from the projector's
  *  own calibration. The Scaled View primary uses this so the grid
  *  stays at the table's physical scale (1 grid square = 1 inch =
@@ -134,7 +160,10 @@ function drawProjectorCalibrated(
 ): void {
   void cv;
   if (!ctx.setup) return;
-  strokeCentredGrid(ctx2d, ctx.effectiveW, ctx.effectiveH, ctx.setup.pixelsPerSquare, ctx.color);
+  const spacing = ctx.setup.pixelsPerSquare;
+  const ox = mapOffsetToCss(ctx.gridOffsetX, spacing, ctx.mapPixelsPerSquare);
+  const oy = mapOffsetToCss(ctx.gridOffsetY, spacing, ctx.mapPixelsPerSquare);
+  strokeCentredGrid(ctx2d, ctx.effectiveW, ctx.effectiveH, spacing, ctx.color, ox, oy);
 }
 
 /** 'monitor-proportional' — the v2.14.10 implementation:
@@ -153,7 +182,9 @@ function drawMonitorProportional(
   void cv;
   if (!ctx.mapPixelsPerSquare || ctx.mapImageWidth <= 0 || ctx.primaryViewNW <= 0) return;
   const spacing = (ctx.mapPixelsPerSquare * ctx.effectiveW) / (ctx.primaryViewNW * ctx.mapImageWidth);
-  strokeCentredGrid(ctx2d, ctx.effectiveW, ctx.effectiveH, spacing, ctx.color);
+  const ox = mapOffsetToCss(ctx.gridOffsetX, spacing, ctx.mapPixelsPerSquare);
+  const oy = mapOffsetToCss(ctx.gridOffsetY, spacing, ctx.mapPixelsPerSquare);
+  strokeCentredGrid(ctx2d, ctx.effectiveW, ctx.effectiveH, spacing, ctx.color, ox, oy);
 }
 
 /** 'map-relative' — the deferred Player View grid (#13). The grid
@@ -173,7 +204,9 @@ function drawMapRelative(
   void cv;
   if (!ctx.view || !ctx.mapPixelsPerSquare || ctx.mapImageWidth <= 0 || ctx.view.viewNW <= 0) return;
   const spacing = (ctx.mapPixelsPerSquare * ctx.effectiveW) / (ctx.view.viewNW * ctx.mapImageWidth);
-  strokeCentredGrid(ctx2d, ctx.effectiveW, ctx.effectiveH, spacing, ctx.color);
+  const ox = mapOffsetToCss(ctx.gridOffsetX, spacing, ctx.mapPixelsPerSquare);
+  const oy = mapOffsetToCss(ctx.gridOffsetY, spacing, ctx.mapPixelsPerSquare);
+  strokeCentredGrid(ctx2d, ctx.effectiveW, ctx.effectiveH, spacing, ctx.color, ox, oy);
 }
 
 /** Unified entry point. Always sizes / clears the canvas (so toggling
