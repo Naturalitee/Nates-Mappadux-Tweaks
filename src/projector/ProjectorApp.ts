@@ -11,6 +11,7 @@ import { ProjectorCalibrationModal } from '../gm/ProjectorCalibrationModal.ts';
 import { bindFullscreenButton } from '../utils/fullscreen.ts';
 import { Viewer } from '../viewers/Viewer.ts';
 import { PROFILE_SCALED } from '../viewers/profiles.ts';
+import { computeView } from '../viewers/strategies/computeView.ts';
 import { decodeImageBitmap } from '../utils/decodeImageBitmap.ts';
 import { generateId } from '../utils/id.ts';
 import {
@@ -622,57 +623,33 @@ export class ProjectorApp {
    * mode + projector calibration + map calibration.
    */
   private _computeViewState(): ViewState {
-    const bg = this.currentBackgroundColor;
-    const mode = this.projectorViewport.mode;
-
-    // 'full' — show the entire map fit-to-window. The renderer's letterbox
-    // / pillarbox already handles aspect; ViewNW=ViewNH=1 means full extent.
-    if (mode === 'full') {
-      return { centerX: 0.5, centerY: 0.5, viewNW: 1, viewNH: 1, backgroundColor: bg };
-    }
-
-    // Monitor mode — show the same crop as the primary, fit-to-window.
-    // The primary's view fraction comes from the GM (projector_role).
-    if (this.role === 'monitor') {
-      return {
-        centerX: this.projectorViewport.centerX,
-        centerY: this.projectorViewport.centerY,
-        viewNW:  this.primaryViewNW,
-        viewNH:  this.primaryViewNH,
-        backgroundColor: bg,
-      };
-    }
-
-    // 'scaled' — derive from calibration. Falls back to fit-to-window if any
-    // input is missing (which D9 will surface as a clear warning).
-    //
-    // v2.14.9 — viewNW / viewNH are intentionally NOT clamped to 1. When
-    // the projector window is bigger than what calibration would fill
-    // with the entire map, we WANT viewNW > 1: the camera frustum then
-    // spans wider than the map plane, the map renders at its calibrated
-    // physical size, and the empty world beyond the plane reads as
-    // background colour. The previous Math.min(1, ...) clamp silently
-    // dropped back to fit-to-window the moment the window exceeded the
-    // map's calibrated footprint — that's the bug Alex caught where
-    // resizing the window resized the map content instead of revealing
-    // more (or less) of it.
-    if (this.setup && this.mapPixelsPerSquare && this.mapImageWidth > 0 && this.mapImageHeight > 0) {
-      const eff    = this._effectiveDims();
-      const ratio  = this.mapPixelsPerSquare / this.setup.pixelsPerSquare;
-      const wMap   = eff.w * ratio;
-      const hMap   = eff.h * ratio;
-      const viewNW = wMap / this.mapImageWidth;
-      const viewNH = hMap / this.mapImageHeight;
-      return {
-        centerX: this.projectorViewport.centerX,
-        centerY: this.projectorViewport.centerY,
-        viewNW,
-        viewNH,
-        backgroundColor: bg,
-      };
-    }
-    // Fallback when we don't have everything yet — just show the full map.
-    return { centerX: 0.5, centerY: 0.5, viewNW: 1, viewNH: 1, backgroundColor: bg };
+    // v2.15 Phase 3b — dispatched via the shared computeView strategies.
+    // Source picked dynamically from `this.role` since a projector window
+    // may flip between primary (calibrated) and monitor (mirror-primary)
+    // at runtime via projector_role. Profile swapping arrives in a later
+    // refactor pass; until then the dispatch lives here.
+    const eff = this._effectiveDims();
+    const result = computeView({
+      source:             this.role === 'monitor' ? 'mirror-primary' : 'calibrated',
+      projectorViewport:  this.projectorViewport,
+      mapPixelsPerSquare: this.mapPixelsPerSquare,
+      mapImageWidth:      this.mapImageWidth,
+      mapImageHeight:     this.mapImageHeight,
+      setup:              this.setup,
+      effectiveW:         eff.w,
+      effectiveH:         eff.h,
+      backgroundColor:    this.currentBackgroundColor,
+      primaryViewNW:      this.primaryViewNW,
+      primaryViewNH:      this.primaryViewNH,
+      broadcastView:      null,
+    });
+    // 'calibrated' and 'mirror-primary' always return a ViewState; the
+    // null case is reserved for 'broadcast' (which Player uses, not
+    // Projector). Coerce-or-fallback so the type checker is happy.
+    return result ?? {
+      centerX: 0.5, centerY: 0.5, viewNW: 1, viewNH: 1,
+      backgroundColor: this.currentBackgroundColor,
+    };
   }
 
   /** Push the computed view to the renderer. */
