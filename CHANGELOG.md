@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.14.15 — 2026-05-22
+
+### Monitor badge: above the grid, renamed Scaled View Monitor
+
+The 1" grid overlay sat at z-index 40, the monitor badge at 35 — so
+gridlines drew across the badge text on monitor windows, making it
+hard to read. Bumped `.monitor-badge` to z-index 50 so the badge
+sits above the grid.
+
+Also renamed the badge text from "Projector Monitor N" to "Scaled
+View Monitor N" — completes the projector→scaled-view rename Alex
+asked for in v2.14.2.
+
+No faff (beta push).
+
 ## v2.14.14 — 2026-05-22
 
 ### Fix: Scaled View defaults to scaled mode on a calibrated map

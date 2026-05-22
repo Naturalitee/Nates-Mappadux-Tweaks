@@ -268,7 +268,7 @@ export class ProjectorApp {
       if (recalBtn) recalBtn.hidden = true;
       this.setupLabelEl.hidden = true;
       this.monitorBadge.hidden = false;
-      this.monitorBadge.textContent = `Projector Monitor ${this.monitorIndex ?? ''}`.trim();
+      this.monitorBadge.textContent = `Scaled View Monitor ${this.monitorIndex ?? ''}`.trim();
       document.body.classList.add('projector-view--monitor');
       // Constrain the canvas to the primary's aspect ratio so what's inside
       // the bezel matches the primary's viewport exactly. White surround
