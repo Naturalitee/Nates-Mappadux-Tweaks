@@ -44,6 +44,16 @@ export default defineConfig(({ command }) => ({
       },
       workbox: {
         globPatterns: ['**/*.{js,css,html,ico,png,svg,woff2,webp}'],
+        // Without these two, a newly-deployed SW sits in 'waiting'
+        // until every Mappadux tab closes — which means "I just
+        // pushed a fix" deploys silently don't take effect for users
+        // still on the old bundle until they restart the browser.
+        // skipWaiting: new SW activates as soon as it's installed.
+        // clientsClaim: it then takes ownership of existing tabs on
+        // their next navigation/reload (not a forced reload — the
+        // user's current session keeps running its cached bundle).
+        skipWaiting:  true,
+        clientsClaim: true,
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/0\.peerjs\.com\/.*/,
