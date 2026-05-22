@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.14.19 — 2026-05-22
+
+### Player zoom/pan — gesture capture fix
+
+v2.14.18 bound the wheel + pointer handlers to `#renderer-canvas`, but
+on Windows Chrome and some mobile browsers the gesture was reaching
+the browser viewport instead of our handler — pinch zoomed the whole
+page (including the chrome buttons), and mouse wheel did nothing.
+
+Three-part fix: gestures now bind to `document.body` (nothing can sit
+above it); `body.player-view` declares `touch-action: none` +
+`overscroll-behavior: none`; meta viewport gets `user-scalable=no` so
+browser pinch is hard-disabled. Coordinate math still uses the
+renderer canvas's bounding rect so the zoom-around-cursor and
+zoom-around-pinch-centroid behaviour is unchanged.
+
+`shouldStart` gate added so taps on the Connect panel, Fullscreen
+button, and Reset View button keep their native click handling.
+
+No faff (beta push).
+
 ## v2.14.18 — 2026-05-22
 
 ### Player View zoom + pan (#1)

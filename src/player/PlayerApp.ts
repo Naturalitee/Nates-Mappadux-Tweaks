@@ -334,11 +334,29 @@ export class PlayerApp {
     ov.centerY = Math.min(bv.centerY + dy, Math.max(bv.centerY - dy, ov.centerY));
   }
 
-  /** Wire pointer / wheel / pinch handlers on the renderer canvas. */
+  /** Wire pointer / wheel / pinch handlers. Bound to document.body so
+   *  no overlay layer (transition canvas, grid canvas, marker overlay,
+   *  faff dimmer) can intercept the gesture — the canvas itself sits
+   *  beneath all of them. Coordinate math still uses the renderer
+   *  canvas's rect, which is identical to the body rect on the player
+   *  page (the canvas fills the viewport). */
   private _attachPlayerGestures(): void {
     const canvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
     if (!canvas) return;
-    attachGestures(canvas, {
+    attachGestures(document.body, {
+      // Pointerdown gate — let the connect panel's input + buttons
+      // and the two floating chrome buttons keep their native event
+      // handling. Without this, e.g. tapping the Connect button on
+      // mobile would be captured as a gesture-start and the click
+      // would never fire.
+      shouldStart: (e) => {
+        const t = e.target as HTMLElement | null;
+        if (!t) return true;
+        if (t.closest('.connect-panel')) return false;
+        if (t.closest('#player-fullscreen-btn')) return false;
+        if (t.closest('#player-reset-view-btn')) return false;
+        return true;
+      },
       onWheel: (e) => this._zoomAtClient(e.clientX, e.clientY, e.factor),
       onDrag:  (e) => {
         // Only treat mouse / pen / touch single-finger drags as pans.

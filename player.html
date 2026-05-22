@@ -2,7 +2,12 @@
 <html lang="en">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <!-- v2.14.19 — disable browser pinch-zoom so the canvas-level
+       pinch handler (PlayerApp clamped zoom into the GM crop) gets
+       the gesture. Without user-scalable=no, iOS Safari and some
+       Android Chrome builds intercept pinch before our pointer
+       handlers see it. -->
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
   <meta name="theme-color" content="#000000" />
   <title>Mappadux — Player</title>
   <link rel="icon" type="image/png" sizes="32x32" href="/favicon-32.png" />

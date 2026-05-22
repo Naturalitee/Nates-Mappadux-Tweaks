@@ -629,6 +629,13 @@ body.player-view {
   width: 100vw;
   height: 100vh;
   background: #000;
+  /* v2.14.19 — pan/zoom gestures live on the body so they can't be
+     swallowed by intermediate layers. touch-action: none disables the
+     browser's pinch-zoom + double-tap-zoom + pull-to-refresh so the
+     canvas-level handler gets the gesture cleanly. overscroll-behavior
+     blocks the bounce / rubber-band effect on touch devices. */
+  touch-action: none;
+  overscroll-behavior: none;
 }
 
 body.player-view #renderer-canvas {
