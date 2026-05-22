@@ -209,6 +209,8 @@ export class MapCalibrationModal {
     };
 
     const redraw = () => {
+      // DEBUG (v2.14.21) — should be sub-ms.
+      const tStart = performance.now();
       svg.setAttribute('viewBox', this.vb.join(' '));
       [line, ...svg.querySelectorAll<SVGLineElement>('.calibration-line')].forEach((l) => {
         l.setAttribute('x1', String(this.a.x));
@@ -218,6 +220,8 @@ export class MapCalibrationModal {
       });
       drawCrosshair(handleA, this.a.x, this.a.y);
       drawCrosshair(handleB, this.b.x, this.b.y);
+      const tEnd = performance.now();
+      if (tEnd - tStart > 4) console.log(`[cal-redraw] ${(tEnd - tStart).toFixed(0)}ms`);
     };
 
     // Initial draw — defer so getBoundingClientRect has stable layout.
@@ -311,16 +315,26 @@ export class MapCalibrationModal {
       const offX       = handle.x - startPt.x;
       const offY       = handle.y - startPt.y;
       const move = (ev: PointerEvent) => {
+        // DEBUG: timer around the per-pointer-move handler. Should be
+        // <2ms; anything more is the freeze culprit.
+        const tMove = performance.now();
         const p  = eventToSvg(ev);
         const cx = Math.max(0, Math.min(this.imgW, p.x + offX));
         const cy = Math.max(0, Math.min(this.imgH, p.y + offY));
         if (which === 'a') this.a = { x: cx, y: cy };
         else                this.b = { x: cx, y: cy };
+        const tRedrawStart = performance.now();
         redraw();
+        const tRedrawEnd = performance.now();
         // v2.14.17 — live grid update during drag so the GM can
         // align the calculated 1″ spacing against the map's own
         // gridlines visually.
         updateCalGrid();
+        const tEnd = performance.now();
+        const total = tEnd - tMove;
+        if (total > 8) {
+          console.log(`[cal-drag] move total=${total.toFixed(0)}ms  redraw=${(tRedrawEnd - tRedrawStart).toFixed(0)}ms  updateCalGrid=${(tEnd - tRedrawEnd).toFixed(0)}ms`);
+        }
       };
       const up = () => {
         window.removeEventListener('pointermove', move);
@@ -426,6 +440,7 @@ export class MapCalibrationModal {
     refreshCurrent(null);
 
     const updateGridFeedback = () => {
+      const tStart = performance.now();
       const g = solveGrid();
       gridFeedback.classList.remove('is-ok', 'is-warn');
       if (!g.ok) {
@@ -459,6 +474,8 @@ export class MapCalibrationModal {
       }
       syncDpiSelectFromPps(g.pps);
       refreshCurrent(g.pps);
+      const tEnd = performance.now();
+      if (tEnd - tStart > 4) console.log(`[cal-feedback] ${(tEnd - tStart).toFixed(0)}ms`);
     };
     // v2.14.2 — when the user fills one of H / V and leaves the other
     // empty, auto-fill the empty side assuming a square (1:1) pixel
@@ -531,6 +548,9 @@ export class MapCalibrationModal {
       return dist / N;
     };
     const updateCalGrid = () => {
+      // DEBUG (v2.14.21) — count lines emitted + total time. Skip
+      // logging when below threshold to avoid console noise.
+      const tStart = performance.now();
       gridOverlayG.innerHTML = '';
       if (!gridOverlayCb.checked) return;
       const pps = derivePps();
@@ -558,6 +578,10 @@ export class MapCalibrationModal {
         lines.push(`<line x1="0" y1="${y}" x2="${this.imgW}" y2="${y}" />`);
       }
       gridOverlayG.innerHTML = lines.join('');
+      const tEnd = performance.now();
+      if (tEnd - tStart > 4) {
+        console.log(`[cal-grid] updateCalGrid lines=${lines.length} took=${(tEnd - tStart).toFixed(0)}ms (pps=${pps.toFixed(2)} imgW=${this.imgW} imgH=${this.imgH})`);
+      }
     };
     gridOverlayCb.addEventListener('change', updateCalGrid);
 
@@ -589,16 +613,32 @@ export class MapCalibrationModal {
     window.addEventListener('keydown', this._onKeyDown);
 
     gridHInput.addEventListener('input', () => {
-      autoFillCounterpart('h'); updateGridFeedback();
+      const t0 = performance.now();
+      autoFillCounterpart('h');
+      const t1 = performance.now();
+      updateGridFeedback();
+      const t2 = performance.now();
       const g = solveGrid();
+      const t3 = performance.now();
       if (g.ok && g.pps !== null) repositionLineFromPps(g.pps);
+      const t4 = performance.now();
       updateCalGrid();
+      const t5 = performance.now();
+      if (t5 - t0 > 8) console.log(`[cal-input H] total=${(t5-t0).toFixed(0)}ms auto=${(t1-t0).toFixed(0)} feedback=${(t2-t1).toFixed(0)} solve=${(t3-t2).toFixed(0)} reposLine=${(t4-t3).toFixed(0)} grid=${(t5-t4).toFixed(0)}`);
     });
     gridVInput.addEventListener('input', () => {
-      autoFillCounterpart('v'); updateGridFeedback();
+      const t0 = performance.now();
+      autoFillCounterpart('v');
+      const t1 = performance.now();
+      updateGridFeedback();
+      const t2 = performance.now();
       const g = solveGrid();
+      const t3 = performance.now();
       if (g.ok && g.pps !== null) repositionLineFromPps(g.pps);
+      const t4 = performance.now();
       updateCalGrid();
+      const t5 = performance.now();
+      if (t5 - t0 > 8) console.log(`[cal-input V] total=${(t5-t0).toFixed(0)}ms auto=${(t1-t0).toFixed(0)} feedback=${(t2-t1).toFixed(0)} solve=${(t3-t2).toFixed(0)} reposLine=${(t4-t3).toFixed(0)} grid=${(t5-t4).toFixed(0)}`);
     });
 
     // v2.14.2 — picking a DPI back-fills H × V using the map's actual
@@ -612,6 +652,7 @@ export class MapCalibrationModal {
     // matchCommonDpi tolerance because of rounding, which would clear
     // the dropdown otherwise).
     dpiSelect.addEventListener('change', () => {
+      const t0 = performance.now();
       const dpi = parseFloat(dpiSelect.value);
       if (!Number.isFinite(dpi) || dpi <= 0) return;
       gridHInput.value = String(Math.max(1, Math.round(this.imgW / dpi)));
@@ -620,13 +661,22 @@ export class MapCalibrationModal {
       dpiSelect.value = String(dpi);
       repositionLineFromPps(dpi);
       updateCalGrid();
+      const t1 = performance.now();
+      if (t1 - t0 > 8) console.log(`[cal-input DPI] total=${(t1-t0).toFixed(0)}ms dpi=${dpi}`);
     });
 
     // v2.14.3 — N is the line's "how many squares does this represent"
     // input. Changing it doesn't move the line, but it does change the
     // implied pps (same physical line, different square count), so
     // H/V/DPI re-derive.
-    distInput.addEventListener('input', () => { syncInputsFromLine(); updateCalGrid(); });
+    distInput.addEventListener('input', () => {
+      const t0 = performance.now();
+      syncInputsFromLine();
+      const t1 = performance.now();
+      updateCalGrid();
+      const t2 = performance.now();
+      if (t2 - t0 > 8) console.log(`[cal-input N] total=${(t2-t0).toFixed(0)}ms syncInputs=${(t1-t0).toFixed(0)} grid=${(t2-t1).toFixed(0)}`);
+    });
 
     updateGridFeedback();
 
@@ -635,10 +685,17 @@ export class MapCalibrationModal {
       const distInput = overlay.querySelector<HTMLInputElement>('.calibration-distance-input')!;
       const squares   = parseFloat(distInput.value);
 
+      // ── DEBUG TIMERS (v2.14.21) — chasing the multi-second Save freeze.
+      //    Logs to console so we can see which segment is heavy. Remove
+      //    once the slow op is identified + fixed.
+      const tSaveStart = performance.now();
+      console.log('[cal-save] click → entered handler');
+
       // By-grid takes precedence when both H and V are filled with positive
       // integers — the user explicitly chose the "I know the map dims" path.
       const g = solveGrid();
       if (g.ok && g.pps !== null) {
+        const t1 = performance.now();
         await MapAssetStore.update(asset.id, {
           pixelsPerSquare:  g.pps,
           gridSquares:      { h: parseInt(gridHInput.value, 10), v: parseInt(gridVInput.value, 10) },
@@ -649,7 +706,10 @@ export class MapCalibrationModal {
           gridOffsetX:      this.gridOffsetX,
           gridOffsetY:      this.gridOffsetY,
         });
+        const t2 = performance.now();
+        console.log(`[cal-save] MapAssetStore.update (by-grid): ${(t2 - t1).toFixed(0)}ms`);
         this.close();
+        console.log(`[cal-save] close() done; total ${(performance.now() - tSaveStart).toFixed(0)}ms`);
         return;
       }
 
@@ -658,6 +718,7 @@ export class MapCalibrationModal {
       const px = Math.hypot(this.b.x - this.a.x, this.b.y - this.a.y);
       if (px < 4) { alert('Drag the two crosses further apart before saving.'); return; }
       const pixelsPerSquare = px / squares;
+      const t1 = performance.now();
       await MapAssetStore.update(asset.id, {
         pixelsPerSquare,
         calibrationLine: {
@@ -675,7 +736,10 @@ export class MapCalibrationModal {
         gridOffsetX:    this.gridOffsetX,
         gridOffsetY:    this.gridOffsetY,
       });
+      const t2 = performance.now();
+      console.log(`[cal-save] MapAssetStore.update (ruler): ${(t2 - t1).toFixed(0)}ms`);
       this.close();
+      console.log(`[cal-save] close() done; total ${(performance.now() - tSaveStart).toFixed(0)}ms`);
     });
 
     return overlay;
