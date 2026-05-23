@@ -757,7 +757,10 @@ export class GMApp {
     // calibrated maps. Player-side grid (map-relative) is independent
     // of the Scaled View grid (calibrated CSS-px); they have their
     // own state and own icon toggle.
-    const playerGridState: 'on' | 'off' | undefined = this._isActiveMapCalibrated()
+    // v2.14.23 — Show Grid icon gated by selection to match the Scaled
+    // View rect's behaviour (the icon only appears on the selected
+    // viewport — minimises chrome clutter when both rects are visible).
+    const playerGridState: 'on' | 'off' | undefined = (playerSelected && this._isActiveMapCalibrated())
       ? ((playerView?.playerGridEnabled) ? 'on' : 'off')
       : undefined;
     this._markerOverlay.updateRect('player', playerBounds
@@ -2575,16 +2578,54 @@ export class GMApp {
       const asset = await this.maps.getAsset(mapState.id);
       if (!asset) return;
       const cal = new MapCalibrationModal();
+      // DEBUG (v2.14.23) — both JS timers AND a wall-clock watchdog
+      // ticker so we can see WHERE the 8s gap lives. The ticker fires
+      // every 100ms; if it stops logging during the freeze, the main
+      // thread is blocked. Also a rAF tick so we know whether frames
+      // are presenting. PerformanceObserver picks up long tasks.
+      const watchdogStart = performance.now();
+      let lastTick = watchdogStart;
+      const tickerId = window.setInterval(() => {
+        const now = performance.now();
+        const gap = now - lastTick;
+        if (gap > 200) console.log(`[watchdog] GAP ${gap.toFixed(0)}ms (since-click ${(now - watchdogStart).toFixed(0)}ms)`);
+        lastTick = now;
+      }, 100);
+      let rafFrames = 0;
+      let rafKeepGoing = true;
+      let lastRaf = watchdogStart;
+      const rafTick = (now: number) => {
+        const gap = now - lastRaf;
+        rafFrames++;
+        if (gap > 200) console.log(`[watchdog rAF] gap ${gap.toFixed(0)}ms (frames so far ${rafFrames})`);
+        lastRaf = now;
+        if (rafKeepGoing) requestAnimationFrame(rafTick);
+      };
+      requestAnimationFrame(rafTick);
+      let longtaskObs: PerformanceObserver | null = null;
+      try {
+        longtaskObs = new PerformanceObserver((list) => {
+          for (const e of list.getEntries()) {
+            console.log(`[longtask] dur=${e.duration.toFixed(0)}ms startSinceClick=${(e.startTime - watchdogStart).toFixed(0)}ms`);
+          }
+        });
+        longtaskObs.observe({ entryTypes: ['longtask'] });
+      } catch { /* not supported in this browser */ }
+
       await cal.open(asset);
-      // DEBUG (v2.14.21) — chasing post-save 11s freeze: user saw
-      // cal-save timers report 56ms, but the UI was stuck for 11s
-      // before the GM screen came back. Means the heavy work is in
-      // refreshProjectorMapInfo or something it triggers.
       const t0 = performance.now();
-      console.log('[gm-postcal] cal.open resolved — starting refreshProjectorMapInfo');
+      console.log(`[gm-postcal] cal.open resolved — starting refreshProjectorMapInfo (since-click ${(t0 - watchdogStart).toFixed(0)}ms)`);
       await this.refreshProjectorMapInfo();
       const t1 = performance.now();
-      console.log(`[gm-postcal] refreshProjectorMapInfo total ${(t1 - t0).toFixed(0)}ms`);
+      console.log(`[gm-postcal] refreshProjectorMapInfo total ${(t1 - t0).toFixed(0)}ms (since-click ${(t1 - watchdogStart).toFixed(0)}ms)`);
+      // Keep the watchdog running for 3 seconds post-handler so we
+      // catch any tail work after refreshProjectorMapInfo returns.
+      setTimeout(() => {
+        rafKeepGoing = false;
+        clearInterval(tickerId);
+        longtaskObs?.disconnect();
+        console.log(`[watchdog] stopped — total since-click ${(performance.now() - watchdogStart).toFixed(0)}ms, rAF frames ${rafFrames}`);
+      }, 3000);
     });
 
     // Unified Projector dropdown. Acts as launcher, off-switch, and setup
