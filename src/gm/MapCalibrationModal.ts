@@ -75,27 +75,17 @@ export class MapCalibrationModal {
   }
 
   private close(): void {
-    // DEBUG (v2.14.23) — fine-grained timers on each close() step.
-    // Hypothesis: removing the SVG <image> with the full-res map
-    // blob triggers a heavy browser GC / image-decoder teardown.
-    // Also: drop the SVG image's href BEFORE removing the overlay so
-    // the browser releases the decoded bitmap eagerly. Then resolve()
-    // the promise BEFORE the DOM removal so the caller's await
-    // continues immediately and the teardown happens during paint
-    // idle. Last-ditch: defer overlay.remove + revokeObjectURL to a
-    // microtask so they don't block the sync caller's UI update.
-    const t0 = performance.now();
     if (this._onKeyDown) {
       window.removeEventListener('keydown', this._onKeyDown);
       this._onKeyDown = null;
     }
-    const t1 = performance.now();
-    // Hide the overlay immediately so the user sees the modal vanish.
-    // The actual DOM removal + blob revoke (which we suspect trigger
-    // a multi-second image-decoder teardown) gets deferred to a
-    // setTimeout so the GM screen can paint at least one frame first.
-    // Also strip the SVG image's href to let the browser release the
-    // decoded bitmap eagerly.
+    // Strip the SVG image's href first so the browser releases the
+    // decoded bitmap (potentially hundreds of MB for high-res maps)
+    // before the SVG node is torn down. Skip-paint with display:none
+    // so the user sees the modal vanish immediately. Resolve the
+    // promise first so the caller's await proceeds without waiting
+    // for the deferred GC. Final teardown via setTimeout so the GM
+    // screen gets a paint frame before any heavy work hits.
     if (this.overlay) {
       this.overlay.style.display = 'none';
       const imageEl = this.overlay.querySelector<SVGImageElement>('.calibration-image');
@@ -104,23 +94,15 @@ export class MapCalibrationModal {
         imageEl.removeAttributeNS('http://www.w3.org/1999/xlink', 'href');
       }
     }
-    const t2 = performance.now();
     if (this.resolver) { this.resolver(); this.resolver = null; }
-    const t3 = performance.now();
     const overlayRef = this.overlay;
     const blobUrlRef = this.blobUrl;
     this.overlay = null;
     this.blobUrl = null;
     setTimeout(() => {
-      const td0 = performance.now();
       if (overlayRef) overlayRef.remove();
-      const td1 = performance.now();
       if (blobUrlRef) URL.revokeObjectURL(blobUrlRef);
-      const td2 = performance.now();
-      console.log(`[cal-close DEFERRED] remove=${(td1-td0).toFixed(0)}ms revokeUrl=${(td2-td1).toFixed(0)}ms`);
     }, 0);
-    const t4 = performance.now();
-    console.log(`[cal-close] keydown=${(t1-t0).toFixed(0)}ms hideAndStrip=${(t2-t1).toFixed(0)}ms resolver=${(t3-t2).toFixed(0)}ms scheduleTeardown=${(t4-t3).toFixed(0)}ms total=${(t4-t0).toFixed(0)}ms`);
   }
 
   private _buildUI(asset: MapAsset): HTMLElement {
@@ -246,8 +228,6 @@ export class MapCalibrationModal {
     };
 
     const redraw = () => {
-      // DEBUG (v2.14.21) — should be sub-ms.
-      const tStart = performance.now();
       svg.setAttribute('viewBox', this.vb.join(' '));
       [line, ...svg.querySelectorAll<SVGLineElement>('.calibration-line')].forEach((l) => {
         l.setAttribute('x1', String(this.a.x));
@@ -257,8 +237,6 @@ export class MapCalibrationModal {
       });
       drawCrosshair(handleA, this.a.x, this.a.y);
       drawCrosshair(handleB, this.b.x, this.b.y);
-      const tEnd = performance.now();
-      if (tEnd - tStart > 4) console.log(`[cal-redraw] ${(tEnd - tStart).toFixed(0)}ms`);
     };
 
     // Initial draw — defer so getBoundingClientRect has stable layout.
@@ -352,26 +330,16 @@ export class MapCalibrationModal {
       const offX       = handle.x - startPt.x;
       const offY       = handle.y - startPt.y;
       const move = (ev: PointerEvent) => {
-        // DEBUG: timer around the per-pointer-move handler. Should be
-        // <2ms; anything more is the freeze culprit.
-        const tMove = performance.now();
         const p  = eventToSvg(ev);
         const cx = Math.max(0, Math.min(this.imgW, p.x + offX));
         const cy = Math.max(0, Math.min(this.imgH, p.y + offY));
         if (which === 'a') this.a = { x: cx, y: cy };
         else                this.b = { x: cx, y: cy };
-        const tRedrawStart = performance.now();
         redraw();
-        const tRedrawEnd = performance.now();
         // v2.14.17 — live grid update during drag so the GM can
         // align the calculated 1″ spacing against the map's own
         // gridlines visually.
         updateCalGrid();
-        const tEnd = performance.now();
-        const total = tEnd - tMove;
-        if (total > 8) {
-          console.log(`[cal-drag] move total=${total.toFixed(0)}ms  redraw=${(tRedrawEnd - tRedrawStart).toFixed(0)}ms  updateCalGrid=${(tEnd - tRedrawEnd).toFixed(0)}ms`);
-        }
       };
       const up = () => {
         window.removeEventListener('pointermove', move);
@@ -477,7 +445,6 @@ export class MapCalibrationModal {
     refreshCurrent(null);
 
     const updateGridFeedback = () => {
-      const tStart = performance.now();
       const g = solveGrid();
       gridFeedback.classList.remove('is-ok', 'is-warn');
       if (!g.ok) {
@@ -511,8 +478,6 @@ export class MapCalibrationModal {
       }
       syncDpiSelectFromPps(g.pps);
       refreshCurrent(g.pps);
-      const tEnd = performance.now();
-      if (tEnd - tStart > 4) console.log(`[cal-feedback] ${(tEnd - tStart).toFixed(0)}ms`);
     };
     // v2.14.2 — when the user fills one of H / V and leaves the other
     // empty, auto-fill the empty side assuming a square (1:1) pixel
@@ -585,9 +550,6 @@ export class MapCalibrationModal {
       return dist / N;
     };
     const updateCalGrid = () => {
-      // DEBUG (v2.14.21) — count lines emitted + total time. Skip
-      // logging when below threshold to avoid console noise.
-      const tStart = performance.now();
       gridOverlayG.innerHTML = '';
       if (!gridOverlayCb.checked) return;
       const pps = derivePps();
@@ -615,10 +577,6 @@ export class MapCalibrationModal {
         lines.push(`<line x1="0" y1="${y}" x2="${this.imgW}" y2="${y}" />`);
       }
       gridOverlayG.innerHTML = lines.join('');
-      const tEnd = performance.now();
-      if (tEnd - tStart > 4) {
-        console.log(`[cal-grid] updateCalGrid lines=${lines.length} took=${(tEnd - tStart).toFixed(0)}ms (pps=${pps.toFixed(2)} imgW=${this.imgW} imgH=${this.imgH})`);
-      }
     };
     gridOverlayCb.addEventListener('change', updateCalGrid);
 
@@ -650,32 +608,16 @@ export class MapCalibrationModal {
     window.addEventListener('keydown', this._onKeyDown);
 
     gridHInput.addEventListener('input', () => {
-      const t0 = performance.now();
-      autoFillCounterpart('h');
-      const t1 = performance.now();
-      updateGridFeedback();
-      const t2 = performance.now();
+      autoFillCounterpart('h'); updateGridFeedback();
       const g = solveGrid();
-      const t3 = performance.now();
       if (g.ok && g.pps !== null) repositionLineFromPps(g.pps);
-      const t4 = performance.now();
       updateCalGrid();
-      const t5 = performance.now();
-      if (t5 - t0 > 8) console.log(`[cal-input H] total=${(t5-t0).toFixed(0)}ms auto=${(t1-t0).toFixed(0)} feedback=${(t2-t1).toFixed(0)} solve=${(t3-t2).toFixed(0)} reposLine=${(t4-t3).toFixed(0)} grid=${(t5-t4).toFixed(0)}`);
     });
     gridVInput.addEventListener('input', () => {
-      const t0 = performance.now();
-      autoFillCounterpart('v');
-      const t1 = performance.now();
-      updateGridFeedback();
-      const t2 = performance.now();
+      autoFillCounterpart('v'); updateGridFeedback();
       const g = solveGrid();
-      const t3 = performance.now();
       if (g.ok && g.pps !== null) repositionLineFromPps(g.pps);
-      const t4 = performance.now();
       updateCalGrid();
-      const t5 = performance.now();
-      if (t5 - t0 > 8) console.log(`[cal-input V] total=${(t5-t0).toFixed(0)}ms auto=${(t1-t0).toFixed(0)} feedback=${(t2-t1).toFixed(0)} solve=${(t3-t2).toFixed(0)} reposLine=${(t4-t3).toFixed(0)} grid=${(t5-t4).toFixed(0)}`);
     });
 
     // v2.14.2 — picking a DPI back-fills H × V using the map's actual
@@ -689,7 +631,6 @@ export class MapCalibrationModal {
     // matchCommonDpi tolerance because of rounding, which would clear
     // the dropdown otherwise).
     dpiSelect.addEventListener('change', () => {
-      const t0 = performance.now();
       const dpi = parseFloat(dpiSelect.value);
       if (!Number.isFinite(dpi) || dpi <= 0) return;
       gridHInput.value = String(Math.max(1, Math.round(this.imgW / dpi)));
@@ -698,22 +639,13 @@ export class MapCalibrationModal {
       dpiSelect.value = String(dpi);
       repositionLineFromPps(dpi);
       updateCalGrid();
-      const t1 = performance.now();
-      if (t1 - t0 > 8) console.log(`[cal-input DPI] total=${(t1-t0).toFixed(0)}ms dpi=${dpi}`);
     });
 
     // v2.14.3 — N is the line's "how many squares does this represent"
     // input. Changing it doesn't move the line, but it does change the
     // implied pps (same physical line, different square count), so
     // H/V/DPI re-derive.
-    distInput.addEventListener('input', () => {
-      const t0 = performance.now();
-      syncInputsFromLine();
-      const t1 = performance.now();
-      updateCalGrid();
-      const t2 = performance.now();
-      if (t2 - t0 > 8) console.log(`[cal-input N] total=${(t2-t0).toFixed(0)}ms syncInputs=${(t1-t0).toFixed(0)} grid=${(t2-t1).toFixed(0)}`);
-    });
+    distInput.addEventListener('input', () => { syncInputsFromLine(); updateCalGrid(); });
 
     updateGridFeedback();
 
@@ -722,17 +654,10 @@ export class MapCalibrationModal {
       const distInput = overlay.querySelector<HTMLInputElement>('.calibration-distance-input')!;
       const squares   = parseFloat(distInput.value);
 
-      // ── DEBUG TIMERS (v2.14.21) — chasing the multi-second Save freeze.
-      //    Logs to console so we can see which segment is heavy. Remove
-      //    once the slow op is identified + fixed.
-      const tSaveStart = performance.now();
-      console.log('[cal-save] click → entered handler');
-
       // By-grid takes precedence when both H and V are filled with positive
       // integers — the user explicitly chose the "I know the map dims" path.
       const g = solveGrid();
       if (g.ok && g.pps !== null) {
-        const t1 = performance.now();
         await MapAssetStore.update(asset.id, {
           pixelsPerSquare:  g.pps,
           gridSquares:      { h: parseInt(gridHInput.value, 10), v: parseInt(gridVInput.value, 10) },
@@ -743,10 +668,7 @@ export class MapCalibrationModal {
           gridOffsetX:      this.gridOffsetX,
           gridOffsetY:      this.gridOffsetY,
         });
-        const t2 = performance.now();
-        console.log(`[cal-save] MapAssetStore.update (by-grid): ${(t2 - t1).toFixed(0)}ms`);
         this.close();
-        console.log(`[cal-save] close() done; total ${(performance.now() - tSaveStart).toFixed(0)}ms`);
         return;
       }
 
@@ -755,7 +677,6 @@ export class MapCalibrationModal {
       const px = Math.hypot(this.b.x - this.a.x, this.b.y - this.a.y);
       if (px < 4) { alert('Drag the two crosses further apart before saving.'); return; }
       const pixelsPerSquare = px / squares;
-      const t1 = performance.now();
       await MapAssetStore.update(asset.id, {
         pixelsPerSquare,
         calibrationLine: {
@@ -773,10 +694,7 @@ export class MapCalibrationModal {
         gridOffsetX:    this.gridOffsetX,
         gridOffsetY:    this.gridOffsetY,
       });
-      const t2 = performance.now();
-      console.log(`[cal-save] MapAssetStore.update (ruler): ${(t2 - t1).toFixed(0)}ms`);
       this.close();
-      console.log(`[cal-save] close() done; total ${(performance.now() - tSaveStart).toFixed(0)}ms`);
     });
 
     return overlay;

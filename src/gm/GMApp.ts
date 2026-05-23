@@ -2580,55 +2580,37 @@ export class GMApp {
       if (!mapState) return;
       const asset = await this.maps.getAsset(mapState.id);
       if (!asset) return;
-      const cal = new MapCalibrationModal();
-      // DEBUG (v2.14.23) — both JS timers AND a wall-clock watchdog
-      // ticker so we can see WHERE the 8s gap lives. The ticker fires
-      // every 100ms; if it stops logging during the freeze, the main
-      // thread is blocked. Also a rAF tick so we know whether frames
-      // are presenting. PerformanceObserver picks up long tasks.
-      const watchdogStart = performance.now();
-      let lastTick = watchdogStart;
-      const tickerId = window.setInterval(() => {
-        const now = performance.now();
-        const gap = now - lastTick;
-        if (gap > 200) console.log(`[watchdog] GAP ${gap.toFixed(0)}ms (since-click ${(now - watchdogStart).toFixed(0)}ms)`);
-        lastTick = now;
-      }, 100);
-      let rafFrames = 0;
-      let rafKeepGoing = true;
-      let lastRaf = watchdogStart;
-      const rafTick = (now: number) => {
-        const gap = now - lastRaf;
-        rafFrames++;
-        if (gap > 200) console.log(`[watchdog rAF] gap ${gap.toFixed(0)}ms (frames so far ${rafFrames})`);
-        lastRaf = now;
-        if (rafKeepGoing) requestAnimationFrame(rafTick);
-      };
-      requestAnimationFrame(rafTick);
-      let longtaskObs: PerformanceObserver | null = null;
-      try {
-        longtaskObs = new PerformanceObserver((list) => {
-          for (const e of list.getEntries()) {
-            console.log(`[longtask] dur=${e.duration.toFixed(0)}ms startSinceClick=${(e.startTime - watchdogStart).toFixed(0)}ms`);
-          }
-        });
-        longtaskObs.observe({ entryTypes: ['longtask'] });
-      } catch { /* not supported in this browser */ }
 
-      await cal.open(asset);
-      const t0 = performance.now();
-      console.log(`[gm-postcal] cal.open resolved — starting refreshProjectorMapInfo (since-click ${(t0 - watchdogStart).toFixed(0)}ms)`);
+      // v2.14.25 — calibrating the ACTIVE map was stalling the whole
+      // session because three render targets were all decoding the
+      // full-res image in parallel: the calibration modal's SVG,
+      // the GM's Three.js canvas behind it, and any connected Scaled
+      // View popup. Pause the GM canvas + send viewers a hold screen
+      // for the duration of the modal so the modal SVG is the only
+      // render target rendering the map. Restored on close (either
+      // path); refreshProjectorMapInfo then pushes the saved
+      // calibration to viewers (no-op if the user cancelled).
+      const canvasWrapper = document.getElementById('canvas-wrapper');
+      const wasDisplay = canvasWrapper?.style.display ?? '';
+      if (canvasWrapper) canvasWrapper.style.display = 'none';
+      this.host.broadcast({ type: 'view_placeholder', target: 'player',    show: true, message: 'GM is calibrating this map — back in a moment.' });
+      this.host.broadcast({ type: 'view_placeholder', target: 'projector', show: true, message: 'GM is calibrating this map — back in a moment.' });
+
+      try {
+        const cal = new MapCalibrationModal();
+        await cal.open(asset);
+      } finally {
+        // Restore GM canvas + clear viewer hold screens regardless of
+        // save / cancel / thrown error. Order: clear hold FIRST so the
+        // viewers don't get a flash of the GM canvas hidden state.
+        this.host.broadcast({ type: 'view_placeholder', target: 'player',    show: false, message: '' });
+        this.host.broadcast({ type: 'view_placeholder', target: 'projector', show: false, message: '' });
+        if (canvasWrapper) canvasWrapper.style.display = wasDisplay;
+      }
+      // Push the saved calibration to viewers. No-op for cancel
+      // (the asset hasn't changed) — the message still fires but
+      // every field matches what they already had.
       await this.refreshProjectorMapInfo();
-      const t1 = performance.now();
-      console.log(`[gm-postcal] refreshProjectorMapInfo total ${(t1 - t0).toFixed(0)}ms (since-click ${(t1 - watchdogStart).toFixed(0)}ms)`);
-      // Keep the watchdog running for 3 seconds post-handler so we
-      // catch any tail work after refreshProjectorMapInfo returns.
-      setTimeout(() => {
-        rafKeepGoing = false;
-        clearInterval(tickerId);
-        longtaskObs?.disconnect();
-        console.log(`[watchdog] stopped — total since-click ${(performance.now() - watchdogStart).toFixed(0)}ms, rAF frames ${rafFrames}`);
-      }, 3000);
     });
 
     // Unified Projector dropdown. Acts as launcher, off-switch, and setup
@@ -4593,17 +4575,7 @@ export class GMApp {
    * the active map changes (or its calibration is updated).
    */
   private async refreshProjectorMapInfo(): Promise<void> {
-    // DEBUG (v2.14.21) — per-step timers to localise the post-save freeze.
-    const TS = (label: string, prev: number): number => {
-      const now = performance.now();
-      const dt = now - prev;
-      if (dt > 3) console.log(`[gm-rpmi] ${label}: ${dt.toFixed(0)}ms`);
-      return now;
-    };
-    let t = performance.now();
-    const t0 = t;
     const mapState = this.state.snapshot().map;
-    t = TS('state.snapshot', t);
     const warnEl = document.getElementById('projection-map-cal-warning');
     if (!mapState) {
       this.projectorEditor.setMapPixelsPerSquare(null);
@@ -4612,11 +4584,9 @@ export class GMApp {
       this._lastMapAssetMeta = null;
       if (warnEl) warnEl.hidden = true;
       this._broadcastRoles(false);
-      console.log(`[gm-rpmi] EARLY EXIT (no map) total=${(performance.now() - t0).toFixed(0)}ms`);
       return;
     }
     const asset = await this.maps.getAsset(mapState.id);
-    t = TS('maps.getAsset', t);
     if (!asset) {
       this.projectorEditor.setMapPixelsPerSquare(null);
       this.projectorEditor.setMapImageWidth(0);
@@ -4624,15 +4594,11 @@ export class GMApp {
       this._lastMapAssetMeta = null;
       if (warnEl) warnEl.hidden = true;
       this._broadcastRoles(false);
-      console.log(`[gm-rpmi] EARLY EXIT (no asset) total=${(performance.now() - t0).toFixed(0)}ms`);
       return;
     }
     this.projectorEditor.setMapPixelsPerSquare(asset.pixelsPerSquare ?? null);
-    t = TS('projectorEditor.setMapPixelsPerSquare', t);
     this.projectorEditor.setMapImageWidth(asset.imageWidth ?? 0);
-    t = TS('projectorEditor.setMapImageWidth', t);
     this.host.updateMapAssetInfo(asset.pixelsPerSquare, asset.imageWidth, asset.imageHeight);
-    t = TS('host.updateMapAssetInfo', t);
     this._lastMapAssetMeta = (asset.pixelsPerSquare && asset.imageWidth && asset.imageHeight)
       ? { pixelsPerSquare: asset.pixelsPerSquare, imageWidth: asset.imageWidth, imageHeight: asset.imageHeight }
       : null;
@@ -4649,10 +4615,8 @@ export class GMApp {
       ...(asset.gridOffsetX     !== undefined ? { gridOffsetX:        asset.gridOffsetX     } : {}),
       ...(asset.gridOffsetY     !== undefined ? { gridOffsetY:        asset.gridOffsetY     } : {}),
     });
-    t = TS('host.broadcast(map_meta_update)', t);
     // Monitors care about the primary's resulting view fraction — push it so they re-crop.
     this._broadcastRoles(false);
-    t = TS('_broadcastRoles', t);
     // If the new active map is uncalibrated and the projector is currently
     // in 'scaled' mode, flip to 'full' — scaled requires pixelsPerSquare
     // to render meaningfully. The Full Map button lock (in
@@ -4668,15 +4632,12 @@ export class GMApp {
       }
     }
     this.refreshProjectionModeButtons();
-    t = TS('refreshProjectionModeButtons', t);
     // The projector rect's bounds depend on mapPixelsPerSquare we only
     // resolved a moment ago (asset metadata is read async from IndexedDB),
     // so getRectBounds() returned null during renderer.onMapLoaded's
     // refresh. Re-push now that the calibration data has landed —
     // otherwise the green chrome stays missing after a map swap.
     this._refreshRectOverlays();
-    TS('_refreshRectOverlays', t);
-    console.log(`[gm-rpmi] DONE total=${(performance.now() - t0).toFixed(0)}ms`);
   }
 
   private setStatus(msg: string, level: 'ok' | 'warn' | 'error'): void {
