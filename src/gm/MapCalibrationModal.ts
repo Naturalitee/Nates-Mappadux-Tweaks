@@ -75,15 +75,52 @@ export class MapCalibrationModal {
   }
 
   private close(): void {
+    // DEBUG (v2.14.23) — fine-grained timers on each close() step.
+    // Hypothesis: removing the SVG <image> with the full-res map
+    // blob triggers a heavy browser GC / image-decoder teardown.
+    // Also: drop the SVG image's href BEFORE removing the overlay so
+    // the browser releases the decoded bitmap eagerly. Then resolve()
+    // the promise BEFORE the DOM removal so the caller's await
+    // continues immediately and the teardown happens during paint
+    // idle. Last-ditch: defer overlay.remove + revokeObjectURL to a
+    // microtask so they don't block the sync caller's UI update.
+    const t0 = performance.now();
     if (this._onKeyDown) {
       window.removeEventListener('keydown', this._onKeyDown);
       this._onKeyDown = null;
     }
-    if (this.overlay) this.overlay.remove();
-    this.overlay = null;
-    if (this.blobUrl) URL.revokeObjectURL(this.blobUrl);
-    this.blobUrl = null;
+    const t1 = performance.now();
+    // Hide the overlay immediately so the user sees the modal vanish.
+    // The actual DOM removal + blob revoke (which we suspect trigger
+    // a multi-second image-decoder teardown) gets deferred to a
+    // setTimeout so the GM screen can paint at least one frame first.
+    // Also strip the SVG image's href to let the browser release the
+    // decoded bitmap eagerly.
+    if (this.overlay) {
+      this.overlay.style.display = 'none';
+      const imageEl = this.overlay.querySelector<SVGImageElement>('.calibration-image');
+      if (imageEl) {
+        imageEl.removeAttribute('href');
+        imageEl.removeAttributeNS('http://www.w3.org/1999/xlink', 'href');
+      }
+    }
+    const t2 = performance.now();
     if (this.resolver) { this.resolver(); this.resolver = null; }
+    const t3 = performance.now();
+    const overlayRef = this.overlay;
+    const blobUrlRef = this.blobUrl;
+    this.overlay = null;
+    this.blobUrl = null;
+    setTimeout(() => {
+      const td0 = performance.now();
+      if (overlayRef) overlayRef.remove();
+      const td1 = performance.now();
+      if (blobUrlRef) URL.revokeObjectURL(blobUrlRef);
+      const td2 = performance.now();
+      console.log(`[cal-close DEFERRED] remove=${(td1-td0).toFixed(0)}ms revokeUrl=${(td2-td1).toFixed(0)}ms`);
+    }, 0);
+    const t4 = performance.now();
+    console.log(`[cal-close] keydown=${(t1-t0).toFixed(0)}ms hideAndStrip=${(t2-t1).toFixed(0)}ms resolver=${(t3-t2).toFixed(0)}ms scheduleTeardown=${(t4-t3).toFixed(0)}ms total=${(t4-t0).toFixed(0)}ms`);
   }
 
   private _buildUI(asset: MapAsset): HTMLElement {

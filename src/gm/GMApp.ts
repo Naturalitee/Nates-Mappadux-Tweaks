@@ -798,7 +798,10 @@ export class GMApp {
       : (projBroadcastEl?.checked === false ? 'off' : 'on');
     // v2.14.3 — Show Grid icon on the Scaled View rect, only on calibrated
     // maps (a 1" grid is meaningless without a known pixels-per-square).
-    const projGridState: 'on' | 'off' | undefined = this._isActiveMapCalibrated()
+    // v2.14.23 — same selection gate as the player rect: chrome
+    // clutter is worse on the smaller projector rect, so the icon
+    // only shows when the projector rect is the selected viewport.
+    const projGridState: 'on' | 'off' | undefined = (projSelected && this._isActiveMapCalibrated())
       ? ((this.state.snapshot().projectorViewport?.gridEnabled) ? 'on' : 'off')
       : undefined;
     this._markerOverlay.updateRect('projector', projBounds
