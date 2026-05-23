@@ -182,13 +182,23 @@ export class Viewer {
 
   /** Show or hide the hold-screen faff overlay. `show=false` removes
    *  it; the next show call rebuilds + re-renders the QR (URLs don't
-   *  change mid-session so we don't re-render the QR unnecessarily). */
+   *  change mid-session so we don't re-render the QR unnecessarily).
+   *
+   *  v2.14.27 — also pauses/resumes the renderer's animation loop.
+   *  Why: when the GM is calibrating the active map, a connected
+   *  Player / Projector popup kept its Three.js loop spinning behind
+   *  the faff overlay, competing with the calibration modal SVG for
+   *  the GPU at the OS level. Stopping the popup's render loop
+   *  during the hold-screen reclaims that contention. Idempotent on
+   *  both Renderer.stop() and .start(). */
   showFaffOverlay(show: boolean, message: string): void {
     if (!show) {
       this._faffOverlayEl?.remove();
       this._faffOverlayEl = null;
+      if (this._isPipelineBuilt()) this.renderer.start();
       return;
     }
+    if (this._isPipelineBuilt()) this.renderer.stop();
     if (!this._faffOverlayEl) {
       const el = document.createElement('div');
       el.className = 'faff-overlay';

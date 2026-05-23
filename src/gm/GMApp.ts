@@ -2581,21 +2581,20 @@ export class GMApp {
       const asset = await this.maps.getAsset(mapState.id);
       if (!asset) return;
 
-      // v2.14.25 — pause GM canvas + send viewers a hold screen for
-      // the duration of the modal so the modal SVG is the only render
-      // target rendering the map.
-      // v2.14.26 — ALSO suspend all outbound broadcasts (except the
-      // view_placeholder hold-screen messages). User's diagnosis: with
-      // a viewer connected, something is firing during scale tweaks
-      // and even on Save/Cancel that keeps re-broadcasting state to
-      // the player, stalling the GM. Suspending all broadcasts during
-      // the modal cleanly stops every such interaction; refresh-
-      // ProjectorMapInfo on close re-syncs everyone with the final
-      // calibration. The host logs which message types it dropped
-      // during the suspension so we can see what was firing.
+      // v2.14.27 — Alex's diagnostic showed 0 broadcasts dropped
+      // during a 5-10s pause with 2 viewers open. So GM isn't sending.
+      // What's left: the popup windows kept their own Three.js render
+      // loops spinning behind the hold screen, competing with the
+      // calibration modal SVG for the GPU at the OS level. The faff
+      // overlay now stops the popup's renderer (Viewer.showFaffOverlay
+      // calls renderer.stop). Also stop the GM's own renderer during
+      // the modal so hiding canvas-wrapper doesn't just paint-skip
+      // (the WebGL animation loop ran anyway). Everything restored
+      // in the finally block.
       const canvasWrapper = document.getElementById('canvas-wrapper');
       const wasDisplay = canvasWrapper?.style.display ?? '';
       if (canvasWrapper) canvasWrapper.style.display = 'none';
+      this.renderer?.stop();
       this.host.broadcast({ type: 'view_placeholder', target: 'player',    show: true, message: 'GM is calibrating this map — back in a moment.' });
       this.host.broadcast({ type: 'view_placeholder', target: 'projector', show: true, message: 'GM is calibrating this map — back in a moment.' });
       this.host.setBroadcastSuspended(true);
@@ -2611,6 +2610,7 @@ export class GMApp {
         this.host.broadcast({ type: 'view_placeholder', target: 'player',    show: false, message: '' });
         this.host.broadcast({ type: 'view_placeholder', target: 'projector', show: false, message: '' });
         if (canvasWrapper) canvasWrapper.style.display = wasDisplay;
+        this.renderer?.start();
       }
       // Push the saved calibration to viewers. No-op for cancel
       // (the asset hasn't changed) — the message still fires but
