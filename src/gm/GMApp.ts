@@ -2581,28 +2581,33 @@ export class GMApp {
       const asset = await this.maps.getAsset(mapState.id);
       if (!asset) return;
 
-      // v2.14.25 — calibrating the ACTIVE map was stalling the whole
-      // session because three render targets were all decoding the
-      // full-res image in parallel: the calibration modal's SVG,
-      // the GM's Three.js canvas behind it, and any connected Scaled
-      // View popup. Pause the GM canvas + send viewers a hold screen
-      // for the duration of the modal so the modal SVG is the only
-      // render target rendering the map. Restored on close (either
-      // path); refreshProjectorMapInfo then pushes the saved
-      // calibration to viewers (no-op if the user cancelled).
+      // v2.14.25 — pause GM canvas + send viewers a hold screen for
+      // the duration of the modal so the modal SVG is the only render
+      // target rendering the map.
+      // v2.14.26 — ALSO suspend all outbound broadcasts (except the
+      // view_placeholder hold-screen messages). User's diagnosis: with
+      // a viewer connected, something is firing during scale tweaks
+      // and even on Save/Cancel that keeps re-broadcasting state to
+      // the player, stalling the GM. Suspending all broadcasts during
+      // the modal cleanly stops every such interaction; refresh-
+      // ProjectorMapInfo on close re-syncs everyone with the final
+      // calibration. The host logs which message types it dropped
+      // during the suspension so we can see what was firing.
       const canvasWrapper = document.getElementById('canvas-wrapper');
       const wasDisplay = canvasWrapper?.style.display ?? '';
       if (canvasWrapper) canvasWrapper.style.display = 'none';
       this.host.broadcast({ type: 'view_placeholder', target: 'player',    show: true, message: 'GM is calibrating this map — back in a moment.' });
       this.host.broadcast({ type: 'view_placeholder', target: 'projector', show: true, message: 'GM is calibrating this map — back in a moment.' });
+      this.host.setBroadcastSuspended(true);
 
       try {
         const cal = new MapCalibrationModal();
         await cal.open(asset);
       } finally {
-        // Restore GM canvas + clear viewer hold screens regardless of
-        // save / cancel / thrown error. Order: clear hold FIRST so the
-        // viewers don't get a flash of the GM canvas hidden state.
+        // Restore everything regardless of save / cancel / thrown error.
+        // Resume broadcasts FIRST so the view_placeholder show=false
+        // messages below actually go out.
+        this.host.setBroadcastSuspended(false);
         this.host.broadcast({ type: 'view_placeholder', target: 'player',    show: false, message: '' });
         this.host.broadcast({ type: 'view_placeholder', target: 'projector', show: false, message: '' });
         if (canvasWrapper) canvasWrapper.style.display = wasDisplay;

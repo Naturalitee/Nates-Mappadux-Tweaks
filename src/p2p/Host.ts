@@ -55,6 +55,18 @@ export class Host {
    *  Players use this to deduplicate the same message arriving via both
    *  BroadcastChannel and PeerJS (local windows receive both). */
   private broadcastSeq = 0;
+  /** v2.14.26 — when true, broadcast() is a no-op. Used to silence
+   *  all outbound P2P traffic during the calibration modal session
+   *  (the active map's calibration changes shouldn't propagate to
+   *  viewers until the GM commits with Save). Viewers see a hold
+   *  screen for the whole modal session, so dropping broadcasts is
+   *  safe — anything important re-syncs via refreshProjectorMapInfo
+   *  the moment the modal closes. */
+  private _broadcastSuspended = false;
+  /** Counter for diagnostic logging — how many broadcasts were dropped
+   *  while suspended. Reset on each setBroadcastSuspended(true). */
+  private _suspendedDropCount = 0;
+  private _suspendedDropTypes = new Map<string, number>();
 
   /**
    * Pending broker-reconnect timer. Set when a broker-level PeerJS error
@@ -152,6 +164,26 @@ export class Host {
     return this.peer?.id || this.requestedRoomCode;
   }
 
+  /** v2.14.26 — suspend / resume outbound broadcasts. Used by GMApp
+   *  to silence viewers while the calibration modal is open. The
+   *  view_placeholder hold screen broadcasts still go through; every
+   *  other type is dropped. On resume, logs the diagnostic counts so
+   *  we can SEE which message types were piling up during the modal. */
+  setBroadcastSuspended(suspended: boolean): void {
+    if (this._broadcastSuspended === suspended) return;
+    if (suspended) {
+      this._suspendedDropCount = 0;
+      this._suspendedDropTypes.clear();
+      this._broadcastSuspended = true;
+      console.log('[host] broadcasts SUSPENDED');
+    } else {
+      this._broadcastSuspended = false;
+      const breakdown = [...this._suspendedDropTypes.entries()]
+        .map(([t, n]) => `${t}=${n}`).join(' ');
+      console.log(`[host] broadcasts RESUMED — dropped ${this._suspendedDropCount} during suspension${breakdown ? ' (' + breakdown + ')' : ''}`);
+    }
+  }
+
   get connectedCount(): number {
     return this.connections.size;
   }
@@ -177,6 +209,15 @@ export class Host {
    *  players receiving the same message via BOTH BroadcastChannel and PeerJS
    *  can detect and drop the duplicate. */
   broadcast(msg: GMMessage): void {
+    // v2.14.26 — gate. While suspended, drop EVERY outbound message
+    // except view_placeholder (we need that to deliver the calibrating
+    // hold screen + clear it). Log what gets dropped so we can confirm
+    // which message types were causing the calibration-modal stalls.
+    if (this._broadcastSuspended && msg.type !== 'view_placeholder') {
+      this._suspendedDropCount++;
+      this._suspendedDropTypes.set(msg.type, (this._suspendedDropTypes.get(msg.type) ?? 0) + 1);
+      return;
+    }
     // Stamp with seq before sending so both channels carry the same number.
     const seq = ++this.broadcastSeq;
     const tagged = { ...msg, _seq: seq } as unknown as GMMessage;
