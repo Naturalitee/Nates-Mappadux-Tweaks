@@ -40,6 +40,8 @@ export async function packCompositeForBroadcast(asset: MapAsset): Promise<PackRe
     imageWidth:       number;
     imageHeight:      number;
     pixelsPerSquare?: number;
+    gridOffsetX?:     number;
+    gridOffsetY?:     number;
     mimeType:         string;
     bytes:            ArrayBuffer;
   };
@@ -56,6 +58,8 @@ export async function packCompositeForBroadcast(asset: MapAsset): Promise<PackRe
       imageWidth:   tileAsset.imageWidth ?? 0,
       imageHeight:  tileAsset.imageHeight ?? 0,
       ...(tileAsset.pixelsPerSquare ? { pixelsPerSquare: tileAsset.pixelsPerSquare } : {}),
+      ...(tileAsset.gridOffsetX     ? { gridOffsetX:     tileAsset.gridOffsetX     } : {}),
+      ...(tileAsset.gridOffsetY     ? { gridOffsetY:     tileAsset.gridOffsetY     } : {}),
       mimeType:     blob.type || 'image/png',
       bytes,
     });
@@ -71,6 +75,8 @@ export async function packCompositeForBroadcast(asset: MapAsset): Promise<PackRe
       imageWidth:  p.imageWidth,
       imageHeight: p.imageHeight,
       ...(p.pixelsPerSquare ? { pixelsPerSquare: p.pixelsPerSquare } : {}),
+      ...(p.gridOffsetX     ? { gridOffsetX:     p.gridOffsetX     } : {}),
+      ...(p.gridOffsetY     ? { gridOffsetY:     p.gridOffsetY     } : {}),
       mimeType:    p.mimeType,
       blobOffset:  totalSize,
       blobSize:    p.bytes.byteLength,

@@ -22,6 +22,12 @@ export interface RasterizeResult {
   imageWidth:         number;
   imageHeight:        number;
   pixelsPerSquare:    number | null;
+  /** v2.14.55 — composite's grid origin in output pixels. Persisted
+   *  on the composite asset so the viewer's drawGrid lines up with
+   *  the master tile's calibrated grid (rather than starting at the
+   *  output's top-left corner). Always present alongside pps. */
+  gridOffsetX:        number;
+  gridOffsetY:        number;
 }
 
 /** One tile's input to the rasteriser. Caller supplies the tile
@@ -29,17 +35,26 @@ export interface RasterizeResult {
  *  math), and the bytes to draw. */
 export interface TileInput {
   tile:  CompositeTile;
-  asset: Pick<MapAsset, 'id' | 'pixelsPerSquare' | 'imageWidth' | 'imageHeight'>;
+  asset: Pick<MapAsset, 'id' | 'pixelsPerSquare' | 'imageWidth' | 'imageHeight' | 'gridOffsetX' | 'gridOffsetY'>;
   blob:  Blob;
 }
 
 /** Output aspect when no other hint is available. */
 const DEFAULT_OUTPUT_ASPECT = 4 / 3;
 
-/** Cap so we don't try to rasterise a 50 000-px-wide composite if a
- *  master tile happens to be huge. 4096 covers everyday 4K maps with
- *  margin. */
-const MAX_OUTPUT_W = 4096;
+/** Memory guardrail on the rasteriser's output. Pixel-budget rather
+ *  than width-cap so wide-and-short composites (think a long corridor
+ *  tile-set) get more horizontal room than tall-and-narrow ones.
+ *  v2.14.55 — was a strict 4096 width cap that single-image-thinking
+ *  made too tight for multi-tile layouts. 64 MP at 4:3 ≈ 9230 × 6925
+ *  (≈ 250 MB transient RGBA); generous for typical play, bounded
+ *  enough to keep browsers safe.
+ *
+ *  Could one day evolve into viewer-aware streaming (rasterise at
+ *  the viewer's canvas needs rather than a fixed budget), but the
+ *  per-viewer composition path makes that a future option rather
+ *  than a blocker. */
+const PIXEL_BUDGET = 64 * 1024 * 1024;
 
 /** Pure rasteriser. Doesn't touch IDB / MapAssetStore. The caller
  *  supplies everything it needs. Viewer-side and GM-side paths both
@@ -72,26 +87,31 @@ export async function rasterizeFromTiles(
     const masterImgW = master.asset.imageWidth ?? 0;
     // workW × tileScale = masterImgW → cell pitch stays at master.pps.
     workW = Math.round(masterImgW / Math.max(0.01, tileScale));
-    if (workW > MAX_OUTPUT_W) {
-      const downscale = MAX_OUTPUT_W / workW;
-      workW = MAX_OUTPUT_W;
+    workH = Math.round(workW / compositeAspect);
+    // Pixel budget: downscale uniformly if we'd blow the cap.
+    const pixels = workW * workH;
+    if (pixels > PIXEL_BUDGET) {
+      const downscale = Math.sqrt(PIXEL_BUDGET / pixels);
+      workW = Math.round(workW * downscale);
+      workH = Math.round(workH * downscale);
       pps = (master.asset.pixelsPerSquare ?? 0) * downscale;
     } else {
       pps = master.asset.pixelsPerSquare ?? null;
     }
-    workH = Math.round(workW / compositeAspect);
   } else {
     workW = 1600;
     workH = Math.round(workW / compositeAspect);
   }
 
-  // Compute bounding box in WORKING pixel space — only the region
-  // tiles actually cover gets rasterised. Saves output pixels when
-  // tiles cluster in a corner of the editor canvas; lets the GM
-  // place tiles anywhere without paying for empty pixels.
-  let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-  // Pre-decode bitmaps once so we can compute aspects + draw without
-  // re-decoding. close() each after the draw to keep memory bounded.
+  // v2.14.55 — output spans the FULL workspace (no bbox crop).
+  // Earlier (v2.14.51) we cropped to the tile envelope to save
+  // pixels; that shrunk the rendered map's declared dimensions and
+  // dragged the grid + the Player View rect bounds with it. The
+  // composite is a TABLE — its declared extent should match the
+  // workspace, with tiles placed within it and transparency
+  // wherever no tile covers. Renderer composites the map plane on
+  // top of the GM's backdrop, so transparency = backdrop visible.
+  // Grid + viewer rect bounds now extend across the whole workspace.
   const decoded: { input: TileInput; bitmap: ImageBitmap; tileW: number; tileH: number; cx: number; cy: number }[] = [];
   for (const input of inputs) {
     let bitmap: ImageBitmap;
@@ -105,25 +125,13 @@ export async function rasterizeFromTiles(
     const cx = input.tile.x * workW;
     const cy = input.tile.y * workH;
     decoded.push({ input, bitmap, tileW, tileH, cx, cy });
-    // Bounding box uses an axis-aligned envelope of the rotated rect.
-    // For now use the rect's circumscribed circle so any rotation
-    // still fits — radius = sqrt(tileW² + tileH²) / 2.
-    const r = Math.sqrt(tileW * tileW + tileH * tileH) / 2;
-    if (cx - r < minX) minX = cx - r;
-    if (cy - r < minY) minY = cy - r;
-    if (cx + r > maxX) maxX = cx + r;
-    if (cy + r > maxY) maxY = cy + r;
   }
   if (decoded.length === 0) return null;
 
-  // Clamp the bbox so the output never claims pixels outside the
-  // working frame (saves the rasteriser from negative-coord draws).
-  const cropX = Math.max(0, Math.floor(minX));
-  const cropY = Math.max(0, Math.floor(minY));
-  const cropR = Math.min(workW, Math.ceil(maxX));
-  const cropB = Math.min(workH, Math.ceil(maxY));
-  const outputW = Math.max(1, cropR - cropX);
-  const outputH = Math.max(1, cropB - cropY);
+  const outputW = workW;
+  const outputH = workH;
+  const cropX = 0;
+  const cropY = 0;
 
   // Offscreen canvas → 2D ctx. Fail soft on browsers without it.
   const canvas = (typeof OffscreenCanvas !== 'undefined')
@@ -162,7 +170,44 @@ export async function rasterizeFromTiles(
   }
 
   const blob = await canvas.convertToBlob({ type: 'image/png' });
-  return { blob, imageWidth: outputW, imageHeight: outputH, pixelsPerSquare: pps };
+
+  // v2.14.55 — compute composite gridOffsetX/Y so viewer drawGrid
+  // aligns with the MASTER tile's calibrated grid. The convention
+  // (v2.14.32): gridlines at map.x = n*K + offsetX. Set offsetX so
+  // the first gridline lands on the master tile's first gridline
+  // in output-pixel space.
+  let gridOffsetX = 0;
+  let gridOffsetY = 0;
+  if (master && pps && pps > 0) {
+    const masterTile     = master.tile;
+    const masterAsset    = master.asset;
+    const masterImgW     = masterAsset.imageWidth ?? 0;
+    const masterImgH     = masterAsset.imageHeight ?? 0;
+    // Display scale of master on the output: master tile renders at
+    // (masterTile.scale * workW) pixels wide; its source is
+    // masterImgW pixels. Ratio = how many output-pixels per
+    // source-pixel.
+    const displayScale = (masterImgW > 0)
+      ? ((masterTile.scale ?? 1) * workW) / masterImgW
+      : 1;
+    // Master image-corner in output coords (cropX/Y are 0 since we
+    // dropped the bbox crop, but kept here in case it returns).
+    const masterCornerX = masterTile.x * workW - masterImgW * displayScale / 2 - cropX;
+    const masterCornerY = masterTile.y * workH - masterImgH * displayScale / 2 - cropY;
+    const masterOffXout = (masterAsset.gridOffsetX ?? 0) * displayScale;
+    const masterOffYout = (masterAsset.gridOffsetY ?? 0) * displayScale;
+    gridOffsetX = ((masterCornerX + masterOffXout) % pps + pps) % pps;
+    gridOffsetY = ((masterCornerY + masterOffYout) % pps + pps) % pps;
+  }
+
+  return {
+    blob,
+    imageWidth: outputW,
+    imageHeight: outputH,
+    pixelsPerSquare: pps,
+    gridOffsetX,
+    gridOffsetY,
+  };
 }
 
 /** GM-side wrapper: resolve each tile's asset + blob from IDB then

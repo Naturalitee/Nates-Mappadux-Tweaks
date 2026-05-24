@@ -388,7 +388,7 @@ export class ProjectorApp {
   }
 
   /** Effective projection-area dimensions in CSS px, accounting for rotation. */
-  /** v2.14.54 — composite gold-class path. See PlayerApp's twin. */
+  /** v2.14.54 — composite payload handling. See PlayerApp's twin. */
   private async _maybeRasterizeComposite(
     blob:      ArrayBuffer,
     composite: CompositeWirePayload | undefined,

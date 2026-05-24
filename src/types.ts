@@ -517,6 +517,10 @@ export interface CompositeWirePayload {
     imageWidth:       number;
     imageHeight:      number;
     pixelsPerSquare?: number;
+    /** v2.14.55 — master tile's calibration nudge. Used by viewer
+     *  rasterise to compute composite gridOffset. */
+    gridOffsetX?:     number;
+    gridOffsetY?:     number;
     mimeType:         string;
     /** Byte offset into the bundled mapBlob where this tile begins. */
     blobOffset:       number;

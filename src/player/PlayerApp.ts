@@ -496,12 +496,11 @@ export class PlayerApp {
     this._applyEffectiveView();
   }
 
-  /** v2.14.54 — composite gold-class path. When map_change /
-   *  full_state carries a composite payload, the mapBlob is a
-   *  packed concatenation of tile bytes, not a final PNG. Unpack +
-   *  rasterise locally so the renderer's loadMap gets a normal
-   *  image buffer. Returns the input blob unchanged for non-
-   *  composite maps. */
+  /** v2.14.54 — composite payload handling. When map_change /
+   *  full_state carries a composite payload, the mapBlob is a packed
+   *  concatenation of tile bytes (not a final PNG). Unpack + rasterise
+   *  locally so the renderer's loadMap gets a normal image buffer.
+   *  Returns the input blob unchanged for non-composite maps. */
   private async _maybeRasterizeComposite(
     blob:      ArrayBuffer,
     composite: CompositeWirePayload | undefined,

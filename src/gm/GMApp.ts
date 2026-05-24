@@ -2273,6 +2273,11 @@ export class GMApp {
       MapAssetStore.runtimeBlobs.set(asset.id, raster.blob);
       updated.imageWidth      = raster.imageWidth;
       updated.imageHeight     = raster.imageHeight;
+      // v2.14.55 — also persist the composite's grid origin offset
+      // so viewer drawGrid aligns with the master tile's calibrated
+      // grid (rather than starting at the output's top-left corner).
+      updated.gridOffsetX     = raster.gridOffsetX;
+      updated.gridOffsetY     = raster.gridOffsetY;
       if (raster.pixelsPerSquare !== null) {
         updated.pixelsPerSquare = raster.pixelsPerSquare;
         // v2.14.53 — full 'scaled' pill. The GM has actively placed +
@@ -2411,9 +2416,9 @@ export class GMApp {
     const blob = localBlob; // for local renderer.loadMap below — GM canvas animates
     this.currentMapBlob = broadcastBlob;
 
-    // v2.14.54 — composite gold-class path. Instead of broadcasting
-    // the GM-rasterised composite PNG (which can hit the 4096 cap +
-    // chew bandwidth), pack each unique tile's bytes into a single
+    // v2.14.54 — composite wire format. Instead of broadcasting the
+    // GM-rasterised composite PNG (which hit the pixel-budget cap +
+    // chewed bandwidth), pack each unique tile's bytes into a single
     // ArrayBuffer + ship composite metadata. Viewers unpack and
     // rasterise locally via rasterizeFromTiles. Same output;
     // bandwidth scales with unique tile bytes rather than the
