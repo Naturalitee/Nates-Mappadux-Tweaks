@@ -485,11 +485,21 @@ export class CompositeMapEditor {
         let nx = startNX + dxNorm;
         let ny = startNY + dyNorm;
         // Snap to the master grid if enabled + available.
-        if (this._snapToGrid && this._masterCellNorm && this._masterCellNorm > 0) {
-          const cell = this._masterCellNorm;
+        // v2.14.58 — _masterCellNorm is the cell size in X-norm
+        // (= cellPx / canvasW). For non-square editor canvases the Y
+        // norm equivalent differs (= cellPx / canvasH). Using the
+        // X-norm for Y snapped tiles at the wrong spacing — close
+        // enough that single placements looked fine, but vertical
+        // stacks landed with a fractional-cell gap because the snap
+        // grid in Y was at 75%-cell intervals (for a 4:3 canvas)
+        // rather than full-cell. Now uses per-axis snap pitches that
+        // match the actually-drawn grid pixels.
+        if (this._snapToGrid && this._masterCellNorm && this._masterCellNorm > 0 && this._canvasH > 0) {
+          const cellNormX = this._masterCellNorm;
+          const cellNormY = this._masterCellNorm * (this._canvasW / this._canvasH);
           // Grid origin = canvas centre (matches _drawReferenceGrid).
-          nx = Math.round((nx - 0.5) / cell) * cell + 0.5;
-          ny = Math.round((ny - 0.5) / cell) * cell + 0.5;
+          nx = Math.round((nx - 0.5) / cellNormX) * cellNormX + 0.5;
+          ny = Math.round((ny - 0.5) / cellNormY) * cellNormY + 0.5;
         }
         const tileW = parseFloat(el.style.width);
         const tileH = parseFloat(el.style.height);
