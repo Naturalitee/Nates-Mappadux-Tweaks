@@ -312,6 +312,7 @@ export class GMApp {
   private mapSelect!:               HTMLSelectElement;
   private mapEditableSelect!:       EditableSelect;
   private editTextMapBtn!:          HTMLButtonElement;
+  private editCompositeBtn?:        HTMLButtonElement;
   private startAnimationBtn!:       HTMLButtonElement;
   private revealProgressEl!:        HTMLElement;
   private revealProgressBarEl!:     HTMLElement;
@@ -2242,6 +2243,24 @@ export class GMApp {
    *  On save the editor preserves the asset id and clears the
    *  rasterisation cache, so we just need to re-fetch the blob and
    *  repaint the texture. */
+  /** v2.14.42 — open the Composite Map editor on the active map. */
+  private async _editCurrentCompositeMap(): Promise<void> {
+    const currentId = this.state.snapshot().map?.id;
+    if (!currentId) return;
+    const storedMap = await getMap(currentId);
+    if (!storedMap) return;
+    const asset = await MapAssetStore.get(storedMap.mapAssetId);
+    if (!asset || asset.source !== 'composite-map') return;
+    const { CompositeMapEditor } = await import('./CompositeMapEditor.ts');
+    const updated = await new CompositeMapEditor().open(asset);
+    if (!updated) return; // cancel — no mutation
+    const { saveMapAsset } = await import('../storage/db.ts');
+    await saveMapAsset(updated);
+    MapAssetStore.invalidateRuntimeCache(asset.id);
+    const refreshed = await getMap(currentId);
+    if (refreshed) await this.loadMap(refreshed);
+  }
+
   private async _editCurrentTextMap(): Promise<void> {
     const currentId = this.state.snapshot().map?.id;
     if (!currentId) return;
@@ -2288,8 +2307,10 @@ export class GMApp {
     // hunting through the Add Map library.
     const mapAssetForButton = await MapAssetStore.get(map.mapAssetId);
     const isTextMap = mapAssetForButton?.source === 'text-map';
+    const isComposite = mapAssetForButton?.source === 'composite-map';
     const hasReveal = isTextMap && mapAssetForButton?.textMap?.animation?.enabled === true;
-    if (this.editTextMapBtn) this.editTextMapBtn.hidden = !isTextMap;
+    if (this.editTextMapBtn)   this.editTextMapBtn.hidden   = !isTextMap;
+    if (this.editCompositeBtn) this.editCompositeBtn.hidden = !isComposite;
     // Show the Start Animation button only when this handout has a
     // reveal animation configured. Hidden in every other case.
     // Reset to 'idle' state (Start Animation label) — every fresh map
@@ -2533,6 +2554,14 @@ export class GMApp {
     });
     this.editTextMapBtn             = q<HTMLButtonElement>('#edit-textmap-btn');
     this.editTextMapBtn.addEventListener('click', () => void this._editCurrentTextMap());
+    // v2.14.42 — composite-map editor entry. Same wiring shape as
+    // the text-map button; visible only when the active map's asset
+    // is a composite (toggled in loadMap).
+    const editCompositeEl = document.getElementById('edit-composite-btn') as HTMLButtonElement | null;
+    if (editCompositeEl) {
+      this.editCompositeBtn = editCompositeEl;
+      editCompositeEl.addEventListener('click', () => void this._editCurrentCompositeMap());
+    }
     this.startAnimationBtn          = q<HTMLButtonElement>('#start-animation-btn');
     this.startAnimationBtn.addEventListener('click', () => void this._onAnimationButtonClick());
     this.revealProgressEl           = q<HTMLElement>('#reveal-progress');
