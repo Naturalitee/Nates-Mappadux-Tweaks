@@ -116,13 +116,18 @@ export async function detectMapScale(inputs: DetectInputs): Promise<ScaleDetecti
           reasons:         [`filename grid ${nameWxH.w}×${nameWxH.h} → ${ppsW} px/sq`],
         });
       } else if (aspectMatch) {
-        const pps = Math.round(avg);
+        // v2.14.41 — use the exact (possibly fractional) pps so the
+        // grid lands at exactly W×H cells across the image. Rounding
+        // to the nearest int caused the grid to drift by ~1 cell on
+        // images whose dimensions weren't multiples of W (e.g. a
+        // 1300px-wide [40x40] map at rounded pps=33 = 39.4 cells).
+        const pps = avg;
         candidates.push({
           pixelsPerSquare: pps,
           gridWidth:       nameWxH.w,
           gridHeight:      nameWxH.h,
           score:           8,
-          reasons:         [`filename ${nameWxH.w}×${nameWxH.h} inferred → ${pps} px/sq (rounded)`],
+          reasons:         [`filename ${nameWxH.w}×${nameWxH.h} inferred → ${pps.toFixed(2)} px/sq`],
           inferred:        true,
         });
       }
@@ -205,12 +210,24 @@ function emptyDetection(signals: ScaleSignals): ScaleDetection {
  * (needsConfirmation=true).
  */
 export function autoApplyPatch(d: ScaleDetection):
-  { pixelsPerSquare: number; scaleConfidence: 'scaled' | 'auto-scaled' | 'inferred' } | null
+  {
+    pixelsPerSquare: number;
+    scaleConfidence: 'scaled' | 'auto-scaled' | 'inferred';
+    gridSquares:     { h: number; v: number };
+  } | null
 {
   if (!d.best) return null;
   if (d.needsConfirmation) return null;
   if (d.badge !== 'scaled' && d.badge !== 'auto-scaled' && d.badge !== 'inferred') return null;
-  return { pixelsPerSquare: d.best.pixelsPerSquare, scaleConfidence: d.badge };
+  // v2.14.41 — also persist the W×H grid count so opening the
+  // Calibration modal pre-fills H and V from the auto-detect's
+  // best candidate. Without this the user saw the asset's Scaled
+  // pill but had to re-type 40 and 40 to verify.
+  return {
+    pixelsPerSquare: d.best.pixelsPerSquare,
+    scaleConfidence: d.badge,
+    gridSquares:     { h: d.best.gridWidth, v: d.best.gridHeight },
+  };
 }
 
 /** Pull a "WxH" grid hint out of arbitrary text — e.g. "Stockade [32x44].png"

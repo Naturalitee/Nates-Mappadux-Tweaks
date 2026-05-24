@@ -643,6 +643,11 @@ export class MapCalibrationModal {
       gridOverlayG.innerHTML = lines.join('');
     };
     gridOverlayCb.addEventListener('change', updateCalGrid);
+    // v2.14.41 — render the grid immediately on open. The hidden
+    // checkbox defaults to `checked` so the panel says "on", but
+    // nothing drew gridlines until the first interaction. Now the
+    // grid appears the moment the modal lands.
+    updateCalGrid();
 
     // v2.14.18 — arrow-key nudge for the grid offset. Only listens
     // while the calibration modal is open AND Show Grid is on.

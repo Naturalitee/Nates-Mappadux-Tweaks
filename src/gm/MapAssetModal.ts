@@ -446,10 +446,12 @@ export class MapAssetModal {
     if (asset.noGrid && !isTextMap) {
       tags.push('<span class="sound-tag sound-tag--no-grid map-nogrid-pill" title="You\'ve marked this asset as having no grid (a handout, world map, or stat block). The projector won\'t scale it to 1″ squares. Click the pill to clear this and calibrate properly." role="button" tabindex="0">No grid</span>');
     } else if (asset.pixelsPerSquare && asset.scaleConfidence === 'inferred') {
-      // v2.14.40 — inferred from a filename WxH that didn't divide
-      // the image cleanly. Distinct amber pill so the GM verifies
-      // by eye (composites in particular pick up this state).
-      tags.push('<span class="sound-tag sound-tag--inferred map-recal-pill" title="Inferred scaling — derived from a filename grid hint (e.g. [40x40]) even though the image dimensions didn\'t divide cleanly. The pixels-per-square has been rounded. Click to verify or recalibrate by hand." role="button" tabindex="0">Inferred</span>');
+      // v2.14.41 — reads as "Scaled" in the same orange family as
+      // AutoScaled (rather than the cyan from v2.14.40). It is a
+      // scaled map; the colour difference is the only signal the
+      // scale was inferred from the filename rather than fully
+      // confirmed. Tooltip explains.
+      tags.push('<span class="sound-tag sound-tag--inferred map-recal-pill" title="Scaled — pixels-per-square inferred from a filename grid hint (e.g. [40x40]) where the image dimensions didn\'t divide cleanly. The value has been rounded. Click to verify or recalibrate by hand." role="button" tabindex="0">Scaled</span>');
     } else if (asset.pixelsPerSquare && asset.scaleConfidence === 'auto-scaled') {
       tags.push('<span class="sound-tag sound-tag--auto-scaled map-autoscaled-pill" title="The auto-detector took a best guess at the grid scale — but wasn\'t fully confident. Click the pill to verify or recalibrate by hand." role="button" tabindex="0">AutoScaled</span>');
     } else if (asset.pixelsPerSquare) {

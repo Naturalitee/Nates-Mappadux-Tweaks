@@ -4944,10 +4944,13 @@ option.select-option--add {
 .sound-tag--local     { color: #94a3b8; border-color: rgba(148, 163, 184, 0.4); }
 .sound-tag--scaled       { color: #fbbf24; border-color: rgba(251, 191, 36, 0.4); }
 .sound-tag--auto-scaled  { color: #f97316; border-color: rgba(249, 115, 22, 0.4); }
-/* v2.14.40 — Inferred: scaling derived from a filename hint when the
-   image dimensions didn't divide cleanly. Sky-blue signals "info —
-   verify by eye" without claiming the full-confidence amber Scaled. */
-.sound-tag--inferred     { color: #38bdf8; border-color: rgba(56, 189, 248, 0.4); }
+/* v2.14.41 — Inferred: scaling derived from a filename hint when the
+   image dimensions didn't divide cleanly. Reads as "Scaled" in the
+   same orange family as AutoScaled — the colour difference is the
+   signal that the value was inferred (not fully confirmed). Slightly
+   warmer than the deep AutoScaled orange so they're distinguishable
+   at a glance without losing the "this IS scaled" connection. */
+.sound-tag--inferred     { color: #fb923c; border-color: rgba(251, 146, 60, 0.4); }
 .sound-tag--no-grid      { color: #94a3b8; border-color: rgba(148, 163, 184, 0.4); }
 .sound-tag--textmap      { color: #a78bfa; border-color: rgba(167, 139, 250, 0.4); }
 /* Animated map tag — teal/cyan; distinct from purple Text and amber
