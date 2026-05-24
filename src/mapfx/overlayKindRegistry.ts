@@ -229,6 +229,15 @@ const SVG_TRANSPARENT =
   '<path d="M3 12h18"/>' +
   '<path d="M12 3v18"/>';
 
+/** v2.14.69 — Reveal Map Layer icon: two stacked rectangles offset
+ *  diagonally, with the front-top corner notched away so the back
+ *  layer peeks through. Reads as "lift the top thing to show what's
+ *  underneath" at glyph size. */
+const SVG_REVEAL_LAYER =
+  '<rect x="3"  y="8"  width="13" height="13" rx="1"/>' +
+  '<path d="M8 3h13v13"/>' +
+  '<path d="M21 3l-5 5"/>';
+
 // Noise / static — a scatter of dots in a rough grid, reads as TV
 // static at icon size.
 const SVG_NOISE =
@@ -505,6 +514,13 @@ export const OVERLAY_KIND_REGISTRY: Record<OverlayKind, OverlayKindEntry> = {
   // elsewhere. MapFX-only; doesn't make sense as a backdrop (the
   // bars have nothing to make transparent).
   transparent:  { id: 'transparent',  label: 'Make Transparent', iconSvg: SVG_TRANSPARENT,  defaultColor: '#000000', defaultRadius: 30, blend: 'maketransparent', animated: false, selectByInterior: true,  allowColor: false, z: 1,  shader: 'transparent' },
+  // v2.14.69 — Reveal Map Layer: intended to expose the tile DIRECTLY
+  // BELOW on layered composites. v1 ships with the same blend as
+  // 'transparent' so it currently reveals the backdrop everywhere; the
+  // per-tile semantics light up once the rasteriser produces a backing
+  // PNG + the renderer hosts a backing plane (next slice). Same z and
+  // selectByInterior as 'transparent' so they cluster in the dropdown.
+  reveal_layer: { id: 'reveal_layer', label: 'Reveal Map Layer', iconSvg: SVG_REVEAL_LAYER, defaultColor: '#000000', defaultRadius: 30, blend: 'maketransparent', animated: false, selectByInterior: true,  allowColor: false, z: 1,  shader: 'transparent' },
 };
 
 /** Order for the kind dropdown — fog first (most-used + click-priority),
@@ -512,7 +528,7 @@ export const OVERLAY_KIND_REGISTRY: Record<OverlayKind, OverlayKindEntry> = {
  *  doubles as click-selection priority (see FogEditor.trySelect): when
  *  polygons overlap, the kind earlier in this list wins the click. */
 export const OVERLAY_KIND_ORDER: OverlayKind[] = [
-  'fog', 'transparent',
+  'fog', 'transparent', 'reveal_layer',
   'fire', 'firestorm', 'embers', 'river', 'ocean', 'light',
   'mist', 'thundercloud', 'noise',
   'aurora', 'portal', 'starfield',

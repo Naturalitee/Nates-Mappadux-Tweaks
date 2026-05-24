@@ -93,7 +93,14 @@ export type OverlayKind =
   | 'aurora'
   | 'embers'
   | 'noise'
-  | 'transparent';
+  | 'transparent'
+  /** v2.14.69 — Reveals the map tile DIRECTLY UNDERNEATH on a layered
+   *  composite, rather than the backdrop. On non-layered maps + non-
+   *  composites it falls through to backdrop reveal (same as
+   *  'transparent'). v1 behaves identically to 'transparent' everywhere;
+   *  the per-tile reveal pipeline (rasteriser backing PNG + renderer
+   *  backing plane) lands in a follow-up. */
+  | 'reveal_layer';
 
 /**
  * The unified polygon used by the overlay system. Every shape that renders
