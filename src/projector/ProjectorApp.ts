@@ -392,14 +392,25 @@ export class ProjectorApp {
   private async _maybeRasterizeComposite(
     blob:      ArrayBuffer,
     composite: CompositeWirePayload | undefined,
-  ): Promise<ArrayBuffer> {
-    if (!composite) return blob;
+  ): Promise<{ renderable: ArrayBuffer; backing?: ArrayBuffer }> {
+    if (!composite) return { renderable: blob };
     const { unpackCompositeBundle } = await import('../maps/compositeWireFormat.ts');
     const { rasterizeFromTiles }    = await import('../maps/rasterizeComposite.ts');
     const inputs = unpackCompositeBundle(blob, composite);
     const result = await rasterizeFromTiles(inputs, composite.aspect);
-    if (!result) return blob;
-    return await result.blob.arrayBuffer();
+    if (!result) return { renderable: blob };
+    const renderable = await result.blob.arrayBuffer();
+    // v2.14.70 — Reveal-layer backing (composite minus topmost
+    // tile). Lets the Reveal Map Layer brush's alpha holes expose
+    // the layer below rather than the backdrop. Skip for single-
+    // tile composites — nothing underneath.
+    if (inputs.length < 2) return { renderable };
+    // Pass full inputs as extentInputs so the backing PNG shares the
+    // main composite's dimensions exactly.
+    const backingResult = await rasterizeFromTiles(inputs.slice(0, -1), composite.aspect, inputs);
+    if (!backingResult) return { renderable };
+    const backing = await backingResult.blob.arrayBuffer();
+    return { renderable, backing };
   }
 
   private _effectiveDims(): { w: number; h: number } {
@@ -434,8 +445,8 @@ export class ProjectorApp {
           const composite = msg.composite;
           const buf = this.mapBlob;
           void (async () => {
-            const renderable = await this._maybeRasterizeComposite(buf, composite);
-            await this.renderer.loadMap(renderable, this.currentFog);
+            const { renderable, backing } = await this._maybeRasterizeComposite(buf, composite);
+            await this.renderer.loadMap(renderable, this.currentFog, backing);
           })();
         }
         // Decode-then-render so the icon bitmaps are in cache by the
@@ -490,16 +501,16 @@ export class ProjectorApp {
             const prior = this._pendingMapLoad;
             this._pendingMapLoad = (async () => {
               await prior;
-              const renderable = await this._maybeRasterizeComposite(finalBlob, composite);
+              const { renderable, backing } = await this._maybeRasterizeComposite(finalBlob, composite);
               await this._runTransition(msg.transition, async () => {
-                await this.renderer.loadMap(renderable, fog);
+                await this.renderer.loadMap(renderable, fog, backing);
               });
               this.lastMapBlob = renderable;
             })();
           } else {
             void (async () => {
-              const renderable = await this._maybeRasterizeComposite(finalBlob, composite);
-              await this.renderer.loadMap(renderable, this.currentFog);
+              const { renderable, backing } = await this._maybeRasterizeComposite(finalBlob, composite);
+              await this.renderer.loadMap(renderable, this.currentFog, backing);
               this.lastMapBlob = renderable;
             })();
           }

@@ -54,10 +54,19 @@ const WARN_PIXEL_THRESHOLD = 64 * 1024 * 1024;
 
 /** Pure rasteriser. Doesn't touch IDB / MapAssetStore. The caller
  *  supplies everything it needs. Viewer-side and GM-side paths both
- *  call this. */
+ *  call this.
+ *
+ *  v2.14.70 — optional `extentInputs` lets the caller pin the
+ *  workspace bbox to a DIFFERENT tile set than the one being drawn.
+ *  Used by the Reveal Map Layer backing rasterise so the backing PNG
+ *  shares the main composite's dimensions exactly (otherwise the
+ *  smaller subset crops to a different bbox and the renderer's
+ *  fixed-aspect backing plane stretches it). Defaults to `inputs`
+ *  when omitted — original behaviour. */
 export async function rasterizeFromTiles(
   inputs:         TileInput[],
   compositeAspect: number = DEFAULT_OUTPUT_ASPECT,
+  extentInputs?:  TileInput[],
 ): Promise<RasterizeResult | null> {
   if (inputs.length === 0) return null;
 
@@ -121,12 +130,31 @@ export async function rasterizeFromTiles(
     const cxRef = input.tile.x * refW;
     const cyRef = input.tile.y * refH;
     decoded.push({ input, bitmap, cxRef, cyRef, tileWref, tileHref });
+  }
+  if (decoded.length === 0) return null;
+
+  // v2.14.70 — bbox is computed from extentInputs (if given), not
+  // `inputs`. Reveal-layer backing rasterises pass the FULL tile
+  // set as extentInputs so the backing PNG matches the main
+  // composite's dimensions exactly; the renderer can then mount
+  // the backing on a same-aspect plane without stretching.
+  const extentSource = extentInputs ?? inputs;
+  for (const input of extentSource) {
+    const tileWref = (input.tile.scale ?? 1) * refW;
+    const aspect = (input.asset.imageWidth && input.asset.imageHeight)
+      ? input.asset.imageWidth / input.asset.imageHeight
+      : 1;
+    const tileHref = input.tile.scaleY != null
+      ? input.tile.scaleY * refH
+      : tileWref / aspect;
+    const cxRef = input.tile.x * refW;
+    const cyRef = input.tile.y * refH;
     minX = Math.min(minX, cxRef - tileWref / 2);
     maxX = Math.max(maxX, cxRef + tileWref / 2);
     minY = Math.min(minY, cyRef - tileHref / 2);
     maxY = Math.max(maxY, cyRef + tileHref / 2);
   }
-  if (decoded.length === 0) return null;
+  if (minX === Infinity) return null;  // extentSource produced no usable inputs
 
   // Workspace = bounding-box extent at reference scale. Tiles shift
   // by -min so the leftmost / topmost lands at (0, 0) in output.
@@ -244,8 +272,35 @@ export async function rasterizeFromTiles(
  *  hand off to rasterizeFromTiles. Returns null if no tiles or no
  *  resolvable blob. */
 export async function rasterizeComposite(asset: MapAsset): Promise<RasterizeResult | null> {
+  const inputs = await _resolveTileInputs(asset);
+  if (inputs.length === 0) return null;
+  return rasterizeFromTiles(inputs, asset.compositeAspect ?? DEFAULT_OUTPUT_ASPECT);
+}
+
+/** v2.14.70 — Reveal-layer backing rasterise. Produces the composite
+ *  WITHOUT the topmost tile (last in the array — array order = z-
+ *  order so the last drawn tile is the visual top). Used by the
+ *  renderer to show through when the Reveal Map Layer brush punches
+ *  alpha holes in the main map. Returns null when there's nothing
+ *  underneath the topmost tile (one tile, no tile assets resolve,
+ *  etc.) — caller skips persisting in that case. */
+export async function rasterizeRevealBacking(asset: MapAsset): Promise<RasterizeResult | null> {
   const tiles = asset.compositeTiles ?? [];
-  if (tiles.length === 0) return null;
+  if (tiles.length < 2) return null;
+  // Resolve the FULL tile set for the extent (so the backing matches
+  // the main composite's dimensions), then resolve the SUBSET (minus
+  // last/topmost tile) for what actually gets drawn.
+  const fullInputs   = await _resolveTileInputs(asset);
+  if (fullInputs.length < 2) return null;
+  const drawnInputs  = fullInputs.slice(0, -1);
+  return rasterizeFromTiles(drawnInputs, asset.compositeAspect ?? DEFAULT_OUTPUT_ASPECT, fullInputs);
+}
+
+/** Internal — fetch + decode every tile's asset + blob for the
+ *  composite. Skips tiles whose asset or blob can't be resolved
+ *  (treating them as visually absent). */
+async function _resolveTileInputs(asset: MapAsset): Promise<TileInput[]> {
+  const tiles = asset.compositeTiles ?? [];
   const inputs: TileInput[] = [];
   for (const tile of tiles) {
     const tileAsset = await MapAssetStore.get(tile.mapAssetId);
@@ -254,5 +309,5 @@ export async function rasterizeComposite(asset: MapAsset): Promise<RasterizeResu
     if (!blob) continue;
     inputs.push({ tile, asset: tileAsset, blob });
   }
-  return rasterizeFromTiles(inputs, asset.compositeAspect ?? DEFAULT_OUTPUT_ASPECT);
+  return inputs;
 }

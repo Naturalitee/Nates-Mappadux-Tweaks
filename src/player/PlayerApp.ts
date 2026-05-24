@@ -504,14 +504,29 @@ export class PlayerApp {
   private async _maybeRasterizeComposite(
     blob:      ArrayBuffer,
     composite: CompositeWirePayload | undefined,
-  ): Promise<ArrayBuffer> {
-    if (!composite) return blob;
+  ): Promise<{ renderable: ArrayBuffer; backing?: ArrayBuffer }> {
+    if (!composite) return { renderable: blob };
     const { unpackCompositeBundle } = await import('../maps/compositeWireFormat.ts');
     const { rasterizeFromTiles }    = await import('../maps/rasterizeComposite.ts');
     const inputs = unpackCompositeBundle(blob, composite);
     const result = await rasterizeFromTiles(inputs, composite.aspect);
-    if (!result) return blob;
-    return await result.blob.arrayBuffer();
+    if (!result) return { renderable: blob };
+    const renderable = await result.blob.arrayBuffer();
+    // v2.14.70 — when the composite has 2+ tiles, also rasterise a
+    // "minus topmost tile" backing so the Reveal Map Layer brush
+    // exposes the layer underneath through alpha holes in the main
+    // map. Single-tile composites skip the backing (nothing to
+    // reveal). The viewer computes the backing locally from the
+    // same wire-shipped tile bytes — no extra bandwidth.
+    if (inputs.length < 2) return { renderable };
+    // Pass full inputs as extentInputs so the backing PNG shares the
+    // main composite's dimensions exactly — otherwise the smaller
+    // subset crops to a different bbox and stretches on the renderer's
+    // fixed-aspect backing plane.
+    const backingResult = await rasterizeFromTiles(inputs.slice(0, -1), composite.aspect, inputs);
+    if (!backingResult) return { renderable };
+    const backing = await backingResult.blob.arrayBuffer();
+    return { renderable, backing };
   }
 
   private _recoverRenderer(): void {
@@ -606,9 +621,9 @@ export class PlayerApp {
           const compositeForFs = msg.composite;
           const fogForFs       = msg.payload.fog;
           void (async () => {
-            const renderable = await this._maybeRasterizeComposite(mapBlob, compositeForFs);
+            const { renderable, backing } = await this._maybeRasterizeComposite(mapBlob, compositeForFs);
             this.lastMapBlob = renderable;
-            await this.renderer.loadMap(renderable, fogForFs);
+            await this.renderer.loadMap(renderable, fogForFs, backing);
           })();
         } else {
           this.renderer.updateFog(msg.payload.fog);
@@ -679,10 +694,10 @@ export class PlayerApp {
             // v2.14.54 — rasterise composite payload locally if
             // present. Cache the rendered blob (not the packed
             // bundle) so context-recovery can re-feed instantly.
-            const renderable = await this._maybeRasterizeComposite(blob, composite);
+            const { renderable, backing } = await this._maybeRasterizeComposite(blob, composite);
             this.lastMapBlob = renderable;
             await this.runTransition(msg.transition, async () => {
-              await this.renderer.loadMap(renderable, fog);
+              await this.renderer.loadMap(renderable, fog, backing);
               if (filter) this.renderer.setFilter(filter);
               if (view) {
                 // v2.14.18 — fresh map = fresh broadcast bounds.

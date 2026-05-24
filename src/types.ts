@@ -1138,6 +1138,14 @@ export interface MapAsset {
   /** v2.14.3 — composite-map mode. 'modular' = side-by-side tile
    *  layout; 'layered' = stacked. Drives editor + renderer behaviour. */
   compositeMode?:  'modular' | 'layered';
+  /** v2.14.70 — composite-only "minus topmost tile" rasterise. Generated
+   *  alongside the main blob when the composite has overlapping tiles.
+   *  The renderer hosts it as a backing plane behind the main map so
+   *  the Reveal Map Layer brush punches alpha holes that expose the
+   *  tile-below content rather than the backdrop. Absent for non-
+   *  layered composites (the brush falls through to backdrop reveal
+   *  same as Make Transparent in that case). */
+  revealBackingBlob?: Blob;
   addedAt:       number;
 }
 

@@ -2275,9 +2275,16 @@ export class GMApp {
     // MapAssetStore.runtimeBlobs by rasterizeComposite, so this is
     // just metadata that lets the renderer + grid logic compute
     // correctly without going through the rasteriser themselves.
-    const { rasterizeComposite } = await import('../maps/rasterizeComposite.ts');
+    const { rasterizeComposite, rasterizeRevealBacking } = await import('../maps/rasterizeComposite.ts');
     MapAssetStore.invalidateRuntimeCache(asset.id);
     const raster = await rasterizeComposite(updated);
+    // v2.14.70 — also rasterise the reveal-layer backing (composite
+    // minus the topmost tile) so the renderer can show it through
+    // alpha holes punched by the Reveal Map Layer brush. Skipped
+    // when the composite has only one tile (nothing to reveal).
+    const backing = await rasterizeRevealBacking(updated);
+    if (backing) updated.revealBackingBlob = backing.blob;
+    else         delete updated.revealBackingBlob;
     if (raster) {
       MapAssetStore.runtimeBlobs.set(asset.id, raster.blob);
       updated.imageWidth      = raster.imageWidth;
@@ -2497,9 +2504,21 @@ export class GMApp {
       void this.refreshProjectorMapInfo();
     };
 
+    // v2.14.70 — Reveal-layer backing buffer. Present iff the active
+    // composite map has overlapping tiles + the editor computed a
+    // "minus topmost tile" rasterise on save. Passed through to the
+    // renderer so it can mount a backing plane behind the main map;
+    // Reveal Map Layer brushes punch the main map's alpha + the
+    // backing shows through. Non-composite maps + composites without
+    // overlaps pass undefined and the renderer skips the backing.
+    let backingBuffer: ArrayBuffer | undefined;
+    if (mapAssetForButton?.revealBackingBlob) {
+      backingBuffer = await mapAssetForButton.revealBackingBlob.arrayBuffer();
+    }
+
     // Pass fog explicitly so the texture-load callback always redraws the right
     // fog even if another loadMap call races ahead of this one's decode.
-    this.renderer.loadMap(blob, fog);
+    this.renderer.loadMap(blob, fog, backingBuffer);
 
     // Clear the status bar on a successful load. The map name was
     // duplicated here while loadMap completed, but the active map

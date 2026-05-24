@@ -63,6 +63,14 @@ export class Renderer {
   // Layer meshes
   private mapMesh:      THREE.Mesh | null = null;
   private fogMesh:      THREE.Mesh | null = null;
+  /** v2.14.70 — Reveal-layer backing plane. Sits at z=-0.005, just
+   *  behind the main map. Painted with the composite's "minus topmost
+   *  tile" rasterise so the Reveal Map Layer brush's alpha-punching
+   *  exposes the layer underneath rather than the backdrop. Null
+   *  whenever the active map isn't a layered composite (or the
+   *  composite has only one tile so there's nothing below). */
+  private mapBackingMesh:    THREE.Mesh | null = null;
+  private mapBackingTexture: THREE.Texture | null = null;
   /** v2.12 — pack background colour. Tracked here rather than on
    *  scene.background because setting scene.background to a Color
    *  forces alpha = 1 on the framebuffer clear, which would destroy
@@ -857,7 +865,7 @@ export class Renderer {
    * state. Any in-flight texture decode from a previous loadMap call is
    * silently discarded when it eventually completes.
    */
-  loadMap(buffer: ArrayBuffer, fog?: FogState): Promise<void> {
+  loadMap(buffer: ArrayBuffer, fog?: FogState, backingBuffer?: ArrayBuffer): Promise<void> {
     const gen = ++this.loadGen;
 
     // Lock in the fog for this load immediately — before the async decode.
@@ -865,6 +873,26 @@ export class Renderer {
     // its own fog before this callback fires.
     if (fog !== undefined) {
       this.lastFogState = fog;
+    }
+
+    // v2.14.70 — Reveal-layer backing texture. Kick the decode in
+    // parallel with the main map decode so it's ready by the time
+    // rebuildLayerMeshes runs. If absent, any previous backing is
+    // torn down here so a non-layered map after a layered one doesn't
+    // leak the old plane.
+    this._disposeBackingTexture();
+    if (backingBuffer) {
+      const backingBlob = new Blob([backingBuffer]);
+      const backingUrl  = URL.createObjectURL(backingBlob);
+      new THREE.TextureLoader().load(backingUrl, (tex) => {
+        URL.revokeObjectURL(backingUrl);
+        if (gen !== this.loadGen) { tex.dispose(); return; }
+        tex.colorSpace = THREE.SRGBColorSpace;
+        this.mapBackingTexture = tex;
+        // If rebuildLayerMeshes already ran for this load (the main
+        // map decoded first), splice in the backing mesh now.
+        this._ensureBackingMesh();
+      });
     }
 
     const mediaKind = Renderer._sniffMediaKind(buffer);
@@ -1886,10 +1914,58 @@ export class Renderer {
     }
   }
 
+  /** v2.14.70 — Tear down the reveal-layer backing plane + its
+   *  texture. Safe to call when nothing's set up (no-op). Called
+   *  on every loadMap before kicking off new decodes so a layered
+   *  map followed by a non-layered one cleans up properly. */
+  private _disposeBackingTexture(): void {
+    if (this.mapBackingMesh) {
+      this.scene.remove(this.mapBackingMesh);
+      this.mapBackingMesh.geometry.dispose();
+      (this.mapBackingMesh.material as THREE.Material).dispose();
+      this.mapBackingMesh = null;
+    }
+    if (this.mapBackingTexture) {
+      this.mapBackingTexture.dispose();
+      this.mapBackingTexture = null;
+    }
+  }
+
+  /** v2.14.70 — Create the backing mesh from the current backing
+   *  texture if both haven't been set up yet + the main map mesh
+   *  exists. Called both from rebuildLayerMeshes (main map decoded
+   *  first → backing arrives later) and from the backing decode
+   *  callback (backing decoded first → main map's rebuild runs
+   *  later and picks it up). */
+  private _ensureBackingMesh(): void {
+    if (this.mapBackingMesh) return;          // already mounted
+    if (!this.mapBackingTexture) return;      // texture not ready
+    if (!this.mapMesh) return;                // wait for main map's geometry
+    const geo = new THREE.PlaneGeometry(this.aspectRatio, 1);
+    const mat = new THREE.MeshBasicMaterial({
+      map: this.mapBackingTexture,
+      depthWrite: false,
+      transparent: true,
+    });
+    this.mapBackingMesh = new THREE.Mesh(geo, mat);
+    // Sit just behind the main map plane (z=0) so a reveal-layer
+    // alpha hole punched in the main map shows the backing through.
+    this.mapBackingMesh.position.z = -0.005;
+    this.scene.add(this.mapBackingMesh);
+  }
+
   private rebuildLayerMeshes(): void {
     // Remove existing layers
     if (this.mapMesh)    { this.scene.remove(this.mapMesh);    this.mapMesh = null; }
     if (this.fogMesh)    { this.scene.remove(this.fogMesh);    this.fogMesh = null; }
+    // Backing mesh follows the main map's lifecycle — remove + let
+    // _ensureBackingMesh re-create with the current aspect ratio.
+    if (this.mapBackingMesh) {
+      this.scene.remove(this.mapBackingMesh);
+      this.mapBackingMesh.geometry.dispose();
+      (this.mapBackingMesh.material as THREE.Material).dispose();
+      this.mapBackingMesh = null;
+    }
 
     // Remove previous border from gmScene
     if (this.mapBorderLine) {
@@ -1918,6 +1994,12 @@ export class Renderer {
     this.mapMesh = new THREE.Mesh(geo, mapMat);
     this.mapMesh.position.z = 0;
     this.scene.add(this.mapMesh);
+
+    // v2.14.70 — Mount the reveal-layer backing plane if we have a
+    // backing texture loaded for this map (layered composite path).
+    // The main map's alpha holes from Reveal Map Layer brushes
+    // expose this plane rather than the backdrop.
+    this._ensureBackingMesh();
 
     // Fog layer — transparent, composited on top. Hosts ALL overlay
     // polygons (fog + MapFX kinds) in the v2.12 unified system.
