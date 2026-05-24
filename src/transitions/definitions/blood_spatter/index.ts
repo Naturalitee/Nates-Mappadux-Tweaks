@@ -241,21 +241,24 @@ export default {
     const dDrip  = duration * 0.50;
 
     // ── Phase 1: Heartbeat dim ────────────────────────────────────────
-    // Two soft red vignette pulses primed under the still snapshot.
+    // Two RED vignette pulses primed under the still snapshot. Strong
+    // enough that the table sees them before the lightning lands.
     await animate(dHeart, (t) => {
       ctx.clearRect(0, 0, w, h);
       ctx.drawImage(snapshot, 0, 0, w, h);
-      // Two pulses: peak at t=0.25 and t=0.75.
-      const pulse1 = Math.max(0, Math.sin(t * Math.PI * 2)) * 0.65;
-      const pulse2 = Math.max(0, Math.sin((t - 0.5) * Math.PI * 2)) * 0.85;
-      const intensity = Math.max(pulse1, pulse2);
-      if (intensity > 0) {
+      // Two pulses: peak at t=0.25 and t=0.75. Both go to full crimson
+      // at the centre stop so the heartbeat is unmistakable, not a
+      // soft tint that could be missed.
+      const pulse1 = Math.max(0, Math.sin(t * Math.PI * 2));
+      const pulse2 = Math.max(0, Math.sin((t - 0.5) * Math.PI * 2));
+      const beat = Math.max(pulse1, pulse2);
+      if (beat > 0) {
         const rg = ctx.createRadialGradient(
-          w / 2, h / 2, Math.min(w, h) * 0.25,
+          w / 2, h / 2, Math.min(w, h) * 0.20,
           w / 2, h / 2, Math.max(w, h) * 0.75,
         );
-        rg.addColorStop(0, 'rgba(60, 0, 0, 0)');
-        rg.addColorStop(1, `rgba(110, 0, 8, ${intensity * 0.55})`);
+        rg.addColorStop(0, `rgba(80, 0, 0, ${beat * 0.35})`);
+        rg.addColorStop(1, `rgba(140, 0, 10, ${beat * 0.85})`);
         ctx.fillStyle = rg;
         ctx.fillRect(0, 0, w, h);
       }

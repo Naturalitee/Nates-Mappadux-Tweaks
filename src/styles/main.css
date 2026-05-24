@@ -5344,6 +5344,20 @@ option.select-option--add {
   border-radius: 3px;
 }
 .sound-edit-btn:hover { color: var(--accent); background: rgba(72, 209, 204, 0.1); }
+
+/* v2.14.64 — Shared rules for buttons that host an inline SVG icon
+   from uiIcons.ts. The base button classes (.btn--xs, .sound-edit-btn,
+   etc.) keep their padding + colour rules; this just makes sure the
+   inner SVG centres and inherits the surrounding text colour, so a
+   .btn--danger button gets a red X, .btn--ghost gets a dimmed pencil,
+   and so on. Width / height come from the SVG's own attributes. */
+.ui-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+}
+.ui-icon-btn > svg { display: block; }
 .sound-row-edit {
   background: rgba(255, 255, 255, 0.03);
   border: 1px solid var(--border);

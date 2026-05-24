@@ -7,6 +7,7 @@ import { MapAssetStore } from '../maps/MapAssetStore.ts';
 import { getUsedAudioAssetIds } from '../storage/assetUsage.ts';
 import { downloadAsset } from '../utils/downloadAsset.ts';
 import { generateId } from '../utils/id.ts';
+import { iconPencil, iconDownload, iconX } from './uiIcons.ts';
 
 // Duration filter options shown in the dropdown
 const DURATION_OPTIONS: Array<{ label: string; value: number | null }> = [
@@ -306,7 +307,7 @@ export class FreesoundModal {
       : `<button class="btn btn--ghost btn--xs sound-store-btn" title="Download the audio bytes and keep a local copy. After storing, this sound travels with your bundle (.mappadux) exports so other GMs or other devices get the actual audio, not just a broken link.">Store</button>`;
     // Download button — only meaningful when we already have the blob locally.
     const downloadBtnHtml = asset.locallyStored
-      ? `<button class="btn btn--ghost btn--xs sound-download-btn" title="Save this audio file to your downloads folder — useful for archiving outside Mappadux or sharing the raw file.">⬇</button>`
+      ? `<button class="btn btn--ghost btn--xs sound-download-btn ui-icon-btn" title="Save this audio file to your downloads folder — useful for archiving outside Mappadux or sharing the raw file.">${iconDownload()}</button>`
       : '';
 
     // Freesound attributions are locked (the API supplies them); Upload + Web Link
@@ -314,7 +315,7 @@ export class FreesoundModal {
     // affordance sits next to the licence text since that's what it edits.
     const editable = asset.source !== 'freesound';
     const editIconHtml = editable
-      ? `<button class="sound-edit-btn" title="Edit licence and attribution. Helps you stay credit-clean when sharing bundles or projecting attributions.">✎</button>`
+      ? `<button class="sound-edit-btn ui-icon-btn" title="Edit licence and attribution. Helps you stay credit-clean when sharing bundles or projecting attributions.">${iconPencil()}</button>`
       : '';
 
     const row = document.createElement('div');
@@ -334,7 +335,7 @@ export class FreesoundModal {
           ${storeBtnHtml}
           ${downloadBtnHtml}
           <button class="btn btn--primary btn--xs sound-use-btn" title="Assign this sound to the current target — a soundboard slot when opened from the soundboard, or attach to a marker when opened from there.">Use</button>
-          <button class="btn btn--danger btn--xs sound-del-btn" title="Remove the asset from your library. Any soundboard slots or markers still pointing at it will go silent.">✕</button>
+          <button class="btn btn--danger btn--xs sound-del-btn ui-icon-btn" title="Remove the asset from your library. Any soundboard slots or markers still pointing at it will go silent.">${iconX()}</button>
         </div>
       </div>
       ${editable ? `

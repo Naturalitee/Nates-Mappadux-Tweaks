@@ -9,6 +9,7 @@ import { UNICODE_LICENSE_LABEL } from './seedImageAssets.ts';
 import { ensureFontsLoaded, pangramFor, registerLocalFontsFromAssets, registerLocalFontAsset } from './fontCatalog.ts';
 import { fuzzySearch } from '../utils/fuzzySearch.ts';
 import { cleanTintableSvg } from '../utils/resolveAssetImages.ts';
+import { iconPencil } from '../gm/uiIcons.ts';
 
 /** Result of the shared-attribution prompt for bulk uploads. Empty
  *  strings mean "skip that field on this batch". categoryId is the
@@ -1377,9 +1378,9 @@ export class ImageAssetModal {
 
       const edit = document.createElement('button');
       edit.type = 'button';
-      edit.className = 'img-modal-font-action';
+      edit.className = 'img-modal-font-action ui-icon-btn';
       edit.title = 'Edit attribution';
-      edit.textContent = '✎';
+      edit.innerHTML = iconPencil();
       edit.addEventListener('click', () => void this._promptEditFontAttribution(font));
       actions.appendChild(edit);
 
@@ -1873,9 +1874,9 @@ export class ImageAssetModal {
       // in the top-right corner.
       const edit = document.createElement('button');
       edit.type = 'button';
-      edit.className = 'img-modal-edit';
+      edit.className = 'img-modal-edit ui-icon-btn';
       edit.title = 'Edit attribution / name';
-      edit.innerHTML = '✎';
+      edit.innerHTML = iconPencil();
       edit.addEventListener('click', (e) => {
         e.stopPropagation();
         void this._editAssetMeta(asset);

@@ -8,6 +8,7 @@ import { detectMapScale, autoApplyPatch } from '../utils/detectMapScale.ts';
 import { generateId } from '../utils/id.ts';
 import { TextMapEditor } from './TextMapEditor.ts';
 import { saveMap as _saveMap, saveMapAsset, getAllMaps } from '../storage/db.ts';
+import { iconPencil, iconDownload, iconX } from './uiIcons.ts';
 
 /** Standard licence options shared with the audio editor. */
 const LICENSE_OPTIONS: string[] = [
@@ -509,7 +510,7 @@ export class MapAssetModal {
       ? ''
       : `<button class="btn btn--ghost btn--xs map-store-btn" title="Download the image bytes and keep a local copy. After storing, this asset travels with your bundle (.mappadux) exports so other GMs or other devices get the actual map, not just a broken link.">Store</button>`;
     const downloadBtnHtml = (asset.locallyStored && !isTextMap)
-      ? `<button class="btn btn--ghost btn--xs map-download-btn" title="Save this map image to your downloads folder — useful for archiving outside Mappadux or sharing the raw file.">⬇</button>`
+      ? `<button class="btn btn--ghost btn--xs map-download-btn ui-icon-btn" title="Save this map image to your downloads folder — useful for archiving outside Mappadux or sharing the raw file.">${iconDownload()}</button>`
       : '';
     // v2.14.35 — Text maps get an Edit + Copy. Both text and image
     // maps get a Scale button when not yet calibrated AND not opted
@@ -557,7 +558,7 @@ export class MapAssetModal {
           ${tagsHtml ? `<span class="sound-tags-row">${tagsHtml}</span>` : ''}
           <span class="sound-meta-row">
             <span class="sound-meta">${this._esc(dimText)} · ${this._esc(licenceText)}</span>
-            <button class="sound-edit-btn" title="Edit licence + attribution">✎</button>
+            <button class="sound-edit-btn ui-icon-btn" title="Edit licence + attribution">${iconPencil()}</button>
           </span>
         </div>
         <div class="sound-row-actions">
@@ -567,7 +568,7 @@ export class MapAssetModal {
           ${storeBtnHtml}
           ${downloadBtnHtml}
           <button class="btn btn--primary btn--xs map-use-btn" title="Add a new map instance backed by this asset to your map list. The asset stays in the library — you can reuse it for multiple maps (e.g. the same dungeon image for two different encounters with their own fog and markers).">Use</button>
-          <button class="btn btn--danger btn--xs map-del-btn" title="Remove the asset from your library. Any maps still using it will become &quot;missing&quot; until you Fix Missing Map.">✕</button>
+          <button class="btn btn--danger btn--xs map-del-btn ui-icon-btn" title="Remove the asset from your library. Any maps still using it will become &quot;missing&quot; until you Fix Missing Map.">${iconX()}</button>
         </div>
       </div>
       <div class="sound-row-edit" hidden>
@@ -908,7 +909,7 @@ export class MapAssetModal {
       row.innerHTML = `
         <input type="text" class="map-upload-queue-name" placeholder="Map name…" />
         <span class="map-upload-queue-filename"></span>
-        <button type="button" class="btn btn--ghost btn--xs map-upload-queue-remove" title="Remove this file from the queue.">✕</button>
+        <button type="button" class="btn btn--ghost btn--xs map-upload-queue-remove ui-icon-btn" title="Remove this file from the queue.">${iconX()}</button>
       `;
       const nameInput = row.querySelector<HTMLInputElement>('.map-upload-queue-name')!;
       nameInput.value = entry.name;
