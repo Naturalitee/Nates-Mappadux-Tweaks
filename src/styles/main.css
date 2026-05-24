@@ -1221,6 +1221,19 @@ option.select-option--add {
   color: var(--text-secondary);
   font-style: italic;
 }
+/* v2.14.60 — Missing-asset rows: hazard prefix + orange text. The
+   colour propagates from the option to the menu LI and to the
+   selected-input view, so the GM sees the broken state both in
+   the dropdown and in the closed combobox. */
+.editable-select__opt--missing {
+  color: #f59e0b;
+}
+.editable-select__opt--missing.editable-select__opt--selected {
+  color: #fbbf24;
+}
+.editable-select__value--missing {
+  color: #f59e0b;
+}
 
 /* ── Transition params ──────────────────────────────────────────────────── */
 .transition-params-container {

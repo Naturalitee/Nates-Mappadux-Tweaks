@@ -110,6 +110,12 @@ const ANIMATED_MAP_PREFIX  = '▶ ';
 // ▦, and a bracketed [T] which Alex flagged as "not an icon".
 const TEXT_MAP_PREFIX      = '¶ ';
 const COMPOSITE_MAP_PREFIX = '▦ ';
+// v2.14.60 — Hazard prefix for map rows whose underlying MapAsset
+// can't be resolved (orphaned by a delete from the library, or a
+// bundle import that didn't carry the asset). Paired with orange
+// text in EditableSelect so the GM spots the broken row before
+// loading it.
+const MISSING_MAP_PREFIX   = '⚠ ';
 
 /** Strip every decoration that has ever been put on a map's display
  *  name — current "▣ " / "▶ " / "▤ " prefixes, the brief "≡ " trial
@@ -120,7 +126,7 @@ function _cleanMapDisplayName(name: string): string {
     // Strip any decorative leading prefix: the legacy "[T] " variant
     // first, then any glyph in the set we've ever used.
     .replace(/^\[T\]\s+/, '')
-    .replace(/^[▣▶▤▦¶≡]\s+/, '')
+    .replace(/^[▣▶▤▦¶≡⚠]\s+/, '')
     // Legacy trailing " [T]" decoration.
     .replace(/(?: \[T\])+$/, '')
     .trim();
@@ -133,8 +139,13 @@ function _cleanMapDisplayName(name: string): string {
  *  checks matches populateMapList: text-map wins over animated wins
  *  over image, so a hypothetical "video text-map" still reads as
  *  text. */
-function _dropdownKindForAsset(asset: import('../types.ts').MapAsset | undefined): 'image' | 'animated' | 'text' | 'composite' {
-  if (!asset) return 'image';
+function _dropdownKindForAsset(asset: import('../types.ts').MapAsset | undefined): 'image' | 'animated' | 'text' | 'composite' | 'missing' {
+  // v2.14.60 — undefined means the StoredMap references a MapAsset
+  // that's been removed (manual library delete, or a bundle import
+  // that didn't carry it). Surface it as 'missing' so the dropdown
+  // shows the hazard prefix + orange tint rather than silently
+  // falling back to the image glyph and failing on load.
+  if (!asset) return 'missing';
   if (asset.source === 'composite-map') return 'composite';
   if (asset.source === 'text-map') return 'text';
   if ((asset.blob?.type ?? '').startsWith('video/')) return 'animated';
@@ -2035,7 +2046,7 @@ export class GMApp {
     // Per-asset kind lookup so we can flag text-map and animated
     // entries in the dropdown with the right leading glyph. Cheap
     // (small N) and saves a round-trip per option.
-    type DropdownKind = 'text' | 'animated' | 'image' | 'composite';
+    type DropdownKind = 'text' | 'animated' | 'image' | 'composite' | 'missing';
     const kindByAssetId = new Map<string, DropdownKind>();
     for (const a of mapAssets) {
       const isAnimated = (a.blob?.type ?? '').startsWith('video/');
@@ -2067,14 +2078,23 @@ export class GMApp {
       // leading "≡ " from m.name before re-adding — defensive against
       // any path that might have round-tripped the marker into
       // storage. Keeps the visual layer the only source of truth.
-      const kind = kindByAssetId.get(m.mapAssetId) ?? 'image';
+      // v2.14.60 — fallback to 'missing' (not 'image') when the asset
+      // can't be resolved; surfaces broken rows with the hazard prefix
+      // + orange tint via EditableSelect rather than masquerading as
+      // a normal image map and failing on load.
+      const kind = kindByAssetId.get(m.mapAssetId) ?? 'missing';
       const cleanName = _cleanMapDisplayName(m.name);
       const prefix =
+        kind === 'missing'   ? MISSING_MAP_PREFIX   :
         kind === 'composite' ? COMPOSITE_MAP_PREFIX :
         kind === 'text'      ? TEXT_MAP_PREFIX      :
         kind === 'animated'  ? ANIMATED_MAP_PREFIX  :
                                IMAGE_MAP_PREFIX;
       opt.textContent = `${prefix}${cleanName}`;
+      if (kind === 'missing') {
+        opt.dataset['missing'] = 'true';
+        opt.title = 'The map image for this entry is missing from your library — it was probably deleted, or this came from a bundle that didn\'t include the asset. Add the original image back to the library (same filename) to restore it.';
+      }
       this.mapSelect.appendChild(opt);
     }
 
@@ -5438,17 +5458,22 @@ export class GMApp {
   private _insertMapOptionSorted(
     id: string,
     name: string,
-    kind: 'image' | 'animated' | 'text' | 'composite' = 'image',
+    kind: 'image' | 'animated' | 'text' | 'composite' | 'missing' = 'image',
   ): void {
     const opt = document.createElement('option');
     opt.value = id;
     const cleanName = _cleanMapDisplayName(name);
     const prefix =
+      kind === 'missing'   ? MISSING_MAP_PREFIX   :
       kind === 'composite' ? COMPOSITE_MAP_PREFIX :
       kind === 'text'      ? TEXT_MAP_PREFIX      :
       kind === 'animated'  ? ANIMATED_MAP_PREFIX  :
                              IMAGE_MAP_PREFIX;
     opt.textContent = `${prefix}${cleanName}`;
+    if (kind === 'missing') {
+      opt.dataset['missing'] = 'true';
+      opt.title = 'The map image for this entry is missing from your library — it was probably deleted, or this came from a bundle that didn\'t include the asset. Add the original image back to the library (same filename) to restore it.';
+    }
     const addSentinel = this.mapSelect.querySelector<HTMLOptionElement>(
       `option[value="${SELECT_ADD_SENTINEL}"]`,
     );
@@ -5497,7 +5522,7 @@ export class GMApp {
     // Look up the underlying asset so the re-inserted option gets
     // the right leading glyph for its kind.
     const map = await getMap(id);
-    let kind: 'image' | 'animated' | 'text' | 'composite' = 'image';
+    let kind: 'image' | 'animated' | 'text' | 'composite' | 'missing' = 'image';
     if (map) {
       const asset = await MapAssetStore.get(map.mapAssetId);
       kind = _dropdownKindForAsset(asset);

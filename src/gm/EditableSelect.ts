@@ -97,7 +97,17 @@ export class EditableSelect {
     }
     const ro = this._isCurrentReadOnly();
     this.input.readOnly = ro;
-    this.input.title    = ro ? '' : 'Click to rename';
+    // v2.14.60 — if the selected <option> is flagged missing (hazard
+    // prefix; underlying asset gone), tint the input orange so the GM
+    // notices before they try to load it. Title comes from the option
+    // itself so the explanation matches.
+    if (sel?.dataset['missing'] === 'true') {
+      this.input.classList.add('editable-select__value--missing');
+      this.input.title = sel.title;
+    } else {
+      this.input.classList.remove('editable-select__value--missing');
+      this.input.title = ro ? '' : 'Click to rename';
+    }
 
     this.menu.innerHTML = '';
     for (const opt of Array.from(this.native.options)) {
@@ -114,6 +124,12 @@ export class EditableSelect {
       }
       if (opt.selected) {
         li.classList.add('editable-select__opt--selected');
+      }
+      // v2.14.60 — propagate the missing flag from <option> to <li>
+      // so the popover row shows orange + the hazard tooltip.
+      if (opt.dataset['missing'] === 'true') {
+        li.classList.add('editable-select__opt--missing');
+        li.title = opt.title;
       }
       // mousedown not click — fires before the document-level outside-click
       // listener that would otherwise close the menu before pick lands.
