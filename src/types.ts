@@ -1062,6 +1062,13 @@ export interface MapAsset {
    * the editor blocks save when the list is empty.
    */
   compositeTiles?: CompositeTile[];
+  /** v2.14.51 — aspect ratio (W / H) of the compositor canvas at the
+   *  time of Save. tile.x/y are normalised 0..1 in compositor space;
+   *  that space's aspect determines whether (0.5, 0.5) lands at a
+   *  square or a wide / tall point. Persist so the rasteriser
+   *  reproduces the editor's geometry exactly. Defaults to 4/3 when
+   *  unset (legacy composites). */
+  compositeAspect?: number;
   /** v2.14.3 — composite-map mode. 'modular' = side-by-side tile
    *  layout; 'layered' = stacked. Drives editor + renderer behaviour. */
   compositeMode?:  'modular' | 'layered';

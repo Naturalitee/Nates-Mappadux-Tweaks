@@ -133,6 +133,11 @@ export class CompositeMapEditor {
       btn.addEventListener('click', () => {
         const action = btn.dataset['action'];
         if (action === 'save') {
+          // v2.14.51 — capture the editor canvas's aspect on save so
+          // the rasteriser reproduces this layout's geometry exactly.
+          if (this.working && this._canvasH > 0) {
+            this.working = { ...this.working, compositeAspect: this._canvasW / this._canvasH };
+          }
           this._close(this.working);
         } else if (action === 'add-map') {
           void this._handleAddMap();
