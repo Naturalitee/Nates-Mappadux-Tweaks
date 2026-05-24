@@ -71,7 +71,11 @@ export class MapAssetModal {
   private onPick: MapPickedCallback;
   private onAssetUpdated: (assetId: string) => void;
   private maps: MapManager;
-  private uploadFile: File | null = null;
+  /** v2.14.38 — queue of files pending upload. Multi-file selection
+   *  via the file input or drag-and-drop appends to the queue;
+   *  Clear empties it. Names are stored separately so the user can
+   *  rename before clicking Add All. */
+  private uploadFiles: { file: File; name: string }[] = [];
   /** assetId → object URL for hover-preview thumbnails. Created lazily on
    *  first hover, revoked when the modal closes. */
   private previewUrlCache = new Map<string, string>();
@@ -178,12 +182,12 @@ export class MapAssetModal {
     dropZone.addEventListener('drop', (e) => {
       e.preventDefault();
       dropZone.classList.remove('upload-drop-zone--over');
-      const file = (e as DragEvent).dataTransfer?.files[0];
-      if (file) this._handleUploadFile(file);
+      const files = (e as DragEvent).dataTransfer?.files;
+      if (files && files.length > 0) this._handleUploadFiles(files);
     });
     fileInput.addEventListener('change', () => {
-      const file = fileInput.files?.[0];
-      if (file) this._handleUploadFile(file);
+      const files = fileInput.files;
+      if (files && files.length > 0) this._handleUploadFiles(files);
     });
     this.el.querySelector('#map-upload-add-btn')?.addEventListener('click', () => void this._addUpload());
     this.el.querySelector('#map-upload-clear-btn')?.addEventListener('click', () => this._clearUpload());
@@ -789,59 +793,134 @@ export class MapAssetModal {
 
   // ─── Upload tab ───────────────────────────────────────────────────────────
 
-  private _handleUploadFile(file: File): void {
-    if (!ALLOWED_TYPES.has(file.type)) {
-      alert(`Unsupported file type: ${file.type}. Use PNG, JPG, WebP, WebM, or MP4.`);
-      return;
+  /** v2.14.38 — accept one or more files, append to queue, show
+   *  the file-info section with a per-file row + bulk attribution. */
+  private _handleUploadFiles(filesArg: FileList | File[]): void {
+    const files = Array.from(filesArg);
+    for (const file of files) {
+      if (!ALLOWED_TYPES.has(file.type)) {
+        alert(`Unsupported file type: ${file.type}. Use PNG, JPG, WebP, WebM, or MP4.`);
+        continue;
+      }
+      if (file.size > MAX_BYTES) {
+        alert(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 50 MB.`);
+        continue;
+      }
+      this.uploadFiles.push({
+        file,
+        name: file.name.replace(/\.[^.]+$/, ''),
+      });
     }
-    if (file.size > MAX_BYTES) {
-      alert(`File too large (${(file.size / 1024 / 1024).toFixed(1)} MB). Max 50 MB.`);
-      return;
+    if (this.uploadFiles.length === 0) return;
+    // Populate the bulk-attribution licence dropdown once on first show.
+    const licenseSel = this.el.querySelector<HTMLSelectElement>('#map-upload-bulk-license');
+    if (licenseSel && licenseSel.options.length === 0) {
+      licenseSel.innerHTML = '<option value="">— No licence picked —</option>' +
+        LICENSE_OPTIONS.map((l) => `<option value="${l}">${l}</option>`).join('');
     }
-    this.uploadFile = file;
-    const nameInput = this.el.querySelector<HTMLInputElement>('#map-upload-name-input')!;
-    nameInput.value = file.name.replace(/\.[^.]+$/, '');
     this.el.querySelector<HTMLElement>('#map-upload-drop-zone')!.hidden = true;
     this.el.querySelector<HTMLElement>('#map-upload-file-info')!.hidden = false;
+    this._renderUploadQueue();
+  }
+
+  /** Re-render the queue list — one row per pending file with name
+   *  input + remove button. Re-binding handlers each render is cheap
+   *  at the file counts we expect (a tile-set is rarely > 20). */
+  private _renderUploadQueue(): void {
+    const queue = this.el.querySelector<HTMLElement>('#map-upload-queue');
+    if (!queue) return;
+    queue.innerHTML = '';
+    this.uploadFiles.forEach((entry, idx) => {
+      const row = document.createElement('div');
+      row.className = 'map-upload-queue-row';
+      row.innerHTML = `
+        <input type="text" class="map-upload-queue-name" placeholder="Map name…" />
+        <span class="map-upload-queue-filename"></span>
+        <button type="button" class="btn btn--ghost btn--xs map-upload-queue-remove" title="Remove this file from the queue.">✕</button>
+      `;
+      const nameInput = row.querySelector<HTMLInputElement>('.map-upload-queue-name')!;
+      nameInput.value = entry.name;
+      nameInput.addEventListener('input', () => {
+        const e = this.uploadFiles[idx];
+        if (e) e.name = nameInput.value;
+      });
+      const fnSpan = row.querySelector<HTMLElement>('.map-upload-queue-filename')!;
+      fnSpan.textContent = entry.file.name;
+      fnSpan.title = `${entry.file.name} · ${(entry.file.size / 1024 / 1024).toFixed(1)} MB`;
+      row.querySelector<HTMLButtonElement>('.map-upload-queue-remove')?.addEventListener('click', () => {
+        this.uploadFiles.splice(idx, 1);
+        if (this.uploadFiles.length === 0) {
+          this._clearUpload();
+        } else {
+          this._renderUploadQueue();
+        }
+      });
+      queue.appendChild(row);
+    });
   }
 
   private _clearUpload(): void {
-    this.uploadFile = null;
+    this.uploadFiles = [];
     const fileInput = this.el.querySelector<HTMLInputElement>('#map-upload-file-input');
     if (fileInput) fileInput.value = '';
     const dropZone = this.el.querySelector<HTMLElement>('#map-upload-drop-zone');
     const fileInfo = this.el.querySelector<HTMLElement>('#map-upload-file-info');
     if (dropZone) dropZone.hidden = false;
     if (fileInfo) fileInfo.hidden  = true;
+    // Clear bulk attribution inputs too — fresh slate on next batch.
+    const sel  = this.el.querySelector<HTMLSelectElement>('#map-upload-bulk-license');
+    const attr = this.el.querySelector<HTMLInputElement>('#map-upload-bulk-attribution');
+    const link = this.el.querySelector<HTMLInputElement>('#map-upload-bulk-link');
+    if (sel)  sel.value  = '';
+    if (attr) attr.value = '';
+    if (link) link.value = '';
+    const queue = this.el.querySelector<HTMLElement>('#map-upload-queue');
+    if (queue) queue.innerHTML = '';
   }
 
   private async _addUpload(): Promise<void> {
-    if (!this.uploadFile) return;
-    const file      = this.uploadFile;
-    const nameInput = this.el.querySelector<HTMLInputElement>('#map-upload-name-input')!;
-    const name      = nameInput.value.trim() || file.name.replace(/\.[^.]+$/, '');
+    if (this.uploadFiles.length === 0) return;
+    const addBtn = this.el.querySelector<HTMLButtonElement>('#map-upload-add-btn');
+    if (addBtn) { addBtn.disabled = true; addBtn.textContent = `Adding 0 / ${this.uploadFiles.length}…`; }
 
-    // Re-use MapManager.importFile so dimensions / id generation logic stays
-    // in one place, then trigger the pick callback with the resulting map.
-    try {
-      const map = await this.maps.importFile(file);
-      // importFile uses the file basename as the StoredMap name; honour the
-      // user's typed value if they changed it.
-      if (name !== map.name) {
-        // saveMap is in db.ts; quickest fix is to round-trip via createMapFromAsset
-        // … but that'd create a second map. Just set the name directly.
-        const { saveMap: _saveMap } = await import('../storage/db.ts');
-        await _saveMap({ ...map, name });
-        map.name = name;
+    // Pull bulk attribution once — applied to every file in the batch.
+    const bulkLicense     = this.el.querySelector<HTMLSelectElement>('#map-upload-bulk-license')?.value.trim()     ?? '';
+    const bulkAttribution = this.el.querySelector<HTMLInputElement>('#map-upload-bulk-attribution')?.value.trim() ?? '';
+    const bulkLink        = this.el.querySelector<HTMLInputElement>('#map-upload-bulk-link')?.value.trim()        ?? '';
+
+    let lastMap: StoredMap | null = null;
+    let added = 0;
+    const total = this.uploadFiles.length;
+    const queue = [...this.uploadFiles];
+    for (const entry of queue) {
+      try {
+        const map = await this.maps.importFile(entry.file);
+        if (entry.name && entry.name !== map.name) {
+          const { saveMap: _saveMap } = await import('../storage/db.ts');
+          await _saveMap({ ...map, name: entry.name });
+          map.name = entry.name;
+        }
+        if (bulkLicense || bulkAttribution || bulkLink) {
+          const patch: Partial<MapAsset> = {};
+          if (bulkLicense)     patch.license         = bulkLicense;
+          if (bulkAttribution) patch.attribution     = bulkAttribution;
+          if (bulkLink)        patch.attributionLink = bulkLink;
+          await MapAssetStore.update(map.mapAssetId, patch);
+        }
+        await this._runScaleDetectForUpload(map);
+        lastMap = map;
+        added++;
+        if (addBtn) addBtn.textContent = `Adding ${added} / ${total}…`;
+      } catch (err) {
+        alert(`${entry.file.name}: ${(err as Error).message}`);
       }
-      // Auto-detect grid scale from filename + DPI + GCD. Auto-apply on high
-      // confidence; prompt with the candidate dialog when ambiguous; skip
-      // entirely when no signals fit (user can still calibrate manually).
-      await this._runScaleDetectForUpload(map);
-      this.onPick(map);
+    }
+    if (addBtn) { addBtn.disabled = false; addBtn.textContent = 'Add All to Library'; }
+    if (lastMap) {
+      this.onPick(lastMap);
       this.close();
-    } catch (err) {
-      alert((err as Error).message);
+    } else {
+      this._clearUpload();
     }
   }
 

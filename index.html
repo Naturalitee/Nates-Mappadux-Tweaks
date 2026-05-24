@@ -651,16 +651,37 @@ https://example.com/map2.jpg"></textarea>
         </div>
         <div id="map-tab-upload" class="tab-content" hidden>
           <div id="map-upload-drop-zone" class="upload-drop-zone">
-            <p class="upload-drop-label">Drop a map image or video here<br>or click to browse</p>
-            <input type="file" id="map-upload-file-input" accept=".png,.jpg,.jpeg,.webp,.webm,.mp4" hidden />
+            <p class="upload-drop-label">Drop one or more maps here<br>or click to browse (multi-select supported)</p>
+            <input type="file" id="map-upload-file-input" accept=".png,.jpg,.jpeg,.webp,.webm,.mp4" multiple hidden />
           </div>
           <p class="upload-storage-hint">Uploaded maps are saved locally inside your map pack &mdash; they travel with your bundle export and stay available offline.</p>
           <div id="map-upload-file-info" class="upload-file-info" hidden>
-            <div class="modal-search-row">
-              <input type="text" id="map-upload-name-input" class="modal-search-input" placeholder="Map name…" />
+            <!-- v2.14.38 — Bulk attribution row. The licence + credit +
+                 source link entered here get applied to every file in
+                 the queue when "Add All" runs. Useful when uploading a
+                 tile-set from the same author (Dwarven Forge,
+                 Heroquest, sci-fi pack, etc.) so the GM doesn't have
+                 to repeat the credit per file. Leave any field blank
+                 to skip it. -->
+            <div class="map-upload-bulk-attr">
+              <div class="map-upload-bulk-attr-row">
+                <label>Licence</label>
+                <select id="map-upload-bulk-license" class="map-edit-license"></select>
+              </div>
+              <div class="map-upload-bulk-attr-row">
+                <label>Credit</label>
+                <input type="text" id="map-upload-bulk-attribution" placeholder='e.g. "Tiles by Author"' />
+              </div>
+              <div class="map-upload-bulk-attr-row">
+                <label>Source link</label>
+                <input type="url" id="map-upload-bulk-link" placeholder="https://… (optional)" />
+              </div>
+              <p class="map-upload-bulk-hint">Applied to every file below. Leave blank to skip.</p>
             </div>
+            <!-- Queue of selected files with per-row name input + remove. -->
+            <div id="map-upload-queue" class="map-upload-queue"></div>
             <div class="upload-actions">
-              <button id="map-upload-add-btn" class="btn btn--primary btn--sm">Add to Library</button>
+              <button id="map-upload-add-btn" class="btn btn--primary btn--sm">Add All to Library</button>
               <button id="map-upload-clear-btn" class="btn btn--ghost btn--sm">Clear</button>
             </div>
           </div>
