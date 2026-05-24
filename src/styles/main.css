@@ -4545,6 +4545,11 @@ option.select-option--add {
   position: absolute;
   inset: 0;
   pointer-events: none;
+  /* v2.14.52 — let lines render beyond the SVG's viewBox so the grid
+     fills the whole canvas pane (it's a guide, not a hard limit).
+     The canvas pane's overflow:hidden still clips at the visible
+     window edge. */
+  overflow: visible;
 }
 /* v2.14.47 — Snap-to-grid toggle in the toolbar. */
 .composite-editor-snap-toggle {

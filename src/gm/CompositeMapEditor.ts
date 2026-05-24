@@ -309,29 +309,37 @@ export class CompositeMapEditor {
     canvasEl.style.cursor = 'grab';
   }
 
-  /** Faint grey grid covering the whole compositor canvas at the
-   *  first scaled tile's cell pitch. No-op when no tile has scale
-   *  info yet (unscaled-only composite). */
+  /** Faint grey grid centred on the canvas, extending well beyond
+   *  the editor's bounds so it reads as a visual guide rather than a
+   *  hard limit. v2.14.52 — was previously clipped to canvasW/H;
+   *  Alex's note: 'the checkerboard is not the limit, it is a
+   *  guide; needs to extend the full pane'. Now drawn over a 5× area
+   *  so panning / zooming out reveals more grid in every direction.
+   *  Tiles still position in canvas-norm (0..1) space; placement
+   *  doesn't change, only the visual extent of the helper grid. */
   private _drawReferenceGrid(svg: SVGElement, cellPx: number | null): void {
     svg.innerHTML = '';
     if (!cellPx || cellPx < 4) return;
-    // Centre the grid on the canvas centre (origin = master tile's
-    // centre) so subsequent tiles snap visually around it. Walk
-    // outward in both directions to fill the whole canvas.
     const cx = this._canvasW / 2;
     const cy = this._canvasH / 2;
+    const extentX = this._canvasW * 3;  // half-width either side of cx
+    const extentY = this._canvasH * 3;
+    const minX = cx - extentX;
+    const maxX = cx + extentX;
+    const minY = cy - extentY;
+    const maxY = cy + extentY;
     const lines: string[] = [];
-    for (let x = cx; x <= this._canvasW + cellPx; x += cellPx) {
-      lines.push(`<line x1="${x}" y1="0" x2="${x}" y2="${this._canvasH}" />`);
+    for (let x = cx; x <= maxX; x += cellPx) {
+      lines.push(`<line x1="${x}" y1="${minY}" x2="${x}" y2="${maxY}" />`);
     }
-    for (let x = cx - cellPx; x >= -cellPx; x -= cellPx) {
-      lines.push(`<line x1="${x}" y1="0" x2="${x}" y2="${this._canvasH}" />`);
+    for (let x = cx - cellPx; x >= minX; x -= cellPx) {
+      lines.push(`<line x1="${x}" y1="${minY}" x2="${x}" y2="${maxY}" />`);
     }
-    for (let y = cy; y <= this._canvasH + cellPx; y += cellPx) {
-      lines.push(`<line x1="0" y1="${y}" x2="${this._canvasW}" y2="${y}" />`);
+    for (let y = cy; y <= maxY; y += cellPx) {
+      lines.push(`<line x1="${minX}" y1="${y}" x2="${maxX}" y2="${y}" />`);
     }
-    for (let y = cy - cellPx; y >= -cellPx; y -= cellPx) {
-      lines.push(`<line x1="0" y1="${y}" x2="${this._canvasW}" y2="${y}" />`);
+    for (let y = cy - cellPx; y >= minY; y -= cellPx) {
+      lines.push(`<line x1="${minX}" y1="${y}" x2="${maxX}" y2="${y}" />`);
     }
     svg.innerHTML = lines.join('');
   }

@@ -139,9 +139,13 @@ export async function rasterizeFromTiles(
     return null;
   }
 
-  // Solid black background — reads as table-edge bezel at play time.
-  ctx.fillStyle = '#000';
-  ctx.fillRect(0, 0, outputW, outputH);
+  // v2.14.52 — DON'T fill the background. PNG defaults to fully
+  // transparent; the renderer composites the map plane on top of
+  // the GM's chosen backdrop (solid colour OR animated Starfield /
+  // Aurora / Embers / etc.). Filling with black here would hide
+  // that — composites with L-shaped / non-rectangular layouts
+  // should show the backdrop wherever no tile covers, same as a
+  // letterboxed single-image map does.
 
   // Draw each tile, translating positions into the crop's frame.
   // Layered mode's z-order (later pass) will pre-sort decoded by
