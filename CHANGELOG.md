@@ -1,5 +1,54 @@
 # Changelog
 
+## v2.14.36 — 2026-05-24
+
+### Rescaling lock-up bug fixed (production stopgap)
+
+Stopgap production cut bundling the calibration + grid + viewer
+fixes from the v2.15-prep beta runs. No faff release this time —
+v2.15 (Map Compositor) will carry the proper one. Highlights:
+
+- **Rescaling no longer locks up the session.** Recalibrating the
+  active map while a Player or Scaled View popup was connected was
+  stalling the GM for up to 10–14 seconds. Three render targets
+  (calibration modal SVG, GM canvas, popup canvas) were all
+  decoding the full-resolution map texture in parallel. The
+  calibration modal now suspends the GM + popup render loops and
+  drops outbound broadcasts for the duration of the modal — only
+  the modal renders the map until you commit.
+- **#13 Player View grid icon + renderer.** Calibrated 1″ grid
+  overlay on the Player View, toggled from the rect's chrome icon.
+- **#1 Player zoom/pan with bounds.** Players can wheel-zoom +
+  drag-pan + pinch-zoom their own view, clamped inside the GM's
+  broadcast crop. Bottom-right Reset button snaps back.
+- **Grid is now genuinely map-anchored.** Single algorithm across
+  Player + Scaled View primary + Scaled View monitor: walk
+  gridlines in map-pixel space and ride the renderer's projection.
+  Identical map pixels carry identical gridlines on every viewer.
+- **Calibration grid panel.** Prominent Preview Grid / Establish
+  Origin button (icon state swap on/off), per-map colour picker,
+  visible nudge hint. Shift+drag the map to align the grid origin;
+  arrows for fine nudge (Shift+arrow ×10, Esc resets). Saved to
+  the asset; every viewer adopts the colour + offset.
+- **Shared grid colour.** Per-map (`MapAsset.gridColor`) instead of
+  per-view; one swatch in the Map panel drives every viewer. The
+  old per-projector 1″ Grid Overlay section is gone — the rect
+  chrome icon is the source of truth for Show Grid.
+- **Mute is now a real button.** First click anywhere still unmutes
+  (autoplay-policy gesture); after that, the small icon-only mute
+  button is the toggle, fading to a low-opacity chrome glyph after
+  5s. Pan/zoom no longer wrestles with mute.
+- **Swap Map Asset (#26).** New "Swap Asset…" in the Map panel.
+  Replace the underlying image while fog, markers, audio, and view
+  stay attached.
+- **PWA stops sitting in 'waiting'.** New service worker now
+  activates on next reload via `skipWaiting` + `clientsClaim`
+  instead of holding for every Mappadux tab to close.
+- A handful of smaller fixes (Show Grid icon gated by rect
+  selection, late-joiner `full_state` carries grid colour + offset,
+  Scale button + Scaled pill restored for textmaps, projection
+  popup gestures no longer fight browser-level pinch).
+
 ## v2.14.20 — 2026-05-22
 
 ### Mute toggle becomes a real button — no more click-anywhere
