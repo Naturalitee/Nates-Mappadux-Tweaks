@@ -894,13 +894,27 @@ export class Renderer {
     // leak the old plane.
     this._disposeBackingTexture();
     if (backingBuffer) {
+      console.log(`[reveal_layer] loadMap: backing buffer received, ${backingBuffer.byteLength} bytes — decoding…`);
       const backingBlob = new Blob([backingBuffer]);
       const backingUrl  = URL.createObjectURL(backingBlob);
+      // v2.14.72 — expose the backing as a downloadable URL via a
+      // global helper so the GM can call __dmrDownloadBacking() in
+      // DevTools to inspect the actual pixels. The URL itself is
+      // revoked once the texture decodes — re-blob from the helper.
+      const backingDebugBlob = backingBlob;
+      (window as unknown as { __dmrDownloadBacking: () => void }).__dmrDownloadBacking = () => {
+        const url = URL.createObjectURL(backingDebugBlob);
+        const a = document.createElement('a');
+        a.href = url; a.download = 'reveal-backing.png'; a.click();
+        URL.revokeObjectURL(url);
+      };
       new THREE.TextureLoader().load(backingUrl, (tex) => {
         URL.revokeObjectURL(backingUrl);
         if (gen !== this.loadGen) { tex.dispose(); return; }
         tex.colorSpace = THREE.SRGBColorSpace;
         this.mapBackingTexture = tex;
+        const img = tex.image as HTMLImageElement;
+        console.log(`[reveal_layer] backing decoded: ${img?.naturalWidth}x${img?.naturalHeight}. Call __dmrDownloadBacking() to inspect.`);
         // v2.14.71 — Hot-refresh any already-mounted reveal_layer
         // shader planes so they pick up the freshly-decoded backing
         // texture. (If the backing decode wins the race with the
@@ -908,9 +922,15 @@ export class Renderer {
         // the texture is wired at first build instead.)
         for (const entry of this.shaderPlanes.values()) {
           const mat = entry.material;
-          if (mat.uniforms['uBacking']) mat.uniforms['uBacking']!.value = tex;
+          if (mat.uniforms['uBacking'])    mat.uniforms['uBacking']!.value    = tex;
+          if (mat.uniforms['uHasBacking']) mat.uniforms['uHasBacking']!.value = 1.0;
         }
+      }, undefined, (err) => {
+        console.error('[reveal_layer] backing decode FAILED', err);
       });
+    } else {
+      console.log('[reveal_layer] loadMap: no backing buffer (non-layered map or single-tile composite).');
+      delete (window as unknown as { __dmrDownloadBacking?: () => void }).__dmrDownloadBacking;
     }
 
     const mediaKind = Renderer._sniffMediaKind(buffer);
@@ -1126,8 +1146,9 @@ export class Renderer {
         // because the backing PNG was rasterised at the main map's
         // exact dimensions — same plane → same map-UV.
         if (shader.wantsBacking) {
-          baseUniforms['uBacking']   = { value: this.mapBackingTexture ?? this._getBackingPlaceholder() };
-          baseUniforms['uBackingUv'] = { value: new THREE.Vector4(mapUvX, mapUvY, mapUvW, mapUvH) };
+          baseUniforms['uBacking']    = { value: this.mapBackingTexture ?? this._getBackingPlaceholder() };
+          baseUniforms['uBackingUv']  = { value: new THREE.Vector4(mapUvX, mapUvY, mapUvW, mapUvH) };
+          baseUniforms['uHasBacking'] = { value: this.mapBackingTexture ? 1.0 : 0.0 };
         }
         // Blend mode follows the kind. Fire ('screen') and similar
         // glow-y kinds use additive so radiance reads as light over
@@ -1194,6 +1215,8 @@ export class Renderer {
         if (backU) backU.value = this.mapBackingTexture ?? this._getBackingPlaceholder();
         const backUvU = entry.material.uniforms['uBackingUv'];
         if (backUvU) (backUvU.value as THREE.Vector4).set(mapUvX, mapUvY, mapUvW, mapUvH);
+        const hasBackU = entry.material.uniforms['uHasBacking'];
+        if (hasBackU) hasBackU.value = this.mapBackingTexture ? 1.0 : 0.0;
       }
     }
 

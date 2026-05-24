@@ -2514,6 +2514,9 @@ export class GMApp {
     let backingBuffer: ArrayBuffer | undefined;
     if (mapAssetForButton?.revealBackingBlob) {
       backingBuffer = await mapAssetForButton.revealBackingBlob.arrayBuffer();
+      console.log(`[reveal_layer] gm: asset has revealBackingBlob, ${backingBuffer.byteLength} bytes`);
+    } else if (mapAssetForButton?.source === 'composite-map') {
+      console.log(`[reveal_layer] gm: composite asset has NO revealBackingBlob (re-save the composite to generate it).`);
     }
 
     // Pass fog explicitly so the texture-load callback always redraws the right

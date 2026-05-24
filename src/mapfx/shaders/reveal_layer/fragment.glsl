@@ -21,11 +21,31 @@
 uniform sampler2D uMask;
 uniform sampler2D uBacking;
 uniform vec4      uBackingUv;
+uniform float     uHasBacking;   // v2.14.72 diagnostic — 1.0 when a real
+                                 // backing texture is bound, 0.0 when the
+                                 // 1x1 transparent placeholder is bound.
 varying vec2      vUv;
 
 void main() {
   float m = texture2D(uMask, vUv).a;
   if (m < 0.01) discard;
+
+  // v2.14.72 — Diagnostic colours so we can see WHERE the pipeline
+  // is failing without DevTools:
+  //   • Correct underlay = working end-to-end
+  //   • Bright magenta   = shader fires, uBacking placeholder (data
+  //                        flow problem — backing buffer isn't
+  //                        reaching the renderer on this viewer)
+  //   • Nothing visible  = polygon plane / mask / shader compile
+  //                        problem (the shader never ran)
+  // The magenta path is hard to miss + only fires when uHasBacking=0;
+  // production state has a real backing → underlay shows + this branch
+  // never runs.
+  if (uHasBacking < 0.5) {
+    gl_FragColor = vec4(1.0, 0.0, 1.0, m * 0.7);
+    return;
+  }
+
   vec2 backingUv = uBackingUv.xy + vUv * uBackingUv.zw;
   vec4 backing = texture2D(uBacking, backingUv);
   // Multiply by mask so soft polygon edges (edgeFade) feather the

@@ -509,6 +509,7 @@ export class PlayerApp {
     const { unpackCompositeBundle } = await import('../maps/compositeWireFormat.ts');
     const { rasterizeFromTiles }    = await import('../maps/rasterizeComposite.ts');
     const inputs = unpackCompositeBundle(blob, composite);
+    console.log(`[reveal_layer] player: composite unpacked with ${inputs.length} tile(s)`);
     const result = await rasterizeFromTiles(inputs, composite.aspect);
     if (!result) return { renderable: blob };
     const renderable = await result.blob.arrayBuffer();
@@ -518,14 +519,21 @@ export class PlayerApp {
     // map. Single-tile composites skip the backing (nothing to
     // reveal). The viewer computes the backing locally from the
     // same wire-shipped tile bytes — no extra bandwidth.
-    if (inputs.length < 2) return { renderable };
+    if (inputs.length < 2) {
+      console.log('[reveal_layer] player: <2 tiles, no backing generated');
+      return { renderable };
+    }
     // Pass full inputs as extentInputs so the backing PNG shares the
     // main composite's dimensions exactly — otherwise the smaller
     // subset crops to a different bbox and stretches on the renderer's
     // fixed-aspect backing plane.
     const backingResult = await rasterizeFromTiles(inputs.slice(0, -1), composite.aspect, inputs);
-    if (!backingResult) return { renderable };
+    if (!backingResult) {
+      console.warn('[reveal_layer] player: backing rasterise returned null');
+      return { renderable };
+    }
     const backing = await backingResult.blob.arrayBuffer();
+    console.log(`[reveal_layer] player: backing rasterised ${backingResult.imageWidth}x${backingResult.imageHeight}, ${backing.byteLength} bytes`);
     return { renderable, backing };
   }
 
