@@ -5088,6 +5088,9 @@ option.select-option--add {
 .sound-tag--inferred     { color: #fb923c; border-color: rgba(251, 146, 60, 0.4); }
 .sound-tag--no-grid      { color: #94a3b8; border-color: rgba(148, 163, 184, 0.4); }
 .sound-tag--textmap      { color: #a78bfa; border-color: rgba(167, 139, 250, 0.4); }
+/* v2.14.50 — Composite shares the purple "type" family with Text so a
+   glance at the pill cluster groups TYPE separately from SCALE state. */
+.sound-tag--composite    { color: #a78bfa; border-color: rgba(167, 139, 250, 0.4); }
 /* Animated map tag — teal/cyan; distinct from purple Text and amber
    Unused / AutoScaled so a row's badge cluster reads at a glance. */
 .sound-tag--animated     { color: #2dd4bf; border-color: rgba(45, 212, 191, 0.4); }

@@ -2573,7 +2573,11 @@ export class GMApp {
 
     this.mapSelect                  = q<HTMLSelectElement>('#map-select');
     this.mapEditableSelect          = new EditableSelect(this.mapSelect, {
-      onRename: (id, name) => void this._renameMap(id, name),
+      onRename:     (id, name) => void this._renameMap(id, name),
+      // v2.14.50 — the dropdown prepends a type glyph (▣/▶/¶/▦) to
+      // every option; strip it when the user starts editing so the
+      // icon can't be accidentally backspaced into.
+      displayClean: _cleanMapDisplayName,
     });
     this.editTextMapBtn             = q<HTMLButtonElement>('#edit-textmap-btn');
     this.editTextMapBtn.addEventListener('click', () => void this._editCurrentTextMap());

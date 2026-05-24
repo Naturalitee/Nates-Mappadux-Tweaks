@@ -478,6 +478,10 @@ export class MapAssetModal {
     if (isUnused)                    tags.push('<span class="sound-tag sound-tag--unused" title="No map currently uses this asset — safe to delete without breaking anything.">Unused</span>');
     if (isAnimated)                  tags.push('<span class="sound-tag sound-tag--animated" title="A video map (webm or mp4). Plays looped on the GM canvas; fog, markers, and magic-wand fill all work against the currently visible frame.">Animated</span>');
     if (isTextMap)                   tags.push('<span class="sound-tag sound-tag--textmap" title="A text-based handout, not an image. Edit its body, font and layout via the Edit button.">Text</span>');
+    // v2.14.50 — Composite pill in the same purple "type" colour as
+    // Text. Marks the asset as not-a-plain-image; the rest of the
+    // library inherits the default Image-style chrome.
+    if (asset.source === 'composite-map') tags.push('<span class="sound-tag sound-tag--composite" title="A composite map — multiple map tiles arranged in modular or layered mode. Edit via the Edit this Composite Map button on the active map.">Composite</span>');
     if (asset.source === 'web-link') tags.push('<span class="sound-tag sound-tag--url" title="Fetched from a web URL on demand. The image bytes live remotely; click Store to keep a local copy.">URL</span>');
     if (asset.locallyStored)         tags.push('<span class="sound-tag sound-tag--local" title="The image bytes are saved locally in your browser\'s database. Travels with bundle exports (.mappadux save files) so other GMs / other devices get the actual asset, not just a link.">Stored</span>');
     // Scale badge — driven by scaleConfidence + noGrid, in priority order.
@@ -529,11 +533,18 @@ export class MapAssetModal {
     // (longSide × cfg.width/height) and changes with whatever the
     // rasteriser uses internally; the GM cares about the shape they
     // picked in the editor (16:9, A4 Portrait, etc.).
-    const dimText = isTextMap && asset.textMap
+    // v2.14.50 — when the asset has a grid count (gridSquares.h × .v),
+    // append "· 40 × 30 grid" to the pixel dims so the library row
+    // reads dimensions AND the grid all at once.
+    const baseDimText = isTextMap && asset.textMap
       ? `${textMapAspectLabel(asset.textMap.width, asset.textMap.height)} handout`
       : asset.imageWidth && asset.imageHeight
         ? `${asset.imageWidth} × ${asset.imageHeight}`
         : asset.source;
+    const gridSuffix = asset.gridSquares
+      ? ` · ${asset.gridSquares.h} × ${asset.gridSquares.v} grid`
+      : '';
+    const dimText = `${baseDimText}${gridSuffix}`;
 
     const licenceText = asset.license ?? 'Edit ▸';
 

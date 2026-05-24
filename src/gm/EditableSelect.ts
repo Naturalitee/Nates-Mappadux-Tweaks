@@ -27,6 +27,15 @@ export interface EditableSelectHandlers {
    *  the option's text in the native <select> is updated and the menu
    *  rebuilds. The value is the option's `value` attribute. */
   onRename?: (value: string, newLabel: string) => void;
+  /** v2.14.50 — optional strip for display-only decorations that
+   *  shouldn't be editable. The map dropdown prepends a type glyph
+   *  (▣ image / ▶ animated / ¶ text / ▦ composite); without this
+   *  hook the user could backspace through it during rename, which
+   *  looks like the icon's been deleted (it isn't — refresh re-adds
+   *  it — but the UX is jumpy). Host passes its own clean-name fn
+   *  here; the input strips on focus, plain rename, glyph restored
+   *  on blur via refresh(). */
+  displayClean?: (raw: string) => string;
 }
 
 export class EditableSelect {
@@ -130,7 +139,14 @@ export class EditableSelect {
     });
 
     this.input.addEventListener('focus', () => {
-      this.renameOriginal = this.input.value;
+      // v2.14.50 — strip the host-supplied display-only prefix (e.g.
+      // the type glyph in the map dropdown) so the user only sees +
+      // edits the plain name. Refresh re-adds the glyph on blur.
+      const cleaned = this.handlers.displayClean
+        ? this.handlers.displayClean(this.input.value)
+        : this.input.value;
+      this.input.value = cleaned;
+      this.renameOriginal = cleaned;
     });
     this.input.addEventListener('keydown', (e) => {
       if (e.key === 'Enter') {
