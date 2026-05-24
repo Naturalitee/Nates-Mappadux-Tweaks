@@ -42,12 +42,25 @@ void main() {
   // production state has a real backing → underlay shows + this branch
   // never runs.
   if (uHasBacking < 0.5) {
+    // MAGENTA — shader fires, no real backing texture (placeholder).
     gl_FragColor = vec4(1.0, 0.0, 1.0, m * 0.7);
     return;
   }
 
   vec2 backingUv = uBackingUv.xy + vUv * uBackingUv.zw;
   vec4 backing = texture2D(uBacking, backingUv);
+
+  // v2.14.73 — second diagnostic. uHasBacking=1 + backing.a=0 means
+  // the backing texture exists but the sampled location is trans-
+  // parent (the lower tile doesn't cover this point, OR UV mapping
+  // is sampling outside the backing). CYAN flag tells us the
+  // difference between "no data" (magenta) and "data exists but
+  // no content here" (cyan).
+  if (backing.a < 0.01) {
+    gl_FragColor = vec4(0.0, 1.0, 1.0, m * 0.7);
+    return;
+  }
+
   // Multiply by mask so soft polygon edges (edgeFade) feather the
   // reveal naturally instead of cutting hard.
   gl_FragColor = vec4(backing.rgb, m * backing.a);

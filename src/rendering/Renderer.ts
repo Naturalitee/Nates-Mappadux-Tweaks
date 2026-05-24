@@ -1149,6 +1149,7 @@ export class Renderer {
           baseUniforms['uBacking']    = { value: this.mapBackingTexture ?? this._getBackingPlaceholder() };
           baseUniforms['uBackingUv']  = { value: new THREE.Vector4(mapUvX, mapUvY, mapUvW, mapUvH) };
           baseUniforms['uHasBacking'] = { value: this.mapBackingTexture ? 1.0 : 0.0 };
+          console.log(`[reveal_layer] plane built for poly ${poly.id} kind=${poly.kind}, uHasBacking=${this.mapBackingTexture ? 1 : 0}, bbox=${mapUvX.toFixed(2)},${mapUvY.toFixed(2)} ${mapUvW.toFixed(2)}x${mapUvH.toFixed(2)}`);
         }
         // Blend mode follows the kind. Fire ('screen') and similar
         // glow-y kinds use additive so radiance reads as light over
