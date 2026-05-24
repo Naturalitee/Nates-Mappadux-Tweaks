@@ -751,10 +751,15 @@ export class ProjectorApp {
   private _applyView(): void {
     // Reflect rotation onto body so CSS can rotate the canvas + grid.
     document.body.dataset['rot'] = String(this.projectorViewport.rotation);
-    this._drawGrid();
+    // v2.14.32 — push the view to the renderer FIRST. The grid now
+    // rides the renderer's projection (mapNormToCanvasCss), so its
+    // gridline positions are only correct once the camera reflects
+    // the new view. Drawing before setView would project against the
+    // PRIOR view and produce a frame-stale grid.
     this._refreshErrorStates();
     const view = this._computeViewState();
     this.renderer.setView(view);
+    this._drawGrid();
     // v2.12.x — per-map animated backdrop follows from the GM's view
     // state. Projector inherits the same backdrop the GM picked so
     // the bars area on the table screen carries the same vibe.
@@ -835,27 +840,20 @@ export class ProjectorApp {
    *  clearing, the gridEnabled gate, and the actual line stroking. */
   private _drawGrid(): void {
     const eff = this._effectiveDims();
-    // v2.14.30 — pass the currently-rendered view so drawGrid can
-    // anchor the grid to a fixed map point (map centre + gridOffset).
-    // Without this the anchor falls back to canvas centre and the
-    // grid stays glued to the window instead of moving with the map
-    // when the view crop changes (e.g. monitor resize, primary
-    // resize → projector_role propagation).
+    // v2.14.32 — drawGrid rides the renderer's projection
+    // (mapNormToCanvasCss), so the same camera that draws the map
+    // also positions the gridlines. No more parallel maths.
     drawGrid(this.gridCanvas, {
-      kind:               this.role === 'monitor' ? 'monitor-proportional' : 'projector-calibrated',
       effectiveW:         eff.w,
       effectiveH:         eff.h,
       enabled:            this.projectorViewport.gridEnabled,
       color:              this.gridColor ?? this.projectorViewport.gridColor,
-      setup:              this.setup,
       mapPixelsPerSquare: this.mapPixelsPerSquare,
       mapImageWidth:      this.mapImageWidth,
       mapImageHeight:     this.mapImageHeight,
-      primaryViewNW:      this.primaryViewNW,
-      primaryViewNH:      this.primaryViewNH,
-      view:               this._computeViewState(),
       gridOffsetX:        this.gridOffsetX,
       gridOffsetY:        this.gridOffsetY,
+      renderer:           this.renderer,
     });
   }
 

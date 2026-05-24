@@ -554,26 +554,21 @@ export class MapCalibrationModal {
       if (!gridOverlayCb.checked) return;
       const pps = derivePps();
       if (!pps || pps < 2) return;
-      // v2.14.18 — grid origin = centre + offset (mod pps so the
-      // walk stays in a bounded band; mathematically equivalent to
-      // walking from any congruent base position).
-      const modX = ((this.gridOffsetX % pps) + pps) % pps;
-      const modY = ((this.gridOffsetY % pps) + pps) % pps;
-      const cx = this.imgW / 2 + modX;
-      const cy = this.imgH / 2 + modY;
+      // v2.14.32 — absolute origin is map(0, 0). Gridlines are at
+      // map.x = n*pps + offsetX, map.y = n*pps + offsetY for every
+      // integer n that lands inside [0, mapW/mapH]. Same convention
+      // viewers use, so the modal preview matches what they draw.
       const lines: string[] = [];
-      // Vertical lines from centre outward.
-      for (let x = cx; x <= this.imgW; x += pps) {
+      const nMinX = Math.ceil((0          - this.gridOffsetX) / pps);
+      const nMaxX = Math.floor((this.imgW - this.gridOffsetX) / pps);
+      for (let n = nMinX; n <= nMaxX; n++) {
+        const x = n * pps + this.gridOffsetX;
         lines.push(`<line x1="${x}" y1="0" x2="${x}" y2="${this.imgH}" />`);
       }
-      for (let x = cx - pps; x >= 0; x -= pps) {
-        lines.push(`<line x1="${x}" y1="0" x2="${x}" y2="${this.imgH}" />`);
-      }
-      // Horizontal lines from centre outward.
-      for (let y = cy; y <= this.imgH; y += pps) {
-        lines.push(`<line x1="0" y1="${y}" x2="${this.imgW}" y2="${y}" />`);
-      }
-      for (let y = cy - pps; y >= 0; y -= pps) {
+      const nMinY = Math.ceil((0          - this.gridOffsetY) / pps);
+      const nMaxY = Math.floor((this.imgH - this.gridOffsetY) / pps);
+      for (let n = nMinY; n <= nMaxY; n++) {
+        const y = n * pps + this.gridOffsetY;
         lines.push(`<line x1="0" y1="${y}" x2="${this.imgW}" y2="${y}" />`);
       }
       gridOverlayG.innerHTML = lines.join('');

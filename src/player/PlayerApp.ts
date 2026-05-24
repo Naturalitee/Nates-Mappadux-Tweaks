@@ -276,22 +276,17 @@ export class PlayerApp {
    *  active map isn't calibrated, or when the canvas isn't bound. */
   private _refreshPlayerGrid(): void {
     if (!this.playerGridCanvas) return;
-    const view = this.lastView;
     drawGrid(this.playerGridCanvas, {
-      kind:               'map-relative',
       effectiveW:         window.innerWidth,
       effectiveH:         window.innerHeight,
-      enabled:            !!view?.playerGridEnabled,
+      enabled:            !!this.lastView?.playerGridEnabled,
       color:              this.gridColor ?? '#ffffff',
-      setup:              null,
       mapPixelsPerSquare: this.mapPixelsPerSquare,
       mapImageWidth:      this.mapImageWidth,
       mapImageHeight:     this.mapImageHeight,
-      primaryViewNW:      1,
-      primaryViewNH:      1,
-      view:               view ?? null,
       gridOffsetX:        this.gridOffsetX,
       gridOffsetY:        this.gridOffsetY,
+      renderer:           this.renderer,
     });
   }
 
