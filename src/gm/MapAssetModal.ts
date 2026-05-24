@@ -5,7 +5,6 @@ import { MapManager } from './MapManager.ts';
 import { MapCalibrationModal } from './MapCalibrationModal.ts';
 import { getUsedMapAssetIds } from '../storage/assetUsage.ts';
 import { detectMapScale, autoApplyPatch } from '../utils/detectMapScale.ts';
-import { ScaleCandidateDialog } from './ScaleCandidateDialog.ts';
 import { generateId } from '../utils/id.ts';
 import { TextMapEditor } from './TextMapEditor.ts';
 import { saveMap as _saveMap, saveMapAsset, getAllMaps } from '../storage/db.ts';
@@ -446,6 +445,11 @@ export class MapAssetModal {
     // as image maps. Image-map noGrid behaviour unchanged.
     if (asset.noGrid && !isTextMap) {
       tags.push('<span class="sound-tag sound-tag--no-grid map-nogrid-pill" title="You\'ve marked this asset as having no grid (a handout, world map, or stat block). The projector won\'t scale it to 1″ squares. Click the pill to clear this and calibrate properly." role="button" tabindex="0">No grid</span>');
+    } else if (asset.pixelsPerSquare && asset.scaleConfidence === 'inferred') {
+      // v2.14.40 — inferred from a filename WxH that didn't divide
+      // the image cleanly. Distinct amber pill so the GM verifies
+      // by eye (composites in particular pick up this state).
+      tags.push('<span class="sound-tag sound-tag--inferred map-recal-pill" title="Inferred scaling — derived from a filename grid hint (e.g. [40x40]) even though the image dimensions didn\'t divide cleanly. The pixels-per-square has been rounded. Click to verify or recalibrate by hand." role="button" tabindex="0">Inferred</span>');
     } else if (asset.pixelsPerSquare && asset.scaleConfidence === 'auto-scaled') {
       tags.push('<span class="sound-tag sound-tag--auto-scaled map-autoscaled-pill" title="The auto-detector took a best guess at the grid scale — but wasn\'t fully confident. Click the pill to verify or recalibrate by hand." role="button" tabindex="0">AutoScaled</span>');
     } else if (asset.pixelsPerSquare) {
@@ -888,35 +892,39 @@ export class MapAssetModal {
     const bulkAttribution = this.el.querySelector<HTMLInputElement>('#map-upload-bulk-attribution')?.value.trim() ?? '';
     const bulkLink        = this.el.querySelector<HTMLInputElement>('#map-upload-bulk-link')?.value.trim()        ?? '';
 
-    let lastMap: StoredMap | null = null;
     let added = 0;
     const total = this.uploadFiles.length;
     const queue = [...this.uploadFiles];
     for (const entry of queue) {
       try {
+        // v2.14.40 — Upload tab is a "load content INTO the library"
+        // flow, NOT a "create a map instance" flow (My Library does
+        // that via the Use button). importFile creates both an asset
+        // AND a StoredMap; delete the StoredMap right after so we
+        // keep just the library entry. Web Links already worked this
+        // way; this brings Upload into line.
         const map = await this.maps.importFile(entry.file);
-        if (entry.name && entry.name !== map.name) {
-          const { saveMap: _saveMap } = await import('../storage/db.ts');
-          await _saveMap({ ...map, name: entry.name });
-          map.name = entry.name;
+        const assetId  = map.mapAssetId;
+        const assetName = (entry.name || map.name).trim();
+        // Rename the ASSET (not the map — we're about to delete it).
+        if (assetName) {
+          await MapAssetStore.update(assetId, { filename: assetName });
         }
+        // Bulk attribution — same source as the asset's filename.
         if (bulkLicense || bulkAttribution || bulkLink) {
           const patch: Partial<MapAsset> = {};
           if (bulkLicense)     patch.license         = bulkLicense;
           if (bulkAttribution) patch.attribution     = bulkAttribution;
           if (bulkLink)        patch.attributionLink = bulkLink;
-          await MapAssetStore.update(map.mapAssetId, patch);
+          await MapAssetStore.update(assetId, patch);
         }
-        // v2.14.39 — single file → keep the candidate-dialog flow.
-        // Multi file → silent (auto-apply only). N dialogs for a
-        // 12-tile drop would be unusable; user can hand-calibrate
-        // uncertain ones afterwards via the library's Scale button.
-        if (total === 1) {
-          await this._runScaleDetectForUpload(map);
-        } else {
-          await this._runScaleDetectForUploadSilent(map);
-        }
-        lastMap = map;
+        // Silent scale-detect (no dialog) — consistent UX whether
+        // uploading 1 or 50 files. Uncertain detections leave the
+        // asset uncalibrated; user calibrates by hand via the
+        // library's Scale button if needed.
+        await this._runScaleDetectForAsset(assetId);
+        // Drop the auto-created StoredMap. Library entry stays.
+        await this.maps.delete(map.id);
         added++;
         if (addBtn) addBtn.textContent = `Adding ${added} / ${total}…`;
       } catch (err) {
@@ -924,60 +932,39 @@ export class MapAssetModal {
       }
     }
     if (addBtn) { addBtn.disabled = false; addBtn.textContent = 'Add All to Library'; }
-    if (lastMap) {
-      this.onPick(lastMap);
-      this.close();
-    } else {
-      this._clearUpload();
+    // Clear the queue + return user to the Library tab so they can
+    // pick which of the newly-added assets to USE.
+    this._clearUpload();
+    if (added > 0) {
+      const libBtn = this.el.querySelector<HTMLButtonElement>('[data-tab="library"]');
+      libBtn?.click();
+      await this._renderLibrary();
     }
   }
 
-  /** v2.14.39 — batch-import path: auto-apply only, no dialog. */
-  private async _runScaleDetectForUploadSilent(map: StoredMap): Promise<void> {
-    const asset = await MapAssetStore.get(map.mapAssetId);
+  /** v2.14.40 — silent scale-detect that operates on an asset id
+   *  directly (no StoredMap round-trip). Library uploads use this. */
+  private async _runScaleDetectForAsset(assetId: string): Promise<void> {
+    const asset = await MapAssetStore.get(assetId);
     if (!asset || !asset.imageWidth || !asset.imageHeight) return;
     const blob = await MapAssetStore.getBlob(asset);
     const detection = await detectMapScale({
-      nameHints:   [asset.filename, map.name],
+      nameHints:   [asset.filename],
       imageWidth:  asset.imageWidth,
       imageHeight: asset.imageHeight,
       ...(blob ? { blob } : {}),
     });
     const patch = autoApplyPatch(detection);
     if (patch) {
-      await MapAssetStore.update(asset.id, patch);
+      await MapAssetStore.update(assetId, patch);
     }
   }
 
-  /** Single-import path: detect, auto-apply, or open dialog when ambiguous. */
-  private async _runScaleDetectForUpload(map: StoredMap): Promise<void> {
-    const asset = await MapAssetStore.get(map.mapAssetId);
-    if (!asset || !asset.imageWidth || !asset.imageHeight) return;
-    const blob = await MapAssetStore.getBlob(asset);
-    const detection = await detectMapScale({
-      nameHints:   [asset.filename, map.name],
-      imageWidth:  asset.imageWidth,
-      imageHeight: asset.imageHeight,
-      ...(blob ? { blob } : {}),
-    });
-    const patch = autoApplyPatch(detection);
-    if (patch) {
-      await MapAssetStore.update(asset.id, patch);
-      return;
-    }
-    if (detection.needsConfirmation && detection.alternates.length > 0) {
-      const result = await new ScaleCandidateDialog().open({ detection, mapName: map.name });
-      if (result.kind === 'candidate') {
-        await MapAssetStore.update(asset.id, {
-          pixelsPerSquare: result.candidate.pixelsPerSquare,
-          scaleConfidence: 'auto-scaled',
-        });
-      } else if (result.kind === 'no-grid') {
-        await MapAssetStore.update(asset.id, { noGrid: true });
-      }
-      // 'cancel' leaves the map uncalibrated; user can use Calibrate later.
-    }
-  }
+  // v2.14.40 — single-file dialog-aware upload path removed.
+  // The Upload tab is a consistent "load INTO library" flow now:
+  // silent detect for every file regardless of count, the user
+  // picks which to USE from the library afterwards. (Implementation
+  // preserved in git history if a dialog-aware import returns.)
 
   private _esc(s: string): string {
     return s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');

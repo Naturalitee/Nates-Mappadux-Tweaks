@@ -1030,10 +1030,16 @@ export interface MapAsset {
    *                     Auto-applied without prompting.
    *   • 'auto-scaled' — auto-detector best-guess, or user picked from the
    *                     candidate dialog. Lower confidence — orange badge.
+   *   • 'inferred'    — derived solely from a filename WxH hint when the
+   *                     image dimensions don't divide cleanly. pps is
+   *                     rounded to the nearest integer. Distinct pill
+   *                     (amber) so the GM can verify by eye — close
+   *                     enough to be useful at the table without claiming
+   *                     surveyor accuracy. v2.14.40.
    *   undefined on a calibrated asset that predates this field — treated as
    *   'manual' for benefit-of-the-doubt and rendered the same green badge.
    */
-  scaleConfidence?: 'manual' | 'scaled' | 'auto-scaled';
+  scaleConfidence?: 'manual' | 'scaled' | 'auto-scaled' | 'inferred';
   /**
    * User explicitly opted this map out of scaling — it has no grid (a
    * handout, world map, stat block, etc.). The auto-detector skips it on

@@ -18,7 +18,7 @@ import { extractImageDpi } from './imageDpi.ts';
  *                    opting a map out of scaling entirely.
  */
 
-export type ScaleBadge = 'scaled' | 'auto-scaled' | 'unscaled' | 'no-grid';
+export type ScaleBadge = 'scaled' | 'auto-scaled' | 'inferred' | 'unscaled' | 'no-grid';
 
 export interface ScaleCandidate {
   pixelsPerSquare: number;
@@ -26,6 +26,11 @@ export interface ScaleCandidate {
   gridHeight:      number;
   score:           number;
   reasons:         string[];
+  /** v2.14.40 — true when this candidate came from a filename W×H
+   *  hint whose image-divided pps wasn't a clean integer (so the
+   *  detector rounded). Propagates to the badge for distinct pill
+   *  rendering. */
+  inferred?:       boolean;
 }
 
 export interface ScaleSignals {
@@ -82,33 +87,45 @@ export async function detectMapScale(inputs: DetectInputs): Promise<ScaleDetecti
 
   const candidates: ScaleCandidate[] = [];
 
-  // v2.14.39 — Name-first short-circuit. When the filename declares
-  // an explicit grid (e.g. "[40x40]") AND the image dimensions
-  // divide by it cleanly, trust that signal even when the resulting
-  // pps falls outside the divisor sweep's [PX_PER_SQ_MIN, MAX]
-  // range. Battlemaps with [40x40] on a 1600×1600 image (pps=40)
-  // used to fail detection entirely because 40 < PX_PER_SQ_MIN; now
-  // they auto-scale on upload.
+  // v2.14.40 — Name-first short-circuit. When the filename declares
+  // an explicit grid (e.g. "[40x40]"), use it as the primary signal
+  // even when the resulting pps is fractional or sits outside the
+  // divisor-sweep band. Three cases:
+  //   • Image divides cleanly + square pixels → 'scaled' candidate
+  //     (score 10, badge=scaled, auto-applied).
+  //   • Image aspect roughly matches the name's aspect (within 10%)
+  //     but doesn't divide cleanly → 'inferred' candidate. Rounded
+  //     pps, distinct badge. Close enough to be useful at the table
+  //     without claiming surveyor accuracy. Auto-applied with the
+  //     amber pill so the GM can verify visually.
+  //   • Otherwise → no candidate from this path (divisor sweep below
+  //     might still find one).
   if (nameWxH) {
     const ppsW = imageWidth  / nameWxH.w;
     const ppsH = imageHeight / nameWxH.h;
-    // Cleanly-dividing AND square-pixel — otherwise we'd be inferring
-    // non-square cells, which is almost never what the user means.
-    if (
-      Number.isInteger(ppsW) && Number.isInteger(ppsH) &&
-      ppsW === ppsH &&
-      ppsW >= 10 && ppsW <= 1000
-    ) {
-      const reasons: string[] = [`filename grid ${nameWxH.w}×${nameWxH.h} → ${ppsW} px/sq`];
-      // Score this above any divisor candidate so it wins the sort.
-      // The name is an explicit user signal; trust it.
-      candidates.push({
-        pixelsPerSquare: ppsW,
-        gridWidth:       nameWxH.w,
-        gridHeight:      nameWxH.h,
-        score:           10,
-        reasons,
-      });
+    const avg  = (ppsW + ppsH) / 2;
+    if (avg >= 10 && avg <= 1000) {
+      const integerExact = Number.isInteger(ppsW) && Number.isInteger(ppsH) && ppsW === ppsH;
+      const aspectMatch  = avg > 0 && Math.abs(ppsW - ppsH) / avg < 0.10;
+      if (integerExact) {
+        candidates.push({
+          pixelsPerSquare: ppsW,
+          gridWidth:       nameWxH.w,
+          gridHeight:      nameWxH.h,
+          score:           10,
+          reasons:         [`filename grid ${nameWxH.w}×${nameWxH.h} → ${ppsW} px/sq`],
+        });
+      } else if (aspectMatch) {
+        const pps = Math.round(avg);
+        candidates.push({
+          pixelsPerSquare: pps,
+          gridWidth:       nameWxH.w,
+          gridHeight:      nameWxH.h,
+          score:           8,
+          reasons:         [`filename ${nameWxH.w}×${nameWxH.h} inferred → ${pps} px/sq (rounded)`],
+          inferred:        true,
+        });
+      }
     }
   }
   for (const d of divisors(g)) {
@@ -152,7 +169,14 @@ export async function detectMapScale(inputs: DetectInputs): Promise<ScaleDetecti
 
   let badge: ScaleBadge;
   let needsConfirmation: boolean;
-  if (best.score >= 8 && gap >= 3) {
+  // v2.14.40 — inferred candidates carry their own badge so the
+  // library renders the amber 'Inferred' pill rather than green
+  // 'Scaled'. They auto-apply (no confirmation dialog) — the GM
+  // can verify visually via Recalibrate this Map.
+  if (best.inferred) {
+    badge = 'inferred';
+    needsConfirmation = false;
+  } else if (best.score >= 8 && gap >= 3) {
     badge = 'scaled';
     needsConfirmation = false;
   } else if (best.score >= 5 && gap >= 2) {
@@ -181,11 +205,11 @@ function emptyDetection(signals: ScaleSignals): ScaleDetection {
  * (needsConfirmation=true).
  */
 export function autoApplyPatch(d: ScaleDetection):
-  { pixelsPerSquare: number; scaleConfidence: 'scaled' | 'auto-scaled' } | null
+  { pixelsPerSquare: number; scaleConfidence: 'scaled' | 'auto-scaled' | 'inferred' } | null
 {
   if (!d.best) return null;
   if (d.needsConfirmation) return null;
-  if (d.badge !== 'scaled' && d.badge !== 'auto-scaled') return null;
+  if (d.badge !== 'scaled' && d.badge !== 'auto-scaled' && d.badge !== 'inferred') return null;
   return { pixelsPerSquare: d.best.pixelsPerSquare, scaleConfidence: d.badge };
 }
 
