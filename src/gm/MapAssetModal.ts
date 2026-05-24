@@ -120,6 +120,10 @@ export class MapAssetModal {
   openForCompositeAddTile(onPick: (asset: MapAsset | null) => void): void {
     this._compositeAddTileCallback = onPick;
     this._compositePickMode = true;
+    // v2.14.46 — re-append to body so this modal lands on top of
+    // the composite editor (which was appended after the asset
+    // modal's initial DOM construction, so was stacking ABOVE it).
+    document.body.appendChild(this.el);
     this.el.hidden = false;
     // Force library tab — picker doesn't make sense from any other.
     const libBtn = this.el.querySelector<HTMLButtonElement>('[data-tab="library"]');

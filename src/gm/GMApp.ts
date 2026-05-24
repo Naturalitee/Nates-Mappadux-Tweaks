@@ -5350,15 +5350,22 @@ export class GMApp {
   private openAddMapDialog(): void {
     this.mapAssetModal.open(async (map) => {
       // Look up the asset so the dropdown row gets the right leading
-      // glyph (image / animated / text) — same treatment as
-      // populateMapList applies on reload.
+      // glyph (image / animated / text / composite) — same treatment
+      // as populateMapList applies on reload.
       const asset = await MapAssetStore.get(map.mapAssetId);
       const kind = _dropdownKindForAsset(asset);
       this._insertMapOptionSorted(map.id, map.name, kind);
       this.mapSelect.value = map.id;
       this.mapEditableSelect.refresh();
       this._lastMapSelectValue = map.id;
-      void this.loadMap(map);
+      await this.loadMap(map);
+      // v2.14.46 — newly-created composite maps jump straight into
+      // the editor so the GM can drop more tiles without hunting
+      // for the Edit button. Picking the first tile is step 1; the
+      // editor is step 2 — flow through automatically.
+      if (asset?.source === 'composite-map') {
+        await this._editCurrentCompositeMap();
+      }
     });
   }
 
