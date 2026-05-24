@@ -264,12 +264,19 @@ export class CompositeMapEditor {
       },
       onWheel: ({ clientX, clientY, factor }) => {
         // Zoom around the cursor: keep the world point under it pinned.
+        // v2.14.48 — invert factor. attachGestures' convention is
+        // factor < 1 = "zoom in" semantically (shrinking view) so the
+        // calibration modal's viewBox math works. But the compositor
+        // applies factor to a CSS transform scale where < 1 visibly
+        // SHRINKS content. Multiplying directly produced reversed
+        // feel (wheel-up zoomed OUT). Dividing fixes the direction
+        // to match every other zoomable surface.
         const rect = canvasEl.getBoundingClientRect();
         const cx = clientX - rect.left;
         const cy = clientY - rect.top;
         const worldX = (cx - this._panX) / this._zoom;
         const worldY = (cy - this._panY) / this._zoom;
-        const newZoom = Math.max(0.2, Math.min(8, this._zoom * factor));
+        const newZoom = Math.max(0.2, Math.min(8, this._zoom / factor));
         this._panX = cx - worldX * newZoom;
         this._panY = cy - worldY * newZoom;
         this._zoom = newZoom;
