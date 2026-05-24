@@ -4781,6 +4781,59 @@ option.select-option--add {
   background: rgba(90, 240, 122, 0.85);
   color: #0a0e1a;
 }
+
+/* v2.14.66 — Right-click context menu for tile layer reordering.
+   Pinned at the cursor; flips to fit inside the viewport. */
+.composite-editor-tile-context-menu {
+  position: fixed;
+  z-index: 10000;
+  min-width: 180px;
+  background: rgba(20, 24, 36, 0.97);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 6px;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.6);
+  padding: 4px 0;
+  color: #e8edf7;
+  font-size: 0.85rem;
+  user-select: none;
+}
+.composite-editor-context-header {
+  padding: 4px 12px 6px;
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+.composite-editor-tile-context-menu button {
+  display: block;
+  width: 100%;
+  padding: 6px 12px;
+  background: transparent;
+  border: none;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  font-size: inherit;
+  font-family: inherit;
+}
+.composite-editor-tile-context-menu button:hover:not(:disabled) {
+  background: rgba(90, 240, 122, 0.18);
+}
+.composite-editor-tile-context-menu button:disabled {
+  color: rgba(255, 255, 255, 0.25);
+  cursor: default;
+}
+.composite-editor-context-sep {
+  height: 1px;
+  margin: 4px 6px;
+  background: rgba(255, 255, 255, 0.12);
+}
+.composite-editor-context-danger {
+  color: #f87171;
+}
+.composite-editor-context-danger:hover:not(:disabled) {
+  background: rgba(248, 113, 113, 0.18) !important;
+}
 .composite-editor-footer {
   display: flex;
   justify-content: flex-end;

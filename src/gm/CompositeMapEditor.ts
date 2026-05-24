@@ -113,6 +113,7 @@ export class CompositeMapEditor {
     for (const url of this.tileBlobUrls.values()) URL.revokeObjectURL(url);
     this.tileBlobUrls.clear();
     this._originalScales.clear();
+    this._closeTileContextMenu();
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
       this._resizeObserver = null;
@@ -561,6 +562,15 @@ export class CompositeMapEditor {
       ev.stopPropagation();
       void this._selectTile(tile.id);
     });
+    // v2.14.66 — right-click any tile → select + open layer context
+    // menu. Array index = z-order (last drawn = on top), so the menu
+    // actions reorder compositeTiles in place; the rasteriser inherits
+    // the new order on save since it draws in array order too.
+    el.addEventListener('contextmenu', (ev) => {
+      ev.preventDefault();
+      ev.stopPropagation();
+      void this._openTileContextMenu(tile.id, ev.clientX, ev.clientY);
+    });
     return el;
   }
 
@@ -753,6 +763,121 @@ export class CompositeMapEditor {
       handle.addEventListener('pointerup',     onUp);
       handle.addEventListener('pointercancel', onUp);
     });
+  }
+
+  /** v2.14.66 — Open the layer-reorder context menu pinned at the
+   *  cursor. Selects the tile too (matches the right-click-selects
+   *  convention used by most graphics apps). Menu actions reorder
+   *  the compositeTiles array in place; since both the editor
+   *  paint loop and the rasteriser iterate in array order, the new
+   *  z-stack takes effect immediately + survives Save. */
+  private async _openTileContextMenu(id: string, clientX: number, clientY: number): Promise<void> {
+    await this._selectTile(id);
+    const tiles = this.working?.compositeTiles ?? [];
+    const idx = tiles.findIndex((t) => t.id === id);
+    if (idx < 0) return;
+    const total = tiles.length;
+    // Position of this tile in the z-stack — last in array = on top,
+    // first = at the back. Display as 1..N from the back for the GM
+    // (matches "send to back" = 1, "bring to front" = N).
+    const zFromBack = idx + 1;
+
+    // Close any previously-open menu before opening a new one.
+    this._closeTileContextMenu();
+
+    const menu = document.createElement('div');
+    menu.className = 'composite-editor-tile-context-menu';
+    menu.dataset['for'] = id;
+    const atFront = idx === total - 1;
+    const atBack  = idx === 0;
+    menu.innerHTML = `
+      <div class="composite-editor-context-header">Layer ${zFromBack} / ${total}</div>
+      <button type="button" data-act="front" ${atFront ? 'disabled' : ''}>Bring to Front</button>
+      <button type="button" data-act="forward" ${atFront ? 'disabled' : ''}>Bring Forward</button>
+      <button type="button" data-act="backward" ${atBack ? 'disabled' : ''}>Send Backward</button>
+      <button type="button" data-act="back" ${atBack ? 'disabled' : ''}>Send to Back</button>
+      <div class="composite-editor-context-sep"></div>
+      <button type="button" data-act="delete" class="composite-editor-context-danger">Delete tile</button>
+    `;
+    document.body.appendChild(menu);
+
+    // Position inside viewport — flip left / up if the menu would
+    // overflow on the right / bottom edges.
+    const menuRect = menu.getBoundingClientRect();
+    const vw = window.innerWidth;
+    const vh = window.innerHeight;
+    const left = (clientX + menuRect.width  > vw) ? Math.max(4, vw - menuRect.width  - 4) : clientX;
+    const top  = (clientY + menuRect.height > vh) ? Math.max(4, vh - menuRect.height - 4) : clientY;
+    menu.style.left = `${left}px`;
+    menu.style.top  = `${top}px`;
+
+    menu.querySelectorAll<HTMLButtonElement>('button[data-act]').forEach((btn) => {
+      btn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        const act = btn.dataset['act'];
+        this._closeTileContextMenu();
+        if (act === 'delete')        void this._deleteTile(id);
+        else if (act === 'front')    void this._moveTileInStack(id, 'front');
+        else if (act === 'forward')  void this._moveTileInStack(id, 'forward');
+        else if (act === 'backward') void this._moveTileInStack(id, 'backward');
+        else if (act === 'back')     void this._moveTileInStack(id, 'back');
+      });
+    });
+
+    // Outside-click + Esc close. Capture-phase + raf so the click
+    // that opened the menu doesn't immediately close it.
+    requestAnimationFrame(() => {
+      const onDocClick = (ev: MouseEvent) => {
+        if (!menu.contains(ev.target as Node)) {
+          this._closeTileContextMenu();
+        }
+      };
+      const onKey = (ev: KeyboardEvent) => {
+        if (ev.key === 'Escape') this._closeTileContextMenu();
+      };
+      document.addEventListener('mousedown', onDocClick, true);
+      document.addEventListener('keydown', onKey);
+      menu.dataset['cleanup'] = '1';
+      (menu as unknown as { _cleanup: () => void })._cleanup = () => {
+        document.removeEventListener('mousedown', onDocClick, true);
+        document.removeEventListener('keydown', onKey);
+      };
+    });
+  }
+
+  /** Remove the tile context menu if one is open. Cleans up its
+   *  outside-click + Esc listeners. */
+  private _closeTileContextMenu(): void {
+    const menu = document.querySelector<HTMLElement>('.composite-editor-tile-context-menu');
+    if (!menu) return;
+    const cleanup = (menu as unknown as { _cleanup?: () => void })._cleanup;
+    if (cleanup) cleanup();
+    menu.remove();
+  }
+
+  /** v2.14.66 — Reorder a tile within compositeTiles. Convention:
+   *  array index = z-order, last = on top.
+   *    'front'    → move to end of array
+   *    'forward'  → swap with next neighbour
+   *    'backward' → swap with previous neighbour
+   *    'back'     → move to start of array
+   *  No-op if the tile is already at the limit for the requested
+   *  direction. */
+  private async _moveTileInStack(id: string, dir: 'front' | 'forward' | 'backward' | 'back'): Promise<void> {
+    if (!this.working) return;
+    const tiles = [...(this.working.compositeTiles ?? [])];
+    const idx = tiles.findIndex((t) => t.id === id);
+    if (idx < 0) return;
+    const [removed] = tiles.splice(idx, 1);
+    if (!removed) return;
+    let newIdx = idx;
+    if      (dir === 'front')    newIdx = tiles.length;       // last slot after splice
+    else if (dir === 'back')     newIdx = 0;
+    else if (dir === 'forward')  newIdx = Math.min(tiles.length, idx + 1);
+    else if (dir === 'backward') newIdx = Math.max(0, idx - 1);
+    tiles.splice(newIdx, 0, removed);
+    this.working = { ...this.working, compositeTiles: tiles };
+    await this._renderTiles();
   }
 
   /** Remove the tile from the working copy + re-render. */
