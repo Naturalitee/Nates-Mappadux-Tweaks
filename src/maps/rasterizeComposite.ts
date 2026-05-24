@@ -42,19 +42,15 @@ export interface TileInput {
 /** Output aspect when no other hint is available. */
 const DEFAULT_OUTPUT_ASPECT = 4 / 3;
 
-/** Memory guardrail on the rasteriser's output. Pixel-budget rather
- *  than width-cap so wide-and-short composites (think a long corridor
- *  tile-set) get more horizontal room than tall-and-narrow ones.
- *  v2.14.55 — was a strict 4096 width cap that single-image-thinking
- *  made too tight for multi-tile layouts. 64 MP at 4:3 ≈ 9230 × 6925
- *  (≈ 250 MB transient RGBA); generous for typical play, bounded
- *  enough to keep browsers safe.
- *
- *  Could one day evolve into viewer-aware streaming (rasterise at
- *  the viewer's canvas needs rather than a fixed budget), but the
- *  per-viewer composition path makes that a future option rather
- *  than a blocker. */
-const PIXEL_BUDGET = 64 * 1024 * 1024;
+/** Console warn threshold. The rasteriser doesn't enforce any
+ *  hard cap on output dims any more (Alex's call: hardware varies,
+ *  warn rather than truncate). Above this threshold we log a hint
+ *  so the GM can see "this composite is heavy" in DevTools if they
+ *  notice slowdown. 64 MP ≈ 9200 × 6900; typical play stays well
+ *  under. Browsers will OOM eventually for truly absurd outputs;
+ *  MapAssetStore.getBlob catches the error and surfaces a Missing
+ *  Map Image placeholder so the GM notices + scales back. */
+const WARN_PIXEL_THRESHOLD = 64 * 1024 * 1024;
 
 /** Pure rasteriser. Doesn't touch IDB / MapAssetStore. The caller
  *  supplies everything it needs. Viewer-side and GM-side paths both
@@ -76,43 +72,32 @@ export async function rasterizeFromTiles(
     }
   }
 
-  // Working dims — the "ideal" output that maps tile.x/y norm coords
-  // (0..1 of compositor space) into pixels. Bounding-box crop then
-  // trims this down to just the covered region.
-  let workW: number;
-  let workH: number;
-  let pps: number | null = null;
+  // v2.14.56 — Reference scale: how many output pixels equal "1.0
+  // norm" along the editor canvas. Tiles store position + size in
+  // norm coords (0..1 of editor canvas at save time); the rasteriser
+  // converts to pixels via this scale.
+  let refW: number;
+  let refH: number;
   if (master) {
     const tileScale = master.tile.scale ?? 1;
     const masterImgW = master.asset.imageWidth ?? 0;
-    // workW × tileScale = masterImgW → cell pitch stays at master.pps.
-    workW = Math.round(masterImgW / Math.max(0.01, tileScale));
-    workH = Math.round(workW / compositeAspect);
-    // Pixel budget: downscale uniformly if we'd blow the cap.
-    const pixels = workW * workH;
-    if (pixels > PIXEL_BUDGET) {
-      const downscale = Math.sqrt(PIXEL_BUDGET / pixels);
-      workW = Math.round(workW * downscale);
-      workH = Math.round(workH * downscale);
-      pps = (master.asset.pixelsPerSquare ?? 0) * downscale;
-    } else {
-      pps = master.asset.pixelsPerSquare ?? null;
-    }
+    // refW × tileScale = masterImgW → master tile renders at its
+    // native imageWidth → cell pitch = master.pps.
+    refW = masterImgW / Math.max(0.01, tileScale);
+    refH = refW / compositeAspect;
   } else {
-    workW = 1600;
-    workH = Math.round(workW / compositeAspect);
+    refW = 1600;
+    refH = refW / compositeAspect;
   }
 
-  // v2.14.55 — output spans the FULL workspace (no bbox crop).
-  // Earlier (v2.14.51) we cropped to the tile envelope to save
-  // pixels; that shrunk the rendered map's declared dimensions and
-  // dragged the grid + the Player View rect bounds with it. The
-  // composite is a TABLE — its declared extent should match the
-  // workspace, with tiles placed within it and transparency
-  // wherever no tile covers. Renderer composites the map plane on
-  // top of the GM's backdrop, so transparency = backdrop visible.
-  // Grid + viewer rect bounds now extend across the whole workspace.
-  const decoded: { input: TileInput; bitmap: ImageBitmap; tileW: number; tileH: number; cx: number; cy: number }[] = [];
+  // Pre-decode tiles + compute their pixel extents at reference scale.
+  // Tile positions stored in NORM are converted to pixel positions in
+  // the COMPOSITOR FRAME. Workspace then sized to fit those extents
+  // — tiles dragged past the editor's visible canvas edge in the
+  // editor are NOT clipped here.
+  const decoded: { input: TileInput; bitmap: ImageBitmap; cxRef: number; cyRef: number; tileWref: number; tileHref: number }[] = [];
+  let minX = 0, maxX = refW;   // always include the editor's 0..1 norm area
+  let minY = 0, maxY = refH;   // even if tiles cluster off-centre
   for (const input of inputs) {
     let bitmap: ImageBitmap;
     try {
@@ -120,18 +105,30 @@ export async function rasterizeFromTiles(
     } catch {
       continue;
     }
-    const tileW = (input.tile.scale ?? 1) * workW;
-    const tileH = tileW * (bitmap.height / bitmap.width);
-    const cx = input.tile.x * workW;
-    const cy = input.tile.y * workH;
-    decoded.push({ input, bitmap, tileW, tileH, cx, cy });
+    const tileWref = (input.tile.scale ?? 1) * refW;
+    const tileHref = tileWref * (bitmap.height / bitmap.width);
+    const cxRef = input.tile.x * refW;
+    const cyRef = input.tile.y * refH;
+    decoded.push({ input, bitmap, cxRef, cyRef, tileWref, tileHref });
+    minX = Math.min(minX, cxRef - tileWref / 2);
+    maxX = Math.max(maxX, cxRef + tileWref / 2);
+    minY = Math.min(minY, cyRef - tileHref / 2);
+    maxY = Math.max(maxY, cyRef + tileHref / 2);
   }
   if (decoded.length === 0) return null;
 
-  const outputW = workW;
-  const outputH = workH;
-  const cropX = 0;
-  const cropY = 0;
+  // Workspace = bounding-box extent at reference scale. Tiles shift
+  // by -min so the leftmost / topmost lands at (0, 0) in output.
+  // v2.14.56 — no enforced cap. pps stays at master.pps; output
+  // dims = the full workspace. Heavy composites will be slow; the
+  // timer below warns the GM in DevTools, and OOM fallback in
+  // MapAssetStore.getBlob shows Missing Map Image so the GM
+  // notices + scales back if their hardware can't cope.
+  const outputW = Math.max(1, Math.round(maxX - minX));
+  const outputH = Math.max(1, Math.round(maxY - minY));
+  const cropX   = minX;
+  const cropY   = minY;
+  const pps: number | null = master ? (master.asset.pixelsPerSquare ?? null) : null;
 
   // Offscreen canvas → 2D ctx. Fail soft on browsers without it.
   const canvas = (typeof OffscreenCanvas !== 'undefined')
@@ -155,49 +152,65 @@ export async function rasterizeFromTiles(
   // should show the backdrop wherever no tile covers, same as a
   // letterboxed single-image map does.
 
-  // Draw each tile, translating positions into the crop's frame.
-  // Layered mode's z-order (later pass) will pre-sort decoded by
-  // tile.layer; modular mode draws in insertion order.
+  // Time the rasterise so we can warn on heavy / sluggish composites.
+  const t0 = performance.now();
+
+  // Draw each tile. cxRef/cyRef are reference-scale pixel positions
+  // in the workspace; shift by -min so the leftmost/topmost lands
+  // at output 0. Layered mode's z-order (later pass) will pre-sort
+  // decoded by tile.layer; modular mode draws in insertion order.
   for (const d of decoded) {
-    const localCx = d.cx - cropX;
-    const localCy = d.cy - cropY;
+    const cxOut    = d.cxRef - cropX;
+    const cyOut    = d.cyRef - cropY;
     ctx.save();
-    ctx.translate(localCx, localCy);
+    ctx.translate(cxOut, cyOut);
     if (d.input.tile.rotation) ctx.rotate(d.input.tile.rotation * Math.PI / 180);
-    ctx.drawImage(d.bitmap, -d.tileW / 2, -d.tileH / 2, d.tileW, d.tileH);
+    ctx.drawImage(d.bitmap, -d.tileWref / 2, -d.tileHref / 2, d.tileWref, d.tileHref);
     ctx.restore();
     d.bitmap.close();
   }
 
   const blob = await canvas.convertToBlob({ type: 'image/png' });
 
+  // Sluggishness telemetry — warn the GM in DevTools if the rasterise
+  // took a noticeable chunk of time. Above the pixel threshold we
+  // always warn; below, we warn only on slow runs. Helps the GM
+  // understand why a save felt heavy.
+  const elapsed = performance.now() - t0;
+  const pixels  = outputW * outputH;
+  if (pixels > WARN_PIXEL_THRESHOLD || elapsed > 1500) {
+    console.warn(
+      `[composite rasterise] ${outputW}×${outputH} (${(pixels / 1_000_000).toFixed(0)} MP) ` +
+      `from ${inputs.length} tile(s) in ${elapsed.toFixed(0)}ms. Slow composites get heavier ` +
+      `as you add tiles or use higher-resolution masters; reduce tile count or master scale to lighten.`,
+    );
+  }
+
   // v2.14.55 — compute composite gridOffsetX/Y so viewer drawGrid
-  // aligns with the MASTER tile's calibrated grid. The convention
+  // aligns with the MASTER tile's calibrated grid. Convention
   // (v2.14.32): gridlines at map.x = n*K + offsetX. Set offsetX so
   // the first gridline lands on the master tile's first gridline
   // in output-pixel space.
   let gridOffsetX = 0;
   let gridOffsetY = 0;
   if (master && pps && pps > 0) {
-    const masterTile     = master.tile;
-    const masterAsset    = master.asset;
-    const masterImgW     = masterAsset.imageWidth ?? 0;
-    const masterImgH     = masterAsset.imageHeight ?? 0;
-    // Display scale of master on the output: master tile renders at
-    // (masterTile.scale * workW) pixels wide; its source is
-    // masterImgW pixels. Ratio = how many output-pixels per
-    // source-pixel.
-    const displayScale = (masterImgW > 0)
-      ? ((masterTile.scale ?? 1) * workW) / masterImgW
-      : 1;
-    // Master image-corner in output coords (cropX/Y are 0 since we
-    // dropped the bbox crop, but kept here in case it returns).
-    const masterCornerX = masterTile.x * workW - masterImgW * displayScale / 2 - cropX;
-    const masterCornerY = masterTile.y * workH - masterImgH * displayScale / 2 - cropY;
+    const masterTile  = master.tile;
+    const masterAsset = master.asset;
+    const masterImgW  = masterAsset.imageWidth ?? 0;
+    const masterImgH  = masterAsset.imageHeight ?? 0;
+    const masterTileWout = (masterTile.scale ?? 1) * refW;     // output px wide
+    const masterTileHout = masterImgW > 0
+      ? masterTileWout * (masterImgH / masterImgW)
+      : masterTileWout;
+    // Display scale: output px per master source px.
+    const displayScale = masterImgW > 0 ? masterTileWout / masterImgW : 1;
+    // Master image corner in WORKSPACE coords, then shift by -crop.
+    const masterCornerXout = (masterTile.x * refW - masterTileWout / 2) - cropX;
+    const masterCornerYout = (masterTile.y * refH - masterTileHout / 2) - cropY;
     const masterOffXout = (masterAsset.gridOffsetX ?? 0) * displayScale;
     const masterOffYout = (masterAsset.gridOffsetY ?? 0) * displayScale;
-    gridOffsetX = ((masterCornerX + masterOffXout) % pps + pps) % pps;
-    gridOffsetY = ((masterCornerY + masterOffYout) % pps + pps) % pps;
+    gridOffsetX = ((masterCornerXout + masterOffXout) % pps + pps) % pps;
+    gridOffsetY = ((masterCornerYout + masterOffYout) % pps + pps) % pps;
   }
 
   return {
