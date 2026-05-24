@@ -772,6 +772,22 @@ export class PlayerApp {
         break;
       }
 
+      case 'map_meta_update': {
+        // v2.14.28 — GM rebroadcasts map metadata after recalibration.
+        // Without this handler, the player kept using the old pps so
+        // its map-relative grid drew at the OLD spacing even though
+        // the asset's calibration had changed. (The map image still
+        // looked right because the texture was unchanged.) Update the
+        // cached metadata and redraw the grid.
+        if (msg.mapPixelsPerSquare !== undefined) this.mapPixelsPerSquare = msg.mapPixelsPerSquare;
+        if (msg.mapImageWidth      !== undefined) this.mapImageWidth      = msg.mapImageWidth;
+        if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
+        if (msg.gridOffsetX        !== undefined) this.gridOffsetX        = msg.gridOffsetX;
+        if (msg.gridOffsetY        !== undefined) this.gridOffsetY        = msg.gridOffsetY;
+        this._refreshPlayerGrid();
+        break;
+      }
+
       case 'marker_update': {
         this.currentMarkers = msg.payload;
         void (async () => {

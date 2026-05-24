@@ -2595,8 +2595,13 @@ export class GMApp {
       const wasDisplay = canvasWrapper?.style.display ?? '';
       if (canvasWrapper) canvasWrapper.style.display = 'none';
       this.renderer?.stop();
-      this.host.broadcast({ type: 'view_placeholder', target: 'player',    show: true, message: 'GM is calibrating this map — back in a moment.' });
-      this.host.broadcast({ type: 'view_placeholder', target: 'projector', show: true, message: 'GM is calibrating this map — back in a moment.' });
+      // v2.14.28 — generic faff message; players don't need to know
+      // the GM is mid-calibration (it's GM-internal plumbing). Random
+      // one-liner from the shared pool, same as the broadcast-bypass
+      // toggle uses.
+      const holdMsg = randomFaffMessage();
+      this.host.broadcast({ type: 'view_placeholder', target: 'player',    show: true, message: holdMsg });
+      this.host.broadcast({ type: 'view_placeholder', target: 'projector', show: true, message: holdMsg });
       this.host.setBroadcastSuspended(true);
 
       try {
