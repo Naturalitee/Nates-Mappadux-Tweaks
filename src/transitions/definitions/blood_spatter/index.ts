@@ -46,16 +46,37 @@ interface Drip {
   delay:      number;          // 0..1 fraction of drip phase before this drip starts
 }
 
-/** Seed N spatter origins across the frame so they FEEL random but
- *  cover the area — biased to upper two thirds since drips fall down. */
-function buildSpatters(count: number, w: number, h: number): Spatter[] {
+/** Seed N spatter origins using a jittered grid layout so the whole
+ *  frame is covered instead of clustering top-half. cols×rows is
+ *  picked so cell aspect ≈ frame aspect; each cell hosts one spatter
+ *  centre with jitter so the layout doesn't read as a regular grid.
+ *  v2.14.65 — replaces a single-axis pseudo-random scatter that drift-
+ *  ed toward the upper-left in low-count runs. spread multiplies the
+ *  spatter radius so the GM can ask for tighter or wider coverage. */
+function buildSpatters(count: number, w: number, h: number, spread: number): Spatter[] {
+  const aspect = w / h;
+  // Pick a grid that's roughly aspect-matched so cells are squarish.
+  // sqrt(count * aspect) gives cols; rows = ceil(count / cols).
+  const cols = Math.max(1, Math.round(Math.sqrt(count * aspect)));
+  const rows = Math.max(1, Math.ceil(count / cols));
+  const cellW = w / cols;
+  const cellH = h / rows;
   const spatters: Spatter[] = [];
   for (let i = 0; i < count; i++) {
-    const cx = (0.08 + srand(i * 5 + 1) * 0.84) * w;
-    const cy = (0.10 + srand(i * 5 + 2) * 0.55) * h;
-    const radius = (0.10 + srand(i * 5 + 3) * 0.12) * Math.min(w, h);
+    const gx = i % cols;
+    const gy = Math.floor(i / cols);
+    // Jitter inside the cell — up to ±40% of the cell extent so
+    // spatters don't read as a regular grid but never overflow.
+    const jx = (srand(i * 11 + 1) - 0.5) * cellW * 0.8;
+    const jy = (srand(i * 11 + 2) - 0.5) * cellH * 0.8;
+    const cx = (gx + 0.5) * cellW + jx;
+    const cy = (gy + 0.5) * cellH + jy;
+    // Radius scales with min(cellW, cellH) so each spatter "owns"
+    // its slice of the frame and reaches into the neighbours.
+    const cellMin = Math.min(cellW, cellH);
+    const radius = (0.45 + srand(i * 11 + 3) * 0.30) * cellMin * spread;
     // Each spatter is 5-9 overlapping irregular circles.
-    const lobeCount = 5 + Math.floor(srand(i * 5 + 4) * 5);
+    const lobeCount = 5 + Math.floor(srand(i * 11 + 4) * 5);
     const lobes: { dx: number; dy: number; r: number }[] = [];
     for (let j = 0; j < lobeCount; j++) {
       const ang = srand(i * 31 + j * 7) * Math.PI * 2;
@@ -206,9 +227,9 @@ export default {
       id: 'duration',
       label: 'Duration',
       min: 800,
-      max: 3000,
+      max: 5000,
       step: 100,
-      default: 1500,
+      default: 2000,
       unit: 'ms',
     },
     {
@@ -218,20 +239,57 @@ export default {
       options: [
         { value: 'low',  label: 'Subtle (3 spatters)'   },
         { value: 'med',  label: 'Standard (6 spatters)' },
-        { value: 'high', label: 'Heavy (10 spatters)'    },
+        { value: 'high', label: 'Heavy (10 spatters)'   },
+        { value: 'xhi',  label: 'Drenched (15 spatters)' },
       ],
       default: 'med',
+    },
+    {
+      type: 'slider',
+      id: 'spread',
+      label: 'Spatter spread',
+      min: 0.5,
+      max: 2.0,
+      step: 0.1,
+      default: 1.0,
+      unit: '×',
+    },
+    {
+      type: 'slider',
+      id: 'lightning',
+      label: 'Lightning brightness',
+      min: 0,
+      max: 1,
+      step: 0.05,
+      default: 1,
+    },
+    {
+      type: 'slider',
+      id: 'drip_reach',
+      label: 'Drip reach',
+      min: 0.2,
+      max: 1.5,
+      step: 0.05,
+      default: 1.0,
+      unit: '×',
     },
   ],
 
   async play({ overlay, snapshot, params, signal }) {
-    const duration = (params['duration'] as number) ?? 1500;
-    const intensity = (params['intensity'] as string) ?? 'med';
+    const duration    = (params['duration']    as number) ?? 2000;
+    const intensity   = (params['intensity']   as string) ?? 'med';
+    const spread      = (params['spread']      as number) ?? 1.0;
+    const lightning   = (params['lightning']   as number) ?? 1.0;
+    const dripReachMult = (params['drip_reach'] as number) ?? 1.0;
     const ctx = overlay.getContext('2d')!;
     const { width: w, height: h } = overlay;
 
-    const spatterCount = intensity === 'low' ? 3 : intensity === 'high' ? 10 : 6;
-    const spatters = buildSpatters(spatterCount, w, h);
+    const spatterCount =
+      intensity === 'low' ? 3  :
+      intensity === 'xhi' ? 15 :
+      intensity === 'high' ? 10 :
+                             6;
+    const spatters = buildSpatters(spatterCount, w, h, spread);
     const drips    = buildDrips(spatters);
 
     // Phase durations as fractions of total.
@@ -275,7 +333,7 @@ export default {
         const d = Math.abs(t - centre);
         return d > width ? 0 : 1 - d / width;
       };
-      const flash = Math.max(spike(0.15, 0.10), spike(0.65, 0.08));
+      const flash = Math.max(spike(0.15, 0.10), spike(0.65, 0.08)) * lightning;
       if (flash > 0) {
         ctx.fillStyle = `rgba(255, 250, 245, ${flash})`;
         ctx.fillRect(0, 0, w, h);
@@ -324,7 +382,7 @@ export default {
       for (const drip of drips) {
         const sp = spatters[drip.spatterIdx]!;
         const local = Math.min(1, Math.max(0, (t - drip.delay) / Math.max(0.01, 1 - drip.delay)));
-        const hFrac = easeIn(local);
+        const hFrac = easeIn(local) * dripReachMult;
         drawDripStreak(ctx, sp, drip, hFrac, 1, h);
       }
       // Punch the drip shapes (and grown reveal) out so the new map
@@ -337,7 +395,7 @@ export default {
       for (const drip of drips) {
         const sp = spatters[drip.spatterIdx]!;
         const local = Math.min(1, Math.max(0, (t - drip.delay) / Math.max(0.01, 1 - drip.delay)));
-        const hFrac = easeIn(local);
+        const hFrac = easeIn(local) * dripReachMult;
         punchDripStreak(ctx, sp, drip, hFrac, h);
       }
       // Final-phase global fade-to-clear so any remaining blood (the
