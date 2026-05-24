@@ -2,11 +2,13 @@
 
 ## v2.14.36 — 2026-05-24
 
-### Rescaling lock-up bug fixed (production stopgap)
+### View-windows refactor to unify, calibration improvements + fixes
 
-Stopgap production cut bundling the calibration + grid + viewer
-fixes from the v2.15-prep beta runs. No faff release this time —
-v2.15 (Map Compositor) will carry the proper one. Highlights:
+Stopgap production cut bundling the v2.15-prep beta work. No faff
+release this time — v2.15 (Map Compositor) will carry the proper
+one. Headline: the rescaling lockup is fixed, the grid is now
+genuinely shared across viewers, and the calibration screen is a
+proper step rather than a buried checkbox. Highlights:
 
 - **Rescaling no longer locks up the session.** Recalibrating the
   active map while a Player or Scaled View popup was connected was
