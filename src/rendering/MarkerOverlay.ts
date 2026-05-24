@@ -573,17 +573,24 @@ export class MarkerOverlay {
       const on = item.showGrid === 'on';
       r.showGridBtn.title = on
         ? '1" Grid Overlay: ON. Click to hide.'
-        : '1" Grid Overlay: off. Click to show a calibrated 1"/25 mm grid on the Scaled View.';
+        : '1" Grid Overlay: off. Click to show a calibrated 1"/25 mm grid.';
       r.showGridBtn.classList.toggle('marker-handle--rect-show-grid--on', on);
-      r.showGridBtn.innerHTML = `
-        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
-             stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-          <rect x="3" y="3" width="18" height="18" rx="1"/>
-          <line x1="9"  y1="3"  x2="9"  y2="21"/>
-          <line x1="15" y1="3"  x2="15" y2="21"/>
-          <line x1="3"  y1="9"  x2="21" y2="9"/>
-          <line x1="3"  y1="15" x2="21" y2="15"/>
-        </svg>`;
+      // v2.14.35 — icon now reflects state explicitly: ON shows the
+      // full 4-line grid; OFF shows an empty rectangle (no internal
+      // lines), so a glance tells the GM whether the grid's live.
+      r.showGridBtn.innerHTML = on
+        ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+             <rect x="3" y="3" width="18" height="18" rx="1"/>
+             <line x1="9"  y1="3"  x2="9"  y2="21"/>
+             <line x1="15" y1="3"  x2="15" y2="21"/>
+             <line x1="3"  y1="9"  x2="21" y2="9"/>
+             <line x1="3"  y1="15" x2="21" y2="15"/>
+           </svg>`
+        : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+                stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+             <rect x="3" y="3" width="18" height="18" rx="1"/>
+           </svg>`;
     }
 
     // v2.14.3 — view-broadcast eye icon. Mirrors the panel-header bypass

@@ -4184,6 +4184,74 @@ option.select-option--add {
 }
 .calibration-toggle-grid input { margin: 0; cursor: pointer; }
 
+/* v2.14.35 — Calibration grid panel. Sits between header + canvas
+   wrap as a dedicated row so the grid-preview + origin-nudge feature
+   reads as a key step in calibration, not a buried checkbox. */
+.calibration-grid-panel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.03);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  flex-wrap: wrap;
+}
+.calibration-grid-toggle {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px;
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-dim);
+  font-size: 0.85rem;
+  font-family: inherit;
+  cursor: pointer;
+  transition: background 120ms, color 120ms, border-color 120ms;
+}
+.calibration-grid-toggle:hover {
+  border-color: var(--border-focus);
+  color: var(--text);
+}
+.calibration-grid-toggle__icon-on  { display: none; }
+.calibration-grid-toggle__icon-off { display: inline-block; }
+.calibration-grid-panel[data-active="true"] .calibration-grid-toggle {
+  background: rgba(90, 240, 122, 0.12);
+  border-color: rgba(90, 240, 122, 0.6);
+  color: var(--text);
+}
+.calibration-grid-panel[data-active="true"] .calibration-grid-toggle__icon-on  { display: inline-block; }
+.calibration-grid-panel[data-active="true"] .calibration-grid-toggle__icon-off { display: none; }
+.calibration-grid-colour-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.78rem;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.calibration-grid-colour-input {
+  width: 32px;
+  height: 24px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+.calibration-grid-hint {
+  display: inline-flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 4px 10px;
+  font-size: 0.75rem;
+  color: var(--text-dim);
+  line-height: 1.4;
+}
+.calibration-grid-hint strong { color: var(--text); font-weight: 600; }
+
 /* v2.14.17 — Grid overlay drawn onto the map preview during
    calibration. Lines in image coordinates; lime-green so it reads
    clearly on both light and dark map backgrounds. */

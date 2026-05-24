@@ -323,15 +323,15 @@ export class MapAssetModal {
     if (asset.source === 'web-link') tags.push('<span class="sound-tag sound-tag--url" title="Fetched from a web URL on demand. The image bytes live remotely; click Store to keep a local copy.">URL</span>');
     if (asset.locallyStored)         tags.push('<span class="sound-tag sound-tag--local" title="The image bytes are saved locally in your browser\'s database. Travels with bundle exports (.mappadux save files) so other GMs / other devices get the actual asset, not just a link.">Stored</span>');
     // Scale badge — driven by scaleConfidence + noGrid, in priority order.
-    // Text maps never have a scale by design, so the scale pills are skipped.
-    if (!isTextMap) {
-      if (asset.noGrid) {
-        tags.push('<span class="sound-tag sound-tag--no-grid map-nogrid-pill" title="You\'ve marked this asset as having no grid (a handout, world map, or stat block). The projector won\'t scale it to 1″ squares. Click the pill to clear this and calibrate properly." role="button" tabindex="0">No grid</span>');
-      } else if (asset.pixelsPerSquare && asset.scaleConfidence === 'auto-scaled') {
-        tags.push('<span class="sound-tag sound-tag--auto-scaled map-autoscaled-pill" title="The auto-detector took a best guess at the grid scale — but wasn\'t fully confident. Click the pill to verify or recalibrate by hand." role="button" tabindex="0">AutoScaled</span>');
-      } else if (asset.pixelsPerSquare) {
-        tags.push('<span class="sound-tag sound-tag--scaled map-recal-pill" title="The map is calibrated to physical 1″/25 mm squares for true-scale projection. Click to recalibrate if the projection looks off." role="button" tabindex="0">Scaled</span>');
-      }
+    // v2.14.35 — textmaps used to be excluded "by design" but the GM
+    // can absolutely want a scaled handout (battle-card sized to
+    // miniatures, etc.). Treat them the same as image maps.
+    if (asset.noGrid) {
+      tags.push('<span class="sound-tag sound-tag--no-grid map-nogrid-pill" title="You\'ve marked this asset as having no grid (a handout, world map, or stat block). The projector won\'t scale it to 1″ squares. Click the pill to clear this and calibrate properly." role="button" tabindex="0">No grid</span>');
+    } else if (asset.pixelsPerSquare && asset.scaleConfidence === 'auto-scaled') {
+      tags.push('<span class="sound-tag sound-tag--auto-scaled map-autoscaled-pill" title="The auto-detector took a best guess at the grid scale — but wasn\'t fully confident. Click the pill to verify or recalibrate by hand." role="button" tabindex="0">AutoScaled</span>');
+    } else if (asset.pixelsPerSquare) {
+      tags.push('<span class="sound-tag sound-tag--scaled map-recal-pill" title="The map is calibrated to physical 1″/25 mm squares for true-scale projection. Click to recalibrate if the projection looks off." role="button" tabindex="0">Scaled</span>');
     }
     const tagsHtml = tags.join('');
 
@@ -341,14 +341,16 @@ export class MapAssetModal {
     const downloadBtnHtml = (asset.locallyStored && !isTextMap)
       ? `<button class="btn btn--ghost btn--xs map-download-btn" title="Save this map image to your downloads folder — useful for archiving outside Mappadux or sharing the raw file.">⬇</button>`
       : '';
-    // Text maps get an Edit button + a Copy button (use one as a
-    // template); image maps get the Scale button (when not yet
-    // calibrated and not opted out of grids).
-    const scaleOrEditBtnHtml = isTextMap
+    // v2.14.35 — Text maps get an Edit + Copy. Both text and image
+    // maps get a Scale button when not yet calibrated AND not opted
+    // out of grids; once calibrated, click the Scaled pill above to
+    // recalibrate (no top-level button needed).
+    const editTextMapBtnHtml = isTextMap
       ? `<button class="btn btn--ghost btn--xs map-edit-textmap-btn" title="Open the handout editor — edit the body text, fonts, layout, banner image, and reveal animation.">Edit</button>`
-      : (asset.pixelsPerSquare || asset.noGrid)
-        ? ''
-        : `<button class="btn btn--ghost btn--xs map-scale-btn" title="Calibrate this map to physical 1″/25 mm squares so the projector can render it at true table scale. Optional for handouts and world maps.">Scale</button>`;
+      : '';
+    const scaleBtnHtml = (asset.pixelsPerSquare || asset.noGrid)
+      ? ''
+      : `<button class="btn btn--ghost btn--xs map-scale-btn" title="Calibrate this map to physical 1″/25 mm squares so the projector can render it at true table scale. Optional for handouts and world maps.">Scale</button>`;
     const copyTextMapBtnHtml = isTextMap
       ? `<button class="btn btn--ghost btn--xs map-copy-textmap-btn" title="Duplicate this handout with a fresh id. Lets you use a polished handout as a template for the next one without overwriting it.">Copy</button>`
       : '';
@@ -379,8 +381,9 @@ export class MapAssetModal {
           </span>
         </div>
         <div class="sound-row-actions">
-          ${scaleOrEditBtnHtml}
+          ${editTextMapBtnHtml}
           ${copyTextMapBtnHtml}
+          ${scaleBtnHtml}
           ${storeBtnHtml}
           ${downloadBtnHtml}
           <button class="btn btn--primary btn--xs map-use-btn" title="Add a new map instance backed by this asset to your map list. The asset stays in the library — you can reuse it for multiple maps (e.g. the same dungeon image for two different encounters with their own fog and markers).">Use</button>

@@ -37,6 +37,9 @@ export class MapCalibrationModal {
   /** v2.14.18 — keydown handler for arrow-key nudge; attached on
    *  open, removed on close. */
   private _onKeyDown: ((e: KeyboardEvent) => void) | null = null;
+  /** v2.14.35 — colour picked in the modal's grid panel; persisted
+   *  to MapAsset.gridColor on save so every viewer adopts it. */
+  private _chosenGridColor: string | null = null;
 
   /** Open the calibration UI; resolves once the modal closes. */
   async open(asset: MapAsset): Promise<void> {
@@ -123,6 +126,11 @@ export class MapCalibrationModal {
     const initialGridH = asset.gridSquares?.h ?? '';
     const initialGridV = asset.gridSquares?.v ?? '';
 
+    // v2.14.35 — initial grid colour comes from the map's saved
+    // gridColor (which the viewers all share). Defaults to a lime-
+    // green that reads on most maps when the colour hasn't been set.
+    const initialGridColor = asset.gridColor ?? '#5af07a';
+
     overlay.innerHTML = `
       <div class="calibration-frame">
         <header class="calibration-header">
@@ -130,12 +138,40 @@ export class MapCalibrationModal {
             <h3>Calibrate &ldquo;${this._esc(asset.filename)}&rdquo;</h3>
             <p>Drag the two crosses to two points whose grid distance you know. Scroll or pinch to zoom, drag empty space to pan. Then enter how many 1&Prime;/25 mm squares the line spans.</p>
           </div>
-          <label class="calibration-toggle-grid" title="Overlay a 1″/25 mm grid on the map at the current calibration. Useful for eyeballing the calculated spacing against any visible grid drawn on the map itself. Nudge to align the grid with the map: SHIFT+drag on the image, or arrow keys (Shift+arrow for 10px steps; Esc resets).">
-            <input type="checkbox" class="calibration-grid-overlay-toggle" />
-            <span>Show grid</span>
-          </label>
           <button class="btn btn--ghost btn--xs calibration-reset" title="Reset zoom and pan">Reset View</button>
         </header>
+        <!-- v2.14.35 — prominent grid-preview panel. Toggle button
+             swaps icon based on state; colour swatch sets the saved
+             per-map grid colour; hint spells out the nudge controls. -->
+        <section class="calibration-grid-panel" data-active="false">
+          <button type="button" class="calibration-grid-toggle" aria-pressed="false" title="Preview a 1″/25 mm grid on top of the map. When on, align the grid origin to the map's own drawn lines using the controls below.">
+            <svg class="calibration-grid-toggle__icon-off" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="1"/>
+            </svg>
+            <svg class="calibration-grid-toggle__icon-on" viewBox="0 0 24 24" width="16" height="16" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <rect x="3" y="3" width="18" height="18" rx="1"/>
+              <line x1="9"  y1="3"  x2="9"  y2="21"/>
+              <line x1="15" y1="3"  x2="15" y2="21"/>
+              <line x1="3"  y1="9"  x2="21" y2="9"/>
+              <line x1="3"  y1="15" x2="21" y2="15"/>
+            </svg>
+            <span class="calibration-grid-toggle__label">Preview Grid / Establish Origin</span>
+          </button>
+          <!-- Hidden checkbox keeps the existing handler wiring + state
+               readable from elsewhere in the modal. Driven by the
+               button click. -->
+          <input type="checkbox" class="calibration-grid-overlay-toggle" hidden />
+          <label class="calibration-grid-colour-label" title="Grid colour saved with the map. Adopted by Player + Scaled View when the grid is shown there.">
+            <span>Colour</span>
+            <input type="color" class="calibration-grid-colour-input" value="${initialGridColor}" />
+          </label>
+          <div class="calibration-grid-hint" hidden>
+            <strong>Align to the map:</strong>
+            <span>SHIFT + drag the image,</span>
+            <span>arrow keys to nudge 1px (Shift+arrow = 10px),</span>
+            <span>Esc to reset.</span>
+          </div>
+        </section>
         <div class="calibration-canvas-wrap">
           <svg class="calibration-svg" xmlns="http://www.w3.org/2000/svg" preserveAspectRatio="xMidYMid meet">
             <image class="calibration-image" href="${this.blobUrl ?? ''}" x="0" y="0" width="${this.imgW}" height="${this.imgH}" />
@@ -544,12 +580,37 @@ export class MapCalibrationModal {
       updateGridFeedback();
     };
 
-    // v2.14.17 — Show Grid overlay during calibration. Toggle in the
-    // header; redraws on every input that changes pps (line drag, N
-    // input, H/V edits, DPI pick). Lets the GM eyeball the calculated
-    // 1″ spacing against any visible grid drawn on the map itself.
+    // v2.14.17 — Show Grid overlay during calibration. v2.14.35 — now
+    // driven by a prominent panel: toggle button swaps icon + label,
+    // colour swatch sets the saved per-map grid colour, hint spells
+    // out the nudge controls. The hidden checkbox is kept as the
+    // source of truth for the existing "is the grid showing" logic.
     const gridOverlayG    = overlay.querySelector<SVGGElement>('.calibration-grid-overlay')!;
     const gridOverlayCb   = overlay.querySelector<HTMLInputElement>('.calibration-grid-overlay-toggle')!;
+    const gridPanel       = overlay.querySelector<HTMLElement>('.calibration-grid-panel')!;
+    const gridToggleBtn   = overlay.querySelector<HTMLButtonElement>('.calibration-grid-toggle')!;
+    const gridHint        = overlay.querySelector<HTMLElement>('.calibration-grid-hint')!;
+    const gridColourInput = overlay.querySelector<HTMLInputElement>('.calibration-grid-colour-input')!;
+    // Track the picked colour so save() can persist it; live-update
+    // the SVG group's stroke so the preview reflects the choice.
+    this._chosenGridColor = initialGridColor;
+    gridOverlayG.style.stroke = initialGridColor;
+    const syncGridPanelState = () => {
+      const on = gridOverlayCb.checked;
+      gridPanel.dataset['active'] = String(on);
+      gridToggleBtn.setAttribute('aria-pressed', String(on));
+      gridHint.hidden = !on;
+    };
+    gridToggleBtn.addEventListener('click', () => {
+      gridOverlayCb.checked = !gridOverlayCb.checked;
+      gridOverlayCb.dispatchEvent(new Event('change'));
+      syncGridPanelState();
+    });
+    gridColourInput.addEventListener('input', () => {
+      this._chosenGridColor = gridColourInput.value;
+      gridOverlayG.style.stroke = gridColourInput.value;
+    });
+    syncGridPanelState();
     const derivePps = (): number | null => {
       const dist = Math.hypot(this.b.x - this.a.x, this.b.y - this.a.y);
       const N = currentN();
@@ -700,6 +761,9 @@ export class MapCalibrationModal {
           // calibration value so every viewer aligns the same way.
           gridOffsetX:      this.gridOffsetX,
           gridOffsetY:      this.gridOffsetY,
+          // v2.14.35 — the colour picked in the grid panel becomes
+          // the per-map default that every viewer adopts.
+          ...(this._chosenGridColor ? { gridColor: this._chosenGridColor } : {}),
         });
         this.close();
         return;
@@ -726,6 +790,8 @@ export class MapCalibrationModal {
         // calibration value so every viewer aligns the same way.
         gridOffsetX:    this.gridOffsetX,
         gridOffsetY:    this.gridOffsetY,
+        // v2.14.35 — saved per-map grid colour.
+        ...(this._chosenGridColor ? { gridColor: this._chosenGridColor } : {}),
       });
       this.close();
     });
