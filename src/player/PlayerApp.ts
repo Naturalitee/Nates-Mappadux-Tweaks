@@ -13,7 +13,7 @@ import { getMarkerAspect } from '../rendering/MarkerLayer.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
 import { TransitionEngine } from '../transitions/TransitionEngine.ts';
 import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
-import type { GMMessage, TransitionConfig, Marker, MarkerIconData, SoundboardAudioData, SoundboardSlot, FogState, FilterState, ViewState } from '../types.ts';
+import type { GMMessage, TransitionConfig, Marker, MarkerIconData, SoundboardAudioData, SoundboardSlot, FogState, FilterState, ViewState, CompositeWirePayload } from '../types.ts';
 import type { MotionOverlay, MotionOverlayScan, MotionOverlayBlob } from '../rendering/MarkerLayer.ts';
 
 /**
@@ -496,6 +496,25 @@ export class PlayerApp {
     this._applyEffectiveView();
   }
 
+  /** v2.14.54 — composite gold-class path. When map_change /
+   *  full_state carries a composite payload, the mapBlob is a
+   *  packed concatenation of tile bytes, not a final PNG. Unpack +
+   *  rasterise locally so the renderer's loadMap gets a normal
+   *  image buffer. Returns the input blob unchanged for non-
+   *  composite maps. */
+  private async _maybeRasterizeComposite(
+    blob:      ArrayBuffer,
+    composite: CompositeWirePayload | undefined,
+  ): Promise<ArrayBuffer> {
+    if (!composite) return blob;
+    const { unpackCompositeBundle } = await import('../maps/compositeWireFormat.ts');
+    const { rasterizeFromTiles }    = await import('../maps/rasterizeComposite.ts');
+    const inputs = unpackCompositeBundle(blob, composite);
+    const result = await rasterizeFromTiles(inputs, composite.aspect);
+    if (!result) return blob;
+    return await result.blob.arrayBuffer();
+  }
+
   private _recoverRenderer(): void {
     if (this.lastMapBlob) {
       // Re-feed the cached state — recreates all GPU resources from scratch.
@@ -582,9 +601,16 @@ export class PlayerApp {
         if (msg.gridOffsetY        !== undefined) this.gridOffsetY        = msg.gridOffsetY;
         if (msg.gridColor          !== undefined) this.gridColor          = msg.gridColor;
         if (mapBlob) {
-          this.lastMapBlob = mapBlob;
           this.lastFog     = msg.payload.fog ?? { polygons: [] };
-          this.renderer.loadMap(mapBlob, msg.payload.fog);
+          // v2.14.54 — composite payload requires local rasterise.
+          // Wrap in IIFE since handleMessage itself is sync.
+          const compositeForFs = msg.composite;
+          const fogForFs       = msg.payload.fog;
+          void (async () => {
+            const renderable = await this._maybeRasterizeComposite(mapBlob, compositeForFs);
+            this.lastMapBlob = renderable;
+            await this.renderer.loadMap(renderable, fogForFs);
+          })();
         } else {
           this.renderer.updateFog(msg.payload.fog);
           this.lastFog = msg.payload.fog ?? { polygons: [] };
@@ -646,12 +672,18 @@ export class PlayerApp {
           // against the still-decoding starting-frame load and the
           // animation visibly "snaps to end".
           const prior = this._pendingMapLoad;
+          const composite = msg.composite;
           this._pendingMapLoad = (async () => {
             await prior;
             if (msg.iconData?.length)       await this._decodeIconData(msg.iconData);
             if (msg.soundboardActive?.length) this._applySoundboardActive(msg.soundboardActive);
+            // v2.14.54 — rasterise composite payload locally if
+            // present. Cache the rendered blob (not the packed
+            // bundle) so context-recovery can re-feed instantly.
+            const renderable = await this._maybeRasterizeComposite(blob, composite);
+            this.lastMapBlob = renderable;
             await this.runTransition(msg.transition, async () => {
-              await this.renderer.loadMap(blob, fog);
+              await this.renderer.loadMap(renderable, fog);
               if (filter) this.renderer.setFilter(filter);
               if (view) {
                 // v2.14.18 — fresh map = fresh broadcast bounds.

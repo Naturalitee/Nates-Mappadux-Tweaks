@@ -15,7 +15,7 @@ import { computeView } from '../viewers/strategies/computeView.ts';
 import { drawGrid } from '../viewers/strategies/drawGrid.ts';
 import { isScaledViewTransitionsEnabled } from '../storage/localSettings.ts';
 import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
-import type { TransitionConfig } from '../types.ts';
+import type { TransitionConfig, CompositeWirePayload } from '../types.ts';
 import { decodeImageBitmap } from '../utils/decodeImageBitmap.ts';
 import { generateId } from '../utils/id.ts';
 import {
@@ -388,6 +388,20 @@ export class ProjectorApp {
   }
 
   /** Effective projection-area dimensions in CSS px, accounting for rotation. */
+  /** v2.14.54 — composite gold-class path. See PlayerApp's twin. */
+  private async _maybeRasterizeComposite(
+    blob:      ArrayBuffer,
+    composite: CompositeWirePayload | undefined,
+  ): Promise<ArrayBuffer> {
+    if (!composite) return blob;
+    const { unpackCompositeBundle } = await import('../maps/compositeWireFormat.ts');
+    const { rasterizeFromTiles }    = await import('../maps/rasterizeComposite.ts');
+    const inputs = unpackCompositeBundle(blob, composite);
+    const result = await rasterizeFromTiles(inputs, composite.aspect);
+    if (!result) return blob;
+    return await result.blob.arrayBuffer();
+  }
+
   private _effectiveDims(): { w: number; h: number } {
     const rot = this.projectorViewport.rotation;
     if (rot === 90 || rot === 270) {
@@ -416,7 +430,13 @@ export class ProjectorApp {
         if (msg.gridColor          !== undefined) this.gridColor          = msg.gridColor;
         if (blob) this.mapBlob = blob;
         if (this.mapBlob) {
-          void this.renderer.loadMap(this.mapBlob, this.currentFog);
+          // v2.14.54 — composite payload → local rasterise.
+          const composite = msg.composite;
+          const buf = this.mapBlob;
+          void (async () => {
+            const renderable = await this._maybeRasterizeComposite(buf, composite);
+            await this.renderer.loadMap(renderable, this.currentFog);
+          })();
         }
         // Decode-then-render so the icon bitmaps are in cache by the
         // time _renderMarkers reads them. Fire-and-forget left markers
@@ -458,25 +478,30 @@ export class ProjectorApp {
         }
         if (blob) {
           const finalBlob = blob;
+          const composite = msg.composite;
           this.mapBlob = finalBlob;
           // v2.14.16 — when Scaled View transitions are enabled, route
           // through the TransitionEngine + serialise behind any
-          // in-flight load (mirrors PlayerApp's v2.14.0 _pendingMapLoad
-          // race fix). When disabled (default), cut straight to the new
-          // texture as before.
+          // in-flight load. When disabled, cut straight to new texture.
+          // v2.14.54 — composite payload → local rasterise inside the
+          // load step so the renderer receives a final image buffer.
           if (this.viewer.transitionEngine) {
             const fog = this.currentFog;
             const prior = this._pendingMapLoad;
             this._pendingMapLoad = (async () => {
               await prior;
+              const renderable = await this._maybeRasterizeComposite(finalBlob, composite);
               await this._runTransition(msg.transition, async () => {
-                await this.renderer.loadMap(finalBlob, fog);
+                await this.renderer.loadMap(renderable, fog);
               });
-              this.lastMapBlob = finalBlob;
+              this.lastMapBlob = renderable;
             })();
           } else {
-            void this.renderer.loadMap(finalBlob, this.currentFog);
-            this.lastMapBlob = finalBlob;
+            void (async () => {
+              const renderable = await this._maybeRasterizeComposite(finalBlob, composite);
+              await this.renderer.loadMap(renderable, this.currentFog);
+              this.lastMapBlob = renderable;
+            })();
           }
         }
         void (async () => {

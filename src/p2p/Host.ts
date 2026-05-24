@@ -42,6 +42,11 @@ export class Host {
    *  lightweight snapshot for instant first-paint). Cleared on the
    *  next map_change since each map's bundle is independent. */
   private lastVideoBundle: { mapId: string; mimeType: string; buffer: ArrayBuffer } | null = null;
+  /** v2.14.54 — cached composite payload for the currently active
+   *  map. Present iff the active map is a composite. New joiners
+   *  receive it in their full_state alongside lastMapBlob (which in
+   *  that case is the packed tile bundle, not a PNG). */
+  private lastComposite: import('../types.ts').CompositeWirePayload | null = null;
   /** Cached map-asset metadata so full_state messages can size projector views. */
   private lastMapPps:           number | undefined = undefined;
   private lastMapImgW:          number | undefined = undefined;
@@ -157,6 +162,7 @@ export class Host {
           ...(this.lastMapGridOffsetX !== undefined ? { gridOffsetX:       this.lastMapGridOffsetX } : {}),
           ...(this.lastMapGridOffsetY !== undefined ? { gridOffsetY:       this.lastMapGridOffsetY } : {}),
           ...(this.lastMapGridColor   !== undefined ? { gridColor:         this.lastMapGridColor   } : {}),
+          ...(this.lastComposite                    ? { composite:         this.lastComposite      } : {}),
         };
         this.local.send(msg);
         // Deliver active positional plays inline (BroadcastChannel supports large payloads)
@@ -257,6 +263,11 @@ export class Host {
     }
     if (msg.type === 'map_change') {
       this.lastMapBlob = msg.mapBlob;
+      // v2.14.54 — cache composite payload alongside lastMapBlob so
+      // late joiners get the same packed-bundle treatment as live
+      // peers. Cleared on every map_change so a switch to a non-
+      // composite drops the stale payload.
+      this.lastComposite = msg.composite ?? null;
       // Each map starts with no video bundle yet — the GM may or may
       // not follow up with one for animated maps.
       this.lastVideoBundle = null;
@@ -402,6 +413,7 @@ export class Host {
           ...(this.lastMapGridOffsetX !== undefined ? { gridOffsetX:       this.lastMapGridOffsetX } : {}),
           ...(this.lastMapGridOffsetY !== undefined ? { gridOffsetY:       this.lastMapGridOffsetY } : {}),
           ...(this.lastMapGridColor   !== undefined ? { gridColor:         this.lastMapGridColor   } : {}),
+          ...(this.lastComposite                    ? { composite:         this.lastComposite      } : {}),
         };
         this.sendTo(conn, msg);
         // Late-joiner video catchup — if the active map is animated,

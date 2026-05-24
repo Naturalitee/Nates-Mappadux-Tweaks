@@ -2293,6 +2293,9 @@ export class GMApp {
     }
     const refreshed = await getMap(currentId);
     if (refreshed) await this.loadMap(refreshed);
+    // v2.14.54 — refresh the dropdown so a rename in the editor
+    // shows up without a page reload. Mirrors the text-map flow.
+    await this.populateMapList();
   }
 
   private async _editCurrentTextMap(): Promise<void> {
@@ -2402,11 +2405,28 @@ export class GMApp {
     // own canvas always loads the FINAL frame — Alex's spec: GM
     // doesn't need to see the transition; a progress bar at trigger
     // time indicates animation is in flight.
-    const broadcastBlob: ArrayBuffer = hasReveal
+    let broadcastBlob: ArrayBuffer = hasReveal
       ? (await this.maps.getStartingFrameBlob(map.id) ?? snapshotBlob)
       : snapshotBlob;
     const blob = localBlob; // for local renderer.loadMap below — GM canvas animates
     this.currentMapBlob = broadcastBlob;
+
+    // v2.14.54 — composite gold-class path. Instead of broadcasting
+    // the GM-rasterised composite PNG (which can hit the 4096 cap +
+    // chew bandwidth), pack each unique tile's bytes into a single
+    // ArrayBuffer + ship composite metadata. Viewers unpack and
+    // rasterise locally via rasterizeFromTiles. Same output;
+    // bandwidth scales with unique tile bytes rather than the
+    // composite PNG; viewers get crisp render at their own scale.
+    let compositePayload: import('../types.ts').CompositeWirePayload | undefined;
+    if (isComposite && mapAssetForButton) {
+      const { packCompositeForBroadcast } = await import('../maps/compositeWireFormat.ts');
+      const packed = await packCompositeForBroadcast(mapAssetForButton);
+      if (packed) {
+        broadcastBlob   = packed.binary;
+        compositePayload = packed.wire;
+      }
+    }
 
     // Clear old-map fog immediately so it never appears on the new map's
     // texture, even during the async decode window.  The correct fog for the
@@ -2552,6 +2572,8 @@ export class GMApp {
       // either the starting frame (handouts with animation enabled)
       // or the final frame (everything else).
       mapBlob:    broadcastBlob,
+      // v2.14.54 — present iff this is a composite map.
+      ...(compositePayload ? { composite: compositePayload } : {}),
       transition: this.buildTransitionConfig(),
     });
 

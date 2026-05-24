@@ -497,6 +497,35 @@ export interface MsgFullState {
   gridOffsetY?:        number;
   /** v2.14.31 — shared grid colour, per-map. */
   gridColor?:          string;
+  /** v2.14.54 — composite payload. See MsgMapChange.composite. */
+  composite?:          CompositeWirePayload;
+}
+
+/** v2.14.54 — wire payload for a composite map. Viewers unpack the
+ *  message's mapBlob (a packed concatenation of tile bytes) using
+ *  tileAssets[].blobOffset / blobSize, then call rasterizeFromTiles
+ *  to produce the final composite image — bandwidth scales with
+ *  unique tile bytes rather than the rasterised composite PNG. */
+export interface CompositeWirePayload {
+  /** Tile placements in compositor-norm 0..1 space (CompositeTile). */
+  tiles: CompositeTile[];
+  /** Unique tile assets referenced by `tiles`. Same asset id used
+   *  more than once is listed once; viewers resolve tile.mapAssetId
+   *  to the matching entry. */
+  tileAssets: Array<{
+    id:               string;
+    imageWidth:       number;
+    imageHeight:      number;
+    pixelsPerSquare?: number;
+    mimeType:         string;
+    /** Byte offset into the bundled mapBlob where this tile begins. */
+    blobOffset:       number;
+    /** Length in bytes. */
+    blobSize:         number;
+  }>;
+  /** Aspect (W / H) the editor canvas was at on Save. The rasteriser
+   *  uses this to reproduce the editor's layout geometry exactly. */
+  aspect: number;
 }
 
 export interface MsgViewUpdate {
@@ -556,6 +585,12 @@ export interface MsgMapChange {
    *  the new map's saved viewport instead of holding over the prior map's. */
   projectorViewport?: ProjectorViewport;
   mapBlob: ArrayBuffer;
+  /** v2.14.54 — composite payload. When set, mapBlob is a packed
+   *  bundle of tile blobs (per tileAssets[].blobOffset / blobSize),
+   *  NOT a single PNG. Viewers unpack + locally rasterise via
+   *  rasterizeFromTiles so the heavy composite PNG never crosses
+   *  the wire. Absent for normal single-image maps. */
+  composite?: CompositeWirePayload;
   transition?: TransitionConfig;
 }
 
