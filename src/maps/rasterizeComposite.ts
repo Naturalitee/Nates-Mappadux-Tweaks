@@ -109,7 +109,15 @@ export async function rasterizeFromTiles(
       continue;
     }
     const tileWref = (input.tile.scale ?? 1) * refW;
-    const tileHref = tileWref * (bitmap.height / bitmap.width);
+    // v2.14.62 — if the GM unlocked aspect + dragged height
+    // independently, tile.scaleY (fraction-of-canvas-HEIGHT) wins
+    // over the asset's native aspect. refH IS the height of the
+    // editor's reference canvas, so scaleY * refH is the matching
+    // pixel height. Absent scaleY = locked aspect default
+    // (derive from bitmap dims as before).
+    const tileHref = input.tile.scaleY != null
+      ? input.tile.scaleY * refH
+      : tileWref * (bitmap.height / bitmap.width);
     const cxRef = input.tile.x * refW;
     const cyRef = input.tile.y * refH;
     decoded.push({ input, bitmap, cxRef, cyRef, tileWref, tileHref });

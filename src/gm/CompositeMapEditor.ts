@@ -56,6 +56,10 @@ export class CompositeMapEditor {
   /** Per-tile blob object URLs so re-renders during interaction
    *  don't recreate them. Revoked on close. */
   private tileBlobUrls = new Map<string, string>();
+  /** v2.14.62 — per-tile snapshot of {scale, scaleY} captured at
+   *  modal-open. The Reset-scale button on the selected tile
+   *  restores from here. Cleared on close. */
+  private _originalScales = new Map<string, { scale: number | undefined; scaleY: number | undefined }>();
   /** v2.14.43 — caller-supplied picker for "+ Add Map". */
   private pickAsset: PickAssetFn | null = null;
   /** v2.14.45 — currently-selected tile id. Click a tile to select;
@@ -93,6 +97,12 @@ export class CompositeMapEditor {
       throw new Error('CompositeMapEditor expects a composite-map MapAsset.');
     }
     this.working = { ...asset, compositeTiles: [...(asset.compositeTiles ?? [])] };
+    // v2.14.62 — snapshot per-tile scale state so the Reset button
+    // can restore it. Deep-copy not needed; we store primitive fields.
+    this._originalScales.clear();
+    for (const t of this.working.compositeTiles ?? []) {
+      this._originalScales.set(t.id, { scale: t.scale, scaleY: t.scaleY });
+    }
     this.overlay = this._buildOverlay();
     document.body.appendChild(this.overlay);
     await this._renderTiles();
@@ -102,6 +112,7 @@ export class CompositeMapEditor {
   private _close(value: MapAsset | null): void {
     for (const url of this.tileBlobUrls.values()) URL.revokeObjectURL(url);
     this.tileBlobUrls.clear();
+    this._originalScales.clear();
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
       this._resizeObserver = null;
@@ -393,7 +404,13 @@ export class CompositeMapEditor {
       ? tileAsset.imageWidth / tileAsset.imageHeight
       : 1;
     const tileW  = (tile.scale ?? 1) * this._canvasW;
-    const tileH  = tileW / aspect;
+    // v2.14.62 — if the user has unlocked aspect + dragged height
+    // independently, scaleY (fraction-of-canvasH) is set + wins
+    // over native aspect. Otherwise tileH derives from the asset's
+    // native aspect (locked behaviour, the default).
+    const tileH  = tile.scaleY != null
+      ? tile.scaleY * this._canvasH
+      : tileW / aspect;
     const left   = tile.x * this._canvasW - tileW / 2;
     const top    = tile.y * this._canvasH - tileH / 2;
 
@@ -481,6 +498,61 @@ export class CompositeMapEditor {
         </svg>`;
       this._bindRotateDrag(rotHandle, el, tile.id);
       el.appendChild(rotHandle);
+
+      // v2.14.62 — Manual resize cluster, anchored bottom-right:
+      //   [reset]        ← top of the stack
+      //   [lock-aspect]  ← middle
+      //   [resize-grab]  ← bottom-right corner (the drag handle)
+      // The lock-aspect toggle defaults ON (tile.lockAspect ?? true).
+      // Reset restores the tile's scale + scaleY to the values it had
+      // when the editor opened (or 0.25 if it was added in this session).
+      const locked = (tile.lockAspect ?? true);
+
+      const resetBtn = document.createElement('button');
+      resetBtn.type = 'button';
+      resetBtn.className = 'composite-editor-tile-reset';
+      resetBtn.title = 'Reset this tile\'s scale to the value it had when you opened the editor (or the default for tiles added this session).';
+      resetBtn.innerHTML = `
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M3 12a9 9 0 1 0 3-6.7"/>
+          <polyline points="3 4 3 9 8 9"/>
+        </svg>`;
+      resetBtn.addEventListener('pointerdown', (ev) => { ev.stopPropagation(); });
+      resetBtn.addEventListener('click', (ev) => { ev.stopPropagation(); void this._resetScale(tile.id); });
+      el.appendChild(resetBtn);
+
+      const lockBtn = document.createElement('button');
+      lockBtn.type = 'button';
+      lockBtn.className = `composite-editor-tile-lock${locked ? ' is-active' : ''}`;
+      lockBtn.title = locked
+        ? 'Aspect ratio LOCKED — dragging the resize handle keeps the tile\'s native proportions. Click to unlock and resize width / height independently.'
+        : 'Aspect ratio UNLOCKED — width and height resize independently. Click to re-lock to native proportions.';
+      lockBtn.innerHTML = locked
+        ? `
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="5" y="11" width="14" height="9" rx="1"/>
+            <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
+          </svg>`
+        : `
+          <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+            <rect x="5" y="11" width="14" height="9" rx="1"/>
+            <path d="M8 11V7a4 4 0 0 1 7.5-2"/>
+          </svg>`;
+      lockBtn.addEventListener('pointerdown', (ev) => { ev.stopPropagation(); });
+      lockBtn.addEventListener('click', (ev) => { ev.stopPropagation(); void this._toggleLockAspect(tile.id); });
+      el.appendChild(lockBtn);
+
+      const resizeHandle = document.createElement('button');
+      resizeHandle.type = 'button';
+      resizeHandle.className = 'composite-editor-tile-resize';
+      resizeHandle.title = 'Drag to resize this tile. Lock the aspect ratio (icon above) to keep native proportions.';
+      resizeHandle.innerHTML = `
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="9 21 21 21 21 9"/>
+          <line x1="21" y1="21" x2="11" y2="11"/>
+        </svg>`;
+      this._bindResizeDrag(resizeHandle, el, tile.id, tileAsset.imageWidth, tileAsset.imageHeight);
+      el.appendChild(resizeHandle);
     }
     this._bindTileDrag(el, tile.id);
     el.addEventListener('click', (ev) => {
@@ -544,6 +616,132 @@ export class CompositeMapEditor {
         tile.rotation = snapped;
         // Live-update transform without a full re-render.
         tileEl.style.transform = `rotate(${snapped}deg)`;
+      };
+      const onUp = (ev: PointerEvent) => {
+        handle.releasePointerCapture(ev.pointerId);
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup',     onUp);
+        handle.removeEventListener('pointercancel', onUp);
+      };
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup',     onUp);
+      handle.addEventListener('pointercancel', onUp);
+    });
+  }
+
+  /** v2.14.62 — flip the per-tile aspect lock + re-render so the
+   *  icon swaps and the next resize drag uses the new mode. */
+  private async _toggleLockAspect(id: string): Promise<void> {
+    const tile = this._findTile(id);
+    if (!tile) return;
+    const currentlyLocked = (tile.lockAspect ?? true);
+    tile.lockAspect = !currentlyLocked;
+    // Re-locking after a free-aspect drag: drop scaleY so the next
+    // render goes back to native aspect (otherwise the tile would
+    // stay "stretched" with no visible cause). The user's width
+    // (tile.scale) is preserved.
+    if (tile.lockAspect) {
+      delete tile.scaleY;
+    }
+    await this._renderTiles();
+  }
+
+  /** v2.14.62 — restore the tile's scale + scaleY to the values
+   *  captured when the editor opened (or 0.25 for tiles added this
+   *  session). Position / rotation / flip are NOT touched. */
+  private async _resetScale(id: string): Promise<void> {
+    const tile = this._findTile(id);
+    if (!tile) return;
+    const snap = this._originalScales.get(id);
+    if (snap) {
+      if (snap.scale  == null) delete tile.scale;  else tile.scale  = snap.scale;
+      if (snap.scaleY == null) delete tile.scaleY; else tile.scaleY = snap.scaleY;
+    }
+    await this._renderTiles();
+  }
+
+  /** v2.14.62 — resize drag. Bottom-right handle; pointerdown
+   *  captures the current scale + cursor; pointermove updates
+   *  scale (and scaleY when unlocked) live. The handle math uses
+   *  the tile's own corner-to-pointer distance so the resize feels
+   *  pinned to the dragged corner regardless of rotation. */
+  private _bindResizeDrag(
+    handle:    HTMLElement,
+    tileEl:    HTMLElement,
+    tileId:    string,
+    nativeW:   number | undefined,
+    nativeH:   number | undefined,
+  ): void {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const tile = this._findTile(tileId);
+      if (!tile) return;
+      handle.setPointerCapture(e.pointerId);
+      // Snapshot start state — drag math is relative so partial drags
+      // compound cleanly with later drags.
+      const startScale  = tile.scale ?? 1;
+      const startScaleY = tile.scaleY;
+      const aspect = (nativeW && nativeH) ? (nativeW / nativeH) : 1;
+      // Distance from tile centre to the resize-handle's start point,
+      // in CSS px / current zoom. We measure with respect to the
+      // tile's centre + the cursor's offset from start so the corner
+      // tracks the cursor even when tile.rotation isn't zero.
+      const tileRect = tileEl.getBoundingClientRect();
+      const cx = tileRect.left + tileRect.width / 2;
+      const cy = tileRect.top  + tileRect.height / 2;
+      const startCornerDx = e.clientX - cx;
+      const startCornerDy = e.clientY - cy;
+      // Inverse-rotate the corner vector into the tile's local frame
+      // so we can map cursor motion to width / height deltas cleanly.
+      const rotRad = -(tile.rotation ?? 0) * Math.PI / 180;
+      const cos = Math.cos(rotRad);
+      const sin = Math.sin(rotRad);
+      const startLocalX = startCornerDx * cos - startCornerDy * sin;
+      const startLocalY = startCornerDx * sin + startCornerDy * cos;
+      // CSS px → norm conversion uses live dims / current zoom.
+      const cssToNormW = 1 / (this._canvasW * this._zoom);
+      const cssToNormH = 1 / (this._canvasH * this._zoom);
+      const onMove = (ev: PointerEvent) => {
+        const dx = ev.clientX - cx;
+        const dy = ev.clientY - cy;
+        const localX = dx * cos - dy * sin;
+        const localY = dx * sin + dy * cos;
+        // Width / height multipliers from local-frame motion: how
+        // much the tile's HALF-extent in each axis grew.
+        const wMult = startLocalX !== 0 ? localX / startLocalX : 1;
+        const hMult = startLocalY !== 0 ? localY / startLocalY : 1;
+        const locked = (tile.lockAspect ?? true);
+        if (locked) {
+          // Uniform scale: pick the larger multiplier so the corner
+          // stays under the cursor (the dominant axis wins).
+          const m = Math.max(0.01, Math.max(wMult, hMult));
+          tile.scale = Math.max(0.01, startScale * m);
+          delete tile.scaleY;
+          const newW = tile.scale * this._canvasW;
+          const newH = newW / aspect;
+          tileEl.style.width  = `${newW}px`;
+          tileEl.style.height = `${newH}px`;
+          tileEl.style.left   = `${tile.x * this._canvasW - newW / 2}px`;
+          tileEl.style.top    = `${tile.y * this._canvasH - newH / 2}px`;
+        } else {
+          tile.scale = Math.max(0.01, startScale * Math.max(0.01, wMult));
+          // scaleY baseline: existing scaleY, or derived from native
+          // aspect at start. Multiply by hMult.
+          const baselineScaleY = startScaleY ?? ((startScale * this._canvasW / aspect) / this._canvasH);
+          tile.scaleY = Math.max(0.01, baselineScaleY * Math.max(0.01, hMult));
+          const newW = tile.scale * this._canvasW;
+          const newH = tile.scaleY * this._canvasH;
+          tileEl.style.width  = `${newW}px`;
+          tileEl.style.height = `${newH}px`;
+          tileEl.style.left   = `${tile.x * this._canvasW - newW / 2}px`;
+          tileEl.style.top    = `${tile.y * this._canvasH - newH / 2}px`;
+        }
+        // Touch the conversion locals so TS doesn't flag them unused
+        // in builds; they're kept for future "snap resize to grid"
+        // work (would convert px deltas to norm cells).
+        void cssToNormW; void cssToNormH;
       };
       const onUp = (ev: PointerEvent) => {
         handle.releasePointerCapture(ev.pointerId);
@@ -676,6 +874,10 @@ export class CompositeMapEditor {
       rotation:   0,
       scale:      0.25,
     };
+    // v2.14.62 — record this tile's freshly-set scale as the Reset
+    // target so a later "reset scale" restores 0.25 rather than the
+    // first-drag value.
+    this._originalScales.set(tile.id, { scale: tile.scale, scaleY: tile.scaleY });
     this.working = {
       ...this.working,
       compositeTiles: [...tiles, tile],

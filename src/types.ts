@@ -985,8 +985,23 @@ export interface CompositeTile {
   rotation:     number;
   /** Optional uniform scale multiplier (1.0 = native size). Modular
    *  mode auto-scales scaled-grid tiles to match the master tile's
-   *  square size; this captures that result and any user override. */
+   *  square size; this captures that result and any user override.
+   *  v2.14.62 — also the WIDTH-fraction-of-canvas used by the
+   *  Composite Editor when aspect-lock is on (height derives from
+   *  the asset's native aspect). When aspect-lock is off + the user
+   *  drags height, scaleY is set to the height-fraction-of-canvas
+   *  override. Absent scaleY = lock aspect to native (default). */
   scale?:       number;
+  /** v2.14.62 — independent vertical scale (fraction of canvas
+   *  HEIGHT) for free-aspect resizes. Absent = derive from native
+   *  asset aspect (the locked-aspect default). Editor's
+   *  lock-aspect toggle controls whether dragging the resize handle
+   *  writes this field. */
+  scaleY?:      number;
+  /** v2.14.62 — per-tile aspect-ratio lock for the resize handle.
+   *  Defaults to true (locked). When false, the resize handle
+   *  scales width + height independently and persists scaleY. */
+  lockAspect?:  boolean;
   /** v2.14.59 — horizontal mirror (flip the tile left/right). */
   flipH?:       boolean;
   /** v2.14.59 — vertical mirror (flip the tile top/bottom). */

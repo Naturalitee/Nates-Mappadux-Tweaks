@@ -4723,6 +4723,64 @@ option.select-option--add {
 }
 .composite-editor-tile-rotate-handle:hover { filter: brightness(1.2); }
 .composite-editor-tile-rotate-handle:active { cursor: grabbing; }
+
+/* v2.14.62 — Manual-resize cluster on the selected tile, anchored
+   to the bottom-right corner:
+
+       [reset]
+       [lock]
+                          [resize]   ← bottom-right corner
+
+   The resize button sits AT the corner; lock + reset stack above
+   it (one above the other). All three share visual chrome with
+   the rotate handle for consistency. */
+.composite-editor-tile-resize {
+  position: absolute;
+  bottom: -14px;
+  right:  -14px;
+  width:  28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 24, 36, 0.9);
+  border: 2px solid rgba(90, 240, 122, 0.85);
+  border-radius: 6px;
+  color: #fff;
+  cursor: nwse-resize;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  z-index: 3;
+  touch-action: none;
+}
+.composite-editor-tile-resize:hover { filter: brightness(1.2); }
+
+.composite-editor-tile-lock,
+.composite-editor-tile-reset {
+  position: absolute;
+  right:  -14px;
+  width:  28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 24, 36, 0.9);
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  z-index: 3;
+}
+.composite-editor-tile-lock  { bottom: 22px; }   /* directly above resize */
+.composite-editor-tile-reset { bottom: 56px; }   /* above lock */
+.composite-editor-tile-lock:hover,
+.composite-editor-tile-reset:hover { filter: brightness(1.2); }
+.composite-editor-tile-lock.is-active {
+  background: rgba(90, 240, 122, 0.85);
+  color: #0a0e1a;
+}
 .composite-editor-footer {
   display: flex;
   justify-content: flex-end;
