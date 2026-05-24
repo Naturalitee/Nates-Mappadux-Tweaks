@@ -192,11 +192,21 @@ export class PlayerApp {
       this._refreshPlayerGrid();
     });
 
-    // v2.14.17 — bind the player-side grid canvas + redraw on window
-    // resize. The grid is map-relative (scales with view + canvas)
-    // so resizes change visible spacing.
+    // v2.14.17 — bind the player-side grid canvas + redraw on canvas
+    // resize.
+    // v2.14.33 — observe the RENDERER canvas (not window.resize). The
+    // Renderer's own ResizeObserver fires before mine on the same
+    // element (registered earlier in init), so by the time my callback
+    // runs the camera has already been updated for the new dimensions
+    // and mapNormToCanvasCss returns coords against the new frustum.
+    // window.resize was firing too early — my grid was projecting
+    // gridlines against the OLD camera onto the NEW canvas size,
+    // which drifted on every window resize.
     this.playerGridCanvas = document.querySelector<HTMLCanvasElement>('#player-grid');
-    window.addEventListener('resize', () => this._refreshPlayerGrid());
+    const rendererCanvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
+    if (rendererCanvas) {
+      new ResizeObserver(() => this._refreshPlayerGrid()).observe(rendererCanvas);
+    }
 
     // v2.14.18 — bind the Reset View button + wire pan/zoom gestures
     // on the renderer canvas. The button stays hidden until the
