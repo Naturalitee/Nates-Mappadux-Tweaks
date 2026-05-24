@@ -323,10 +323,11 @@ export class MapAssetModal {
     if (asset.source === 'web-link') tags.push('<span class="sound-tag sound-tag--url" title="Fetched from a web URL on demand. The image bytes live remotely; click Store to keep a local copy.">URL</span>');
     if (asset.locallyStored)         tags.push('<span class="sound-tag sound-tag--local" title="The image bytes are saved locally in your browser\'s database. Travels with bundle exports (.mappadux save files) so other GMs / other devices get the actual asset, not just a link.">Stored</span>');
     // Scale badge — driven by scaleConfidence + noGrid, in priority order.
-    // v2.14.35 — textmaps used to be excluded "by design" but the GM
-    // can absolutely want a scaled handout (battle-card sized to
-    // miniatures, etc.). Treat them the same as image maps.
-    if (asset.noGrid) {
+    // v2.14.36 — textmaps don't carry the noGrid opt-out (it's
+    // legacy from when textmaps couldn't be scaled at all); they
+    // always offer the Scale button when not yet calibrated, same
+    // as image maps. Image-map noGrid behaviour unchanged.
+    if (asset.noGrid && !isTextMap) {
       tags.push('<span class="sound-tag sound-tag--no-grid map-nogrid-pill" title="You\'ve marked this asset as having no grid (a handout, world map, or stat block). The projector won\'t scale it to 1″ squares. Click the pill to clear this and calibrate properly." role="button" tabindex="0">No grid</span>');
     } else if (asset.pixelsPerSquare && asset.scaleConfidence === 'auto-scaled') {
       tags.push('<span class="sound-tag sound-tag--auto-scaled map-autoscaled-pill" title="The auto-detector took a best guess at the grid scale — but wasn\'t fully confident. Click the pill to verify or recalibrate by hand." role="button" tabindex="0">AutoScaled</span>');
@@ -348,7 +349,10 @@ export class MapAssetModal {
     const editTextMapBtnHtml = isTextMap
       ? `<button class="btn btn--ghost btn--xs map-edit-textmap-btn" title="Open the handout editor — edit the body text, fonts, layout, banner image, and reveal animation.">Edit</button>`
       : '';
-    const scaleBtnHtml = (asset.pixelsPerSquare || asset.noGrid)
+    // v2.14.36 — noGrid disables the Scale button for image maps
+    // (the GM has explicitly opted out). Textmaps ignore noGrid here
+    // so they always offer Scale until calibrated.
+    const scaleBtnHtml = (asset.pixelsPerSquare || (asset.noGrid && !isTextMap))
       ? ''
       : `<button class="btn btn--ghost btn--xs map-scale-btn" title="Calibrate this map to physical 1″/25 mm squares so the projector can render it at true table scale. Optional for handouts and world maps.">Scale</button>`;
     const copyTextMapBtnHtml = isTextMap

@@ -159,8 +159,9 @@ export class MapCalibrationModal {
           </button>
           <!-- Hidden checkbox keeps the existing handler wiring + state
                readable from elsewhere in the modal. Driven by the
-               button click. -->
-          <input type="checkbox" class="calibration-grid-overlay-toggle" hidden />
+               button click. v2.14.36 — defaults to checked so the
+               grid + nudge controls are visible from the start. -->
+          <input type="checkbox" class="calibration-grid-overlay-toggle" checked hidden />
           <label class="calibration-grid-colour-label" title="Grid colour saved with the map. Adopted by Player + Scaled View when the grid is shown there.">
             <span>Colour</span>
             <input type="color" class="calibration-grid-colour-input" value="${initialGridColor}" />

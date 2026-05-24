@@ -4208,6 +4208,44 @@ export class GMApp {
       });
     });
 
+    // v2.14.36 — Swap Map Asset (#26). Re-target the active map at
+    // a different MapAsset from the library, preserving fog, markers,
+    // audio, view state, etc. Re-uses the asset modal's onPick flow
+    // (same shape Fix Missing Map uses): the modal creates a scratch
+    // StoredMap pointing at the picked asset, we retarget our map to
+    // that asset id, then delete the scratch. A confirm dialog up
+    // front so swaps aren't accidental.
+    document.querySelector('#swap-map-asset-btn')?.addEventListener('click', async () => {
+      const targetId = this.mapSelect.value;
+      if (!targetId) return;
+      const currentMap = (await this.maps.getAll()).find((m) => m.id === targetId);
+      if (!currentMap) return;
+      const currentAsset = await MapAssetStore.get(currentMap.mapAssetId);
+      const currentLabel = currentAsset?.filename ?? 'current asset';
+      this.mapAssetModal.open(async (scratchMap) => {
+        // Same asset picked → no-op except for scratch cleanup.
+        if (scratchMap.mapAssetId === currentMap.mapAssetId) {
+          await this.maps.delete(scratchMap.id);
+          return;
+        }
+        const newAsset = await MapAssetStore.get(scratchMap.mapAssetId);
+        const newLabel = newAsset?.filename ?? 'selected asset';
+        const ok = await confirmDialog({
+          title:        'Swap map asset?',
+          body:         `Replace "${currentLabel}" with "${newLabel}" on "${currentMap.name}". Fog, markers, audio and view stay attached to the map — only the underlying image changes.`,
+          confirmLabel: 'Swap',
+        });
+        if (!ok) {
+          await this.maps.delete(scratchMap.id);
+          return;
+        }
+        await this.maps.retargetMap(targetId, scratchMap.mapAssetId);
+        await this.maps.delete(scratchMap.id);
+        const swapped = (await this.maps.getAll()).find((m) => m.id === targetId);
+        if (swapped) await this.loadMap(swapped);
+      });
+    });
+
     // Map clone
     document.querySelector('#clone-map-btn')?.addEventListener('click', async () => {
       const id = this.mapSelect.value;

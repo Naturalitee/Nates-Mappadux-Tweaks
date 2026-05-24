@@ -4253,10 +4253,15 @@ option.select-option--add {
 .calibration-grid-hint strong { color: var(--text); font-weight: 600; }
 
 /* v2.14.17 — Grid overlay drawn onto the map preview during
-   calibration. Lines in image coordinates; lime-green so it reads
-   clearly on both light and dark map backgrounds. */
-.calibration-grid-overlay line {
+   calibration. Lines inherit stroke from the .calibration-grid-overlay
+   group so the colour picker can drive it. v2.14.36 — used to set
+   stroke directly on the line (which overrode the inherited stroke
+   from the group) so the picker had no effect. */
+.calibration-grid-overlay {
   stroke: #5af07a;
+}
+.calibration-grid-overlay line {
+  stroke: inherit;
   stroke-width: 1;
   /* The SVG's viewBox is set in image-pixel units. A stroke-width of
      1 here scales with the user's zoom, which is what we want — the
