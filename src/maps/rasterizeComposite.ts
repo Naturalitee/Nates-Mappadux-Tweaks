@@ -90,14 +90,17 @@ export async function rasterizeFromTiles(
     refH = refW / compositeAspect;
   }
 
-  // Pre-decode tiles + compute their pixel extents at reference scale.
-  // Tile positions stored in NORM are converted to pixel positions in
-  // the COMPOSITOR FRAME. Workspace then sized to fit those extents
-  // — tiles dragged past the editor's visible canvas edge in the
-  // editor are NOT clipped here.
+  // Pre-decode tiles + compute their pixel extents at reference
+  // scale. Workspace = tile bounding box only. v2.14.57 — previously
+  // the workspace also included the editor canvas's 0..1 norm area
+  // as a floor, which 'pinned' the output wider than the actual
+  // tile footprint. Alex's call: composite extent should be where
+  // the tiles actually are, not where the editor frame happened to
+  // be. Tiles will be shifted by -minLeft / -minTop so the
+  // top-left-most tile lands at output (0, 0).
   const decoded: { input: TileInput; bitmap: ImageBitmap; cxRef: number; cyRef: number; tileWref: number; tileHref: number }[] = [];
-  let minX = 0, maxX = refW;   // always include the editor's 0..1 norm area
-  let minY = 0, maxY = refH;   // even if tiles cluster off-centre
+  let minX = Infinity, maxX = -Infinity;
+  let minY = Infinity, maxY = -Infinity;
   for (const input of inputs) {
     let bitmap: ImageBitmap;
     try {
