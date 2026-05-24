@@ -104,10 +104,11 @@ const DRAWING_MODE_LS_KEY = 'mappadux:drawingMode';
  *  storage still displays cleanly. */
 const IMAGE_MAP_PREFIX     = '▣ ';
 const ANIMATED_MAP_PREFIX  = '▶ ';
-// v2.14.38 — ▤ (square with horizontal lines) was too close to ▦
-// (square with grid) for composite maps; the difference was a one-
-// pixel scan apart. Using a literal "[T]" reads at a glance.
-const TEXT_MAP_PREFIX      = '[T] ';
+// v2.14.39 — ¶ (paragraph mark) reads as "text" instantly and is
+// visually unambiguous against ▣ / ▦ . Previously used ▤ (square
+// with horizontal lines) which was confusable with the composite
+// ▦, and a bracketed [T] which Alex flagged as "not an icon".
+const TEXT_MAP_PREFIX      = '¶ ';
 const COMPOSITE_MAP_PREFIX = '▦ ';
 
 /** Strip every decoration that has ever been put on a map's display
@@ -116,10 +117,10 @@ const COMPOSITE_MAP_PREFIX = '▦ ';
  *  EditableSelect, and storage all see the raw name. */
 function _cleanMapDisplayName(name: string): string {
   return name
-    // Strip any decorative leading prefix: glyph chars + the new
-    // bracket-style "[T] " text-map prefix + any legacy "≡ ".
+    // Strip any decorative leading prefix: the legacy "[T] " variant
+    // first, then any glyph in the set we've ever used.
     .replace(/^\[T\]\s+/, '')
-    .replace(/^[▣▶▤▦≡]\s+/, '')
+    .replace(/^[▣▶▤▦¶≡]\s+/, '')
     // Legacy trailing " [T]" decoration.
     .replace(/(?: \[T\])+$/, '')
     .trim();

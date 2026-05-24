@@ -81,6 +81,36 @@ export async function detectMapScale(inputs: DetectInputs): Promise<ScaleDetecti
   const signals: ScaleSignals = { nameWxH, dpi, imageGcd: g };
 
   const candidates: ScaleCandidate[] = [];
+
+  // v2.14.39 — Name-first short-circuit. When the filename declares
+  // an explicit grid (e.g. "[40x40]") AND the image dimensions
+  // divide by it cleanly, trust that signal even when the resulting
+  // pps falls outside the divisor sweep's [PX_PER_SQ_MIN, MAX]
+  // range. Battlemaps with [40x40] on a 1600×1600 image (pps=40)
+  // used to fail detection entirely because 40 < PX_PER_SQ_MIN; now
+  // they auto-scale on upload.
+  if (nameWxH) {
+    const ppsW = imageWidth  / nameWxH.w;
+    const ppsH = imageHeight / nameWxH.h;
+    // Cleanly-dividing AND square-pixel — otherwise we'd be inferring
+    // non-square cells, which is almost never what the user means.
+    if (
+      Number.isInteger(ppsW) && Number.isInteger(ppsH) &&
+      ppsW === ppsH &&
+      ppsW >= 10 && ppsW <= 1000
+    ) {
+      const reasons: string[] = [`filename grid ${nameWxH.w}×${nameWxH.h} → ${ppsW} px/sq`];
+      // Score this above any divisor candidate so it wins the sort.
+      // The name is an explicit user signal; trust it.
+      candidates.push({
+        pixelsPerSquare: ppsW,
+        gridWidth:       nameWxH.w,
+        gridHeight:      nameWxH.h,
+        score:           10,
+        reasons,
+      });
+    }
+  }
   for (const d of divisors(g)) {
     if (d < PX_PER_SQ_MIN || d > PX_PER_SQ_MAX) continue;
     const gw = imageWidth  / d;

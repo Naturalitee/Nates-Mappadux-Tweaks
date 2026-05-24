@@ -907,7 +907,15 @@ export class MapAssetModal {
           if (bulkLink)        patch.attributionLink = bulkLink;
           await MapAssetStore.update(map.mapAssetId, patch);
         }
-        await this._runScaleDetectForUpload(map);
+        // v2.14.39 — single file → keep the candidate-dialog flow.
+        // Multi file → silent (auto-apply only). N dialogs for a
+        // 12-tile drop would be unusable; user can hand-calibrate
+        // uncertain ones afterwards via the library's Scale button.
+        if (total === 1) {
+          await this._runScaleDetectForUpload(map);
+        } else {
+          await this._runScaleDetectForUploadSilent(map);
+        }
         lastMap = map;
         added++;
         if (addBtn) addBtn.textContent = `Adding ${added} / ${total}…`;
@@ -921,6 +929,23 @@ export class MapAssetModal {
       this.close();
     } else {
       this._clearUpload();
+    }
+  }
+
+  /** v2.14.39 — batch-import path: auto-apply only, no dialog. */
+  private async _runScaleDetectForUploadSilent(map: StoredMap): Promise<void> {
+    const asset = await MapAssetStore.get(map.mapAssetId);
+    if (!asset || !asset.imageWidth || !asset.imageHeight) return;
+    const blob = await MapAssetStore.getBlob(asset);
+    const detection = await detectMapScale({
+      nameHints:   [asset.filename, map.name],
+      imageWidth:  asset.imageWidth,
+      imageHeight: asset.imageHeight,
+      ...(blob ? { blob } : {}),
+    });
+    const patch = autoApplyPatch(detection);
+    if (patch) {
+      await MapAssetStore.update(asset.id, patch);
     }
   }
 
