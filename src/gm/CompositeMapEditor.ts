@@ -28,6 +28,25 @@ import { attachGestures } from '../utils/Gestures.ts';
  *  implementation — GMApp wires it to MapAssetModal.openForCompositeAddTile. */
 export type PickAssetFn = () => Promise<MapAsset | null>;
 
+/** v2.14.59 — snap a free-rotated angle (degrees, may be < 0 or
+ *  > 360) to common tile-set angles. Right angles (0/90/180/270)
+ *  get a generous ±5° tolerance; finer angles (multiples of 45
+ *  and 30) get ±2°. Otherwise returns the angle modulo 360. */
+function _snapRotation(deg: number): number {
+  const wrap = (a: number) => ((a % 360) + 360) % 360;
+  const distTo = (a: number, b: number) => Math.abs(wrap(a - b + 180) - 180);
+  // Right-angle snap (±5°).
+  const near90 = Math.round(deg / 90) * 90;
+  if (distTo(deg, near90) <= 5) return wrap(near90);
+  // 45° family (±2°): 45, 135, 225, 315.
+  const near45 = Math.round(deg / 45) * 45;
+  if (distTo(deg, near45) <= 2) return wrap(near45);
+  // 30° family (±2°): 30, 60, 120, 150, 210, 240, 300, 330.
+  const near30 = Math.round(deg / 30) * 30;
+  if (distTo(deg, near30) <= 2) return wrap(near30);
+  return wrap(deg);
+}
+
 export class CompositeMapEditor {
   private overlay: HTMLElement | null = null;
   private resolver: ((value: MapAsset | null) => void) | null = null;
@@ -386,12 +405,20 @@ export class CompositeMapEditor {
     el.style.top       = `${top}px`;
     el.style.width     = `${tileW}px`;
     el.style.height    = `${tileH}px`;
+    // v2.14.59 — outer transform = rotation. Inner content gets the
+    // flip scale so the chrome (trash / flip btns / rotation handle)
+    // isn't mirrored along with the image.
     el.style.transform = `rotate(${tile.rotation}deg)`;
-    el.innerHTML = `<img src="${url}" alt="" draggable="false" />`;
+    const sx = tile.flipH ? -1 : 1;
+    const sy = tile.flipV ? -1 : 1;
+    el.innerHTML = `
+      <div class="composite-editor-tile-content" style="transform: scale(${sx}, ${sy});">
+        <img src="${url}" alt="" draggable="false" />
+      </div>
+    `;
     if (isSelected) {
       // v2.14.45 — Mappadux convention: red trashcan handle pinned
-      // at bottom-left apex of the selected object. Same SVG pattern
-      // as FogEditor / markers / text-map elements.
+      // at bottom-left apex of the selected object.
       const trash = document.createElement('button');
       trash.type = 'button';
       trash.className = 'composite-editor-tile-trash';
@@ -404,16 +431,56 @@ export class CompositeMapEditor {
           <line x1="14" y1="11" x2="14" y2="17"/>
           <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
         </svg>`;
-      trash.addEventListener('pointerdown', (ev) => {
-        // Trashcan beats drag — stop the drag handler from claiming
-        // this pointer event before delete fires.
-        ev.stopPropagation();
-      });
-      trash.addEventListener('click', (ev) => {
-        ev.stopPropagation();
-        void this._deleteTile(tile.id);
-      });
+      trash.addEventListener('pointerdown', (ev) => { ev.stopPropagation(); });
+      trash.addEventListener('click', (ev) => { ev.stopPropagation(); void this._deleteTile(tile.id); });
       el.appendChild(trash);
+
+      // v2.14.59 — Flip H + Flip V buttons on the top corners.
+      const flipH = document.createElement('button');
+      flipH.type = 'button';
+      flipH.className = `composite-editor-tile-flip composite-editor-tile-flip--h${tile.flipH ? ' is-active' : ''}`;
+      flipH.title = 'Mirror this tile horizontally (left ↔ right).';
+      flipH.innerHTML = `
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="6 4 2 12 6 20"/>
+          <polyline points="18 4 22 12 18 20"/>
+          <line x1="12" y1="2" x2="12" y2="22"/>
+        </svg>`;
+      flipH.addEventListener('pointerdown', (ev) => { ev.stopPropagation(); });
+      flipH.addEventListener('click', (ev) => { ev.stopPropagation(); void this._toggleFlip(tile.id, 'h'); });
+      el.appendChild(flipH);
+
+      const flipV = document.createElement('button');
+      flipV.type = 'button';
+      flipV.className = `composite-editor-tile-flip composite-editor-tile-flip--v${tile.flipV ? ' is-active' : ''}`;
+      flipV.title = 'Mirror this tile vertically (top ↔ bottom).';
+      flipV.innerHTML = `
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="4 6 12 2 20 6"/>
+          <polyline points="4 18 12 22 20 18"/>
+          <line x1="2" y1="12" x2="22" y2="12"/>
+        </svg>`;
+      flipV.addEventListener('pointerdown', (ev) => { ev.stopPropagation(); });
+      flipV.addEventListener('click', (ev) => { ev.stopPropagation(); void this._toggleFlip(tile.id, 'v'); });
+      el.appendChild(flipV);
+
+      // v2.14.59 — Rotation handle: ball above top-centre, dashed
+      // stem connecting to the tile edge. Drag to rotate; snaps to
+      // 0/90/180/270 (±5°) and 30/45/60/etc (±2°).
+      const rotStem = document.createElement('div');
+      rotStem.className = 'composite-editor-tile-rotate-stem';
+      el.appendChild(rotStem);
+      const rotHandle = document.createElement('button');
+      rotHandle.type = 'button';
+      rotHandle.className = 'composite-editor-tile-rotate-handle';
+      rotHandle.title = 'Drag to rotate this tile. Snaps to common angles.';
+      rotHandle.innerHTML = `
+        <svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <path d="M21 12a9 9 0 1 1-3-6.7"/>
+          <polyline points="21 4 21 9 16 9"/>
+        </svg>`;
+      this._bindRotateDrag(rotHandle, el, tile.id);
+      el.appendChild(rotHandle);
     }
     this._bindTileDrag(el, tile.id);
     el.addEventListener('click', (ev) => {
@@ -438,6 +505,56 @@ export class CompositeMapEditor {
     if (this.selectedTileId === null) return;
     this.selectedTileId = null;
     await this._renderTiles();
+  }
+
+  /** v2.14.59 — toggle a tile's horizontal or vertical mirror flag
+   *  and re-render so the inner content scale + button active-state
+   *  refresh. */
+  private async _toggleFlip(id: string, axis: 'h' | 'v'): Promise<void> {
+    const tile = this._findTile(id);
+    if (!tile) return;
+    if (axis === 'h') tile.flipH = !tile.flipH;
+    else              tile.flipV = !tile.flipV;
+    await this._renderTiles();
+  }
+
+  /** v2.14.59 — rotation drag. Pointerdown on the rotate handle →
+   *  compute angle from tile centre to pointer on every move → set
+   *  tile.rotation, apply snap. Tile centre is the bounding-rect
+   *  centre (rotation pivot is centre via transform-origin default). */
+  private _bindRotateDrag(handle: HTMLElement, tileEl: HTMLElement, tileId: string): void {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const tile = this._findTile(tileId);
+      if (!tile) return;
+      handle.setPointerCapture(e.pointerId);
+      const rect = tileEl.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top  + rect.height / 2;
+      const onMove = (ev: PointerEvent) => {
+        const dx = ev.clientX - cx;
+        const dy = ev.clientY - cy;
+        // atan2(dy, dx) in screen coords (Y goes DOWN). Convert to
+        // CSS rotation degrees with the "rotation 0 = handle up"
+        // convention: rotation = atan2 + 90.
+        const deg = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+        const snapped = _snapRotation(deg);
+        tile.rotation = snapped;
+        // Live-update transform without a full re-render.
+        tileEl.style.transform = `rotate(${snapped}deg)`;
+      };
+      const onUp = (ev: PointerEvent) => {
+        handle.releasePointerCapture(ev.pointerId);
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup',     onUp);
+        handle.removeEventListener('pointercancel', onUp);
+      };
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup',     onUp);
+      handle.addEventListener('pointercancel', onUp);
+    });
   }
 
   /** Remove the tile from the working copy + re-render. */

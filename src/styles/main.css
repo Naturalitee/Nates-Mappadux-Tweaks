@@ -4604,7 +4604,15 @@ option.select-option--add {
   outline: 1px solid rgba(255, 255, 255, 0.18);
   outline-offset: -1px;
 }
-.composite-editor-tile img {
+/* v2.14.59 — Inner content wrapper takes the flip scale so chrome
+   buttons (rotate handle, flip toggles, trashcan) on the outer
+   tile don't mirror with the image. */
+.composite-editor-tile-content {
+  position: absolute;
+  inset: 0;
+  transform-origin: center center;
+}
+.composite-editor-tile-content img {
   width: 100%;
   height: 100%;
   display: block;
@@ -4639,6 +4647,69 @@ option.select-option--add {
 .composite-editor-tile-trash:hover {
   background: #dc2626;
 }
+
+/* v2.14.59 — Flip H + Flip V buttons on the top corners of the
+   selected tile. Compact chrome icons; active state when the flip
+   is engaged. */
+.composite-editor-tile-flip {
+  position: absolute;
+  top: -14px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 24, 36, 0.9);
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  z-index: 3;
+}
+.composite-editor-tile-flip--h { right: -14px; }
+.composite-editor-tile-flip--v { left:  -14px; }
+.composite-editor-tile-flip:hover { filter: brightness(1.2); }
+.composite-editor-tile-flip.is-active {
+  background: rgba(90, 240, 122, 0.85);
+  color: #0a0e1a;
+}
+
+/* v2.14.59 — Rotation handle: ball above tile top-centre with a
+   dashed stem visualising the connection to the tile. */
+.composite-editor-tile-rotate-stem {
+  position: absolute;
+  top: -28px;
+  left: 50%;
+  width: 0;
+  height: 28px;
+  border-left: 1.5px dashed rgba(90, 240, 122, 0.85);
+  pointer-events: none;
+  z-index: 2;
+}
+.composite-editor-tile-rotate-handle {
+  position: absolute;
+  top: -42px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 24, 36, 0.9);
+  border: 2px solid rgba(90, 240, 122, 0.85);
+  border-radius: 50%;
+  color: #fff;
+  cursor: grab;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  z-index: 3;
+  touch-action: none;
+}
+.composite-editor-tile-rotate-handle:hover { filter: brightness(1.2); }
+.composite-editor-tile-rotate-handle:active { cursor: grabbing; }
 .composite-editor-footer {
   display: flex;
   justify-content: flex-end;

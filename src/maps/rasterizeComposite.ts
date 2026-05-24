@@ -168,6 +168,12 @@ export async function rasterizeFromTiles(
     ctx.save();
     ctx.translate(cxOut, cyOut);
     if (d.input.tile.rotation) ctx.rotate(d.input.tile.rotation * Math.PI / 180);
+    // v2.14.59 — Apply flip AFTER rotation so the mirror is in the
+    // tile's local frame (matches the editor's preview which scales
+    // the inner content div).
+    const sx = d.input.tile.flipH ? -1 : 1;
+    const sy = d.input.tile.flipV ? -1 : 1;
+    if (sx !== 1 || sy !== 1) ctx.scale(sx, sy);
     ctx.drawImage(d.bitmap, -d.tileWref / 2, -d.tileHref / 2, d.tileWref, d.tileHref);
     ctx.restore();
     d.bitmap.close();

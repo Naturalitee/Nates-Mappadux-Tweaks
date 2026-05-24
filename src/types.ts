@@ -979,13 +979,18 @@ export interface CompositeTile {
   x:            number;
   /** Centre y in the composite's normalised 0..1 space. */
   y:            number;
-  /** Rotation in degrees (0..360). Modular mode snaps to common
-   *  angles via the editor; layered mode normally stays at 0. */
+  /** Rotation in degrees (0..360). Editor offers free rotate + snaps
+   *  to common tile-set angles (0/90/180/270 ±5° and 30/45/60 ±2°
+   *  off the nearest right angle). */
   rotation:     number;
   /** Optional uniform scale multiplier (1.0 = native size). Modular
    *  mode auto-scales scaled-grid tiles to match the master tile's
    *  square size; this captures that result and any user override. */
   scale?:       number;
+  /** v2.14.59 — horizontal mirror (flip the tile left/right). */
+  flipH?:       boolean;
+  /** v2.14.59 — vertical mirror (flip the tile top/bottom). */
+  flipV?:       boolean;
   /** Layered-mode only — z-order. Lower draws under higher. Defaults
    *  to insertion order. */
   layer?:       number;
