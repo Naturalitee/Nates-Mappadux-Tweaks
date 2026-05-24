@@ -130,7 +130,7 @@ export class MapCalibrationModal {
             <h3>Calibrate &ldquo;${this._esc(asset.filename)}&rdquo;</h3>
             <p>Drag the two crosses to two points whose grid distance you know. Scroll or pinch to zoom, drag empty space to pan. Then enter how many 1&Prime;/25 mm squares the line spans.</p>
           </div>
-          <label class="calibration-toggle-grid" title="Overlay a 1″/25 mm grid on the map at the current calibration. Useful for eyeballing the calculated spacing against any visible grid drawn on the map itself. Arrow keys nudge the grid to align with bordered maps (Shift+arrow for 10px steps; Esc resets the nudge).">
+          <label class="calibration-toggle-grid" title="Overlay a 1″/25 mm grid on the map at the current calibration. Useful for eyeballing the calculated spacing against any visible grid drawn on the map itself. Nudge to align the grid with the map: SHIFT+drag on the image, or arrow keys (Shift+arrow for 10px steps; Esc resets).">
             <input type="checkbox" class="calibration-grid-overlay-toggle" />
             <span>Show grid</span>
           </label>
@@ -270,7 +270,14 @@ export class MapCalibrationModal {
       // captures and stops propagation, but the gesture helper attaches to
       // the SVG so it still sees the event. Returning false leaves the
       // handle's behaviour intact.
-      shouldStart: (e) => !(e.target as Element).closest('.calibration-handle'),
+      // v2.14.34 — also skip when shift is held AND Show Grid is on:
+      // that's the grid-nudge drag (see _bindGridNudgeDrag below).
+      shouldStart: (e) => {
+        if ((e.target as Element).closest('.calibration-handle')) return false;
+        const cb = overlay.querySelector<HTMLInputElement>('.calibration-grid-overlay-toggle');
+        if (e.shiftKey && cb?.checked) return false;
+        return true;
+      },
 
       onWheel: ({ clientX, clientY, factor }) => {
         zoomAround(clientToSvg(clientX, clientY), factor);
@@ -601,6 +608,37 @@ export class MapCalibrationModal {
       }
     };
     window.addEventListener('keydown', this._onKeyDown);
+
+    // v2.14.34 — shift+drag on the calibration SVG nudges the grid
+    // origin visually. attachGestures' shouldStart returns false for
+    // shift+drag when Show Grid is on, so the pan handler skips and
+    // this raw pointerdown takes over. Delta is in SVG/map-pixel
+    // units (clientToSvg accounts for the current viewBox / zoom),
+    // applied directly to gridOffsetX/Y. Calibration nudge is the
+    // canonical map origin → align gridlines to the map's own
+    // drawn grid by dragging until they coincide.
+    svg.addEventListener('pointerdown', (e) => {
+      if (!e.shiftKey) return;
+      if (!gridOverlayCb.checked) return;
+      if ((e.target as Element).closest('.calibration-handle')) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const startPt = eventToSvg(e);
+      const startOffsetX = this.gridOffsetX;
+      const startOffsetY = this.gridOffsetY;
+      const move = (ev: PointerEvent) => {
+        const p = eventToSvg(ev);
+        this.gridOffsetX = startOffsetX + (p.x - startPt.x);
+        this.gridOffsetY = startOffsetY + (p.y - startPt.y);
+        updateCalGrid();
+      };
+      const up = () => {
+        window.removeEventListener('pointermove', move);
+        window.removeEventListener('pointerup',   up);
+      };
+      window.addEventListener('pointermove', move);
+      window.addEventListener('pointerup',   up);
+    });
 
     gridHInput.addEventListener('input', () => {
       autoFillCounterpart('h'); updateGridFeedback();

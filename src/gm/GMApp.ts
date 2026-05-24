@@ -912,6 +912,10 @@ export class GMApp {
     const mapState = this.state.snapshot().map;
     if (!mapState) return;
     this._lastMapAssetGridColor = color;
+    // v2.14.34 — keep Host's full_state cache in sync so a viewer
+    // joining AFTER this colour pick sees it on initial connect
+    // (without us having to wait for the next refreshProjectorMapInfo).
+    this.host.setLastMapGridColor(color);
     await MapAssetStore.update(mapState.id, { gridColor: color });
     this.host.broadcast({
       type: 'map_meta_update',
@@ -2573,6 +2577,7 @@ export class GMApp {
     // saveMapAsset round-trips).
     mapGridColour?.addEventListener('input', () => {
       this._lastMapAssetGridColor = mapGridColour.value;
+      this.host.setLastMapGridColor(mapGridColour.value);
       this.host.broadcast({ type: 'map_meta_update', gridColor: mapGridColour.value });
     });
     mapGridColour?.addEventListener('change', () => {
@@ -4674,7 +4679,11 @@ export class GMApp {
     }
     this.projectorEditor.setMapPixelsPerSquare(asset.pixelsPerSquare ?? null);
     this.projectorEditor.setMapImageWidth(asset.imageWidth ?? 0);
-    this.host.updateMapAssetInfo(asset.pixelsPerSquare, asset.imageWidth, asset.imageHeight);
+    // v2.14.34 — also cache offset + colour for late-joiner full_state.
+    this.host.updateMapAssetInfo(
+      asset.pixelsPerSquare, asset.imageWidth, asset.imageHeight,
+      asset.gridOffsetX, asset.gridOffsetY, asset.gridColor,
+    );
     this._lastMapAssetMeta = (asset.pixelsPerSquare && asset.imageWidth && asset.imageHeight)
       ? { pixelsPerSquare: asset.pixelsPerSquare, imageWidth: asset.imageWidth, imageHeight: asset.imageHeight }
       : null;

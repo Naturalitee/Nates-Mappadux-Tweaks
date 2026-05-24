@@ -46,6 +46,14 @@ export class Host {
   private lastMapPps:           number | undefined = undefined;
   private lastMapImgW:          number | undefined = undefined;
   private lastMapImgH:          number | undefined = undefined;
+  /** v2.14.34 — also cache the calibration nudge offset + per-map
+   *  grid colour so a late-joining viewer's first full_state carries
+   *  them. Without this the new viewer drew at gridOffset=0 with a
+   *  default-white grid until the GM happened to broadcast a fresh
+   *  map_meta_update (e.g. nudged a value). */
+  private lastMapGridOffsetX:   number | undefined = undefined;
+  private lastMapGridOffsetY:   number | undefined = undefined;
+  private lastMapGridColor:     string | undefined = undefined;
   private lastIconData:         MarkerIconData[] = [];
   private lastSoundboardActive: SoundboardAudioData[] = [];
   private lastSoundboardAssets: { assetId: string; dataUrl: string }[] = [];
@@ -143,9 +151,12 @@ export class Host {
           ...(this.lastIconData.length > 0             ? { iconData:         this.lastIconData          } : {}),
           ...(this.lastSoundboardActive.length > 0     ? { soundboardActive: this.lastSoundboardActive } : {}),
           ...(this.lastSoundboardAssets.length > 0     ? { soundboardAssets: this.lastSoundboardAssets } : {}),
-          ...(this.lastMapPps  !== undefined           ? { mapPixelsPerSquare: this.lastMapPps          } : {}),
-          ...(this.lastMapImgW !== undefined           ? { mapImageWidth:      this.lastMapImgW         } : {}),
-          ...(this.lastMapImgH !== undefined           ? { mapImageHeight:     this.lastMapImgH         } : {}),
+          ...(this.lastMapPps        !== undefined ? { mapPixelsPerSquare: this.lastMapPps        } : {}),
+          ...(this.lastMapImgW       !== undefined ? { mapImageWidth:      this.lastMapImgW       } : {}),
+          ...(this.lastMapImgH       !== undefined ? { mapImageHeight:     this.lastMapImgH       } : {}),
+          ...(this.lastMapGridOffsetX !== undefined ? { gridOffsetX:       this.lastMapGridOffsetX } : {}),
+          ...(this.lastMapGridOffsetY !== undefined ? { gridOffsetY:       this.lastMapGridOffsetY } : {}),
+          ...(this.lastMapGridColor   !== undefined ? { gridColor:         this.lastMapGridColor   } : {}),
         };
         this.local.send(msg);
         // Deliver active positional plays inline (BroadcastChannel supports large payloads)
@@ -310,10 +321,27 @@ export class Host {
   }
 
   /** Update the cached map-asset metadata used by full_state for projector views. */
-  updateMapAssetInfo(pps: number | undefined, imgW: number | undefined, imgH: number | undefined): void {
+  updateMapAssetInfo(
+    pps: number | undefined,
+    imgW: number | undefined,
+    imgH: number | undefined,
+    gridOffsetX?: number,
+    gridOffsetY?: number,
+    gridColor?:   string,
+  ): void {
     this.lastMapPps  = pps;
     this.lastMapImgW = imgW;
     this.lastMapImgH = imgH;
+    this.lastMapGridOffsetX = gridOffsetX;
+    this.lastMapGridOffsetY = gridOffsetY;
+    this.lastMapGridColor   = gridColor;
+  }
+
+  /** v2.14.34 — focused setter for the cached grid colour. Used by
+   *  the GM map panel's swatch handler so colour-only updates don't
+   *  have to round-trip the other map-meta fields. */
+  setLastMapGridColor(color: string | undefined): void {
+    this.lastMapGridColor = color;
   }
 
   /** Update the preload asset cache — called whenever blobs finish loading in SoundboardPanel */
@@ -368,9 +396,12 @@ export class Host {
           ...(this.lastIconData.length > 0             ? { iconData:         this.lastIconData          } : {}),
           ...(this.lastSoundboardActive.length > 0     ? { soundboardActive: this.lastSoundboardActive } : {}),
           ...(this.lastSoundboardAssets.length > 0     ? { soundboardAssets: this.lastSoundboardAssets } : {}),
-          ...(this.lastMapPps  !== undefined           ? { mapPixelsPerSquare: this.lastMapPps          } : {}),
-          ...(this.lastMapImgW !== undefined           ? { mapImageWidth:      this.lastMapImgW         } : {}),
-          ...(this.lastMapImgH !== undefined           ? { mapImageHeight:     this.lastMapImgH         } : {}),
+          ...(this.lastMapPps        !== undefined ? { mapPixelsPerSquare: this.lastMapPps        } : {}),
+          ...(this.lastMapImgW       !== undefined ? { mapImageWidth:      this.lastMapImgW       } : {}),
+          ...(this.lastMapImgH       !== undefined ? { mapImageHeight:     this.lastMapImgH       } : {}),
+          ...(this.lastMapGridOffsetX !== undefined ? { gridOffsetX:       this.lastMapGridOffsetX } : {}),
+          ...(this.lastMapGridOffsetY !== undefined ? { gridOffsetY:       this.lastMapGridOffsetY } : {}),
+          ...(this.lastMapGridColor   !== undefined ? { gridColor:         this.lastMapGridColor   } : {}),
         };
         this.sendTo(conn, msg);
         // Late-joiner video catchup — if the active map is animated,
