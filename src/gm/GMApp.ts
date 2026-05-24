@@ -873,6 +873,52 @@ export class GMApp {
     });
   }
 
+  /** v2.14.31 — Map panel grid-colour row. Shows a colour swatch when
+   *  the active map is calibrated, or a "Calibrate first" button
+   *  otherwise. Called whenever the active map (or its calibration)
+   *  changes, and whenever the user picks a new colour. */
+  private _updateMapGridPanel(): void {
+    const row     = document.getElementById('map-grid-row');
+    const colour  = document.getElementById('map-grid-colour') as HTMLInputElement | null;
+    const calBtn  = document.getElementById('map-grid-calibrate-btn') as HTMLButtonElement | null;
+    if (!row || !colour || !calBtn) return;
+
+    const mapState = this.state.snapshot().map;
+    const isCalibrated = this._isActiveMapCalibrated();
+    const hasMap = !!mapState;
+
+    if (hasMap && isCalibrated) {
+      row.hidden = false;
+      calBtn.hidden = true;
+      // Asset's saved colour drives the swatch; default to white when unset.
+      colour.value = this._lastMapAssetGridColor ?? '#ffffff';
+    } else if (hasMap) {
+      row.hidden = true;
+      calBtn.hidden = false;
+    } else {
+      row.hidden = true;
+      calBtn.hidden = true;
+    }
+  }
+
+  /** Cached grid colour for the active map's asset so the Map panel
+   *  swatch can populate without a fresh IDB read on every paint.
+   *  Refreshed inside refreshProjectorMapInfo. */
+  private _lastMapAssetGridColor: string | null = null;
+
+  /** v2.14.31 — persist the new grid colour on the active map's
+   *  asset and push it to live viewers via map_meta_update. */
+  private async _setActiveMapGridColor(color: string): Promise<void> {
+    const mapState = this.state.snapshot().map;
+    if (!mapState) return;
+    this._lastMapAssetGridColor = color;
+    await MapAssetStore.update(mapState.id, { gridColor: color });
+    this.host.broadcast({
+      type: 'map_meta_update',
+      gridColor: color,
+    });
+  }
+
   /** Off-screen viewport indicators — small edge-pinned pills with a
    *  directional arrow that appear when the GM has panned / zoomed away
    *  far enough that a viewport rect's bounding box no longer overlaps
@@ -1093,10 +1139,13 @@ export class GMApp {
    */
   private _handleRectShowGrid(kind: 'player' | 'projector'): void {
     if (kind === 'projector') {
-      const cb = document.querySelector<HTMLInputElement>('#projection-grid-toggle');
-      if (!cb) return;
-      cb.checked = !cb.checked;
-      cb.dispatchEvent(new Event('change'));
+      // v2.14.31 — projection-grid-toggle UI removed; flip
+      // projectorViewport.gridEnabled directly and broadcast.
+      const current = this.state.snapshot().projectorViewport ?? defaultProjectorViewport();
+      const next: ProjectorViewport = { ...current, gridEnabled: !current.gridEnabled };
+      this.state.setProjectorViewport(next);
+      this.projectorEditor.setViewport(next);
+      this.host.broadcast({ type: 'projector_viewport_update', payload: next });
       this._refreshRectOverlays();
       return;
     }
@@ -2511,6 +2560,29 @@ export class GMApp {
       this._refreshRectOverlays();
     });
 
+    // v2.14.31 — Map-panel grid colour swatch + "calibrate first"
+    // button binding. Persists the colour on the MapAsset and pushes
+    // it to live viewers via map_meta_update so both Player and
+    // Scaled View pick it up immediately without a map reload.
+    const mapGridColour = document.getElementById('map-grid-colour') as HTMLInputElement | null;
+    const mapGridCalibrateBtn = document.getElementById('map-grid-calibrate-btn') as HTMLButtonElement | null;
+    // v2.14.31 — 'input' fires on every picker tick → live preview to
+    // connected viewers via broadcast. 'change' fires on picker close
+    // → one IDB save per picking session (a colour-picker drag can
+    // fire 'input' 30+ times; we don't want that many getAsset →
+    // saveMapAsset round-trips).
+    mapGridColour?.addEventListener('input', () => {
+      this._lastMapAssetGridColor = mapGridColour.value;
+      this.host.broadcast({ type: 'map_meta_update', gridColor: mapGridColour.value });
+    });
+    mapGridColour?.addEventListener('change', () => {
+      void this._setActiveMapGridColor(mapGridColour.value);
+    });
+    mapGridCalibrateBtn?.addEventListener('click', () => {
+      // Re-use the existing recalibrate flow — same UX entry point.
+      document.getElementById('projection-recal-map-btn')?.click();
+    });
+
     // v2.14.3 — Move Projection View button + edit-mode flow retired.
     // The projector rect now has its own green move handle on the GM
     // canvas (managed inside ProjectorViewportEditor); drag from there
@@ -2549,12 +2621,12 @@ export class GMApp {
       });
     });
 
-    // Projector view sub-toggles (grid overlay, filter passthrough). All travel
-    // inside the same projector_viewport_update message that already syncs.
-    const gridToggle   = document.getElementById('projection-grid-toggle')   as HTMLInputElement | null;
-    const gridColour   = document.getElementById('projection-grid-colour')   as HTMLInputElement | null;
+    // v2.14.31 — the Show Grid toggle now lives on the rect's chrome
+    // icon (set via the GM canvas). The colour swatch moved to the
+    // Map panel (under Backdrop), per-map and shared with the Player.
+    // Only the filter passthrough toggle stays here.
     const filterToggle = document.getElementById('projection-filter-toggle') as HTMLInputElement | null;
-    const broadcastVp = (patch: Partial<Pick<ProjectorViewport, 'gridEnabled' | 'gridColor' | 'filterEnabled'>>) => {
+    const broadcastVp = (patch: Partial<Pick<ProjectorViewport, 'gridEnabled' | 'filterEnabled'>>) => {
       const current = this.state.snapshot().projectorViewport ?? defaultProjectorViewport();
       const next: ProjectorViewport = { ...current, ...patch };
       this.state.setProjectorViewport(next);
@@ -2564,12 +2636,6 @@ export class GMApp {
       this.projectorEditor.setViewport(next);
       this.host.broadcast({ type: 'projector_viewport_update', payload: next });
     };
-    gridToggle?.addEventListener  ('change', () => {
-      broadcastVp({ gridEnabled: gridToggle.checked });
-      // v2.14.3 — keep the rect-chrome Show Grid icon in sync.
-      this._refreshRectOverlays();
-    });
-    gridColour?.addEventListener  ('input',  () => broadcastVp({ gridColor:     gridColour.value     }));
     // "Disable Filters" — checked = filters disabled = filterEnabled false.
     filterToggle?.addEventListener('change', () => broadcastVp({ filterEnabled: !filterToggle.checked }));
     this._refreshProjectionPanelMode();
@@ -4570,11 +4636,7 @@ export class GMApp {
     this.refreshRotationButtons();
     this.refreshProjectionModeButtons();
     const vp = state.projectorViewport ?? defaultProjectorViewport();
-    const gridToggle   = document.getElementById('projection-grid-toggle')   as HTMLInputElement | null;
-    const gridColour   = document.getElementById('projection-grid-colour')   as HTMLInputElement | null;
     const filterToggle = document.getElementById('projection-filter-toggle') as HTMLInputElement | null;
-    if (gridToggle)   gridToggle.checked   = vp.gridEnabled;
-    if (gridColour)   gridColour.value     = vp.gridColor;
     // UI toggle is "Disable Filters" — checked when filters are NOT applied.
     if (filterToggle) filterToggle.checked = !vp.filterEnabled;
   }
@@ -4592,6 +4654,8 @@ export class GMApp {
       this.projectorEditor.setMapImageWidth(0);
       this.host.updateMapAssetInfo(undefined, undefined, undefined);
       this._lastMapAssetMeta = null;
+      this._lastMapAssetGridColor = null;
+      this._updateMapGridPanel();
       if (warnEl) warnEl.hidden = true;
       this._broadcastRoles(false);
       return;
@@ -4602,6 +4666,8 @@ export class GMApp {
       this.projectorEditor.setMapImageWidth(0);
       this.host.updateMapAssetInfo(undefined, undefined, undefined);
       this._lastMapAssetMeta = null;
+      this._lastMapAssetGridColor = null;
+      this._updateMapGridPanel();
       if (warnEl) warnEl.hidden = true;
       this._broadcastRoles(false);
       return;
@@ -4612,6 +4678,9 @@ export class GMApp {
     this._lastMapAssetMeta = (asset.pixelsPerSquare && asset.imageWidth && asset.imageHeight)
       ? { pixelsPerSquare: asset.pixelsPerSquare, imageWidth: asset.imageWidth, imageHeight: asset.imageHeight }
       : null;
+    // v2.14.31 — cache + render the map-scoped grid colour swatch.
+    this._lastMapAssetGridColor = asset.gridColor ?? null;
+    this._updateMapGridPanel();
     // Active-map calibration warning — visible when the map has no pps.
     if (warnEl) warnEl.hidden = !!asset.pixelsPerSquare;
     // Push fresh map metadata to the live primary projector so it re-crops at
@@ -4624,6 +4693,7 @@ export class GMApp {
       ...(asset.imageHeight     !== undefined ? { mapImageHeight:     asset.imageHeight     } : {}),
       ...(asset.gridOffsetX     !== undefined ? { gridOffsetX:        asset.gridOffsetX     } : {}),
       ...(asset.gridOffsetY     !== undefined ? { gridOffsetY:        asset.gridOffsetY     } : {}),
+      ...(asset.gridColor       !== undefined ? { gridColor:          asset.gridColor       } : {}),
     });
     // Monitors care about the primary's resulting view fraction — push it so they re-crop.
     this._broadcastRoles(false);

@@ -76,6 +76,10 @@ export class PlayerApp {
   /** v2.14.18 — grid offset for the active map (border-nudge alignment). */
   private gridOffsetX:        number        = 0;
   private gridOffsetY:        number        = 0;
+  /** v2.14.31 — shared per-map grid colour (replaces the prior
+   *  view-scoped ViewState.playerGridColor). Updated from full_state
+   *  / map_change / map_meta_update broadcasts. */
+  private gridColor:          string | null = null;
   /** v2.14.17 — Player-side grid overlay canvas. Drawn into whenever
    *  the GM's view broadcast carries playerGridEnabled=true and the
    *  active map is calibrated. */
@@ -278,7 +282,7 @@ export class PlayerApp {
       effectiveW:         window.innerWidth,
       effectiveH:         window.innerHeight,
       enabled:            !!view?.playerGridEnabled,
-      color:              view?.playerGridColor ?? '#ffffff',
+      color:              this.gridColor ?? '#ffffff',
       setup:              null,
       mapPixelsPerSquare: this.mapPixelsPerSquare,
       mapImageWidth:      this.mapImageWidth,
@@ -571,6 +575,7 @@ export class PlayerApp {
         if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
         if (msg.gridOffsetX        !== undefined) this.gridOffsetX        = msg.gridOffsetX;
         if (msg.gridOffsetY        !== undefined) this.gridOffsetY        = msg.gridOffsetY;
+        if (msg.gridColor          !== undefined) this.gridColor          = msg.gridColor;
         if (mapBlob) {
           this.lastMapBlob = mapBlob;
           this.lastFog     = msg.payload.fog ?? { polygons: [] };
@@ -609,6 +614,7 @@ export class PlayerApp {
         if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
         if (msg.gridOffsetX        !== undefined) this.gridOffsetX        = msg.gridOffsetX;
         if (msg.gridOffsetY        !== undefined) this.gridOffsetY        = msg.gridOffsetY;
+        if (msg.gridColor          !== undefined) this.gridColor          = msg.gridColor;
         // Stop any playing audio from the previous map
         this._stopAllSoundboard();
         this._stopAllPositional();
@@ -784,6 +790,7 @@ export class PlayerApp {
         if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
         if (msg.gridOffsetX        !== undefined) this.gridOffsetX        = msg.gridOffsetX;
         if (msg.gridOffsetY        !== undefined) this.gridOffsetY        = msg.gridOffsetY;
+        if (msg.gridColor          !== undefined) this.gridColor          = msg.gridColor;
         this._refreshPlayerGrid();
         break;
       }

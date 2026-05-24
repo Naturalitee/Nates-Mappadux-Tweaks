@@ -495,6 +495,8 @@ export interface MsgFullState {
    *  alignment in every viewer that draws the grid. */
   gridOffsetX?:        number;
   gridOffsetY?:        number;
+  /** v2.14.31 — shared grid colour, per-map. */
+  gridColor?:          string;
 }
 
 export interface MsgViewUpdate {
@@ -547,6 +549,8 @@ export interface MsgMapChange {
   /** v2.14.18 — grid offset for the incoming map. */
   gridOffsetX?:        number;
   gridOffsetY?:        number;
+  /** v2.14.31 — shared grid colour for the incoming map. */
+  gridColor?:          string;
   /** Projector viewport for the incoming map (rotation, mode, grid, filter
    *  toggle, etc.). Carried in map_change so the projector window applies
    *  the new map's saved viewport instead of holding over the prior map's. */
@@ -783,6 +787,9 @@ export interface MsgMapMetaUpdate {
    *  recalibrates a live map. */
   gridOffsetX?:        number;
   gridOffsetY?:        number;
+  /** v2.14.31 — shared grid colour; refreshed when the GM changes
+   *  the per-map colour swatch. */
+  gridColor?:          string;
 }
 
 /**
@@ -1004,6 +1011,16 @@ export interface MapAsset {
    */
   gridOffsetX?: number;
   gridOffsetY?: number;
+  /**
+   * v2.14.31 — Shared grid colour for ALL viewers (player + scaled
+   * primary + scaled monitors) of this map. Replaces the per-view
+   * ProjectorViewport.gridColor + ViewState.playerGridColor — the
+   * GM picks one colour once (in the Map panel next to Backdrop),
+   * every viewer drawing this map's grid uses it. Falls back to
+   * '#ffffff' when unset. Travels in map_meta_update / full_state /
+   * map_change broadcasts.
+   */
+  gridColor?: string;
   /**
    * Provenance + confidence behind `pixelsPerSquare`. Drives the library
    * badge and retrofit behaviour:

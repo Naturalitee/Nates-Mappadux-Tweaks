@@ -4340,6 +4340,19 @@ option.select-option--add {
 }
 .player-fullscreen-btn:hover { opacity: 1; }
 
+/* v2.14.31 — Map-panel grid colour swatch. Sits in the fog-row--kind
+   layout next to Backdrop. The native colour input is small so we
+   give it a sensible fixed size rather than letting it stretch. */
+.map-grid-colour {
+  width: 38px;
+  height: 28px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+
 /* v2.14.18 — Reset-view button. Sits just above the Fullscreen button,
    visible only once the player has zoomed/panned away from the GM crop.
    Same low-key chrome so it doesn't distract from the map. */

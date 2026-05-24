@@ -111,6 +111,10 @@ export class ProjectorApp {
   /** v2.14.18 — grid offset for the active map (border-nudge alignment). */
   private gridOffsetX:       number             = 0;
   private gridOffsetY:       number             = 0;
+  /** v2.14.31 — per-map shared grid colour (replaces the per-view
+   *  ProjectorViewport.gridColor for this device). Falls back to
+   *  projectorViewport.gridColor if the asset hasn't set one. */
+  private gridColor:         string | null      = null;
   private projectorViewport: ProjectorViewport  = defaultProjectorViewport();
   private currentFog:        FogState           = { polygons: [] };
   private currentMarkers:    Marker[]           = [];
@@ -409,6 +413,7 @@ export class ProjectorApp {
         if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
         if (msg.gridOffsetX        !== undefined) this.gridOffsetX        = msg.gridOffsetX;
         if (msg.gridOffsetY        !== undefined) this.gridOffsetY        = msg.gridOffsetY;
+        if (msg.gridColor          !== undefined) this.gridColor          = msg.gridColor;
         if (blob) this.mapBlob = blob;
         if (this.mapBlob) {
           void this.renderer.loadMap(this.mapBlob, this.currentFog);
@@ -440,6 +445,7 @@ export class ProjectorApp {
         if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
         if (msg.gridOffsetX        !== undefined) this.gridOffsetX        = msg.gridOffsetX;
         if (msg.gridOffsetY        !== undefined) this.gridOffsetY        = msg.gridOffsetY;
+        if (msg.gridColor          !== undefined) this.gridColor          = msg.gridColor;
         // Viewport (rotation / mode / grid / filterEnabled) also belongs to
         // the incoming map. Apply the same way projector_viewport_update
         // would so we don't hold over the prior map's rotation.
@@ -580,6 +586,7 @@ export class ProjectorApp {
         if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
         if (msg.gridOffsetX        !== undefined) this.gridOffsetX        = msg.gridOffsetX;
         if (msg.gridOffsetY        !== undefined) this.gridOffsetY        = msg.gridOffsetY;
+        if (msg.gridColor          !== undefined) this.gridColor          = msg.gridColor;
         this._applyView();
         break;
       }
@@ -839,7 +846,7 @@ export class ProjectorApp {
       effectiveW:         eff.w,
       effectiveH:         eff.h,
       enabled:            this.projectorViewport.gridEnabled,
-      color:              this.projectorViewport.gridColor,
+      color:              this.gridColor ?? this.projectorViewport.gridColor,
       setup:              this.setup,
       mapPixelsPerSquare: this.mapPixelsPerSquare,
       mapImageWidth:      this.mapImageWidth,

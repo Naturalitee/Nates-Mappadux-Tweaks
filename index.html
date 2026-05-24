@@ -100,6 +100,17 @@
             </svg>
           </button>
         </div>
+        <!-- v2.14.31 — Shared grid colour for ALL viewers of this map
+             (Player + Scaled View primary + Scaled View monitors). The
+             per-view toggles still live on each rect's chrome icons —
+             the colour itself is map-scoped. When the map isn't
+             calibrated, this row swaps to a "Calibrate map" button
+             since the grid can't render without a pps value. -->
+        <div class="fog-row fog-row--kind" id="map-grid-row" hidden>
+          <span class="fog-row-label">Grid colour</span>
+          <input type="color" id="map-grid-colour" class="map-grid-colour" value="#ffffff" title="Grid line colour used by both the Player View and the Scaled View when their Show Grid icon is on. Stored per-map — different maps can use different colours." />
+        </div>
+        <button id="map-grid-calibrate-btn" class="btn btn--ghost btn--sm btn--full" hidden title="The 1″ grid needs a calibrated pixels-per-inch. Click to calibrate this map first; then the grid colour swatch will appear here.">No Grid — calibrate map&hellip;</button>
         <div class="btn-row">
           <button id="clone-map-btn"  class="btn btn--ghost   btn--sm">Clone Map</button>
           <button id="delete-map-btn" class="btn btn--danger  btn--sm">Delete Map</button>
@@ -463,18 +474,11 @@
             <button class="btn btn--ghost btn--sm" data-rotation="270" title="Three-quarter turn clockwise. Use for portrait mounts in the opposite orientation to 90°.">270&deg;</button>
           </div>
 
-          <p class="view-hint view-hint--gap" title="Optional 1″/25 mm grid drawn over the projected image. Anchored to projector calibration (not map calibration) so squares always line up with the physical surface regardless of which map is loaded.">1&Prime; Grid Overlay</p>
-          <div class="param-row param-row--toggle">
-            <label for="projection-grid-toggle" title="When on, the projector overlays a grid of 1″/25 mm squares on top of the map. Stays anchored to physical scale even when zooming the GM canvas.">Show grid</label>
-            <label class="toggle-switch">
-              <input type="checkbox" id="projection-grid-toggle" />
-              <span class="toggle-slider"></span>
-            </label>
-          </div>
-          <div class="param-row">
-            <label for="projection-grid-colour">Colour</label>
-            <input type="color" id="projection-grid-colour" value="#ffffff" title="Grid line colour. White reads well on dark maps; pick a contrasting colour for light or busy artwork." />
-          </div>
+          <!-- v2.14.31 — 1" Grid Overlay section removed. The Show
+               Grid toggle now lives on the Scaled View rect's chrome
+               icon (set from the GM canvas) and the colour swatch
+               moved to the Map panel (under Backdrop) where it's
+               shared with the Player View. -->
 
           <button id="projection-recal-map-btn" class="btn btn--ghost btn--sm btn--full view-hint--gap" title="Re-run the calibration flow for the active map — adjust pixels-per-square if the projected scale looks off compared to physical miniatures.">Recalibrate this Map&hellip;</button>
 
