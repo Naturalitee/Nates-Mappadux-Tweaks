@@ -828,6 +828,12 @@ export class ProjectorApp {
    *  clearing, the gridEnabled gate, and the actual line stroking. */
   private _drawGrid(): void {
     const eff = this._effectiveDims();
+    // v2.14.30 — pass the currently-rendered view so drawGrid can
+    // anchor the grid to a fixed map point (map centre + gridOffset).
+    // Without this the anchor falls back to canvas centre and the
+    // grid stays glued to the window instead of moving with the map
+    // when the view crop changes (e.g. monitor resize, primary
+    // resize → projector_role propagation).
     drawGrid(this.gridCanvas, {
       kind:               this.role === 'monitor' ? 'monitor-proportional' : 'projector-calibrated',
       effectiveW:         eff.w,
@@ -840,7 +846,7 @@ export class ProjectorApp {
       mapImageHeight:     this.mapImageHeight,
       primaryViewNW:      this.primaryViewNW,
       primaryViewNH:      this.primaryViewNH,
-      view:               null,
+      view:               this._computeViewState(),
       gridOffsetX:        this.gridOffsetX,
       gridOffsetY:        this.gridOffsetY,
     });
