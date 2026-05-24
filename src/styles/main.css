@@ -5317,6 +5317,45 @@ option.select-option--add {
    distinguish from purple Composite (the parent kind) and orange
    scale pills. */
 .sound-tag--layered      { color: #22d3ee; border-color: rgba(34, 211, 238, 0.4); }
+
+/* v2.14.68 — Pill-based quick filter row on the library tab. Each
+   pill shares its colour with the matching asset pill (so the GM
+   visually links "click this pill = show rows with this pill") but
+   reads as muted-when-inactive / solid-when-active. */
+.library-pill-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  padding: 6px 0 4px;
+  margin-bottom: 6px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.06);
+}
+.library-pill-filter:empty { display: none; }
+.library-filter-pill {
+  background: transparent;
+  cursor: pointer;
+  opacity: 0.55;
+  transition: opacity 0.1s, background 0.1s;
+}
+.library-filter-pill:hover { opacity: 0.85; }
+.library-filter-pill.is-active {
+  opacity: 1;
+  background: rgba(255, 255, 255, 0.10);
+}
+.library-filter-clear {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 999px;
+  padding: 2px 10px;
+  font-size: 0.7rem;
+  color: rgba(255, 255, 255, 0.6);
+  cursor: pointer;
+  margin-left: auto;
+}
+.library-filter-clear:hover {
+  color: #fff;
+  border-color: rgba(255, 255, 255, 0.45);
+}
 /* Animated map tag — teal/cyan; distinct from purple Text and amber
    Unused / AutoScaled so a row's badge cluster reads at a glance. */
 .sound-tag--animated     { color: #2dd4bf; border-color: rgba(45, 212, 191, 0.4); }

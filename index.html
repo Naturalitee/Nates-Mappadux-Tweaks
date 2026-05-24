@@ -629,6 +629,12 @@ https://example.com/sound2.wav"></textarea>
           <div class="modal-search-row">
             <input type="text" id="map-library-search" class="modal-search-input" placeholder="Filter library…" />
           </div>
+          <!-- v2.14.68 — pill-based quick filter row. Click a pill to
+               narrow the library to assets carrying that tag. Multi-
+               select ANDs the filters. Empty row when there's nothing
+               filterable so it doesn't add visual noise on a fresh
+               library. -->
+          <div id="map-library-filter-pills" class="library-pill-filter"></div>
           <div id="map-library-list" class="sound-list"></div>
           <p id="map-library-empty" class="sound-list-empty" hidden>No map assets yet. Use Upload or Web Links to add one.</p>
           <div id="map-library-footer" class="library-footer">

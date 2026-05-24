@@ -142,6 +142,10 @@ export class MapAssetModal {
    *  tile to an existing composite. Set via openForCompositeAddTile;
    *  cleared on resolution. */
   private _compositeAddTileCallback: ((asset: MapAsset | null) => void) | null = null;
+  /** v2.14.68 — active pill filters on the library tab. Click a pill
+   *  to toggle; multi-selected pills AND together. Cleared on close
+   *  so reopening starts fresh. */
+  private _activeFilters: Set<string> = new Set();
 
   constructor(
     maps: MapManager,
@@ -193,6 +197,9 @@ export class MapAssetModal {
       this._compositeAddTileCallback = null;
     }
     this._compositePickMode = false;
+    // v2.14.68 — drop any active pill filters so re-opening the modal
+    // starts with the full library visible.
+    this._activeFilters.clear();
   }
 
   /** Drop hover-preview object URLs and the popover element. */
@@ -424,11 +431,20 @@ export class MapAssetModal {
     // Banner showing the active mode — only when pick-first-tile is on.
     this._renderCompositeBanner();
 
-    emptyEl.hidden = filtered.length > 0;
-    listEl.innerHTML = '';
     // v2.14.67 — pass an asset-by-id map so composite rows can detect
     // tile overlap (drives the Layered pill) without a fresh DB hit.
     const assetById = new Map(all.map((a) => [a.id, a] as const));
+
+    // v2.14.68 — pill filters. Render the filter row first (built from
+    // the kinds actually present in the unfiltered set), then narrow
+    // `filtered` by the active filter set. Multi-select ANDs.
+    this._renderFilterPills(all, assetById);
+    if (this._activeFilters.size > 0) {
+      filtered = filtered.filter((a) => this._matchesActiveFilters(a, assetById, usedIds));
+    }
+
+    emptyEl.hidden = filtered.length > 0;
+    listEl.innerHTML = '';
     for (const asset of filtered) {
       listEl.appendChild(this._libraryRow(asset, usedIds, assetById));
     }
@@ -509,6 +525,110 @@ export class MapAssetModal {
     for (const asset of unused) await MapAssetStore.delete(asset.id);
     await this._renderLibrary();
     if (status) status.textContent = `Deleted ${unused.length} unused asset${unused.length === 1 ? '' : 's'}.`;
+  }
+
+  /** v2.14.68 — render the clickable filter-pill row above the list.
+   *  Only emits a pill for kinds actually present in the library so
+   *  the row doesn't visually noise up empty / single-kind libraries.
+   *  Active pills are highlighted; click toggles + triggers re-render. */
+  private _renderFilterPills(
+    all: MapAsset[],
+    assetById: Map<string, MapAsset>,
+  ): void {
+    const host = this.el.querySelector<HTMLElement>('#map-library-filter-pills');
+    if (!host) return;
+
+    // Each entry: { key, label, tagClass, present? }. `present` returns
+    // true if at least one asset matches → only then is the pill
+    // rendered (avoids "filter by Layered" when no composite is
+    // layered).
+    const filters: Array<{
+      key:     string;
+      label:   string;
+      cls:     string;
+      title:   string;
+      present: () => boolean;
+    }> = [
+      { key: 'composite', label: 'Composite', cls: 'sound-tag--composite',
+        title: 'Show only composite maps.',
+        present: () => all.some((a) => a.source === 'composite-map') },
+      { key: 'layered',   label: 'Layered',   cls: 'sound-tag--layered',
+        title: 'Show only composites with overlapping tiles.',
+        present: () => all.some((a) => a.source === 'composite-map' && _compositeHasOverlap(a, assetById)) },
+      { key: 'text',      label: 'Text',      cls: 'sound-tag--textmap',
+        title: 'Show only handout / text maps.',
+        present: () => all.some((a) => a.source === 'text-map') },
+      { key: 'animated',  label: 'Animated',  cls: 'sound-tag--animated',
+        title: 'Show only animated (video) maps.',
+        present: () => all.some((a) => (a.blob?.type ?? '').startsWith('video/')) },
+      { key: 'url',       label: 'URL',       cls: 'sound-tag--url',
+        title: 'Show only web-link maps.',
+        present: () => all.some((a) => a.source === 'web-link') },
+      { key: 'stored',    label: 'Stored',    cls: 'sound-tag--local',
+        title: 'Show only assets whose bytes are saved locally.',
+        present: () => all.some((a) => a.locallyStored) },
+      { key: 'unused',    label: 'Unused',    cls: 'sound-tag--unused',
+        title: 'Show only assets not referenced by any map.',
+        present: () => true },  // always meaningful as a filter
+      { key: 'scaled',    label: 'Scaled',    cls: 'sound-tag--scaled',
+        title: 'Show only calibrated maps (any scale confidence).',
+        present: () => all.some((a) => !!a.pixelsPerSquare) },
+      { key: 'no-grid',   label: 'No grid',   cls: 'sound-tag--no-grid',
+        title: 'Show only assets marked as having no grid.',
+        present: () => all.some((a) => !!a.noGrid) },
+    ];
+
+    const visible = filters.filter((f) => f.present());
+    if (visible.length === 0) {
+      host.innerHTML = '';
+      return;
+    }
+
+    host.innerHTML = visible.map((f) => {
+      const active = this._activeFilters.has(f.key);
+      return `<button type="button" class="library-filter-pill sound-tag ${f.cls}${active ? ' is-active' : ''}" data-filter="${f.key}" title="${f.title}">${f.label}</button>`;
+    }).join('') + (this._activeFilters.size > 0
+      ? `<button type="button" class="library-filter-clear" data-filter="__clear" title="Clear all filters.">Clear filters</button>`
+      : '');
+
+    host.querySelectorAll<HTMLButtonElement>('[data-filter]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const key = btn.dataset['filter']!;
+        if (key === '__clear') {
+          this._activeFilters.clear();
+        } else if (this._activeFilters.has(key)) {
+          this._activeFilters.delete(key);
+        } else {
+          this._activeFilters.add(key);
+        }
+        void this._renderLibrary();
+      });
+    });
+  }
+
+  /** v2.14.68 — apply the active filter set. Each filter has a
+   *  predicate; the asset must match ALL active predicates to survive
+   *  (logical AND). Predicates here mirror the row's pill logic so the
+   *  filter feels consistent with what's visible. */
+  private _matchesActiveFilters(
+    asset:     MapAsset,
+    assetById: Map<string, MapAsset>,
+    usedIds:   Set<string>,
+  ): boolean {
+    for (const key of this._activeFilters) {
+      switch (key) {
+        case 'composite': if (asset.source !== 'composite-map') return false; break;
+        case 'layered':   if (!(asset.source === 'composite-map' && _compositeHasOverlap(asset, assetById))) return false; break;
+        case 'text':      if (asset.source !== 'text-map') return false; break;
+        case 'animated':  if (!(asset.blob?.type ?? '').startsWith('video/')) return false; break;
+        case 'url':       if (asset.source !== 'web-link') return false; break;
+        case 'stored':    if (!asset.locallyStored) return false; break;
+        case 'unused':    if (usedIds.has(asset.id)) return false; break;
+        case 'scaled':    if (!asset.pixelsPerSquare) return false; break;
+        case 'no-grid':   if (!asset.noGrid) return false; break;
+      }
+    }
+    return true;
   }
 
   private _libraryRow(
