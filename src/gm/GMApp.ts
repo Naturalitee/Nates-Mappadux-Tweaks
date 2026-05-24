@@ -2260,9 +2260,26 @@ export class GMApp {
     });
     const updated = await new CompositeMapEditor().open(asset, { pickAsset });
     if (!updated) return; // cancel — no mutation
+    // v2.14.49 — re-rasterise the composite + persist its output
+    // dimensions + pps so viewers' calibration math (Scaled View
+    // crop, grid spacing) lines up. The blob itself is cached in
+    // MapAssetStore.runtimeBlobs by rasterizeComposite, so this is
+    // just metadata that lets the renderer + grid logic compute
+    // correctly without going through the rasteriser themselves.
+    const { rasterizeComposite } = await import('../maps/rasterizeComposite.ts');
+    MapAssetStore.invalidateRuntimeCache(asset.id);
+    const raster = await rasterizeComposite(updated);
+    if (raster) {
+      MapAssetStore.runtimeBlobs.set(asset.id, raster.blob);
+      updated.imageWidth      = raster.imageWidth;
+      updated.imageHeight     = raster.imageHeight;
+      if (raster.pixelsPerSquare !== null) {
+        updated.pixelsPerSquare = raster.pixelsPerSquare;
+        updated.scaleConfidence = 'inferred';
+      }
+    }
     const { saveMapAsset } = await import('../storage/db.ts');
     await saveMapAsset(updated);
-    MapAssetStore.invalidateRuntimeCache(asset.id);
     const refreshed = await getMap(currentId);
     if (refreshed) await this.loadMap(refreshed);
   }

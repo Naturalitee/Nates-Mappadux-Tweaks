@@ -16,8 +16,12 @@ import { rasterizeTextMap } from './rasterizeTextMap.ts';
  *     getBlob is just stored-blob → runtime cache → web-link fetch.
  */
 export class MapAssetStore {
-  /** Runtime-only cache for fetched blobs of non-stored web-link assets. */
-  private static runtimeBlobs = new Map<string, Blob>();
+  /** Runtime-only cache for fetched blobs of non-stored web-link
+   *  assets AND rasterised composite-map blobs. v2.14.49 — exposed
+   *  package-internal-ish (still discouraged from direct use; prefer
+   *  getBlob / invalidateRuntimeCache) so the composite editor can
+   *  prime the cache after rasterising on save. */
+  static readonly runtimeBlobs = new Map<string, Blob>();
 
   static async getAll(): Promise<MapAsset[]> {
     const all = await getAllMapAssets();
@@ -79,19 +83,22 @@ export class MapAssetStore {
     const cached = MapAssetStore.runtimeBlobs.get(asset.id);
     if (cached) return cached;
 
-    // v2.14.37 — composite-map fallback (single-tile only). Until the
-    // editor + true compositing render path lands, treat a composite
-    // with exactly one tile as "show that tile". Multi-tile composites
-    // need the proper compositor render — for now they show the
-    // first tile too, which is wrong but visible (rather than a
-    // missing-image placeholder).
+    // v2.14.49 — composite-map render path. Rasterise the tile array
+    // into a single PNG so every downstream consumer (player view,
+    // scaled view, GM canvas, thumbnail) sees the composite as a
+    // normal map image. Result cached in runtimeBlobs keyed by
+    // asset id; invalidated on every composite save by the editor.
     if (asset.source === 'composite-map' && asset.compositeTiles && asset.compositeTiles.length > 0) {
-      const firstTile = asset.compositeTiles[0]!;
-      const tileAsset = await MapAssetStore.get(firstTile.mapAssetId);
-      if (tileAsset) {
-        return MapAssetStore.getBlob(tileAsset);
+      const { rasterizeComposite } = await import('./rasterizeComposite.ts');
+      try {
+        const result = await rasterizeComposite(asset);
+        if (!result) return null;
+        MapAssetStore.runtimeBlobs.set(asset.id, result.blob);
+        return result.blob;
+      } catch (err) {
+        console.error(`[MapAssetStore] composite rasterisation failed for asset ${asset.id}:`, err);
+        return null;
       }
-      return null;
     }
 
     if (asset.source === 'text-map' && asset.textMap) {
