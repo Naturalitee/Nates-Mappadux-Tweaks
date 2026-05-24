@@ -63,14 +63,26 @@ export class Renderer {
   // Layer meshes
   private mapMesh:      THREE.Mesh | null = null;
   private fogMesh:      THREE.Mesh | null = null;
-  /** v2.14.70 — Reveal-layer backing plane. Sits at z=-0.005, just
-   *  behind the main map. Painted with the composite's "minus topmost
-   *  tile" rasterise so the Reveal Map Layer brush's alpha-punching
-   *  exposes the layer underneath rather than the backdrop. Null
-   *  whenever the active map isn't a layered composite (or the
-   *  composite has only one tile so there's nothing below). */
-  private mapBackingMesh:    THREE.Mesh | null = null;
+  /** v2.14.71 — Reveal-layer backing TEXTURE (no mesh). Painted with
+   *  the composite's "minus topmost tile" rasterise. The reveal_layer
+   *  shader samples this texture directly inside its polygon mask to
+   *  positively draw the tile-below content on top of the main map.
+   *
+   *  v2.14.70 mounted this as a backing PLANE at z<0, hoping the
+   *  'transparent' kind's alpha punching would expose it. That
+   *  failed because the punching is post-process (clip-pass replaces
+   *  with backdrop, not with whatever's behind in the scene). The
+   *  shader-based approach skips that whole pipeline.
+   *
+   *  Null whenever the active map isn't a layered composite. Shaders
+   *  that opt in via `wantsBacking` get a 1x1 transparent placeholder
+   *  in that case so they execute as a no-op rather than crashing
+   *  on a null sampler. */
   private mapBackingTexture: THREE.Texture | null = null;
+  /** v2.14.71 — Cached 1x1 fully-transparent texture used as the
+   *  uBacking placeholder when no real backing exists. Built once,
+   *  reused across all shader planes on non-layered maps. */
+  private _backingPlaceholder: THREE.Texture | null = null;
   /** v2.12 — pack background colour. Tracked here rather than on
    *  scene.background because setting scene.background to a Color
    *  forces alpha = 1 on the framebuffer clear, which would destroy
@@ -889,9 +901,15 @@ export class Renderer {
         if (gen !== this.loadGen) { tex.dispose(); return; }
         tex.colorSpace = THREE.SRGBColorSpace;
         this.mapBackingTexture = tex;
-        // If rebuildLayerMeshes already ran for this load (the main
-        // map decoded first), splice in the backing mesh now.
-        this._ensureBackingMesh();
+        // v2.14.71 — Hot-refresh any already-mounted reveal_layer
+        // shader planes so they pick up the freshly-decoded backing
+        // texture. (If the backing decode wins the race with the
+        // main map / fog rebuild, shaderPlanes won't exist yet and
+        // the texture is wired at first build instead.)
+        for (const entry of this.shaderPlanes.values()) {
+          const mat = entry.material;
+          if (mat.uniforms['uBacking']) mat.uniforms['uBacking']!.value = tex;
+        }
       });
     }
 
@@ -1100,6 +1118,17 @@ export class Renderer {
           baseUniforms['uMap']   = { value: this.mapTexture };
           baseUniforms['uMapUv'] = { value: new THREE.Vector4(mapUvX, mapUvY, mapUvW, mapUvH) };
         }
+        // v2.14.71 — Reveal-layer backing wiring. Mirrors the uMap
+        // pattern: shader opts in via `uniform sampler2D uBacking`,
+        // renderer binds the live backing texture (or a 1x1 trans-
+        // parent placeholder on non-layered maps so the sampler is
+        // always valid). uBackingUv uses the SAME bbox math as uMapUv
+        // because the backing PNG was rasterised at the main map's
+        // exact dimensions — same plane → same map-UV.
+        if (shader.wantsBacking) {
+          baseUniforms['uBacking']   = { value: this.mapBackingTexture ?? this._getBackingPlaceholder() };
+          baseUniforms['uBackingUv'] = { value: new THREE.Vector4(mapUvX, mapUvY, mapUvW, mapUvH) };
+        }
         // Blend mode follows the kind. Fire ('screen') and similar
         // glow-y kinds use additive so radiance reads as light over
         // the map. River + opaque-surface kinds use normal alpha so
@@ -1160,6 +1189,11 @@ export class Renderer {
         if (mapU) mapU.value = this.mapTexture;
         const mapUvU = entry.material.uniforms['uMapUv'];
         if (mapUvU) (mapUvU.value as THREE.Vector4).set(mapUvX, mapUvY, mapUvW, mapUvH);
+        // v2.14.71 — Same pattern for the reveal-layer backing.
+        const backU = entry.material.uniforms['uBacking'];
+        if (backU) backU.value = this.mapBackingTexture ?? this._getBackingPlaceholder();
+        const backUvU = entry.material.uniforms['uBackingUv'];
+        if (backUvU) (backUvU.value as THREE.Vector4).set(mapUvX, mapUvY, mapUvW, mapUvH);
       }
     }
 
@@ -1914,58 +1948,35 @@ export class Renderer {
     }
   }
 
-  /** v2.14.70 — Tear down the reveal-layer backing plane + its
-   *  texture. Safe to call when nothing's set up (no-op). Called
-   *  on every loadMap before kicking off new decodes so a layered
-   *  map followed by a non-layered one cleans up properly. */
+  /** v2.14.71 — Dispose the reveal-layer backing texture. Safe to
+   *  call when nothing's set up (no-op). Called on every loadMap
+   *  before kicking off new decodes so a layered map followed by a
+   *  non-layered one cleans up properly. No mesh to remove — the
+   *  shader samples the texture directly. */
   private _disposeBackingTexture(): void {
-    if (this.mapBackingMesh) {
-      this.scene.remove(this.mapBackingMesh);
-      this.mapBackingMesh.geometry.dispose();
-      (this.mapBackingMesh.material as THREE.Material).dispose();
-      this.mapBackingMesh = null;
-    }
     if (this.mapBackingTexture) {
       this.mapBackingTexture.dispose();
       this.mapBackingTexture = null;
     }
   }
 
-  /** v2.14.70 — Create the backing mesh from the current backing
-   *  texture if both haven't been set up yet + the main map mesh
-   *  exists. Called both from rebuildLayerMeshes (main map decoded
-   *  first → backing arrives later) and from the backing decode
-   *  callback (backing decoded first → main map's rebuild runs
-   *  later and picks it up). */
-  private _ensureBackingMesh(): void {
-    if (this.mapBackingMesh) return;          // already mounted
-    if (!this.mapBackingTexture) return;      // texture not ready
-    if (!this.mapMesh) return;                // wait for main map's geometry
-    const geo = new THREE.PlaneGeometry(this.aspectRatio, 1);
-    const mat = new THREE.MeshBasicMaterial({
-      map: this.mapBackingTexture,
-      depthWrite: false,
-      transparent: true,
-    });
-    this.mapBackingMesh = new THREE.Mesh(geo, mat);
-    // Sit just behind the main map plane (z=0) so a reveal-layer
-    // alpha hole punched in the main map shows the backing through.
-    this.mapBackingMesh.position.z = -0.005;
-    this.scene.add(this.mapBackingMesh);
+  /** v2.14.71 — Lazy 1x1 transparent placeholder for the uBacking
+   *  uniform. Used on non-layered maps so reveal_layer shader planes
+   *  have a valid sampler to read from (output: alpha=0, visible
+   *  no-op). */
+  private _getBackingPlaceholder(): THREE.Texture {
+    if (this._backingPlaceholder) return this._backingPlaceholder;
+    const data = new Uint8Array([0, 0, 0, 0]);
+    const tex  = new THREE.DataTexture(data, 1, 1, THREE.RGBAFormat);
+    tex.needsUpdate = true;
+    this._backingPlaceholder = tex;
+    return tex;
   }
 
   private rebuildLayerMeshes(): void {
     // Remove existing layers
     if (this.mapMesh)    { this.scene.remove(this.mapMesh);    this.mapMesh = null; }
     if (this.fogMesh)    { this.scene.remove(this.fogMesh);    this.fogMesh = null; }
-    // Backing mesh follows the main map's lifecycle — remove + let
-    // _ensureBackingMesh re-create with the current aspect ratio.
-    if (this.mapBackingMesh) {
-      this.scene.remove(this.mapBackingMesh);
-      this.mapBackingMesh.geometry.dispose();
-      (this.mapBackingMesh.material as THREE.Material).dispose();
-      this.mapBackingMesh = null;
-    }
 
     // Remove previous border from gmScene
     if (this.mapBorderLine) {
@@ -1995,11 +2006,9 @@ export class Renderer {
     this.mapMesh.position.z = 0;
     this.scene.add(this.mapMesh);
 
-    // v2.14.70 — Mount the reveal-layer backing plane if we have a
-    // backing texture loaded for this map (layered composite path).
-    // The main map's alpha holes from Reveal Map Layer brushes
-    // expose this plane rather than the backdrop.
-    this._ensureBackingMesh();
+    // v2.14.71 — Reveal-layer backing is sampled directly by the
+    // reveal_layer shader (no scene mesh needed); see uBacking
+    // wiring in the per-kind shader-plane setup below.
 
     // Fog layer — transparent, composited on top. Hosts ALL overlay
     // polygons (fog + MapFX kinds) in the v2.12 unified system.

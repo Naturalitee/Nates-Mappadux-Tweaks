@@ -27,6 +27,15 @@ export interface KindShader {
    *  on the rendered map — e.g. a river's refraction shows the GM's
    *  painted river bed shimmering rather than a procedural pattern. */
   wantsMap: boolean;
+  /** v2.14.71 — True when the fragment source declares `uniform
+   *  sampler2D uBacking`. Renderer wires the active map's reveal-
+   *  layer backing texture (composite "minus topmost tile" PNG) +
+   *  per-plane uBackingUv. Used by the reveal_layer shader to draw
+   *  the tile below INSIDE the polygon mask. When there's no backing
+   *  texture (non-layered map), the renderer binds a 1x1 transparent
+   *  placeholder so the shader's sample resolves to alpha=0 and the
+   *  brush is a visual no-op rather than a crash. */
+  wantsBacking: boolean;
 }
 
 /** Lazy texture cache so each shader's noise / etc. loads once. */
@@ -59,8 +68,12 @@ export function loadKindShader(shaderId: string): KindShader | null {
   const textures = getKindTextures(shaderId);
   // Detect whether the shader wants the underlying map texture passed
   // in. Renderer wires uMap + uMapUv per-plane when this is true.
-  const wantsMap = /uniform\s+sampler2D\s+uMap\b/.test(fragment);
-  return { vertex, fragment, textures, wantsMap };
+  const wantsMap     = /uniform\s+sampler2D\s+uMap\b/.test(fragment);
+  // v2.14.71 — Detect reveal-layer backing usage. Same pattern as
+  // uMap; renderer binds the live backing texture (or a 1x1
+  // transparent placeholder when none exists).
+  const wantsBacking = /uniform\s+sampler2D\s+uBacking\b/.test(fragment);
+  return { vertex, fragment, textures, wantsMap, wantsBacking };
 }
 
 /** Resolve texture assets for a shader by uniform name. Convention:

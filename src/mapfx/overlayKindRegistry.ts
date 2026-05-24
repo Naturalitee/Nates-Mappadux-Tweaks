@@ -520,7 +520,12 @@ export const OVERLAY_KIND_REGISTRY: Record<OverlayKind, OverlayKindEntry> = {
   // per-tile semantics light up once the rasteriser produces a backing
   // PNG + the renderer hosts a backing plane (next slice). Same z and
   // selectByInterior as 'transparent' so they cluster in the dropdown.
-  reveal_layer: { id: 'reveal_layer', label: 'Reveal Map Layer', iconSvg: SVG_REVEAL_LAYER, defaultColor: '#000000', defaultRadius: 30, blend: 'maketransparent', animated: false, selectByInterior: true,  allowColor: false, z: 1,  shader: 'transparent' },
+  // v2.14.71 — reveal_layer has its own shader that POSITIVELY DRAWS
+  // the backing texture inside its polygon mask (normal alpha blend),
+  // rather than punching framebuffer alpha and letting the clip-pass
+  // fill with backdrop (which is what 'transparent' does and why
+  // v2.14.70 painted backdrop instead of the layer-below).
+  reveal_layer: { id: 'reveal_layer', label: 'Reveal Map Layer', iconSvg: SVG_REVEAL_LAYER, defaultColor: '#000000', defaultRadius: 30, blend: 'normal',          animated: false, selectByInterior: true,  allowColor: false, z: 1,  shader: 'reveal_layer' },
 };
 
 /** Order for the kind dropdown — fog first (most-used + click-priority),
