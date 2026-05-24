@@ -10,6 +10,54 @@ import { TextMapEditor } from './TextMapEditor.ts';
 import { saveMap as _saveMap, saveMapAsset, getAllMaps } from '../storage/db.ts';
 import { iconPencil, iconDownload, iconX } from './uiIcons.ts';
 
+/** v2.14.67 — derive per-tile bounding box (in composite-norm coords)
+ *  for the "Layered" pill detection. Mirrors the editor's render-time
+ *  geometry so detection matches what the GM sees. */
+function _tileBoundsNorm(
+  tile: import('../types.ts').CompositeTile,
+  asset: MapAsset | undefined,
+  canvasAspect: number,
+): { x0: number; x1: number; y0: number; y1: number } {
+  const widthNormX = tile.scale ?? 1;
+  let heightNormY: number;
+  if (tile.scaleY != null) {
+    heightNormY = tile.scaleY;
+  } else {
+    const aspect = (asset?.imageWidth && asset?.imageHeight)
+      ? asset.imageWidth / asset.imageHeight
+      : 1;
+    // tile px height = (scale * canvasW) / aspect → norm-Y = above / canvasH
+    heightNormY = widthNormX * canvasAspect / aspect;
+  }
+  return {
+    x0: tile.x - widthNormX / 2,
+    x1: tile.x + widthNormX / 2,
+    y0: tile.y - heightNormY / 2,
+    y1: tile.y + heightNormY / 2,
+  };
+}
+
+/** True if any pair of tiles in the composite has overlapping bounding
+ *  boxes — drives the Layered pill in the library. Ignores rotation
+ *  (over-detects spinning tiles) which is fine: an overlapping rotated
+ *  tile is layered either way. */
+function _compositeHasOverlap(
+  asset: MapAsset,
+  assetById: Map<string, MapAsset>,
+): boolean {
+  const tiles = asset.compositeTiles ?? [];
+  if (tiles.length < 2) return false;
+  const canvasAspect = asset.compositeAspect ?? (4 / 3);
+  const bounds = tiles.map((t) => _tileBoundsNorm(t, assetById.get(t.mapAssetId), canvasAspect));
+  for (let i = 0; i < bounds.length; i++) {
+    for (let j = i + 1; j < bounds.length; j++) {
+      const a = bounds[i]!, b = bounds[j]!;
+      if (a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0) return true;
+    }
+  }
+  return false;
+}
+
 /** Standard licence options shared with the audio editor. */
 const LICENSE_OPTIONS: string[] = [
   'CC0 (Public Domain)',
@@ -378,8 +426,11 @@ export class MapAssetModal {
 
     emptyEl.hidden = filtered.length > 0;
     listEl.innerHTML = '';
+    // v2.14.67 — pass an asset-by-id map so composite rows can detect
+    // tile overlap (drives the Layered pill) without a fresh DB hit.
+    const assetById = new Map(all.map((a) => [a.id, a] as const));
     for (const asset of filtered) {
-      listEl.appendChild(this._libraryRow(asset, usedIds));
+      listEl.appendChild(this._libraryRow(asset, usedIds, assetById));
     }
 
     // Footer button visibility — same logic as the audio library.
@@ -460,7 +511,11 @@ export class MapAssetModal {
     if (status) status.textContent = `Deleted ${unused.length} unused asset${unused.length === 1 ? '' : 's'}.`;
   }
 
-  private _libraryRow(asset: MapAsset, usedIds: Set<string> = new Set()): HTMLElement {
+  private _libraryRow(
+    asset: MapAsset,
+    usedIds: Set<string> = new Set(),
+    assetById: Map<string, MapAsset> = new Map(),
+  ): HTMLElement {
     const isUnused = !usedIds.has(asset.id);
 
     const isTextMap = asset.source === 'text-map';
@@ -483,6 +538,13 @@ export class MapAssetModal {
     // Text. Marks the asset as not-a-plain-image; the rest of the
     // library inherits the default Image-style chrome.
     if (asset.source === 'composite-map') tags.push('<span class="sound-tag sound-tag--composite" title="A composite map — multiple map tiles arranged in modular or layered mode. Edit via the Edit this Composite Map button on the active map.">Composite</span>');
+    // v2.14.67 — Layered pill flags composites whose tiles overlap.
+    // Signals to the GM that this composite supports per-tile
+    // reveal-below semantics with the Make Transparent MapFX kind
+    // (once the renderer-side wiring lands).
+    if (asset.source === 'composite-map' && _compositeHasOverlap(asset, assetById)) {
+      tags.push('<span class="sound-tag sound-tag--layered" title="This composite has overlapping tiles. The Make Transparent MapFX kind reveals the tile directly underneath wherever you paint, rather than the backdrop.">Layered</span>');
+    }
     if (asset.source === 'web-link') tags.push('<span class="sound-tag sound-tag--url" title="Fetched from a web URL on demand. The image bytes live remotely; click Store to keep a local copy.">URL</span>');
     if (asset.locallyStored)         tags.push('<span class="sound-tag sound-tag--local" title="The image bytes are saved locally in your browser\'s database. Travels with bundle exports (.mappadux save files) so other GMs / other devices get the actual asset, not just a link.">Stored</span>');
     // Scale badge — driven by scaleConfidence + noGrid, in priority order.

@@ -5313,6 +5313,10 @@ option.select-option--add {
 /* v2.14.50 — Composite shares the purple "type" family with Text so a
    glance at the pill cluster groups TYPE separately from SCALE state. */
 .sound-tag--composite    { color: #a78bfa; border-color: rgba(167, 139, 250, 0.4); }
+/* v2.14.67 — Layered: composite with overlapping tiles. Cyan to
+   distinguish from purple Composite (the parent kind) and orange
+   scale pills. */
+.sound-tag--layered      { color: #22d3ee; border-color: rgba(34, 211, 238, 0.4); }
 /* Animated map tag — teal/cyan; distinct from purple Text and amber
    Unused / AutoScaled so a row's badge cluster reads at a glance. */
 .sound-tag--animated     { color: #2dd4bf; border-color: rgba(45, 212, 191, 0.4); }
