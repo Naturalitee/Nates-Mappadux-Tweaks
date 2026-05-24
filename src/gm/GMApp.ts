@@ -2252,7 +2252,13 @@ export class GMApp {
     const asset = await MapAssetStore.get(storedMap.mapAssetId);
     if (!asset || asset.source !== 'composite-map') return;
     const { CompositeMapEditor } = await import('./CompositeMapEditor.ts');
-    const updated = await new CompositeMapEditor().open(asset);
+    // v2.14.43 — wire "+ Add Map" through the existing MapAssetModal
+    // in tile-add mode. Returns the picked MapAsset (or null on
+    // cancel) to the editor, which appends a tile.
+    const pickAsset = (): Promise<typeof asset | null> => new Promise((resolve) => {
+      this.mapAssetModal.openForCompositeAddTile((picked) => resolve(picked));
+    });
+    const updated = await new CompositeMapEditor().open(asset, { pickAsset });
     if (!updated) return; // cancel — no mutation
     const { saveMapAsset } = await import('../storage/db.ts');
     await saveMapAsset(updated);

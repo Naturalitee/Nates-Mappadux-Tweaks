@@ -20,6 +20,12 @@
 
 import type { MapAsset, CompositeTile } from '../types.ts';
 import { MapAssetStore } from '../maps/MapAssetStore.ts';
+import { generateId } from '../utils/id.ts';
+
+/** Caller-supplied picker for "+ Add Map". Returns null if the user
+ *  cancelled the pick. The editor doesn't depend on the picker
+ *  implementation — GMApp wires it to MapAssetModal.openForCompositeAddTile. */
+export type PickAssetFn = () => Promise<MapAsset | null>;
 
 /** Editor's internal compositor canvas size in CSS pixels. Tiles
  *  position in the asset's 0..1 normalised space; this constant
@@ -36,11 +42,14 @@ export class CompositeMapEditor {
   /** Per-tile blob object URLs so re-renders during interaction
    *  don't recreate them. Revoked on close. */
   private tileBlobUrls = new Map<string, string>();
+  /** v2.14.43 — caller-supplied picker for "+ Add Map". */
+  private pickAsset: PickAssetFn | null = null;
 
   /** Open the editor on a composite-map MapAsset. Resolves with the
    *  mutated asset on Save, or null on Cancel / Esc / X. Throws if
    *  the asset isn't a composite-map. */
-  async open(asset: MapAsset): Promise<MapAsset | null> {
+  async open(asset: MapAsset, opts?: { pickAsset?: PickAssetFn }): Promise<MapAsset | null> {
+    this.pickAsset = opts?.pickAsset ?? null;
     if (asset.source !== 'composite-map') {
       throw new Error('CompositeMapEditor expects a composite-map MapAsset.');
     }
@@ -72,8 +81,9 @@ export class CompositeMapEditor {
           <button type="button" class="modal-close" data-action="cancel">×</button>
         </div>
         <div class="composite-editor-toolbar">
+          <button type="button" class="btn btn--primary btn--sm" data-action="add-map" title="Pick another tile from your library and drop it on the compositor canvas.">+ Add Map</button>
           <span class="composite-editor-mode-label">${this.working?.compositeMode === 'layered' ? 'Layered' : 'Modular'} mode</span>
-          <span class="composite-editor-hint">View only in this build. Drag &amp; add tiles arrive next.</span>
+          <span class="composite-editor-hint">Drag tiles to position. Snap rules + rotation arrive in the next pass.</span>
         </div>
         <div class="composite-editor-canvas-wrap">
           <div class="composite-editor-canvas">
@@ -93,6 +103,8 @@ export class CompositeMapEditor {
         const action = btn.dataset['action'];
         if (action === 'save') {
           this._close(this.working);
+        } else if (action === 'add-map') {
+          void this._handleAddMap();
         } else {
           this._close(null);
         }
@@ -210,6 +222,43 @@ export class CompositeMapEditor {
     el.style.transform = `rotate(${tile.rotation}deg)`;
     el.innerHTML = `<img src="${url}" alt="" draggable="false" />`;
     return el;
+  }
+
+  /** v2.14.43 — "+ Add Map" handler. Asks the caller-supplied picker
+   *  for an asset; on a pick, append it as a new tile and re-render.
+   *  Without a picker (e.g. tests, or wiring not provided) this is
+   *  silently a no-op. */
+  private async _handleAddMap(): Promise<void> {
+    if (!this.pickAsset || !this.working) return;
+    const asset = await this.pickAsset();
+    if (!asset) return;
+    this._addTile(asset);
+    await this._renderTiles();
+  }
+
+  /** Append a tile for the given asset to the working composite.
+   *  Subsequent tiles cascade slightly so they don't perfectly
+   *  overlap the first one — drag-to-position arrives in commit 3. */
+  private _addTile(asset: MapAsset): void {
+    if (!this.working) return;
+    const tiles = this.working.compositeTiles ?? [];
+    // Cascade offset: each new tile starts 5% down + 5% right of
+    // the previous-tile-count's position. Just enough that the GM
+    // sees the new tile sitting outside the previous one's centre.
+    const n = tiles.length;
+    const offset = Math.min(0.04 * n, 0.4);
+    const tile: CompositeTile = {
+      id:         generateId(),
+      mapAssetId: asset.id,
+      x:          0.5 + offset,
+      y:          0.5 + offset,
+      rotation:   0,
+      scale:      0.25,
+    };
+    this.working = {
+      ...this.working,
+      compositeTiles: [...tiles, tile],
+    };
   }
 
   private _esc(s: string): string {

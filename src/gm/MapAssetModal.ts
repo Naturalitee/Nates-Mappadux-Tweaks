@@ -87,6 +87,12 @@ export class MapAssetModal {
    *  banner explains the state. Toggled by + Create a New Composite
    *  Map and cleared on close. */
   private _compositePickMode = false;
+  /** v2.14.43 — when set, "Use" returns the picked MapAsset to this
+   *  callback (no StoredMap is created) and closes the modal. Used
+   *  by the Composite Map editor's "+ Add Map" flow to add another
+   *  tile to an existing composite. Set via openForCompositeAddTile;
+   *  cleared on resolution. */
+  private _compositeAddTileCallback: ((asset: MapAsset | null) => void) | null = null;
 
   constructor(
     maps: MapManager,
@@ -106,11 +112,33 @@ export class MapAssetModal {
     void this._renderLibrary();
   }
 
+  /** v2.14.43 — open in "pick a tile to add to an existing composite"
+   *  mode. The Use button on a row resolves the callback with the
+   *  asset (no StoredMap created); closing without picking resolves
+   *  with null. Re-uses the same filter / sort / banner UX as the
+   *  first-tile pick (just with different banner copy). */
+  openForCompositeAddTile(onPick: (asset: MapAsset | null) => void): void {
+    this._compositeAddTileCallback = onPick;
+    this._compositePickMode = true;
+    this.el.hidden = false;
+    // Force library tab — picker doesn't make sense from any other.
+    const libBtn = this.el.querySelector<HTMLButtonElement>('[data-tab="library"]');
+    libBtn?.click();
+    void this._renderLibrary();
+  }
+
   close(): void {
     this.el.hidden = true;
     this._clearUpload();
     this._clearWebLinks();
     this._teardownPreviewCache();
+    // v2.14.43 — if the modal closes mid-add-tile (X / Esc / backdrop
+    // click later), resolve the pending callback with null so the
+    // caller isn't left hanging.
+    if (this._compositeAddTileCallback) {
+      this._compositeAddTileCallback(null);
+      this._compositeAddTileCallback = null;
+    }
     this._compositePickMode = false;
   }
 
@@ -237,10 +265,20 @@ export class MapAssetModal {
     if (!banner) {
       banner = document.createElement('div');
       banner.className = 'composite-pick-banner';
+      // v2.14.43 — banner copy differs depending on whether we're
+      // picking the FIRST tile (new composite) or adding ANOTHER
+      // tile to an existing composite. Same flow either way.
+      const isAddingToExisting = this._compositeAddTileCallback !== null;
+      const headline = isAddingToExisting
+        ? 'Pick a tile to add to this composite map.'
+        : 'Pick the first tile for your composite map.';
+      const sub = isAddingToExisting
+        ? 'Scaled maps align to the master grid; unscaled tiles place freely. Upload new maps if you don\'t see what you need.'
+        : 'Scaled maps are recommended — they set the master grid for the composite. Upload new maps if you don\'t see what you need.';
       banner.innerHTML = `
         <div class="composite-pick-banner__text">
-          <strong>Pick the first tile for your composite map.</strong>
-          <span>Scaled maps are recommended — they set the master grid for the composite. Upload new maps if you don't see what you need.</span>
+          <strong>${headline}</strong>
+          <span>${sub}</span>
         </div>
         <button class="btn btn--ghost btn--xs composite-pick-banner__cancel" type="button" title="Cancel and return to the normal library view.">Cancel</button>
       `;
@@ -556,6 +594,19 @@ export class MapAssetModal {
     `;
 
     row.querySelector<HTMLButtonElement>('.map-use-btn')?.addEventListener('click', async () => {
+      // v2.14.43 — add-tile callback wins over first-tile creation
+      // when both are conceptually set. (compositePickMode is true
+      // for either; the callback is set only for "add tile to
+      // existing composite".)
+      if (this._compositeAddTileCallback) {
+        const cb = this._compositeAddTileCallback;
+        this._compositeAddTileCallback = null;
+        this._compositePickMode = false;
+        this.el.hidden = true;
+        this._teardownPreviewCache();
+        cb(asset);
+        return;
+      }
       // v2.14.37 — composite-pick mode short-circuits Use into
       // "use this as the first tile of a new composite map".
       if (this._compositePickMode) {
