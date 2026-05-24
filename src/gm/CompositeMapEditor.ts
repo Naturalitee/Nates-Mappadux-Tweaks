@@ -44,6 +44,11 @@ export class CompositeMapEditor {
   private tileBlobUrls = new Map<string, string>();
   /** v2.14.43 — caller-supplied picker for "+ Add Map". */
   private pickAsset: PickAssetFn | null = null;
+  /** v2.14.45 — currently-selected tile id. Click a tile to select;
+   *  click the canvas background (or another tile) to swap. The
+   *  selected tile shows the dashed marquee + bottom-left trashcan
+   *  delete handle (Mappadux convention). */
+  private selectedTileId: string | null = null;
 
   /** Open the editor on a composite-map MapAsset. Resolves with the
    *  mutated asset on Save, or null on Cancel / Esc / X. Throws if
@@ -133,6 +138,13 @@ export class CompositeMapEditor {
     if (canvasEl) {
       canvasEl.style.width  = `${CANVAS_W}px`;
       canvasEl.style.height = `${CANVAS_H}px`;
+      // v2.14.45 — click empty canvas → deselect. Bound once;
+      // subsequent re-renders don't re-bind because the canvas el
+      // itself is reused (only .composite-editor-tiles is cleared).
+      if (!canvasEl.dataset['deselectBound']) {
+        canvasEl.addEventListener('click', () => void this._deselect());
+        canvasEl.dataset['deselectBound'] = 'true';
+      }
     }
     gridEl.setAttribute('viewBox', `0 0 ${CANVAS_W} ${CANVAS_H}`);
     gridEl.setAttribute('width',  String(CANVAS_W));
@@ -215,8 +227,9 @@ export class CompositeMapEditor {
     const left   = tile.x * CANVAS_W - tileW / 2;
     const top    = tile.y * CANVAS_H - tileH / 2;
 
+    const isSelected = tile.id === this.selectedTileId;
     const el = document.createElement('div');
-    el.className = 'composite-editor-tile';
+    el.className = `composite-editor-tile${isSelected ? ' composite-editor-tile--selected' : ''}`;
     el.dataset['tileId'] = tile.id;
     el.style.left      = `${left}px`;
     el.style.top       = `${top}px`;
@@ -224,8 +237,71 @@ export class CompositeMapEditor {
     el.style.height    = `${tileH}px`;
     el.style.transform = `rotate(${tile.rotation}deg)`;
     el.innerHTML = `<img src="${url}" alt="" draggable="false" />`;
+    if (isSelected) {
+      // v2.14.45 — Mappadux convention: red trashcan handle pinned
+      // at bottom-left apex of the selected object. Same SVG pattern
+      // as FogEditor / markers / text-map elements.
+      const trash = document.createElement('button');
+      trash.type = 'button';
+      trash.className = 'composite-editor-tile-trash';
+      trash.title = 'Delete this tile from the composite.';
+      trash.innerHTML = `
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="3 6 5 6 21 6"/>
+          <path d="M19 6l-2 14a2 2 0 0 1-2 2H9a2 2 0 0 1-2-2L5 6"/>
+          <line x1="10" y1="11" x2="10" y2="17"/>
+          <line x1="14" y1="11" x2="14" y2="17"/>
+          <path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>
+        </svg>`;
+      trash.addEventListener('pointerdown', (ev) => {
+        // Trashcan beats drag — stop the drag handler from claiming
+        // this pointer event before delete fires.
+        ev.stopPropagation();
+      });
+      trash.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        void this._deleteTile(tile.id);
+      });
+      el.appendChild(trash);
+    }
     this._bindTileDrag(el, tile.id);
+    el.addEventListener('click', (ev) => {
+      // Select on click. The drag handler also fires pointerdown, but
+      // a click only synthesises if the pointer didn't move far.
+      ev.stopPropagation();
+      void this._selectTile(tile.id);
+    });
     return el;
+  }
+
+  /** Click a tile → it becomes the selected one; click again on the
+   *  same tile → no-op (stays selected); click another → swap;
+   *  click empty canvas background → deselect. */
+  private async _selectTile(id: string): Promise<void> {
+    if (this.selectedTileId === id) return;
+    this.selectedTileId = id;
+    await this._renderTiles();
+  }
+
+  private async _deselect(): Promise<void> {
+    if (this.selectedTileId === null) return;
+    this.selectedTileId = null;
+    await this._renderTiles();
+  }
+
+  /** Remove the tile from the working copy + re-render. */
+  private async _deleteTile(id: string): Promise<void> {
+    if (!this.working) return;
+    const tiles = (this.working.compositeTiles ?? []).filter((t) => t.id !== id);
+    this.working = { ...this.working, compositeTiles: tiles };
+    if (this.selectedTileId === id) this.selectedTileId = null;
+    // Drop the blob URL — gone for good unless re-added.
+    const url = this.tileBlobUrls.get(id);
+    if (url) {
+      URL.revokeObjectURL(url);
+      this.tileBlobUrls.delete(id);
+    }
+    await this._renderTiles();
   }
 
   /** v2.14.44 — drag-to-position. Captures the pointer; computes a

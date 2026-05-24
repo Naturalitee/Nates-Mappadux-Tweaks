@@ -4552,6 +4552,11 @@ option.select-option--add {
   position: absolute;
   pointer-events: auto;
   transform-origin: center center;
+  /* Subtle border around every tile so the GM can see overlap edges
+     even on light tile artwork. The selected tile bumps the border
+     up to the dashed marquee. */
+  outline: 1px solid rgba(255, 255, 255, 0.18);
+  outline-offset: -1px;
 }
 .composite-editor-tile img {
   width: 100%;
@@ -4559,6 +4564,34 @@ option.select-option--add {
   display: block;
   user-select: none;
   -webkit-user-drag: none;
+}
+/* v2.14.45 — selected tile. Dashed lime-green marquee + the red
+   trashcan handle pinned at bottom-left apex (Mappadux convention). */
+.composite-editor-tile--selected {
+  outline: 2px dashed rgba(90, 240, 122, 0.9);
+  outline-offset: -2px;
+  z-index: 2;
+}
+.composite-editor-tile-trash {
+  position: absolute;
+  bottom: -14px;
+  left: -14px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: #b91c1c;
+  border: 2px solid #fff;
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  z-index: 3;
+}
+.composite-editor-tile-trash:hover {
+  background: #dc2626;
 }
 .composite-editor-footer {
   display: flex;
