@@ -2275,11 +2275,22 @@ export class GMApp {
       updated.imageHeight     = raster.imageHeight;
       if (raster.pixelsPerSquare !== null) {
         updated.pixelsPerSquare = raster.pixelsPerSquare;
-        updated.scaleConfidence = 'inferred';
+        // v2.14.53 — full 'scaled' pill. The GM has actively placed +
+        // saved the tiles via the editor; that's more deliberate than
+        // an inference from a filename hint. Unscaled tile maps that
+        // get placed into a scaled composite inherit the master pps
+        // through composition — i.e. the GM HAS scaled them.
+        updated.scaleConfidence = 'scaled';
       }
     }
     const { saveMapAsset } = await import('../storage/db.ts');
     await saveMapAsset(updated);
+    // v2.14.53 — propagate the asset's filename into the StoredMap
+    // so the dropdown + Name input reflect any rename done in the
+    // editor. Mirrors the text-map edit flow.
+    if (storedMap.name !== updated.filename) {
+      await saveMap({ ...storedMap, name: updated.filename });
+    }
     const refreshed = await getMap(currentId);
     if (refreshed) await this.loadMap(refreshed);
   }

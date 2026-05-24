@@ -105,6 +105,10 @@ export class CompositeMapEditor {
           <button type="button" class="modal-close" data-action="cancel">×</button>
         </div>
         <div class="composite-editor-toolbar">
+          <label class="composite-editor-name-label" title="Rename this composite map. Applied on Save.">
+            <span>Name:</span>
+            <input type="text" class="composite-editor-name-input" value="${this._esc(this.working?.filename ?? '')}" />
+          </label>
           <button type="button" class="btn btn--primary btn--sm" data-action="add-map" title="Pick another tile from your library and drop it on the compositor canvas.">+ Add Map</button>
           <span class="composite-editor-mode-label">${this.working?.compositeMode === 'layered' ? 'Layered' : 'Modular'} mode</span>
           <label class="composite-editor-snap-toggle" title="When on, tiles snap their centre to the nearest reference-grid intersection while you drag. Off = freeform placement.">
@@ -133,10 +137,16 @@ export class CompositeMapEditor {
       btn.addEventListener('click', () => {
         const action = btn.dataset['action'];
         if (action === 'save') {
-          // v2.14.51 — capture the editor canvas's aspect on save so
-          // the rasteriser reproduces this layout's geometry exactly.
-          if (this.working && this._canvasH > 0) {
-            this.working = { ...this.working, compositeAspect: this._canvasW / this._canvasH };
+          if (this.working) {
+            // v2.14.51 — capture canvas aspect for the rasteriser.
+            // v2.14.53 — also commit any rename done in the Name input.
+            const nameInput = overlay.querySelector<HTMLInputElement>('.composite-editor-name-input');
+            const nextName = nameInput?.value.trim();
+            this.working = {
+              ...this.working,
+              ...(this._canvasH > 0 ? { compositeAspect: this._canvasW / this._canvasH } : {}),
+              ...(nextName ? { filename: nextName } : {}),
+            };
           }
           this._close(this.working);
         } else if (action === 'add-map') {

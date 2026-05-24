@@ -4551,6 +4551,28 @@ option.select-option--add {
      window edge. */
   overflow: visible;
 }
+/* v2.14.53 — Editable name field at the top of the toolbar. */
+.composite-editor-name-label {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.85rem;
+  color: var(--text-dim);
+}
+.composite-editor-name-input {
+  min-width: 200px;
+  padding: 4px 8px;
+  background: var(--bg-elevated);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  font-size: 0.85rem;
+}
+.composite-editor-name-input:focus {
+  outline: none;
+  border-color: var(--border-focus);
+}
+
 /* v2.14.47 — Snap-to-grid toggle in the toolbar. */
 .composite-editor-snap-toggle {
   display: inline-flex;
