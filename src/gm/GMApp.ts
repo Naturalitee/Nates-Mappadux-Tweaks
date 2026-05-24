@@ -102,9 +102,10 @@ const DRAWING_MODE_LS_KEY = 'mappadux:drawingMode';
  *  _insertMapOptionSorted prepend on render; _cleanMapDisplayName
  *  strips on read so legacy data with old decorations baked into
  *  storage still displays cleanly. */
-const IMAGE_MAP_PREFIX    = '▣ ';
-const ANIMATED_MAP_PREFIX = '▶ ';
-const TEXT_MAP_PREFIX     = '▤ ';
+const IMAGE_MAP_PREFIX     = '▣ ';
+const ANIMATED_MAP_PREFIX  = '▶ ';
+const TEXT_MAP_PREFIX      = '▤ ';
+const COMPOSITE_MAP_PREFIX = '▦ ';
 
 /** Strip every decoration that has ever been put on a map's display
  *  name — current "▣ " / "▶ " / "▤ " prefixes, the brief "≡ " trial
@@ -112,7 +113,7 @@ const TEXT_MAP_PREFIX     = '▤ ';
  *  EditableSelect, and storage all see the raw name. */
 function _cleanMapDisplayName(name: string): string {
   return name
-    .replace(/^[▣▶▤≡]\s+/, '')
+    .replace(/^[▣▶▤▦≡]\s+/, '')
     .replace(/(?: \[T\])+$/, '')
     .trim();
 }
@@ -124,8 +125,9 @@ function _cleanMapDisplayName(name: string): string {
  *  checks matches populateMapList: text-map wins over animated wins
  *  over image, so a hypothetical "video text-map" still reads as
  *  text. */
-function _dropdownKindForAsset(asset: import('../types.ts').MapAsset | undefined): 'image' | 'animated' | 'text' {
+function _dropdownKindForAsset(asset: import('../types.ts').MapAsset | undefined): 'image' | 'animated' | 'text' | 'composite' {
   if (!asset) return 'image';
+  if (asset.source === 'composite-map') return 'composite';
   if (asset.source === 'text-map') return 'text';
   if ((asset.blob?.type ?? '').startsWith('video/')) return 'animated';
   return 'image';
@@ -2024,11 +2026,15 @@ export class GMApp {
     // Per-asset kind lookup so we can flag text-map and animated
     // entries in the dropdown with the right leading glyph. Cheap
     // (small N) and saves a round-trip per option.
-    type DropdownKind = 'text' | 'animated' | 'image';
+    type DropdownKind = 'text' | 'animated' | 'image' | 'composite';
     const kindByAssetId = new Map<string, DropdownKind>();
     for (const a of mapAssets) {
       const isAnimated = (a.blob?.type ?? '').startsWith('video/');
-      const kind: DropdownKind = a.source === 'text-map' ? 'text' : isAnimated ? 'animated' : 'image';
+      const kind: DropdownKind =
+        a.source === 'composite-map' ? 'composite' :
+        a.source === 'text-map'      ? 'text'      :
+        isAnimated                   ? 'animated'  :
+                                       'image';
       kindByAssetId.set(a.id, kind);
     }
     this.mapSelect.innerHTML = '';
@@ -2055,9 +2061,10 @@ export class GMApp {
       const kind = kindByAssetId.get(m.mapAssetId) ?? 'image';
       const cleanName = _cleanMapDisplayName(m.name);
       const prefix =
-        kind === 'text'     ? TEXT_MAP_PREFIX     :
-        kind === 'animated' ? ANIMATED_MAP_PREFIX :
-                              IMAGE_MAP_PREFIX;
+        kind === 'composite' ? COMPOSITE_MAP_PREFIX :
+        kind === 'text'      ? TEXT_MAP_PREFIX      :
+        kind === 'animated'  ? ANIMATED_MAP_PREFIX  :
+                               IMAGE_MAP_PREFIX;
       opt.textContent = `${prefix}${cleanName}`;
       this.mapSelect.appendChild(opt);
     }
@@ -5322,15 +5329,16 @@ export class GMApp {
   private _insertMapOptionSorted(
     id: string,
     name: string,
-    kind: 'image' | 'animated' | 'text' = 'image',
+    kind: 'image' | 'animated' | 'text' | 'composite' = 'image',
   ): void {
     const opt = document.createElement('option');
     opt.value = id;
     const cleanName = _cleanMapDisplayName(name);
     const prefix =
-      kind === 'text'     ? TEXT_MAP_PREFIX     :
-      kind === 'animated' ? ANIMATED_MAP_PREFIX :
-                            IMAGE_MAP_PREFIX;
+      kind === 'composite' ? COMPOSITE_MAP_PREFIX :
+      kind === 'text'      ? TEXT_MAP_PREFIX      :
+      kind === 'animated'  ? ANIMATED_MAP_PREFIX  :
+                             IMAGE_MAP_PREFIX;
     opt.textContent = `${prefix}${cleanName}`;
     const addSentinel = this.mapSelect.querySelector<HTMLOptionElement>(
       `option[value="${SELECT_ADD_SENTINEL}"]`,
@@ -5380,7 +5388,7 @@ export class GMApp {
     // Look up the underlying asset so the re-inserted option gets
     // the right leading glyph for its kind.
     const map = await getMap(id);
-    let kind: 'image' | 'animated' | 'text' = 'image';
+    let kind: 'image' | 'animated' | 'text' | 'composite' = 'image';
     if (map) {
       const asset = await MapAssetStore.get(map.mapAssetId);
       kind = _dropdownKindForAsset(asset);

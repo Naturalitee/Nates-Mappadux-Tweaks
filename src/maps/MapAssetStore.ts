@@ -79,6 +79,21 @@ export class MapAssetStore {
     const cached = MapAssetStore.runtimeBlobs.get(asset.id);
     if (cached) return cached;
 
+    // v2.14.37 — composite-map fallback (single-tile only). Until the
+    // editor + true compositing render path lands, treat a composite
+    // with exactly one tile as "show that tile". Multi-tile composites
+    // need the proper compositor render — for now they show the
+    // first tile too, which is wrong but visible (rather than a
+    // missing-image placeholder).
+    if (asset.source === 'composite-map' && asset.compositeTiles && asset.compositeTiles.length > 0) {
+      const firstTile = asset.compositeTiles[0]!;
+      const tileAsset = await MapAssetStore.get(firstTile.mapAssetId);
+      if (tileAsset) {
+        return MapAssetStore.getBlob(tileAsset);
+      }
+      return null;
+    }
+
     if (asset.source === 'text-map' && asset.textMap) {
       // On-demand rasterisation: the editor stores only the config
       // (bodyHtml + colours + ratio + font). Cache the resulting PNG in

@@ -1,4 +1,4 @@
-import type { MapAsset, StoredMap } from '../types.ts';
+import type { MapAsset, StoredMap, CompositeTile } from '../types.ts';
 import { MapAssetStore } from '../maps/MapAssetStore.ts';
 import { downloadAsset } from '../utils/downloadAsset.ts';
 import { MapManager } from './MapManager.ts';
@@ -8,7 +8,7 @@ import { detectMapScale, autoApplyPatch } from '../utils/detectMapScale.ts';
 import { ScaleCandidateDialog } from './ScaleCandidateDialog.ts';
 import { generateId } from '../utils/id.ts';
 import { TextMapEditor } from './TextMapEditor.ts';
-import { saveMap as _saveMap, getAllMaps } from '../storage/db.ts';
+import { saveMap as _saveMap, saveMapAsset, getAllMaps } from '../storage/db.ts';
 
 /** Standard licence options shared with the audio editor. */
 const LICENSE_OPTIONS: string[] = [
@@ -76,6 +76,14 @@ export class MapAssetModal {
    *  first hover, revoked when the modal closes. */
   private previewUrlCache = new Map<string, string>();
   private previewPopover: HTMLElement | null = null;
+  /** v2.14.37 — when true, the library is in "pick first tile for a
+   *  new composite map" mode. Text maps are filtered out; scaled
+   *  image maps are sorted to the top; the Use button on a row
+   *  creates a composite-map asset + StoredMap and fires onPick with
+   *  the resulting composite (rather than a single-asset map). A
+   *  banner explains the state. Toggled by + Create a New Composite
+   *  Map and cleared on close. */
+  private _compositePickMode = false;
 
   constructor(
     maps: MapManager,
@@ -100,6 +108,7 @@ export class MapAssetModal {
     this._clearUpload();
     this._clearWebLinks();
     this._teardownPreviewCache();
+    this._compositePickMode = false;
   }
 
   /** Drop hover-preview object URLs and the popover element. */
@@ -188,6 +197,93 @@ export class MapAssetModal {
       'click',
       () => void this._createHandout(),
     );
+
+    // v2.14.37 — Map Compositor entry point. Click → re-render the
+    // library in "pick first tile" mode; the next Use creates the
+    // composite map.
+    this.el.querySelector('#map-library-create-composite-btn')?.addEventListener(
+      'click',
+      () => void this._enterCompositePickMode(),
+    );
+  }
+
+  /** v2.14.37 — flip the library into pick-first-tile mode for a new
+   *  composite map. No data writes yet — the user's next Use click
+   *  drives `_createCompositeFromTile`. */
+  private async _enterCompositePickMode(): Promise<void> {
+    this._compositePickMode = true;
+    // Make sure we're on the Library tab — even if the user clicked
+    // from a different tab (e.g. Web Links) the picker only makes
+    // sense from the library list.
+    const libBtn = this.el.querySelector<HTMLButtonElement>('[data-tab="library"]');
+    libBtn?.click();
+    await this._renderLibrary();
+  }
+
+  /** v2.14.37 — render (or remove) the composite-pick banner above
+   *  the library list. Banner explains the mode + nudges towards
+   *  scaled tiles + offers a Cancel that drops back to normal mode. */
+  private _renderCompositeBanner(): void {
+    const host = this.el.querySelector<HTMLElement>('#map-library-list')?.parentElement;
+    if (!host) return;
+    let banner = host.querySelector<HTMLElement>('.composite-pick-banner');
+    if (!this._compositePickMode) {
+      banner?.remove();
+      return;
+    }
+    if (!banner) {
+      banner = document.createElement('div');
+      banner.className = 'composite-pick-banner';
+      banner.innerHTML = `
+        <div class="composite-pick-banner__text">
+          <strong>Pick the first tile for your composite map.</strong>
+          <span>Scaled maps are recommended — they set the master grid for the composite. Upload new maps if you don't see what you need.</span>
+        </div>
+        <button class="btn btn--ghost btn--xs composite-pick-banner__cancel" type="button" title="Cancel and return to the normal library view.">Cancel</button>
+      `;
+      banner.querySelector<HTMLButtonElement>('.composite-pick-banner__cancel')?.addEventListener('click', () => {
+        this._compositePickMode = false;
+        void this._renderLibrary();
+      });
+      host.insertBefore(banner, host.firstChild);
+    }
+  }
+
+  /** v2.14.37 — create a new composite map with one tile centred on
+   *  the canvas. Composite asset + StoredMap + initial tile array
+   *  saved in one shot; onPick fires with the new StoredMap. */
+  private async _createCompositeFromTile(firstTileAsset: MapAsset): Promise<void> {
+    const compositeAssetId = generateId();
+    const tile: CompositeTile = {
+      id:         generateId(),
+      mapAssetId: firstTileAsset.id,
+      x:          0.5,
+      y:          0.5,
+      rotation:   0,
+      // 25% scale per Alex's spec — leaves room around the edges for
+      // more tiles to be dropped in.
+      scale:      0.25,
+    };
+    const compositeAsset: MapAsset = {
+      id:             compositeAssetId,
+      filename:       `${firstTileAsset.filename} (Composite)`,
+      source:         'composite-map',
+      locallyStored:  true,
+      addedAt:        Date.now(),
+      compositeTiles: [tile],
+      compositeMode:  'modular',
+    };
+    await saveMapAsset(compositeAsset);
+    const map: StoredMap = {
+      id:         generateId(),
+      name:       compositeAsset.filename,
+      mapAssetId: compositeAssetId,
+      addedAt:    Date.now(),
+    };
+    await _saveMap(map);
+    this._compositePickMode = false;
+    this.onPick(map);
+    this.close();
   }
 
   private async _createHandout(): Promise<void> {
@@ -215,7 +311,24 @@ export class MapAssetModal {
       MapAssetStore.getAll(),
       getUsedMapAssetIds(),
     ]);
-    const filtered = filter ? all.filter((a) => a.filename.toLowerCase().includes(filter)) : all;
+    let filtered = filter ? all.filter((a) => a.filename.toLowerCase().includes(filter)) : all;
+
+    // v2.14.37 — composite-pick mode: drop text-map handouts (they
+    // can't be tiles) AND drop existing composite maps (no nesting),
+    // then sort scaled image maps to the top so the GM's first
+    // instinct is the recommended choice.
+    if (this._compositePickMode) {
+      filtered = filtered.filter((a) => a.source !== 'text-map' && a.source !== 'composite-map');
+      filtered = [...filtered].sort((a, b) => {
+        const aScaled = a.pixelsPerSquare ? 1 : 0;
+        const bScaled = b.pixelsPerSquare ? 1 : 0;
+        if (aScaled !== bScaled) return bScaled - aScaled;
+        return a.filename.localeCompare(b.filename);
+      });
+    }
+
+    // Banner showing the active mode — only when pick-first-tile is on.
+    this._renderCompositeBanner();
 
     emptyEl.hidden = filtered.length > 0;
     listEl.innerHTML = '';
@@ -433,6 +546,12 @@ export class MapAssetModal {
     `;
 
     row.querySelector<HTMLButtonElement>('.map-use-btn')?.addEventListener('click', async () => {
+      // v2.14.37 — composite-pick mode short-circuits Use into
+      // "use this as the first tile of a new composite map".
+      if (this._compositePickMode) {
+        await this._createCompositeFromTile(asset);
+        return;
+      }
       const map = await this.maps.createMapFromAsset(asset.id, asset.filename.replace(/\.[^.]+$/, ''));
       this.onPick(map);
       this.close();

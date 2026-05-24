@@ -4413,6 +4413,29 @@ option.select-option--add {
 }
 .player-fullscreen-btn:hover { opacity: 1; }
 
+/* v2.14.37 — Compositor pick-first-tile banner. Sits above the
+   asset library list when the modal is in composite-pick mode. */
+.composite-pick-banner {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 14px;
+  margin-bottom: 8px;
+  background: rgba(90, 240, 122, 0.10);
+  border: 1px solid rgba(90, 240, 122, 0.55);
+  border-radius: var(--radius-md);
+}
+.composite-pick-banner__text {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.85rem;
+  line-height: 1.35;
+}
+.composite-pick-banner__text strong { color: var(--text); }
+.composite-pick-banner__text span   { color: var(--text-dim); font-size: 0.78rem; }
+
 /* v2.14.31 — Map-panel grid colour swatch. Sits in the fog-row--kind
    layout next to Backdrop. The native colour input is small so we
    give it a sensible fixed size rather than letting it stretch. */
