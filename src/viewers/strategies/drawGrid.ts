@@ -94,35 +94,33 @@ function prepCanvas(
   return ctx;
 }
 
-/** Walk a grid centred on (cx, cy) in CSS pixels, stroking lines at
- *  `spacing` CSS px on both axes. Used by every strategy below; the
- *  only thing that varies between them is how `spacing` is derived. */
-function strokeCentredGrid(
+/** Walk a grid anchored at the CSS-px point (anchorX, anchorY) — that
+ *  point sits on a gridline crossing. Lines repeat at `spacing` CSS
+ *  px on both axes in both directions. The anchor may sit far outside
+ *  the canvas (modulo math collapses it into [0, spacing) so we walk
+ *  the minimum number of lines).
+ *
+ *  v2.14.29 — replaces the old strokeCentredGrid: anchoring to a
+ *  map-space point (rather than the canvas centre) is what makes the
+ *  grids on Player + Scaled View land on identical map pixels. The
+ *  canvas-centre anchor caused them to slide with each viewer's
+ *  window instead of staying glued to map coords. */
+function strokeAnchoredGrid(
   ctx: CanvasRenderingContext2D,
   w: number,
   h: number,
   spacing: number,
   color: string,
-  offsetX = 0,
-  offsetY = 0,
+  anchorX: number,
+  anchorY: number,
 ): void {
   if (spacing < 2) return; // sanity — sub-pixel grids alias to noise
   ctx.strokeStyle = color;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  // v2.14.18 — offset shifts the grid origin from canvas centre.
-  // Modulo by spacing so the offset stays in a [-spacing/2, spacing/2)
-  // band (the visible pattern is periodic; without the mod we'd
-  // walk extra iterations for no visual change).
-  const modX = ((offsetX % spacing) + spacing) % spacing;
-  const modY = ((offsetY % spacing) + spacing) % spacing;
-  const cx = w / 2 + modX;
-  const cy = h / 2 + modY;
+  const cx = ((anchorX % spacing) + spacing) % spacing;
+  const cy = ((anchorY % spacing) + spacing) % spacing;
   for (let x = cx; x <= w + spacing; x += spacing) {
-    ctx.moveTo(Math.round(x) + 0.5, 0);
-    ctx.lineTo(Math.round(x) + 0.5, h);
-  }
-  for (let x = cx - spacing; x >= -spacing; x -= spacing) {
     ctx.moveTo(Math.round(x) + 0.5, 0);
     ctx.lineTo(Math.round(x) + 0.5, h);
   }
@@ -130,23 +128,61 @@ function strokeCentredGrid(
     ctx.moveTo(0, Math.round(y) + 0.5);
     ctx.lineTo(w, Math.round(y) + 0.5);
   }
-  for (let y = cy - spacing; y >= -spacing; y -= spacing) {
-    ctx.moveTo(0, Math.round(y) + 0.5);
-    ctx.lineTo(w, Math.round(y) + 0.5);
-  }
   ctx.stroke();
 }
 
-/** Convert a map-pixel offset into the equivalent offset in CSS
- *  pixels on a canvas that draws `spacing` CSS-px per `mapPxPerSq`
- *  map-pixels. Returns 0 if any input is missing. */
-function mapOffsetToCss(
-  offsetMapPx: number | undefined,
+/** Map a point in MAP pixels to its CSS-px position on a viewer's
+ *  canvas, given the viewer's view (centre + viewNW/H), the map's
+ *  intrinsic dimensions, and the canvas size. Used to anchor the
+ *  grid to a fixed map coordinate so every viewer's gridlines fall
+ *  on the same map pixels. */
+function mapPointToCss(
+  mx: number,
+  my: number,
+  view: ViewState | null,
+  mapW: number,
+  mapH: number,
+  canvasW: number,
+  canvasH: number,
+): { x: number; y: number } | null {
+  if (!view || view.viewNW <= 0 || view.viewNH <= 0 || mapW <= 0 || mapH <= 0) return null;
+  const normX = mx / mapW;
+  const normY = my / mapH;
+  const viewLeft = view.centerX - view.viewNW / 2;
+  const viewTop  = view.centerY - view.viewNH / 2;
+  return {
+    x: ((normX - viewLeft) / view.viewNW) * canvasW,
+    y: ((normY - viewTop)  / view.viewNH) * canvasH,
+  };
+}
+
+/** Compute the CSS-px anchor for a grid that should align across all
+ *  viewers — anchor at MAP centre + the calibration's gridOffset
+ *  (also in map-px). Falls back to canvas centre + a scaled
+ *  CSS-px-from-map-px offset if the view/map metadata isn't yet
+ *  available (e.g. before the first view_update lands). */
+function gridAnchor(
+  ctx: DrawGridContext,
   spacing: number,
-  mapPxPerSq: number | null,
-): number {
-  if (!offsetMapPx || !mapPxPerSq || mapPxPerSq <= 0 || spacing <= 0) return 0;
-  return offsetMapPx * (spacing / mapPxPerSq);
+): { x: number; y: number } {
+  const offsetMapX = ctx.gridOffsetX ?? 0;
+  const offsetMapY = ctx.gridOffsetY ?? 0;
+  const fromMap = mapPointToCss(
+    ctx.mapImageWidth / 2 + offsetMapX,
+    ctx.mapImageHeight / 2 + offsetMapY,
+    ctx.view,
+    ctx.mapImageWidth,
+    ctx.mapImageHeight,
+    ctx.effectiveW,
+    ctx.effectiveH,
+  );
+  if (fromMap) return fromMap;
+  // Fallback — pre-view state. Replicate the v2.14.18 behaviour so
+  // a flash of mis-aligned grid doesn't appear during initial paint.
+  const mapPxPerSq = ctx.mapPixelsPerSquare;
+  const ox = mapPxPerSq && mapPxPerSq > 0 ? offsetMapX * (spacing / mapPxPerSq) : 0;
+  const oy = mapPxPerSq && mapPxPerSq > 0 ? offsetMapY * (spacing / mapPxPerSq) : 0;
+  return { x: ctx.effectiveW / 2 + ox, y: ctx.effectiveH / 2 + oy };
 }
 
 /** 'projector-calibrated' — fixed CSS-px-per-inch from the projector's
@@ -161,9 +197,8 @@ function drawProjectorCalibrated(
   void cv;
   if (!ctx.setup) return;
   const spacing = ctx.setup.pixelsPerSquare;
-  const ox = mapOffsetToCss(ctx.gridOffsetX, spacing, ctx.mapPixelsPerSquare);
-  const oy = mapOffsetToCss(ctx.gridOffsetY, spacing, ctx.mapPixelsPerSquare);
-  strokeCentredGrid(ctx2d, ctx.effectiveW, ctx.effectiveH, spacing, ctx.color, ox, oy);
+  const anchor = gridAnchor(ctx, spacing);
+  strokeAnchoredGrid(ctx2d, ctx.effectiveW, ctx.effectiveH, spacing, ctx.color, anchor.x, anchor.y);
 }
 
 /** 'monitor-proportional' — the v2.14.10 implementation:
@@ -182,9 +217,8 @@ function drawMonitorProportional(
   void cv;
   if (!ctx.mapPixelsPerSquare || ctx.mapImageWidth <= 0 || ctx.primaryViewNW <= 0) return;
   const spacing = (ctx.mapPixelsPerSquare * ctx.effectiveW) / (ctx.primaryViewNW * ctx.mapImageWidth);
-  const ox = mapOffsetToCss(ctx.gridOffsetX, spacing, ctx.mapPixelsPerSquare);
-  const oy = mapOffsetToCss(ctx.gridOffsetY, spacing, ctx.mapPixelsPerSquare);
-  strokeCentredGrid(ctx2d, ctx.effectiveW, ctx.effectiveH, spacing, ctx.color, ox, oy);
+  const anchor = gridAnchor(ctx, spacing);
+  strokeAnchoredGrid(ctx2d, ctx.effectiveW, ctx.effectiveH, spacing, ctx.color, anchor.x, anchor.y);
 }
 
 /** 'map-relative' — the deferred Player View grid (#13). The grid
@@ -204,9 +238,8 @@ function drawMapRelative(
   void cv;
   if (!ctx.view || !ctx.mapPixelsPerSquare || ctx.mapImageWidth <= 0 || ctx.view.viewNW <= 0) return;
   const spacing = (ctx.mapPixelsPerSquare * ctx.effectiveW) / (ctx.view.viewNW * ctx.mapImageWidth);
-  const ox = mapOffsetToCss(ctx.gridOffsetX, spacing, ctx.mapPixelsPerSquare);
-  const oy = mapOffsetToCss(ctx.gridOffsetY, spacing, ctx.mapPixelsPerSquare);
-  strokeCentredGrid(ctx2d, ctx.effectiveW, ctx.effectiveH, spacing, ctx.color, ox, oy);
+  const anchor = gridAnchor(ctx, spacing);
+  strokeAnchoredGrid(ctx2d, ctx.effectiveW, ctx.effectiveH, spacing, ctx.color, anchor.x, anchor.y);
 }
 
 /** Unified entry point. Always sizes / clears the canvas (so toggling
