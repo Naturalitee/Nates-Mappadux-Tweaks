@@ -4546,7 +4546,7 @@ option.select-option--add {
 .composite-editor-tiles {
   position: absolute;
   inset: 0;
-  pointer-events: none; /* tile interactions arrive in commit 3 */
+  /* v2.14.44 — tiles now interactive (drag-to-position). */
 }
 .composite-editor-tile {
   position: absolute;

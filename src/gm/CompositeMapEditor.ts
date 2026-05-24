@@ -193,7 +193,9 @@ export class CompositeMapEditor {
 
   /** Render a single tile as an absolutely-positioned <img> inside
    *  the composite canvas. Position from tile.x/y (composite-norm);
-   *  size from tile.scale * canvasW preserving the asset's aspect. */
+   *  size from tile.scale * canvasW preserving the asset's aspect.
+   *  v2.14.44 — also binds a pointerdown drag handler that mutates
+   *  tile.x/y while the pointer moves; no snap rules yet (freeform). */
   private async _renderTile(tile: CompositeTile): Promise<HTMLElement | null> {
     const tileAsset = await MapAssetStore.get(tile.mapAssetId);
     if (!tileAsset) return null;
@@ -215,13 +217,77 @@ export class CompositeMapEditor {
 
     const el = document.createElement('div');
     el.className = 'composite-editor-tile';
+    el.dataset['tileId'] = tile.id;
     el.style.left      = `${left}px`;
     el.style.top       = `${top}px`;
     el.style.width     = `${tileW}px`;
     el.style.height    = `${tileH}px`;
     el.style.transform = `rotate(${tile.rotation}deg)`;
     el.innerHTML = `<img src="${url}" alt="" draggable="false" />`;
+    this._bindTileDrag(el, tile.id);
     return el;
+  }
+
+  /** v2.14.44 — drag-to-position. Captures the pointer; computes a
+   *  delta from the drag-start position (in CSS px of the editor
+   *  canvas) and converts to composite-norm coords for mutation.
+   *  Live-updates the tile element's CSS during the drag so the
+   *  user sees motion without a full re-render per frame; on
+   *  pointerup the working tile is committed and a full re-render
+   *  fires so the grid stays consistent. */
+  private _bindTileDrag(el: HTMLElement, tileId: string): void {
+    el.style.cursor = 'grab';
+    el.addEventListener('pointerdown', (e) => {
+      // Skip if the press hit the underlying image's right-click
+      // context menu etc. Only the primary button kicks off drag.
+      if (e.button !== 0) return;
+      e.preventDefault();
+      const tile = this._findTile(tileId);
+      if (!tile) return;
+      const startX = e.clientX;
+      const startY = e.clientY;
+      const startNX = tile.x;
+      const startNY = tile.y;
+      el.setPointerCapture(e.pointerId);
+      el.style.cursor = 'grabbing';
+      const canvasEl = this.overlay?.querySelector<HTMLElement>('.composite-editor-canvas');
+      // Use the canvas's bounding rect for CSS-px-to-norm conversion
+      // so it's accurate under any browser zoom / page scaling.
+      const canvasRect = canvasEl?.getBoundingClientRect();
+      const cssToNormX = canvasRect ? 1 / canvasRect.width  : 1 / CANVAS_W;
+      const cssToNormY = canvasRect ? 1 / canvasRect.height : 1 / CANVAS_H;
+      const onMove = (ev: PointerEvent) => {
+        const dxNorm = (ev.clientX - startX) * cssToNormX;
+        const dyNorm = (ev.clientY - startY) * cssToNormY;
+        const nx = startNX + dxNorm;
+        const ny = startNY + dyNorm;
+        // Live-update the tile's DOM directly — cheap, no re-render.
+        const tileW = parseFloat(el.style.width);
+        const tileH = parseFloat(el.style.height);
+        el.style.left = `${nx * CANVAS_W - tileW / 2}px`;
+        el.style.top  = `${ny * CANVAS_H - tileH / 2}px`;
+        // Mutate the working tile so the value persists past drag-end.
+        tile.x = nx;
+        tile.y = ny;
+      };
+      const onUp = (ev: PointerEvent) => {
+        el.releasePointerCapture(ev.pointerId);
+        el.style.cursor = 'grab';
+        el.removeEventListener('pointermove', onMove);
+        el.removeEventListener('pointerup',     onUp);
+        el.removeEventListener('pointercancel', onUp);
+      };
+      el.addEventListener('pointermove', onMove);
+      el.addEventListener('pointerup',     onUp);
+      el.addEventListener('pointercancel', onUp);
+    });
+  }
+
+  /** Find a tile in the working copy by id. Mutating the returned
+   *  object mutates the working copy — used by drag-to-position. */
+  private _findTile(id: string): CompositeTile | null {
+    if (!this.working) return null;
+    return (this.working.compositeTiles ?? []).find((t) => t.id === id) ?? null;
   }
 
   /** v2.14.43 — "+ Add Map" handler. Asks the caller-supplied picker
