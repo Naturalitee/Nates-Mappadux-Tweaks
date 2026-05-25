@@ -6,6 +6,13 @@
 import './images/bundledFontsLoad.ts';
 
 import { GMApp } from './gm/GMApp.ts';
+import { handleAuthCallback as handleSpotifyCallback } from './stagecraft/spotifyAuth.ts';
+
+// v2.16 — If the page was redirected back from Spotify with a
+// ?code= auth callback, exchange it for tokens BEFORE GMApp init.
+// The handler cleans the URL on the way through. No-op on every
+// regular page load.
+void handleSpotifyCallback();
 
 // Vercel Web Analytics — only injected on builds produced by Vercel's CI
 // (process.env.VERCEL='1'). The conditional + dynamic import lets the bundler

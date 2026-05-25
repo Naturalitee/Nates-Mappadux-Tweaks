@@ -23,12 +23,23 @@ import {
   setHaConfig,
   getQlcConfig,
   setQlcConfig,
-  isSoundtracksEnabled,
-  setSoundtracksEnabled,
+  isYoutubeEnabled,
+  setYoutubeEnabled,
+  isSpotifyEnabled,
+  setSpotifyEnabled,
 } from '../stagecraft/stagecraftStorage.ts';
 import { fetchInfo as fetchWledInfo, normaliseEndpoint } from '../stagecraft/wledClient.ts';
 import { fetchInfo as fetchQlcInfo, normaliseQlcEndpoint } from '../stagecraft/qlcClient.ts';
 import { wledConfigUrl, haConfigUrl, qlcConfigUrl } from '../stagecraft/configUrls.ts';
+import {
+  getSpotifyClientId,
+  setSpotifyClientId,
+  getSpotifyProfile,
+  isSpotifyConnected,
+  clearSpotifyAuth,
+  startConnect as startSpotifyConnect,
+  getRedirectUri as spotifyRedirectUri,
+} from '../stagecraft/spotifyAuth.ts';
 import { generateId } from '../utils/id.ts';
 
 /**
@@ -557,7 +568,7 @@ export class SettingsDialog {
     wrap.className = 'settings-stagecraft-soundtracks';
 
     const heading = document.createElement('strong');
-    heading.textContent = 'Soundtracks (YouTube)';
+    heading.textContent = 'Soundtracks (YouTube + Spotify)';
     wrap.appendChild(heading);
 
     const sub = document.createElement('div');
@@ -565,30 +576,131 @@ export class SettingsDialog {
     sub.style.marginBottom = '6px';
     sub.innerHTML =
       'Pack-level background music that survives map switches. Paste ' +
-      'YouTube (or YouTube Music) URLs into the Soundtracks panel ' +
-      'slots — Theme, Intro, Outro, Playlist. No login needed for ' +
-      'YouTube. Spotify slots arrive in a later patch. The actual ' +
-      'track URLs travel with your <code>.mappadux</code> bundle.';
+      'YouTube, YouTube Music, or Spotify URLs into the Soundtracks ' +
+      'panel slots — Theme, Intro, Outro, Playlist. Enable the ' +
+      'providers you want to use; the Soundtracks panel appears as ' +
+      'soon as at least one is on. The track URLs travel with your ' +
+      '<code>.mappadux</code> bundle (no auth tokens — those stay local).';
     wrap.appendChild(sub);
 
+    wrap.appendChild(this._buildProviderToggleRow(
+      'Enable YouTube',
+      'No sign-in needed. Plays via YouTube\'s public IFrame Player API.',
+      isYoutubeEnabled,
+      setYoutubeEnabled,
+    ));
+    wrap.appendChild(this._buildProviderToggleRow(
+      'Enable Spotify',
+      'Plays via the Spotify Web Playback SDK — full programmatic control (play / pause / seek / volume / fade / crossfade). Requires a Spotify Premium account AND a one-time Spotify Developer App registration (you get a Client ID). Use the Connect flow below once you\'ve enabled this and pasted a Client ID.',
+      isSpotifyEnabled,
+      setSpotifyEnabled,
+    ));
+    wrap.appendChild(this._buildSpotifyConnectRow());
+
+    return wrap;
+  }
+
+  /** Spotify Client ID input + Connect button. Surfaces profile +
+   *  product when connected. Hidden when Spotify isn't enabled. */
+  private _buildSpotifyConnectRow(): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'settings-stagecraft-spotify-connect';
+    wrap.style.marginTop = '6px';
+
+    const sub = document.createElement('div');
+    sub.className = 'settings-stat-sub';
+    sub.innerHTML =
+      'Register a Spotify Developer App at ' +
+      '<a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>. ' +
+      `Add this exact redirect URI: <code>${escapeHtml(spotifyRedirectUri())}</code>. ` +
+      'Copy the Client ID, paste it below, then Connect.';
+    wrap.appendChild(sub);
+
+    const form = document.createElement('div');
+    form.className = 'settings-stagecraft-ha-form';
+    form.style.marginTop = '4px';
+    const idInput = document.createElement('input');
+    idInput.type = 'text';
+    idInput.placeholder = 'Spotify Client ID';
+    idInput.value = getSpotifyClientId();
+    form.appendChild(idInput);
+    wrap.appendChild(form);
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'settings-btn-row';
+    btnRow.style.marginTop = '4px';
+
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'btn btn--ghost btn--sm';
+    saveBtn.textContent = 'Save Client ID';
+
+    const connectBtn = document.createElement('button');
+    connectBtn.type = 'button';
+    connectBtn.className = 'btn btn--ghost btn--sm';
+    connectBtn.textContent = isSpotifyConnected() ? 'Reconnect' : 'Connect Spotify';
+
+    const disconnectBtn = document.createElement('button');
+    disconnectBtn.type = 'button';
+    disconnectBtn.className = 'btn btn--danger btn--sm';
+    disconnectBtn.textContent = 'Disconnect';
+    disconnectBtn.hidden = !isSpotifyConnected();
+
+    const status = document.createElement('div');
+    status.className = 'settings-stat-sub';
+    status.style.marginTop = '4px';
+    const profile = getSpotifyProfile();
+    if (isSpotifyConnected() && profile) {
+      status.textContent = `Connected as ${profile.displayName} (${profile.product}).`;
+      if (profile.product !== 'premium') {
+        status.textContent += ' Web Playback SDK requires Premium — free accounts can\'t play full tracks.';
+      }
+    }
+
+    saveBtn.addEventListener('click', () => {
+      setSpotifyClientId(idInput.value);
+      status.textContent = 'Saved Client ID. Click Connect to start the OAuth flow.';
+    });
+    connectBtn.addEventListener('click', () => {
+      setSpotifyClientId(idInput.value);  // save in case user didn't click Save
+      void startSpotifyConnect().catch((e) => {
+        status.textContent = `Connect failed: ${(e as Error).message}`;
+      });
+    });
+    disconnectBtn.addEventListener('click', () => {
+      clearSpotifyAuth();
+      connectBtn.textContent = 'Connect Spotify';
+      disconnectBtn.hidden = true;
+      status.textContent = 'Disconnected.';
+    });
+
+    btnRow.append(saveBtn, connectBtn, disconnectBtn);
+    wrap.append(btnRow, status);
+    return wrap;
+  }
+
+  private _buildProviderToggleRow(
+    title: string,
+    help: string,
+    get: () => boolean,
+    set: (v: boolean) => void,
+  ): HTMLElement {
     const row = document.createElement('div');
     row.className = 'settings-danger-row';
     const label = document.createElement('div');
-    label.innerHTML = '<strong>Enable Soundtracks panel</strong><br>' +
-      '<span class="settings-stat-sub">Adds a "Soundtracks" panel to the sidebar.</span>';
+    label.innerHTML = `<strong>${title}</strong><br>` +
+      `<span class="settings-stat-sub">${help}</span>`;
     const toggle = document.createElement('label');
     toggle.className = 'toggle-switch';
     const input = document.createElement('input');
     input.type = 'checkbox';
-    input.checked = isSoundtracksEnabled();
-    input.addEventListener('change', () => setSoundtracksEnabled(input.checked));
+    input.checked = get();
+    input.addEventListener('change', () => set(input.checked));
     const slider = document.createElement('span');
     slider.className = 'toggle-slider';
     toggle.append(input, slider);
     row.append(label, toggle);
-    wrap.appendChild(row);
-
-    return wrap;
+    return row;
   }
 
   private _buildWledSubsection(): HTMLElement {

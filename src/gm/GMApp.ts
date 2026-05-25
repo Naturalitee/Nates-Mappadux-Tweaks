@@ -753,7 +753,7 @@ export class GMApp {
       this.soundtracksPanel?.refresh();
     })();
     this.soundtracksPanel = new SoundtracksPanel({
-      getConfig: () => this._session?.soundtracks ?? {},
+      getConfig: () => this._session?.soundtracks ?? { slots: [] },
       saveConfig: async (cfg) => {
         const { loadSession, saveSession } = await import('../storage/db.ts');
         const existing = (await loadSession()) ?? this._session;

@@ -1392,29 +1392,55 @@ export interface StoredSession {
 }
 
 /** v2.16 — Pack-level Soundtracks. Survives map switches; long-term
- *  layer underneath the per-map Audio panel. Currently YouTube-only;
- *  Spotify slots can be added alongside in a later patch without
- *  breaking the existing shape (the kind tag discriminates). */
+ *  layer underneath the per-map Audio panel. Mutually-exclusive
+ *  playback — only ONE slot can play at a time. Selecting a
+ *  different slot crossfades from the current to the new one.
+ *
+ *  The first slot is always a "silent" anchor — selecting it
+ *  crossfades to nothing, the elegant way to stop the music.
+ *  Subsequent slots are user-defined.
+ *
+ *  v2.15.12 redesign: replaced the fixed Pre-setup/Theme/Outro/
+ *  Playlist shape with an N-slot model (like the Soundboard) so
+ *  GMs can author per-scene labelled cues. Migration in
+ *  src/stagecraft/soundtracksMigrate.ts. */
 export interface SoundtracksConfig {
-  /** Pre-setup music — plays when the GM opens a session but hasn't
-   *  yet engaged the players (manual play / pause). */
-  preSetup?: SoundtrackSlot;
-  /** Intro / Theme — fires once at session start (manual trigger). */
-  theme?:    SoundtrackSlot;
-  /** Outro / Closing Credits — fires manually when wrapping up. */
-  outro?:    SoundtrackSlot;
-  /** Ambient playlist — auto-crossfades between tracks; the default
-   *  background layer once enabled. */
-  playlist?: SoundtrackSlot;
+  /** Ordered list of slots. By convention slots[0] is silent; the
+   *  migration helper guarantees this. */
+  slots: SoundtrackSlot[];
+  /** Crossfade duration in milliseconds when switching slots.
+   *  Default 1500 ms. */
+  crossfadeMs?: number;
 }
 
-/** A single Soundtrack slot. List of track references; for the
- *  Theme / Intro / Outro slots the list is typically 1, for the
- *  Playlist slot it's many. */
+/** A single Soundtrack slot. Holds 0..N tracks; how they're played
+ *  depends on `mode`. */
 export interface SoundtrackSlot {
-  /** Default volume for this slot (0..100). Optional. */
-  volume?: number;
+  /** Stable id for the slot — used to address it in panel state
+   *  (which slot is currently playing) and bundle round-trip. */
+  id: string;
+  /** User-set label (e.g. "Tavern", "Combat", "Spooky"). */
+  label: string;
+  /** Mode of operation:
+   *   - 'silent'    — selecting this slot stops the music (no tracks).
+   *   - 'play-once' — single track. Optionally trimmed via startSec /
+   *                   endSec; stops at endSec.
+   *   - 'loop'      — single track, loops the [startSec, endSec] range.
+   *   - 'playlist'  — many tracks, sequential or shuffled, crossfade
+   *                   between them. Loops at the end of the list. */
+  mode: 'silent' | 'play-once' | 'loop' | 'playlist';
+  /** Tracks. Empty for silent. One for play-once / loop. Many for
+   *  playlist. */
   tracks: SoundtrackTrack[];
+  /** Play-once / loop start time, seconds from track start. Default 0. */
+  startSec?: number;
+  /** Play-once / loop end time, seconds from track start. Default =
+   *  full track length. */
+  endSec?: number;
+  /** Playlist mode: when true, play tracks in random order. */
+  shuffle?: boolean;
+  /** Volume 0..100. Default 80. */
+  volume?: number;
 }
 
 /** A single track reference. Discriminated by `kind` so Spotify

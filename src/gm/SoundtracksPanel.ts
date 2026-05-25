@@ -1,314 +1,531 @@
 /**
- * SoundtracksPanel — pack-level background music. v2.16 first cut.
+ * SoundtracksPanel — pack-level background music with N user-defined
+ * slots, mutually-exclusive playback, and crossfade on slot switch.
  *
- * Four slots: Pre-setup / Theme (Intro) / Outro / Playlist. Each slot
- * holds a list of YouTube URL references. The panel uses one shared
- * YouTube IFrame Player instance and multiplexes it onto whichever
- * slot the GM is currently playing.
+ * The first slot is always a "Silent" anchor — selecting it
+ * crossfades the current track to silence and stops. Other slots
+ * are user-authored, each with:
+ *   - label (e.g. "Tavern", "Combat")
+ *   - mode: play-once | loop | playlist
+ *   - tracks: YouTube and/or Spotify URLs
+ *   - per-mode controls: start/end times for play-once/loop, shuffle
+ *     for playlist
+ *   - per-slot volume
  *
- * No OAuth — YouTube IFrame works for anyone. Spotify Web Playback
- * SDK lands in a later patch behind a discriminated union on
- * `SoundtrackTrack.kind`.
+ * One YouTube and one Spotify engine live alongside each other. The
+ * crossfade engine ramps the active engine's volume to 0 while
+ * ramping the new engine's volume from 0 to the target. Both engines
+ * support setVolume (YouTube IFrame Player + Spotify Web Playback
+ * SDK), so this works across providers without a parallel-iframe
+ * trick.
  *
- * Hidden by default; appears once isSoundtracksEnabled() is true
- * (Settings toggle).
+ * v2.15.12 — N-slot model + Spotify SDK + crossfade.
  */
 
 import type { SoundtracksConfig, SoundtrackSlot, SoundtrackTrack } from '../types.ts';
-import { isSoundtracksEnabled } from '../stagecraft/stagecraftStorage.ts';
+import {
+  isSoundtracksEnabled,
+  isYoutubeEnabled,
+  isSpotifyEnabled,
+} from '../stagecraft/stagecraftStorage.ts';
 import {
   createYouTubePlayer,
-  extractVideoId,
   YT_STATE,
   type YouTubeSoundtrackPlayer,
 } from '../stagecraft/youtubePlayer.ts';
-
-type SlotKey = 'preSetup' | 'theme' | 'outro' | 'playlist';
-
-const SLOT_ORDER: { key: SlotKey; label: string }[] = [
-  { key: 'preSetup', label: 'Pre-setup' },
-  { key: 'theme',    label: 'Theme / Intro' },
-  { key: 'outro',    label: 'Outro' },
-  { key: 'playlist', label: 'Playlist' },
-];
+import {
+  createSpotifyPlayer,
+  type SpotifySoundtrackPlayer,
+} from '../stagecraft/spotifySdk.ts';
+import { isSpotifyConnected, getSpotifyProfile } from '../stagecraft/spotifyAuth.ts';
+import { parseSoundtrackUrl, defaultTrackLabel } from '../stagecraft/soundtrackUrl.ts';
+import { migrateSoundtracksConfig, newUserSlot } from '../stagecraft/soundtracksMigrate.ts';
 
 export interface SoundtracksPanelHost {
-  /** Read the current pack-level Soundtracks config. Returns an empty
-   *  object when nothing has been set yet. */
+  /** Returns the current config (legacy-shape allowed; the panel
+   *  migrates on first read). */
   getConfig(): SoundtracksConfig;
-  /** Persist the new config. Called whenever the GM adds / removes a
-   *  track or changes a slot's volume. */
   saveConfig(cfg: SoundtracksConfig): Promise<void>;
 }
+
+const DEFAULT_VOLUME = 80;
+const CROSSFADE_STEPS = 20;
 
 export class SoundtracksPanel {
   private host:        SoundtracksPanelHost;
   private panelEl:     HTMLElement;
   private slotsEl:     HTMLElement;
   private statusEl:    HTMLElement;
-  private player:      YouTubeSoundtrackPlayer | null = null;
-  /** Which slot is currently playing — null = nothing. */
-  private activeSlot:  SlotKey | null = null;
+  /** Migrated working copy of the config. */
+  private cfg:         SoundtracksConfig = { slots: [] };
+  /** Lazily created engines. */
+  private ytPlayer:      YouTubeSoundtrackPlayer | null = null;
+  private spotifyPlayer: SpotifySoundtrackPlayer | null = null;
+  /** Which provider's engine is currently producing audio. */
+  private activeKind:   'youtube' | 'spotify' | null = null;
+  /** Which slot is currently playing — id from this.cfg.slots. */
+  private activeSlotId: string | null = null;
   /** Index within the active slot's tracks list. */
   private activeIndex = 0;
+  /** RAF / setTimeout handle for the running crossfade so we can
+   *  cancel mid-fade if the user picks another slot. */
+  private crossfadeTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(host: SoundtracksPanelHost) {
     this.host     = host;
     this.panelEl  = document.getElementById('soundtracks-panel')!;
     this.slotsEl  = document.getElementById('soundtracks-slots')!;
     this.statusEl = document.getElementById('soundtracks-status')!;
-    // Panel collapse/expand is handled by GMApp's global panel-title
-    // listener (binds every .panel-title[aria-expanded] button at
-    // bindUIControls time).
   }
 
-  /** Show / hide the panel based on Settings toggle + rebuild the
-   *  slot rows. Called from init() + on every Settings close. */
   refresh(): void {
     if (!isSoundtracksEnabled()) {
       this.panelEl.hidden = true;
-      // Don't tear down a playing track silently — if the user has it
-      // running, they'll notice the panel disappear; they can re-enable.
-      this._teardownPlayer();
+      this._teardownAllPlayers();
       return;
     }
     this.panelEl.hidden = false;
+    this.cfg = migrateSoundtracksConfig(this.host.getConfig());
     this._renderSlots();
   }
 
+  // ─── Render ─────────────────────────────────────────────────────────
+
   private _renderSlots(): void {
-    const cfg = this.host.getConfig();
     this.slotsEl.innerHTML = '';
-    for (const { key, label } of SLOT_ORDER) {
-      const slot = cfg[key];
-      this.slotsEl.appendChild(this._renderSlotRow(key, label, slot));
+    for (const slot of this.cfg.slots) {
+      this.slotsEl.appendChild(this._renderSlotRow(slot));
+    }
+    // Add-slot button.
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'btn btn--ghost btn--sm btn--full';
+    addBtn.style.marginTop = '8px';
+    addBtn.textContent = '+ Add slot';
+    addBtn.addEventListener('click', () => void this._addSlot());
+    this.slotsEl.appendChild(addBtn);
+
+    // Spotify status note (helpful when SDK won't play).
+    if (isSpotifyEnabled()) {
+      const note = document.createElement('div');
+      note.className = 'settings-stat-sub';
+      note.style.marginTop = '4px';
+      if (!isSpotifyConnected()) {
+        note.textContent = 'Spotify enabled but not connected — Settings → Stagecraft → Connect to play Spotify tracks.';
+      } else {
+        const p = getSpotifyProfile();
+        if (p && p.product !== 'premium') {
+          note.textContent = `Spotify connected as ${p.displayName} (${p.product}). Web Playback SDK requires a Premium account — free accounts can't play full tracks.`;
+        }
+      }
+      this.slotsEl.appendChild(note);
     }
   }
 
-  private _renderSlotRow(key: SlotKey, label: string, slot: SoundtrackSlot | undefined): HTMLElement {
+  private _renderSlotRow(slot: SoundtrackSlot): HTMLElement {
     const row = document.createElement('div');
     row.className = 'soundtrack-slot';
-    row.dataset['slotKey'] = key;
+    row.dataset['slotId'] = slot.id;
+    const isActive = this.activeSlotId === slot.id;
+    if (isActive) row.classList.add('is-active');
+    const isSilent = slot.mode === 'silent';
 
-    // Header — label + transport buttons.
+    // Header — label + play indicator + (for non-silent) settings popover.
     const header = document.createElement('div');
     header.className = 'soundtrack-slot-header';
-    const labelEl = document.createElement('div');
-    labelEl.className = 'soundtrack-slot-label';
-    labelEl.textContent = label;
-    header.appendChild(labelEl);
 
-    const isActive = this.activeSlot === key;
     const playBtn = document.createElement('button');
     playBtn.type = 'button';
     playBtn.className = 'btn btn--ghost btn--sm';
-    playBtn.textContent = isActive ? 'Pause' : 'Play';
-    playBtn.disabled = !slot || slot.tracks.length === 0;
-    playBtn.addEventListener('click', () => {
-      if (isActive) void this._togglePause();
-      else          void this._playSlot(key);
-    });
+    playBtn.textContent = isActive ? '▣' : '▶';
+    playBtn.title = isActive ? 'Currently playing' : 'Crossfade to this slot';
+    playBtn.disabled = !isSilent && slot.tracks.length === 0;
+    playBtn.addEventListener('click', () => void this._selectSlot(slot.id));
+    header.appendChild(playBtn);
 
-    const stopBtn = document.createElement('button');
-    stopBtn.type = 'button';
-    stopBtn.className = 'btn btn--ghost btn--sm';
-    stopBtn.textContent = 'Stop';
-    stopBtn.disabled = !isActive;
-    stopBtn.addEventListener('click', () => this._stop());
+    if (isSilent) {
+      const labelEl = document.createElement('div');
+      labelEl.className = 'soundtrack-slot-label';
+      labelEl.textContent = slot.label;
+      header.appendChild(labelEl);
+    } else {
+      const labelInput = document.createElement('input');
+      labelInput.type = 'text';
+      labelInput.value = slot.label;
+      labelInput.className = 'soundtrack-slot-label-input';
+      labelInput.addEventListener('change', () => void this._updateSlot(slot.id, { label: labelInput.value.trim() || 'Slot' }));
+      header.appendChild(labelInput);
+    }
 
-    header.append(playBtn, stopBtn);
+    if (!isSilent) {
+      const delBtn = document.createElement('button');
+      delBtn.type = 'button';
+      delBtn.className = 'btn btn--danger btn--sm';
+      delBtn.textContent = '×';
+      delBtn.title = 'Remove slot';
+      delBtn.addEventListener('click', () => void this._removeSlot(slot.id));
+      header.appendChild(delBtn);
+    }
     row.appendChild(header);
 
-    // Volume slider (drives the YT player when this slot is active).
-    const volRow = document.createElement('div');
-    volRow.className = 'soundtrack-volume-row';
-    const volLabel = document.createElement('span');
-    volLabel.className = 'settings-stat-sub';
-    const initialVol = slot?.volume ?? 80;
-    volLabel.textContent = `Vol ${initialVol}%`;
-    const volSlider = document.createElement('input');
-    volSlider.type = 'range';
-    volSlider.min = '0';
-    volSlider.max = '100';
-    volSlider.value = String(initialVol);
-    volSlider.addEventListener('input', () => {
-      const v = parseInt(volSlider.value, 10);
-      volLabel.textContent = `Vol ${v}%`;
-      if (isActive && this.player) this.player.setVolume(v);
-    });
-    volSlider.addEventListener('change', () => {
-      const v = parseInt(volSlider.value, 10);
-      void this._setSlotVolume(key, v);
-    });
-    volRow.append(volLabel, volSlider);
-    row.appendChild(volRow);
+    if (isSilent) return row;
 
-    // Track list.
-    const tracksEl = document.createElement('div');
-    tracksEl.className = 'soundtrack-tracks';
-    if (slot && slot.tracks.length > 0) {
-      slot.tracks.forEach((t, i) => {
-        const trEl = document.createElement('div');
-        trEl.className = 'soundtrack-track';
-        if (isActive && i === this.activeIndex) trEl.classList.add('is-playing');
-        const desc = document.createElement('span');
-        desc.textContent = t.kind === 'youtube'
-          ? (t.label ?? `YouTube: ${t.videoId}`)
-          : (t.label ?? `Spotify: ${t.trackUri}`);
-        const rmBtn = document.createElement('button');
-        rmBtn.type = 'button';
-        rmBtn.className = 'btn btn--danger btn--sm';
-        rmBtn.textContent = '×';
-        rmBtn.title = 'Remove track';
-        rmBtn.addEventListener('click', () => void this._removeTrack(key, i));
-        trEl.append(desc, rmBtn);
-        tracksEl.appendChild(trEl);
-      });
-    } else {
-      const empty = document.createElement('div');
-      empty.className = 'settings-stat-sub';
-      empty.textContent = 'No tracks. Paste a YouTube URL below to add one.';
-      tracksEl.appendChild(empty);
+    // Mode picker.
+    const modeRow = document.createElement('div');
+    modeRow.className = 'soundtrack-mode-row';
+    const modeSelect = document.createElement('select');
+    for (const m of ['play-once', 'loop', 'playlist'] as const) {
+      const opt = document.createElement('option');
+      opt.value = m;
+      opt.textContent = m === 'play-once' ? 'Play once' : m === 'loop' ? 'Loop' : 'Playlist';
+      modeSelect.appendChild(opt);
     }
-    row.appendChild(tracksEl);
+    modeSelect.value = slot.mode;
+    modeSelect.addEventListener('change', () => void this._updateSlot(slot.id, { mode: modeSelect.value as SoundtrackSlot['mode'] }));
+    modeRow.appendChild(modeSelect);
+    row.appendChild(modeRow);
+
+    // Mode-specific controls.
+    if (slot.mode === 'play-once' || slot.mode === 'loop') {
+      row.appendChild(this._renderTimeControls(slot));
+    } else if (slot.mode === 'playlist') {
+      row.appendChild(this._renderShuffleControl(slot));
+    }
+
+    // Tracks list.
+    row.appendChild(this._renderTrackList(slot));
 
     // Add-track input.
-    const addRow = document.createElement('div');
-    addRow.className = 'soundtrack-add-row';
-    const input = document.createElement('input');
-    input.type = 'text';
-    input.placeholder = 'Paste YouTube URL (or video id)';
-    const addBtn = document.createElement('button');
-    addBtn.type = 'button';
-    addBtn.className = 'btn btn--ghost btn--sm';
-    addBtn.textContent = 'Add';
-    const submit = () => {
-      const id = extractVideoId(input.value);
-      if (!id) {
-        this.statusEl.textContent = 'Could not parse a YouTube video id from that input.';
-        return;
-      }
-      void this._addTrack(key, { kind: 'youtube', videoId: id });
-      input.value = '';
-      this.statusEl.textContent = '';
-    };
-    addBtn.addEventListener('click', submit);
-    input.addEventListener('keydown', (ev) => {
-      if (ev.key === 'Enter') { ev.preventDefault(); submit(); }
-    });
-    addRow.append(input, addBtn);
-    row.appendChild(addRow);
+    row.appendChild(this._renderAddTrack(slot));
+
+    // Volume slider.
+    row.appendChild(this._renderVolume(slot));
 
     return row;
   }
 
-  private async _addTrack(key: SlotKey, track: SoundtrackTrack): Promise<void> {
-    const cfg = this.host.getConfig();
-    const slot = cfg[key] ?? { tracks: [] };
-    const next: SoundtracksConfig = {
-      ...cfg,
-      [key]: { ...slot, tracks: [...slot.tracks, track] },
-    };
-    await this.host.saveConfig(next);
-    this._renderSlots();
-  }
-
-  private async _setSlotVolume(key: SlotKey, volume: number): Promise<void> {
-    const cfg = this.host.getConfig();
-    const slot = cfg[key] ?? { tracks: [] };
-    const next: SoundtracksConfig = {
-      ...cfg,
-      [key]: { ...slot, volume },
-    };
-    await this.host.saveConfig(next);
-  }
-
-  private async _removeTrack(key: SlotKey, index: number): Promise<void> {
-    const cfg = this.host.getConfig();
-    const slot = cfg[key];
-    if (!slot) return;
-    const nextTracks = slot.tracks.filter((_, i) => i !== index);
-    const next: SoundtracksConfig = {
-      ...cfg,
-      [key]: { ...slot, tracks: nextTracks },
-    };
-    // If we just removed the active track, stop.
-    if (this.activeSlot === key && this.activeIndex >= nextTracks.length) {
-      this._stop();
-    }
-    await this.host.saveConfig(next);
-    this._renderSlots();
-  }
-
-  private async _playSlot(key: SlotKey): Promise<void> {
-    const cfg = this.host.getConfig();
-    const slot = cfg[key];
-    if (!slot || slot.tracks.length === 0) return;
-    if (!this.player) {
-      this.statusEl.textContent = 'Loading YouTube player…';
-      this.player = await createYouTubePlayer();
-      this.player.onStateChange((s) => this._onPlayerState(s));
-      this.statusEl.textContent = '';
-    }
-    this.activeSlot  = key;
-    this.activeIndex = 0;
-    const first = slot.tracks[0];
-    if (first && first.kind === 'youtube') {
-      this.player.load(first.videoId, {
-        autoplay: true,
-        volume:   slot.volume ?? 80,
+  private _renderTimeControls(slot: SoundtrackSlot): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'soundtrack-time-row';
+    const mkInput = (label: string, key: 'startSec' | 'endSec'): HTMLElement => {
+      const lbl = document.createElement('label');
+      const val = document.createElement('input');
+      val.type = 'number';
+      val.min  = '0';
+      val.step = '0.5';
+      val.placeholder = label === 'Start' ? '0' : '(end)';
+      const cur = slot[key];
+      val.value = cur !== undefined ? String(cur) : '';
+      val.addEventListener('change', () => {
+        const num = parseFloat(val.value);
+        const patch = Number.isFinite(num) && num >= 0
+          ? ({ [key]: num } as Partial<SoundtrackSlot>)
+          : ({ [key]: undefined } as unknown as Partial<SoundtrackSlot>);
+        void this._updateSlot(slot.id, patch);
       });
-    }
-    this._renderSlots();
+      lbl.append(document.createTextNode(label + ' '), val);
+      return lbl;
+    };
+    wrap.append(mkInput('Start', 'startSec'), mkInput('End', 'endSec'));
+    return wrap;
   }
 
-  private _onPlayerState(state: number): void {
-    if (state === YT_STATE.ENDED) {
-      // Advance to next track in the active slot, or stop.
-      if (!this.activeSlot) return;
-      const cfg = this.host.getConfig();
-      const slot = cfg[this.activeSlot];
-      if (!slot) { this._stop(); return; }
-      const next = this.activeIndex + 1;
-      if (next >= slot.tracks.length) {
-        // Loop playlists; stop one-shots.
-        if (this.activeSlot === 'playlist') {
-          this.activeIndex = 0;
-        } else {
-          this._stop();
-          return;
+  private _renderShuffleControl(slot: SoundtrackSlot): HTMLElement {
+    const wrap = document.createElement('label');
+    wrap.className = 'soundtrack-shuffle-row';
+    const cb = document.createElement('input');
+    cb.type = 'checkbox';
+    cb.checked = !!slot.shuffle;
+    cb.addEventListener('change', () => void this._updateSlot(slot.id, { shuffle: cb.checked }));
+    wrap.append(cb, document.createTextNode(' Shuffle (random order)'));
+    return wrap;
+  }
+
+  private _renderTrackList(slot: SoundtrackSlot): HTMLElement {
+    const list = document.createElement('div');
+    list.className = 'soundtrack-tracks';
+    if (slot.tracks.length === 0) {
+      const empty = document.createElement('div');
+      empty.className = 'settings-stat-sub';
+      empty.textContent = 'No tracks — paste a URL below.';
+      list.appendChild(empty);
+      return list;
+    }
+    slot.tracks.forEach((t, i) => {
+      const trEl = document.createElement('div');
+      trEl.className = 'soundtrack-track';
+      if (this.activeSlotId === slot.id && i === this.activeIndex) trEl.classList.add('is-playing');
+      const desc = document.createElement('span');
+      desc.textContent = t.label ?? defaultTrackLabel(t);
+      desc.className   = `soundtrack-track-label soundtrack-track-label--${t.kind}`;
+      const rmBtn = document.createElement('button');
+      rmBtn.type = 'button';
+      rmBtn.className = 'btn btn--danger btn--sm';
+      rmBtn.textContent = '×';
+      rmBtn.title = 'Remove track';
+      rmBtn.addEventListener('click', () => void this._removeTrack(slot.id, i));
+      trEl.append(desc, rmBtn);
+      list.appendChild(trEl);
+    });
+    return list;
+  }
+
+  private _renderAddTrack(slot: SoundtrackSlot): HTMLElement {
+    const addRow = document.createElement('div');
+    addRow.className = 'soundtrack-add-row';
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.placeholder = 'Paste YouTube or Spotify URL';
+    const addBtn = document.createElement('button');
+    addBtn.type = 'button';
+    addBtn.className = 'btn btn--ghost btn--sm';
+    addBtn.textContent = 'Add';
+    const submit = (): void => {
+      const t = parseSoundtrackUrl(input.value);
+      if (!t) {
+        this.statusEl.textContent = 'Couldn\'t parse a YouTube / Spotify track from that URL.';
+        return;
+      }
+      if (t.kind === 'youtube' && !isYoutubeEnabled()) {
+        this.statusEl.textContent = 'YouTube is disabled — enable it in Settings → Stagecraft.';
+        return;
+      }
+      if (t.kind === 'spotify' && !isSpotifyEnabled()) {
+        this.statusEl.textContent = 'Spotify is disabled — enable it in Settings → Stagecraft.';
+        return;
+      }
+      void this._addTrack(slot.id, t);
+      input.value = '';
+      this.statusEl.textContent = '';
+    };
+    addBtn.addEventListener('click', submit);
+    input.addEventListener('keydown', (ev) => { if (ev.key === 'Enter') { ev.preventDefault(); submit(); } });
+    addRow.append(input, addBtn);
+    return addRow;
+  }
+
+  private _renderVolume(slot: SoundtrackSlot): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'soundtrack-volume-row';
+    const label = document.createElement('span');
+    label.className = 'settings-stat-sub';
+    const initialVol = slot.volume ?? DEFAULT_VOLUME;
+    label.textContent = `Vol ${initialVol}%`;
+    const slider = document.createElement('input');
+    slider.type = 'range';
+    slider.min  = '0';
+    slider.max  = '100';
+    slider.value = String(initialVol);
+    slider.addEventListener('input', () => {
+      const v = parseInt(slider.value, 10);
+      label.textContent = `Vol ${v}%`;
+      // Live-drive the active player's volume if THIS slot is playing.
+      if (this.activeSlotId === slot.id) {
+        const player = this._activePlayer();
+        if (player) {
+          if (this.activeKind === 'spotify') void (player as SpotifySoundtrackPlayer).setVolume(v);
+          else                                (player as YouTubeSoundtrackPlayer).setVolume(v);
         }
-      } else {
-        this.activeIndex = next;
       }
-      const t = slot.tracks[this.activeIndex];
-      if (this.player && t && t.kind === 'youtube') {
-        this.player.load(t.videoId, { autoplay: true, volume: slot.volume ?? 80 });
-      }
-      this._renderSlots();
-    }
+    });
+    slider.addEventListener('change', () => {
+      const v = parseInt(slider.value, 10);
+      void this._updateSlot(slot.id, { volume: v });
+    });
+    row.append(label, slider);
+    return row;
   }
 
-  private _togglePause(): void {
-    if (!this.player) return;
-    // Crude — assumes any non-paused state means "playing-ish".
-    this.player.pause();
-  }
+  // ─── Mutations ──────────────────────────────────────────────────────
 
-  private _stop(): void {
-    if (this.player) this.player.stop();
-    this.activeSlot  = null;
-    this.activeIndex = 0;
+  private async _addSlot(): Promise<void> {
+    const slot = newUserSlot(`Slot ${this.cfg.slots.length}`);
+    this.cfg = { ...this.cfg, slots: [...this.cfg.slots, slot] };
+    await this.host.saveConfig(this.cfg);
     this._renderSlots();
   }
 
-  private _teardownPlayer(): void {
-    if (this.player) {
-      try { this.player.destroy(); } catch { /* ignore */ }
-      this.player = null;
-    }
-    this.activeSlot  = null;
-    this.activeIndex = 0;
+  private async _removeSlot(id: string): Promise<void> {
+    if (this.activeSlotId === id) await this._selectSlot(this.cfg.slots[0]?.id ?? null);
+    this.cfg = { ...this.cfg, slots: this.cfg.slots.filter((s) => s.id !== id) };
+    await this.host.saveConfig(this.cfg);
+    this._renderSlots();
   }
 
+  private async _updateSlot(id: string, patch: Partial<SoundtrackSlot>): Promise<void> {
+    this.cfg = {
+      ...this.cfg,
+      slots: this.cfg.slots.map((s) => s.id === id ? { ...s, ...patch } : s),
+    };
+    await this.host.saveConfig(this.cfg);
+    this._renderSlots();
+  }
+
+  private async _addTrack(id: string, track: SoundtrackTrack): Promise<void> {
+    const slot = this.cfg.slots.find((s) => s.id === id);
+    if (!slot) return;
+    await this._updateSlot(id, { tracks: [...slot.tracks, track] });
+  }
+
+  private async _removeTrack(id: string, index: number): Promise<void> {
+    const slot = this.cfg.slots.find((s) => s.id === id);
+    if (!slot) return;
+    await this._updateSlot(id, { tracks: slot.tracks.filter((_, i) => i !== index) });
+  }
+
+  // ─── Playback ───────────────────────────────────────────────────────
+
+  /** Crossfade from the currently-playing slot to `targetSlotId`.
+   *  Silent target: fade current down + stop. Same-slot: no-op. */
+  private async _selectSlot(targetSlotId: string | null): Promise<void> {
+    if (targetSlotId === this.activeSlotId) return;
+    const target = targetSlotId ? this.cfg.slots.find((s) => s.id === targetSlotId) : null;
+    const crossfadeMs = this.cfg.crossfadeMs ?? 1500;
+
+    // Cancel any in-flight crossfade.
+    if (this.crossfadeTimer) { clearTimeout(this.crossfadeTimer); this.crossfadeTimer = null; }
+
+    // Fade current down (if anything is playing).
+    if (this.activeKind && this._activePlayer()) {
+      await this._fade(this.activeKind, this._currentVolume(), 0, crossfadeMs);
+      try {
+        const p = this._activePlayer();
+        if (this.activeKind === 'spotify') await (p as SpotifySoundtrackPlayer).stop();
+        else                                (p as YouTubeSoundtrackPlayer).stop();
+      } catch { /* nothing */ }
+    }
+
+    this.activeSlotId = targetSlotId;
+    this.activeKind   = null;
+    this.activeIndex  = 0;
+
+    if (!target || target.mode === 'silent' || target.tracks.length === 0) {
+      this._renderSlots();
+      return;
+    }
+
+    // Pick the first track (or random if shuffle), kick playback.
+    const startIndex = target.mode === 'playlist' && target.shuffle
+      ? Math.floor(Math.random() * target.tracks.length)
+      : 0;
+    this.activeIndex = startIndex;
+    await this._playTrackAtIndex(target, startIndex, crossfadeMs);
+    this._renderSlots();
+  }
+
+  private async _playTrackAtIndex(slot: SoundtrackSlot, index: number, crossfadeMs: number): Promise<void> {
+    const track = slot.tracks[index];
+    if (!track) return;
+    const targetVolume = slot.volume ?? DEFAULT_VOLUME;
+    if (track.kind === 'youtube') {
+      const p = await this._ensureYouTubePlayer();
+      p.load(track.videoId, { autoplay: true, volume: 0 });
+      this.activeKind = 'youtube';
+      // YouTube needs a moment for the player to actually start before
+      // setVolume takes effect; ramp via setVolume regardless.
+      await this._fade('youtube', 0, targetVolume, crossfadeMs);
+    } else {
+      const p = await this._ensureSpotifyPlayer();
+      const positionMs = slot.startSec ? Math.floor(slot.startSec * 1000) : 0;
+      await p.load(track.trackUri, {
+        autoplay: true,
+        volume:   0,
+        ...(positionMs ? { positionMs } : {}),
+      });
+      this.activeKind = 'spotify';
+      await this._fade('spotify', 0, targetVolume, crossfadeMs);
+    }
+  }
+
+  /** Volume ramp on the named engine. Returns when the fade is done
+   *  (or has been cancelled by a newer _selectSlot). */
+  private async _fade(kind: 'youtube' | 'spotify', from: number, to: number, durationMs: number): Promise<void> {
+    if (durationMs <= 0) return;
+    const stepMs = Math.max(20, Math.floor(durationMs / CROSSFADE_STEPS));
+    const steps  = Math.max(1, Math.floor(durationMs / stepMs));
+    return new Promise((resolve) => {
+      let i = 0;
+      const tick = (): void => {
+        i++;
+        const t = Math.min(1, i / steps);
+        const v = from + (to - from) * t;
+        const p = kind === 'youtube' ? this.ytPlayer : this.spotifyPlayer;
+        if (p) {
+          if (kind === 'spotify') void (p as SpotifySoundtrackPlayer).setVolume(v);
+          else                    (p as YouTubeSoundtrackPlayer).setVolume(v);
+        }
+        if (i >= steps) { this.crossfadeTimer = null; resolve(); }
+        else            { this.crossfadeTimer = setTimeout(tick, stepMs); }
+      };
+      this.crossfadeTimer = setTimeout(tick, stepMs);
+    });
+  }
+
+  private _currentVolume(): number {
+    const slot = this.cfg.slots.find((s) => s.id === this.activeSlotId);
+    return slot?.volume ?? DEFAULT_VOLUME;
+  }
+
+  private _activePlayer(): YouTubeSoundtrackPlayer | SpotifySoundtrackPlayer | null {
+    if (this.activeKind === 'youtube') return this.ytPlayer;
+    if (this.activeKind === 'spotify') return this.spotifyPlayer;
+    return null;
+  }
+
+  private async _ensureYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
+    if (this.ytPlayer) return this.ytPlayer;
+    this.statusEl.textContent = 'Loading YouTube player…';
+    this.ytPlayer = await createYouTubePlayer();
+    this.statusEl.textContent = '';
+    this.ytPlayer.onStateChange((s) => {
+      if (s === YT_STATE.ENDED) this._onTrackEnded();
+    });
+    return this.ytPlayer;
+  }
+
+  private async _ensureSpotifyPlayer(): Promise<SpotifySoundtrackPlayer> {
+    if (this.spotifyPlayer) return this.spotifyPlayer;
+    if (!isSpotifyConnected()) {
+      throw new Error('Spotify not connected. Settings → Stagecraft → Connect Spotify.');
+    }
+    this.statusEl.textContent = 'Loading Spotify player…';
+    this.spotifyPlayer = await createSpotifyPlayer();
+    this.statusEl.textContent = '';
+    this.spotifyPlayer.onEnded(() => this._onTrackEnded());
+    return this.spotifyPlayer;
+  }
+
+  private _onTrackEnded(): void {
+    const slot = this.cfg.slots.find((s) => s.id === this.activeSlotId);
+    if (!slot) return;
+    const crossfadeMs = this.cfg.crossfadeMs ?? 1500;
+    if (slot.mode === 'play-once') {
+      // Stop after one play; go silent.
+      void this._selectSlot(this.cfg.slots[0]?.id ?? null);
+      return;
+    }
+    if (slot.mode === 'loop') {
+      // Replay the same track from startSec.
+      void this._playTrackAtIndex(slot, this.activeIndex, crossfadeMs);
+      return;
+    }
+    // playlist: advance to next track (with shuffle if set).
+    let next = this.activeIndex + 1;
+    if (slot.shuffle && slot.tracks.length > 1) {
+      do { next = Math.floor(Math.random() * slot.tracks.length); }
+      while (next === this.activeIndex);
+    }
+    if (next >= slot.tracks.length) next = 0;
+    this.activeIndex = next;
+    void this._playTrackAtIndex(slot, next, crossfadeMs);
+    this._renderSlots();
+  }
+
+  private _teardownAllPlayers(): void {
+    if (this.ytPlayer)      { try { this.ytPlayer.destroy(); }      catch { /* nothing */ } this.ytPlayer = null; }
+    if (this.spotifyPlayer) { try { this.spotifyPlayer.destroy(); } catch { /* nothing */ } this.spotifyPlayer = null; }
+    this.activeKind   = null;
+    this.activeSlotId = null;
+    this.activeIndex  = 0;
+  }
 }

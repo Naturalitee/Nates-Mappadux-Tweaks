@@ -14,7 +14,8 @@
 const WLED_ENDPOINTS_KEY = 'mappadux:stagecraft_wled_endpoints';
 const HA_CONFIG_KEY      = 'mappadux:stagecraft_ha';
 const QLC_CONFIG_KEY     = 'mappadux:stagecraft_qlc';
-const SOUNDTRACKS_ENABLED_KEY = 'mappadux:stagecraft_soundtracks_enabled';
+const SOUNDTRACK_YT_KEY  = 'mappadux:stagecraft_soundtracks_youtube';
+const SOUNDTRACK_SP_KEY  = 'mappadux:stagecraft_soundtracks_spotify';
 
 export interface WledEndpoint {
   /** Stable id (generated when the endpoint is first added). Used to
@@ -119,21 +120,42 @@ export function setQlcConfig(cfg: QlcConfig | null): void {
   } catch { /* private mode etc. — no-op */ }
 }
 
-// ─── Soundtracks (YouTube) — pack-level enable ─────────────────────────
+// ─── Soundtracks — per-provider enable ─────────────────────────────────
 
-/** YouTube doesn't need OAuth so the "enable" is really just a user
- *  opt-in that says "I want the Soundtracks panel to appear". The
- *  track URLs themselves travel in the bundle on SessionState. */
-export function isSoundtracksEnabled(): boolean {
-  try { return localStorage.getItem(SOUNDTRACKS_ENABLED_KEY) === '1'; }
+/** YouTube doesn't need OAuth — the "enable" is an explicit user
+ *  opt-in (mirrors how WLED / HA / QLC+ each connect via Settings)
+ *  that says "I want the Soundtracks panel to appear and accept
+ *  YouTube URLs". */
+export function isYoutubeEnabled(): boolean {
+  try { return localStorage.getItem(SOUNDTRACK_YT_KEY) === '1'; }
   catch { return false; }
 }
-
-export function setSoundtracksEnabled(enabled: boolean): void {
+export function setYoutubeEnabled(enabled: boolean): void {
   try {
-    if (enabled) localStorage.setItem(SOUNDTRACKS_ENABLED_KEY, '1');
-    else         localStorage.removeItem(SOUNDTRACKS_ENABLED_KEY);
+    if (enabled) localStorage.setItem(SOUNDTRACK_YT_KEY, '1');
+    else         localStorage.removeItem(SOUNDTRACK_YT_KEY);
   } catch { /* private mode etc. — no-op */ }
+}
+
+/** Spotify (embed path — no Developer App, no OAuth, ~30s previews
+ *  for non-signed-in users; full tracks when the user already has
+ *  Spotify open in another tab + signed in). Future Web Playback
+ *  SDK integration with full track playback regardless of session
+ *  will hang off this same enable flag plus a token-config slot. */
+export function isSpotifyEnabled(): boolean {
+  try { return localStorage.getItem(SOUNDTRACK_SP_KEY) === '1'; }
+  catch { return false; }
+}
+export function setSpotifyEnabled(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.setItem(SOUNDTRACK_SP_KEY, '1');
+    else         localStorage.removeItem(SOUNDTRACK_SP_KEY);
+  } catch { /* private mode etc. — no-op */ }
+}
+
+/** Either provider enabled → the Soundtracks panel appears. */
+export function isSoundtracksEnabled(): boolean {
+  return isYoutubeEnabled() || isSpotifyEnabled();
 }
 
 // ─── Convenience: are any Stagecraft connections configured? ──────────
