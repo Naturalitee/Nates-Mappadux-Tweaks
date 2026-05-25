@@ -20,10 +20,12 @@ import type { MapAsset, StagecraftAssignment } from '../types.ts';
 import {
   getWledEndpoints,
   getHaConfig,
+  getQlcConfig,
   hasAnyStagecraftConnection,
 } from '../stagecraft/stagecraftStorage.ts';
 import { fetchPresets, type WledPreset } from '../stagecraft/wledClient.ts';
 import { fetchEntities, type HaEntity } from '../stagecraft/haClient.ts';
+import { fetchFunctions, type QlcFunction } from '../stagecraft/qlcClient.ts';
 
 export interface StagecraftPanelHost {
   /** Returns the live MapAsset for the active map, or null when no
@@ -49,6 +51,8 @@ export class StagecraftPanel {
   private wledPresetCache = new Map<string, WledPreset[]>();
   /** Cache of HA entities, populated lazily. */
   private haEntityCache: HaEntity[] | null = null;
+  /** Cache of QLC+ Functions, populated lazily. */
+  private qlcFunctionCache: QlcFunction[] | null = null;
 
   constructor(host: StagecraftPanelHost) {
     this.host          = host;
@@ -71,6 +75,7 @@ export class StagecraftPanel {
     if (opts?.force) {
       this.wledPresetCache.clear();
       this.haEntityCache = null;
+      this.qlcFunctionCache = null;
     }
     if (!hasAnyStagecraftConnection()) {
       this.panelEl.hidden = true;
@@ -112,6 +117,31 @@ export class StagecraftPanel {
         const v = select.value;
         if (v === '') void this.host.saveAssignment(endpoint.id, null);
         else void this.host.saveAssignment(endpoint.id, { kind: 'wled', presetId: parseInt(v, 10) });
+      });
+    }
+
+    // ── QLC+ row ────────────────────────────────────────────────
+    const qlc = getQlcConfig();
+    if (qlc) {
+      const row = document.createElement('div');
+      row.className = 'stagecraft-row';
+      const labelEl = document.createElement('label');
+      labelEl.textContent = 'QLC+:';
+      const select = document.createElement('select');
+      select.className = 'stagecraft-select';
+      const loadingOpt = document.createElement('option');
+      loadingOpt.textContent = 'Loading Functions…';
+      loadingOpt.disabled = true;
+      select.appendChild(loadingOpt);
+      row.append(labelEl, select);
+      this.assignmentsEl.appendChild(row);
+
+      const fns = this.qlcFunctionCache ?? await this._loadQlcFunctions(qlc.url);
+      this._populateQlcSelect(select, fns, existing['qlc']);
+      select.addEventListener('change', () => {
+        const v = select.value;
+        if (v === '') void this.host.saveAssignment('qlc', null);
+        else          void this.host.saveAssignment('qlc', { kind: 'qlc', functionId: parseInt(v, 10) });
       });
     }
 
@@ -168,6 +198,48 @@ export class StagecraftPanel {
     }
     this.haEntityCache = result.data;
     return result.data;
+  }
+
+  private async _loadQlcFunctions(url: string): Promise<QlcFunction[]> {
+    const result = await fetchFunctions(url);
+    if (!result.ok) {
+      this.statusEl.textContent = `QLC+: ${result.message}`;
+      return [];
+    }
+    this.qlcFunctionCache = result.data;
+    return result.data;
+  }
+
+  private _populateQlcSelect(
+    select: HTMLSelectElement,
+    fns: QlcFunction[],
+    existing: StagecraftAssignment | undefined,
+  ): void {
+    select.innerHTML = '';
+    const none = document.createElement('option');
+    none.value = '';
+    none.textContent = '(none — do nothing on this map)';
+    select.appendChild(none);
+    // Group by Function type so chasers / scenes / sequences are
+    // easy to scan. Mirrors how QLC+'s own dropdown organises them.
+    const groups: Record<string, QlcFunction[]> = {};
+    for (const f of fns) (groups[f.type] ??= []).push(f);
+    for (const type of Object.keys(groups).sort()) {
+      const og = document.createElement('optgroup');
+      og.label = type;
+      for (const f of groups[type]!) {
+        const opt = document.createElement('option');
+        opt.value = String(f.id);
+        opt.textContent = f.name;
+        og.appendChild(opt);
+      }
+      select.appendChild(og);
+    }
+    if (existing && existing.kind === 'qlc') {
+      select.value = String(existing.functionId);
+    } else {
+      select.value = '';
+    }
   }
 
   private _populateWledSelect(

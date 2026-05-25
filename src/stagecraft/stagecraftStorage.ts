@@ -13,6 +13,7 @@
 
 const WLED_ENDPOINTS_KEY = 'mappadux:stagecraft_wled_endpoints';
 const HA_CONFIG_KEY      = 'mappadux:stagecraft_ha';
+const QLC_CONFIG_KEY     = 'mappadux:stagecraft_qlc';
 const SOUNDTRACKS_ENABLED_KEY = 'mappadux:stagecraft_soundtracks_enabled';
 
 export interface WledEndpoint {
@@ -30,6 +31,13 @@ export interface HaConfig {
   url: string;
   /** Long-lived access token. Never travels in bundles. */
   token: string;
+}
+
+export interface QlcConfig {
+  /** WebSocket-bearing URL, e.g. `ws://192.168.1.50:9999/qlcplusWS`.
+   *  Stored normalised; users can type just the host and Mappadux
+   *  fills in the default port + path. */
+  url: string;
 }
 
 // ─── WLED endpoints ────────────────────────────────────────────────────
@@ -90,6 +98,27 @@ export function setHaConfig(cfg: HaConfig | null): void {
   } catch { /* private mode etc. — no-op */ }
 }
 
+// ─── QLC+ (DMX lighting) ───────────────────────────────────────────────
+
+export function getQlcConfig(): QlcConfig | null {
+  try {
+    const raw = localStorage.getItem(QLC_CONFIG_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    if (!parsed || typeof parsed !== 'object') return null;
+    const r = parsed as Record<string, unknown>;
+    if (typeof r['url'] !== 'string') return null;
+    return { url: r['url'] };
+  } catch { return null; }
+}
+
+export function setQlcConfig(cfg: QlcConfig | null): void {
+  try {
+    if (cfg) localStorage.setItem(QLC_CONFIG_KEY, JSON.stringify(cfg));
+    else     localStorage.removeItem(QLC_CONFIG_KEY);
+  } catch { /* private mode etc. — no-op */ }
+}
+
 // ─── Soundtracks (YouTube) — pack-level enable ─────────────────────────
 
 /** YouTube doesn't need OAuth so the "enable" is really just a user
@@ -109,9 +138,11 @@ export function setSoundtracksEnabled(enabled: boolean): void {
 
 // ─── Convenience: are any Stagecraft connections configured? ──────────
 
-/** True if at least one WLED endpoint, HA config, or Soundtracks opt-
- *  in exists. Drives the Lighting/Automation panel's visibility —
- *  the Soundtracks panel is independently gated by isSoundtracksEnabled. */
+/** True if at least one WLED endpoint, HA config, or QLC+ config
+ *  exists. Drives the Lighting/Automation panel's visibility — the
+ *  Soundtracks panel is independently gated by isSoundtracksEnabled. */
 export function hasAnyStagecraftConnection(): boolean {
-  return getWledEndpoints().length > 0 || getHaConfig() !== null;
+  return getWledEndpoints().length > 0
+      || getHaConfig()  !== null
+      || getQlcConfig() !== null;
 }

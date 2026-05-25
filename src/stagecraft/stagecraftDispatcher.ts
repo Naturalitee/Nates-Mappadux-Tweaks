@@ -17,9 +17,11 @@ import type { MapAsset, StagecraftAssignment } from '../types.ts';
 import {
   getWledEndpoints,
   getHaConfig,
+  getQlcConfig,
 } from './stagecraftStorage.ts';
 import { applyPreset as wledApplyPreset } from './wledClient.ts';
 import { fireEntity as haFireEntity, type HaEntity } from './haClient.ts';
+import { fireFunction as qlcFireFunction } from './qlcClient.ts';
 
 /** Run every Stagecraft assignment defined on `asset`. Resolves once
  *  all fire-and-forget calls have completed (success or soft-fail). */
@@ -44,7 +46,25 @@ export async function fireStagecraftForAsset(asset: MapAsset): Promise<void> {
     tasks.push(_runHa(ha.url, ha.token, haAssign));
   }
 
+  // ── QLC+ ─────────────────────────────────────────────────────
+  const qlc = getQlcConfig();
+  const qlcAssign = assignments['qlc'];
+  if (qlc && qlcAssign && qlcAssign.kind === 'qlc') {
+    tasks.push(_runQlc(qlc.url, qlcAssign));
+  }
+
   await Promise.allSettled(tasks);
+}
+
+async function _runQlc(url: string, assignment: Extract<StagecraftAssignment, { kind: 'qlc' }>): Promise<void> {
+  try {
+    const result = await qlcFireFunction(url, assignment.functionId);
+    if (!result.ok) {
+      console.warn(`[stagecraft] QLC+ failed to fire function ${assignment.functionId}: ${result.message}`);
+    }
+  } catch (e) {
+    console.warn(`[stagecraft] QLC+ threw: ${(e as Error).message}`);
+  }
 }
 
 async function _runWled(url: string, assignment: Extract<StagecraftAssignment, { kind: 'wled' }>, label: string): Promise<void> {

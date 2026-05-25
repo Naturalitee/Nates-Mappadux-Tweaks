@@ -307,6 +307,63 @@ Things to spot-check that should be unaffected:
 
 ---
 
+## H. QLC+ (DMX lighting) — v2.15.10
+
+Prerequisite: a QLC+ instance reachable from this browser. Enable
+QLC+'s Web Interface (Functions → Web Interface in the QLC+ menu)
+— it opens a port on `:9999` by default. Author at least one
+Function (scene / chaser / etc.) in QLC+ before testing.
+
+### H1. Add the connection
+
+  - Settings → Stagecraft → QLC+ subsection.
+  - Enter the URL — bare host like `192.168.1.50` works (port + path
+    default to `:9999/qlcplusWS`). Full `ws://...` URLs also accepted.
+  - Click Save, then Test.
+  - Expected: Test reports `OK — N Functions reported.`
+  - On failure: timeout suggests the device is unreachable; network
+    error suggests the Web Interface isn't enabled in QLC+.
+
+### H2. Lighting / Automation panel — QLC+ row
+
+  - With a QLC+ connection saved, the Lighting / Automation panel
+    shows a third row: `QLC+:` with a dropdown grouped by Function
+    type (Scene / Chaser / Collection / Sequence / RGBMatrix / EFX /
+    Audio / Video / Show / Script).
+  - Pick a Function.
+  - Click "Fire now (test)" — the Function should start on the DMX
+    rig.
+
+### H3. Map switch fires the QLC+ Function
+
+  - Assign different Functions to two different maps.
+  - Switch maps — each fires its assigned Function.
+
+### H4. Known QLC+ quirks
+
+  - QLC+ doesn't expose CORS headers on its WebSocket the way
+    browsers expect for cross-origin secure contexts. Mappadux runs
+    over HTTPS in production (`www.mappadux.com`) but QLC+ runs over
+    plain WebSocket (`ws://`). **Browsers block ws:// from https://
+    pages** — that's the "mixed content" rule. If you're hitting
+    Mappadux on `https://`, the QLC+ connection will fail. Two
+    workarounds: (a) run Mappadux from `http://localhost:5173` for
+    dev / `npm run dev`; (b) put a reverse proxy in front of QLC+
+    that terminates TLS to expose `wss://`.
+  - Functions list message format is pipe-separated triples
+    `<id>|<name>|<type>`. If a Function name contains a literal
+    `|`, parsing may go sideways. Avoid pipes in QLC+ Function
+    names if possible.
+
+## Banked for v2.16 (not yet built)
+
+  - **Spotify Web Playback SDK** — alongside YouTube. Premium-
+    account OAuth (PKCE).
+  - **Crossfade between Playlist tracks** — needs a second
+    YouTube IFrame to fade between.
+  - **YouTube oEmbed title lookup** — display real track titles
+    instead of `YouTube: <videoId>`.
+
 ## Known limitations / not-yet
 
   - The dispatcher fires on EVERY state-notify with `map` change,

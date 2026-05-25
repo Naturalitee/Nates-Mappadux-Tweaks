@@ -21,10 +21,13 @@ import {
   removeWledEndpoint,
   getHaConfig,
   setHaConfig,
+  getQlcConfig,
+  setQlcConfig,
   isSoundtracksEnabled,
   setSoundtracksEnabled,
 } from '../stagecraft/stagecraftStorage.ts';
 import { fetchInfo as fetchWledInfo, normaliseEndpoint } from '../stagecraft/wledClient.ts';
+import { fetchInfo as fetchQlcInfo, normaliseQlcEndpoint } from '../stagecraft/qlcClient.ts';
 import { generateId } from '../utils/id.ts';
 
 /**
@@ -453,9 +456,87 @@ export class SettingsDialog {
     sec.appendChild(document.createElement('hr'));
     sec.appendChild(this._buildHaSubsection());
     sec.appendChild(document.createElement('hr'));
+    sec.appendChild(this._buildQlcSubsection());
+    sec.appendChild(document.createElement('hr'));
     sec.appendChild(this._buildSoundtracksSubsection());
 
     return sec;
+  }
+
+  private _buildQlcSubsection(): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'settings-stagecraft-qlc';
+
+    const heading = document.createElement('strong');
+    heading.textContent = 'QLC+ (DMX lighting)';
+    wrap.appendChild(heading);
+    const sub = document.createElement('div');
+    sub.className = 'settings-stat-sub';
+    sub.style.marginBottom = '6px';
+    sub.innerHTML =
+      'Connect to a <a href="https://www.qlcplus.org" target="_blank" rel="noopener">Q Light Controller Plus</a> ' +
+      'instance to fire DMX scenes / chasers / sequences on map switch. ' +
+      'Enable the Web Interface in QLC+ (Functions menu → Web Interface). ' +
+      'Mappadux only calls existing Functions you have authored in QLC+ — ' +
+      'set them up there first.';
+    wrap.appendChild(sub);
+
+    const existing = getQlcConfig();
+    const form = document.createElement('div');
+    form.className = 'settings-stagecraft-ha-form';
+    form.innerHTML =
+      `<input type="text" data-field="url" placeholder="URL (e.g. 192.168.1.50 or ws://192.168.1.50:9999)" value="${existing ? escapeHtml(existing.url) : ''}" />`;
+    wrap.appendChild(form);
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'settings-btn-row';
+    btnRow.style.marginTop = '6px';
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'btn btn--ghost btn--sm';
+    saveBtn.textContent = existing ? 'Save changes' : 'Save';
+    const testBtn = document.createElement('button');
+    testBtn.type = 'button';
+    testBtn.className = 'btn btn--ghost btn--sm';
+    testBtn.textContent = 'Test';
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'btn btn--danger btn--sm';
+    clearBtn.textContent = 'Disconnect';
+    clearBtn.hidden = !existing;
+    const status = document.createElement('div');
+    status.className = 'settings-stat-sub';
+    status.style.marginTop = '4px';
+
+    const urlInput = form.querySelector<HTMLInputElement>('[data-field="url"]')!;
+    saveBtn.addEventListener('click', () => {
+      const url = normaliseQlcEndpoint(urlInput.value);
+      if (!url) { status.textContent = 'Enter a URL to save.'; return; }
+      setQlcConfig({ url });
+      urlInput.value = url;
+      saveBtn.textContent = 'Save changes';
+      clearBtn.hidden = false;
+      status.textContent = 'Saved. Open the Lighting / Automation panel to pick a Function for the active map.';
+    });
+    testBtn.addEventListener('click', async () => {
+      const url = normaliseQlcEndpoint(urlInput.value);
+      if (!url) { status.textContent = 'Enter a URL first.'; return; }
+      status.textContent = 'Testing…';
+      const info = await fetchQlcInfo(url);
+      if (info.ok) status.textContent = `OK — ${info.data.functionCount} Functions reported.`;
+      else         status.textContent = `Failed: ${info.message}`;
+    });
+    clearBtn.addEventListener('click', () => {
+      setQlcConfig(null);
+      urlInput.value = '';
+      saveBtn.textContent = 'Save';
+      clearBtn.hidden = true;
+      status.textContent = 'Disconnected.';
+    });
+
+    btnRow.append(saveBtn, testBtn, clearBtn);
+    wrap.append(btnRow, status);
+    return wrap;
   }
 
   private _buildSoundtracksSubsection(): HTMLElement {

@@ -1162,10 +1162,12 @@ export interface MapAsset {
 
 /** Per-map preset/scene assignment for a single Stagecraft connection.
  *  Discriminated by `kind` so we can extend without reshaping existing
- *  entries. WLED fires a preset id; HA calls a scene or script. */
+ *  entries. WLED fires a preset id; HA calls a scene or script; QLC+
+ *  fires a Function (scene / chaser / sequence / collection) by id. */
 export type StagecraftAssignment =
   | { kind: 'wled'; presetId: number }
-  | { kind: 'ha';   service: 'scene' | 'script'; entity: string };
+  | { kind: 'ha';   service: 'scene' | 'script'; entity: string }
+  | { kind: 'qlc';  functionId: number };
 
 /** Stream C handout configuration — the body and presentation settings for
  *  a text-map. Animation runs on the player side using the same body. */
