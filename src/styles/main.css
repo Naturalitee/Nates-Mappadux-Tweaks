@@ -3231,12 +3231,13 @@ option.select-option--add {
   pointer-events: none;
   z-index: 2;
 }
-/* Top-left of the element is occupied by the existing drag handle,
-   bottom corners by delete + resize — so the flip pair stacks on
-   the right edge. Mid-upper for H, mid-lower for V; close enough to
-   read as a paired control without crowding the existing chrome. */
-.txt-map-el-flip--h { top: 30%; right: -11px; }
-.txt-map-el-flip--v { top: 70%; right: -11px; transform: translateY(-100%); }
+/* v2.14.103 — Flip pair sits on the UPPER right edge, stacked just
+   below the top corner so the lower-right cluster (resize + lock +
+   reset) has a clean run from the bottom upward. Matches the
+   composite editor's bottom-right cluster pattern, just adapted for
+   the textmap chrome where the top-left is taken by drag. */
+.txt-map-el-flip--h { top: 12px;  right: -11px; }
+.txt-map-el-flip--v { top: 42px;  right: -11px; }
 .txt-map-el-flip.is-active {
   background: rgba(90, 240, 122, 0.85);
   color: #0a0e1a;
@@ -3244,15 +3245,14 @@ option.select-option--add {
 }
 .txt-map-el-rotate-handle:hover,
 .txt-map-el-flip:hover { filter: brightness(1.2); }
-/* v2.14.102 — Aspect-lock toggle on image elements. Sits on the
-   left edge mid-height (the only free corner — top-left is drag,
-   bottom-left is delete, right edge holds the flip pair). */
-.txt-map-el-lock {
+/* v2.14.103 — Aspect-lock + reset stack on the bottom-right edge
+   ABOVE the resize handle, mirroring the Composite Editor's
+   bottom-right cluster. Only emitted for image elements. */
+.txt-map-el-lock,
+.txt-map-el-reset {
   position: absolute;
   display: none;
-  top: 50%;
-  left: -11px;
-  transform: translateY(-50%);
+  right: -11px;
   width: 22px;
   height: 22px;
   padding: 0;
@@ -3266,19 +3266,24 @@ option.select-option--add {
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
   z-index: 3;
 }
-.txt-map-el-lock:hover { filter: brightness(1.2); }
+.txt-map-el-lock  { bottom: 19px; }   /* directly above resize */
+.txt-map-el-reset { bottom: 49px; }   /* above lock */
+.txt-map-el-lock:hover,
+.txt-map-el-reset:hover { filter: brightness(1.2); }
 .txt-map-el-lock.is-active {
   background: rgba(90, 240, 122, 0.85);
   color: #0a0e1a;
   border-color: #fff;
 }
 
-/* Show all rotate / flip / lock chrome alongside the existing
-   drag/resize/delete handles when the element is selected. */
+/* Show all rotate / flip / lock / reset chrome alongside the
+   existing drag/resize/delete handles when the element is
+   selected. */
 .txt-map-el--selected .txt-map-el-rotate-handle,
 .txt-map-el--selected .txt-map-el-flip,
 .txt-map-el--selected .txt-map-el-rotate-stem,
-.txt-map-el--selected .txt-map-el-lock { display: flex; }
+.txt-map-el--selected .txt-map-el-lock,
+.txt-map-el--selected .txt-map-el-reset { display: flex; }
 /* Per-element controls — live inside the top toolbar so every editing
    knob is in one place. Visible only when an element is selected;
    appended after the page-level controls in the same flex row. */

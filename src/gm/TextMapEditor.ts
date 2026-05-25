@@ -1232,19 +1232,33 @@ export class TextMapEditor {
     flipV.addEventListener('click', (ev) => { ev.stopPropagation(); this._toggleFlip(el.id, 'v'); });
     host.appendChild(flipV);
 
-    // v2.14.102 — Aspect-lock toggle for IMAGE elements only. Sits
-    // on the left edge mid-height (the only free corner — top-left
-    // is drag, bottom-left is delete, right edge is flip pair).
-    // Padlock SVG: closed when locked, arch lifted when unlocked.
+    // v2.14.103 — Image-only chrome cluster: aspect-lock + reset
+    // stack ABOVE the resize handle in the bottom-right corner,
+    // mirroring the Composite Editor pattern. Reset snaps the
+    // element's bounding box to the IMAGE'S NATURAL aspect ratio
+    // at the current width — undoes any stretching the GM did.
     // Text elements skip this — handout text boxes are designed
     // for free reflow at any aspect.
     if (el.type === 'image') {
+      const resetBtn = document.createElement('button');
+      resetBtn.type = 'button';
+      resetBtn.className = 'txt-map-el-reset';
+      resetBtn.title = 'Reset bounding box to the image\'s natural aspect at the current width.';
+      resetBtn.innerHTML =
+        '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<path d="M3 12a9 9 0 1 0 3-6.7"/>' +
+          '<polyline points="3 4 3 9 8 9"/>' +
+        '</svg>';
+      resetBtn.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+      resetBtn.addEventListener('click', (ev) => { ev.stopPropagation(); void this._resetElementAspect(el.id); });
+      host.appendChild(resetBtn);
+
       const locked = el.lockAspect ?? true;
       const lockBtn = document.createElement('button');
       lockBtn.type = 'button';
       lockBtn.className = `txt-map-el-lock${locked ? ' is-active' : ''}`;
       lockBtn.title = locked
-        ? 'Aspect ratio LOCKED — resize preserves the image\'s shape. Click to unlock and stretch freely.'
+        ? 'Aspect ratio LOCKED — resize preserves the box\'s current shape. Click to unlock and stretch freely.'
         : 'Aspect ratio UNLOCKED — width and height resize independently. Click to re-lock.';
       lockBtn.innerHTML = locked
         ? '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'
@@ -1311,6 +1325,61 @@ export class TextMapEditor {
       handle.addEventListener('pointerup',     onUp);
       handle.addEventListener('pointercancel', onUp);
     });
+  }
+
+  /** v2.14.103 — Snap an image element's bounding box to the
+   *  IMAGE's natural aspect at the current width. Undoes any
+   *  stretch the GM did while the lock was off. Loads the asset
+   *  to measure natural dimensions; SVG sources read viewBox,
+   *  raster sources decode the blob into an Image to measure.
+   *  Unicode-char assets have no measurable dimensions — skip. */
+  private async _resetElementAspect(elementId: string): Promise<void> {
+    const el = this.elements.find((x) => x.id === elementId);
+    if (!el || el.type !== 'image') return;
+    const { ImageAssetStore } = await import('../images/ImageAssetStore.ts');
+    const asset = await ImageAssetStore.get(el.assetId);
+    if (!asset) return;
+
+    let nw = 0;
+    let nh = 0;
+    if (asset.svgSource) {
+      // Pull the viewBox or width/height attributes from the SVG.
+      const vb = /viewBox\s*=\s*["']\s*[-\d.]+\s+[-\d.]+\s+([\d.]+)\s+([\d.]+)/.exec(asset.svgSource);
+      if (vb) {
+        nw = parseFloat(vb[1]!);
+        nh = parseFloat(vb[2]!);
+      }
+      if (!nw || !nh) {
+        const w = /<svg[^>]*\swidth\s*=\s*["']([\d.]+)/.exec(asset.svgSource);
+        const h = /<svg[^>]*\sheight\s*=\s*["']([\d.]+)/.exec(asset.svgSource);
+        if (w && h) { nw = parseFloat(w[1]!); nh = parseFloat(h[1]!); }
+      }
+    }
+    if ((!nw || !nh) && asset.blob) {
+      const url = URL.createObjectURL(asset.blob);
+      try {
+        await new Promise<void>((resolve) => {
+          const img = new Image();
+          img.onload = () => { nw = img.naturalWidth; nh = img.naturalHeight; resolve(); };
+          img.onerror = () => resolve();
+          img.src = url;
+        });
+      } finally {
+        URL.revokeObjectURL(url);
+      }
+    }
+    if (!nw || !nh) return;
+
+    this._pushUndo();
+    // Element w/h are in % of page; the image aspect is in pixels.
+    // Convert via the page's own pixel aspect so the rendered box
+    // matches the image's natural shape at the current width.
+    const imageAspect = nw / nh;
+    const pageAspect = this.cfg.width / Math.max(1, this.cfg.height);
+    el.h = el.w * pageAspect / imageAspect;
+    clampElementGeometry(el);
+    const host = this.elementNodes.get(elementId);
+    if (host) this._applyGeometry(host, el);
   }
 
   /** v2.14.102 — Toggle the per-element aspect-ratio lock on an
