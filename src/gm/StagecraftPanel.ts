@@ -26,6 +26,7 @@ import {
 import { fetchPresets, type WledPreset } from '../stagecraft/wledClient.ts';
 import { fetchEntities, type HaEntity } from '../stagecraft/haClient.ts';
 import { fetchFunctions, type QlcFunction } from '../stagecraft/qlcClient.ts';
+import { wledConfigUrl, haConfigUrl, qlcConfigUrl } from '../stagecraft/configUrls.ts';
 
 export interface StagecraftPanelHost {
   /** Returns the live MapAsset for the active map, or null when no
@@ -102,12 +103,12 @@ export class StagecraftPanel {
       labelEl.textContent = `WLED: ${endpoint.label}`;
       const select = document.createElement('select');
       select.className = 'stagecraft-select';
-      // Seed with a loading option; populate on cache hit / fetch.
       const loadingOpt = document.createElement('option');
       loadingOpt.textContent = 'Loading presets…';
       loadingOpt.disabled = true;
       select.appendChild(loadingOpt);
-      row.append(labelEl, select);
+      const openLink = this._configLink(wledConfigUrl(endpoint.url), 'Open WLED to author / edit presets');
+      row.append(labelEl, select, openLink);
       this.assignmentsEl.appendChild(row);
 
       const cached = this.wledPresetCache.get(endpoint.id);
@@ -133,7 +134,8 @@ export class StagecraftPanel {
       loadingOpt.textContent = 'Loading Functions…';
       loadingOpt.disabled = true;
       select.appendChild(loadingOpt);
-      row.append(labelEl, select);
+      const openLink = this._configLink(qlcConfigUrl(qlc.url), 'Open QLC+ Web Interface to author Functions');
+      row.append(labelEl, select, openLink);
       this.assignmentsEl.appendChild(row);
 
       const fns = this.qlcFunctionCache ?? await this._loadQlcFunctions(qlc.url);
@@ -158,7 +160,8 @@ export class StagecraftPanel {
       loadingOpt.textContent = 'Loading entities…';
       loadingOpt.disabled = true;
       select.appendChild(loadingOpt);
-      row.append(labelEl, select);
+      const openLink = this._configLink(haConfigUrl(ha.url), 'Open Home Assistant to author scenes / scripts');
+      row.append(labelEl, select, openLink);
       this.assignmentsEl.appendChild(row);
 
       const entities = this.haEntityCache ?? await this._loadHaEntities(ha.url, ha.token);
@@ -178,6 +181,21 @@ export class StagecraftPanel {
         }
       });
     }
+  }
+
+  /** Small "↗" link next to each connection row that opens the
+   *  device's own web UI in a new tab. Lets the GM author a new
+   *  preset / scene / Function and come back to assign it without
+   *  hunting for the URL. */
+  private _configLink(href: string, title: string): HTMLAnchorElement {
+    const a = document.createElement('a');
+    a.className = 'stagecraft-config-link';
+    a.href      = href;
+    a.target    = '_blank';
+    a.rel       = 'noopener';
+    a.title     = title;
+    a.textContent = '↗';
+    return a;
   }
 
   private async _loadWledPresets(id: string, url: string): Promise<WledPreset[]> {

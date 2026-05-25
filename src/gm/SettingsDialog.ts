@@ -28,6 +28,7 @@ import {
 } from '../stagecraft/stagecraftStorage.ts';
 import { fetchInfo as fetchWledInfo, normaliseEndpoint } from '../stagecraft/wledClient.ts';
 import { fetchInfo as fetchQlcInfo, normaliseQlcEndpoint } from '../stagecraft/qlcClient.ts';
+import { wledConfigUrl, haConfigUrl, qlcConfigUrl } from '../stagecraft/configUrls.ts';
 import { generateId } from '../utils/id.ts';
 
 /**
@@ -508,6 +509,15 @@ export class SettingsDialog {
     status.className = 'settings-stat-sub';
     status.style.marginTop = '4px';
 
+    const openLink = document.createElement('a');
+    openLink.target = '_blank';
+    openLink.rel    = 'noopener';
+    openLink.className = 'stagecraft-config-link';
+    openLink.textContent = 'Open QLC+ ↗';
+    openLink.title = 'Open the QLC+ Web Interface to author Functions';
+    openLink.hidden = !existing;
+    if (existing) openLink.href = qlcConfigUrl(existing.url);
+
     const urlInput = form.querySelector<HTMLInputElement>('[data-field="url"]')!;
     saveBtn.addEventListener('click', () => {
       const url = normaliseQlcEndpoint(urlInput.value);
@@ -516,6 +526,8 @@ export class SettingsDialog {
       urlInput.value = url;
       saveBtn.textContent = 'Save changes';
       clearBtn.hidden = false;
+      openLink.hidden = false;
+      openLink.href = qlcConfigUrl(url);
       status.textContent = 'Saved. Open the Lighting / Automation panel to pick a Function for the active map.';
     });
     testBtn.addEventListener('click', async () => {
@@ -531,10 +543,11 @@ export class SettingsDialog {
       urlInput.value = '';
       saveBtn.textContent = 'Save';
       clearBtn.hidden = true;
+      openLink.hidden = true;
       status.textContent = 'Disconnected.';
     });
 
-    btnRow.append(saveBtn, testBtn, clearBtn);
+    btnRow.append(saveBtn, testBtn, clearBtn, openLink);
     wrap.append(btnRow, status);
     return wrap;
   }
@@ -617,6 +630,7 @@ export class SettingsDialog {
         const labelEl = document.createElement('div');
         labelEl.innerHTML = `<strong>${escapeHtml(ep.label)}</strong>` +
           `<br><span class="settings-stat-sub">${escapeHtml(ep.url)}</span>` +
+          ` <a href="${escapeHtml(wledConfigUrl(ep.url))}" target="_blank" rel="noopener" class="stagecraft-config-link" title="Open WLED's own web UI to author presets">Open WLED ↗</a>` +
           `<br><span class="settings-stat-sub" data-status>(not tested yet)</span>`;
 
         const btnRow = document.createElement('div');
@@ -722,6 +736,15 @@ export class SettingsDialog {
 
     const urlInput   = form.querySelector<HTMLInputElement>('[data-field="url"]')!;
     const tokenInput = form.querySelector<HTMLInputElement>('[data-field="token"]')!;
+    const openLink = document.createElement('a');
+    openLink.target = '_blank';
+    openLink.rel    = 'noopener';
+    openLink.className = 'stagecraft-config-link';
+    openLink.textContent = 'Open Home Assistant ↗';
+    openLink.title = 'Open the HA dashboard to author scenes / scripts';
+    openLink.hidden = !existing;
+    if (existing) openLink.href = haConfigUrl(existing.url);
+
     saveBtn.addEventListener('click', () => {
       const url = urlInput.value.trim().replace(/\/+$/, '');
       const token = tokenInput.value.trim();
@@ -732,6 +755,8 @@ export class SettingsDialog {
       setHaConfig({ url, token });
       saveBtn.textContent = 'Save changes';
       clearBtn.hidden = false;
+      openLink.hidden = false;
+      openLink.href = haConfigUrl(url);
       status.textContent = 'Saved. The Lighting/Automation panel should now show Home Assistant.';
     });
     clearBtn.addEventListener('click', () => {
@@ -740,10 +765,11 @@ export class SettingsDialog {
       tokenInput.value = '';
       saveBtn.textContent = 'Save';
       clearBtn.hidden = true;
+      openLink.hidden = true;
       status.textContent = 'Disconnected. Mappadux will stop firing Home Assistant scenes.';
     });
 
-    btnRow.append(saveBtn, clearBtn);
+    btnRow.append(saveBtn, clearBtn, openLink);
     wrap.append(btnRow, status);
     return wrap;
   }

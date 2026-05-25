@@ -4008,6 +4008,22 @@ option.select-option--add {
   color: var(--text-primary);
   font: inherit;
 }
+/* v2.15.11 — "↗" link next to each connection row in the sidebar
+   panel + in the Settings subsections. One-click jump to the
+   device's own UI so the GM can author new presets / scenes /
+   Functions and come back to assign them. */
+.stagecraft-config-link {
+  flex: 0 0 auto;
+  padding: 4px 6px;
+  font-size: var(--font-size-sm);
+  color: var(--accent);
+  text-decoration: none;
+  border-radius: var(--radius-sm);
+}
+.stagecraft-config-link:hover {
+  background: var(--bg-input);
+  text-decoration: underline;
+}
 
 /* v2.16 — Soundtracks panel rows. Pack-level music slots, each with
    a label + transport buttons in the header and a track list + add
