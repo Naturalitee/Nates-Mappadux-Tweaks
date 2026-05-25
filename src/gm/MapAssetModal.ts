@@ -173,6 +173,12 @@ export class MapAssetModal {
   openForCompositeAddTile(onPick: (asset: MapAsset | null) => void): void {
     this._compositeAddTileCallback = onPick;
     this._compositePickMode = true;
+    // v2.14.88 — preselect the 'scaled' pill so the picker opens
+    // narrowed to calibrated maps (the recommended pick for a tile).
+    // GM can clear the pill to widen the view to unscaled handouts /
+    // decorative tiles / etc. — composite-pick mode no longer
+    // hard-excludes any kind except other composites.
+    this._activeFilters = new Set(['scaled']);
     // v2.14.46 — re-append to body so this modal lands on top of
     // the composite editor (which was appended after the asset
     // modal's initial DOM construction, so was stacking ABOVE it).
@@ -303,6 +309,8 @@ export class MapAssetModal {
    *  drives `_createCompositeFromTile`. */
   private async _enterCompositePickMode(): Promise<void> {
     this._compositePickMode = true;
+    // v2.14.88 — preselect the 'scaled' pill (see openForCompositeAddTile).
+    this._activeFilters = new Set(['scaled']);
     // Make sure we're on the Library tab — even if the user clicked
     // from a different tab (e.g. Web Links) the picker only makes
     // sense from the library list.
@@ -414,12 +422,13 @@ export class MapAssetModal {
     ]);
     let filtered = filter ? all.filter((a) => a.filename.toLowerCase().includes(filter)) : all;
 
-    // v2.14.37 — composite-pick mode: drop text-map handouts (they
-    // can't be tiles) AND drop existing composite maps (no nesting),
-    // then sort scaled image maps to the top so the GM's first
-    // instinct is the recommended choice.
+    // v2.14.88 — composite-pick mode: only block nesting (drop
+    // composite-map). Text-maps are allowed; creative GMs can layer
+    // a labelled handout sheet on top of a battlemap or whatever.
+    // Scaled maps sort to the top regardless of pill state so the
+    // recommended-pick is still the easy default.
     if (this._compositePickMode) {
-      filtered = filtered.filter((a) => a.source !== 'text-map' && a.source !== 'composite-map');
+      filtered = filtered.filter((a) => a.source !== 'composite-map');
       filtered = [...filtered].sort((a, b) => {
         const aScaled = a.pixelsPerSquare ? 1 : 0;
         const bScaled = b.pixelsPerSquare ? 1 : 0;

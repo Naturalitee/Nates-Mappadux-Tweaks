@@ -291,20 +291,10 @@ export default {
     // (e.g. crimson → pink-white). The whole frame flashes WITH the
     // strike — the way a real lightning strike actually catches the
     // scene around it.
-    let _lightningDebugFired = 0;
     const drawLightning = (tGlobal: number): void => {
       if (lightningIntensity <= 0) return;
       const a = lightningAlpha(tGlobal, lightningIntensity);
       if (a <= 0) return;
-      _lightningDebugFired++;
-      // v2.14.86 — once-per-strike console log so we can verify the
-      // flashes are firing on every viewer (GM / player / projector).
-      // tGlobal + alpha tell us WHEN the strike fired and HOW bright;
-      // if these appear in console but the screen looks unchanged
-      // the blend / draw-order is the culprit, not the timing.
-      if (_lightningDebugFired === 1 || _lightningDebugFired % 30 === 0) {
-        console.log(`[blood_splatter] lightning frame #${_lightningDebugFired}: tGlobal=${tGlobal.toFixed(3)}, alpha=${a.toFixed(2)}`);
-      }
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.fillStyle = `rgba(255, 250, 245, ${a})`;

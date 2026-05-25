@@ -2339,6 +2339,19 @@ export class GMApp {
     }
     const { saveMapAsset } = await import('../storage/db.ts');
     await saveMapAsset(updated);
+
+    // v2.14.88 — Inferred-scaling for every non-master tile in the
+    // composite. Once a master tile is on the canvas its cell pitch
+    // is known; every other tile's natural pixels-per-square can be
+    // derived from the master + the tile's scale + image dimensions.
+    // Write that back to each tile asset with scaleConfidence='inferred'
+    // so the library row shows the amber "Inferred" pill — the GM
+    // can verify or hand-calibrate any tile that looks off.
+    // Skips tiles that already have manual/scaled confidence (don't
+    // clobber the GM's own work) and tiles with unlocked aspect
+    // (non-square source cells can't be expressed as a single pps).
+    await this._inferTileScalesFromComposite(updated);
+
     // v2.14.53 — propagate the asset's filename into the StoredMap
     // so the dropdown + Name input reflect any rename done in the
     // editor. Mirrors the text-map edit flow.
@@ -2350,6 +2363,57 @@ export class GMApp {
     // v2.14.54 — refresh the dropdown so a rename in the editor
     // shows up without a page reload. Mirrors the text-map flow.
     await this.populateMapList();
+  }
+
+  /** v2.14.88 — Walk every non-master tile of a composite map and
+   *  persist an inferred pixelsPerSquare derived from the master
+   *  tile's calibration + each tile's scale. Only touches tiles
+   *  whose current scaleConfidence is undefined / inferred /
+   *  auto-scaled (low-trust); tiles the GM manually calibrated keep
+   *  their existing value. Tiles with unlocked aspect (scaleY set)
+   *  are skipped — a single pps assumes square source cells. */
+  private async _inferTileScalesFromComposite(asset: import('../types.ts').MapAsset): Promise<void> {
+    const tiles = asset.compositeTiles ?? [];
+    if (tiles.length < 2) return;
+    // Find the first tile whose underlying asset has a pps — that's
+    // the master (sets the composite's grid pitch).
+    let masterTile: import('../types.ts').CompositeTile | null = null;
+    let masterAsset: import('../types.ts').MapAsset | null = null;
+    for (const t of tiles) {
+      const a = await MapAssetStore.get(t.mapAssetId);
+      if (a?.pixelsPerSquare && a.imageWidth) {
+        masterTile = t;
+        masterAsset = a;
+        break;
+      }
+    }
+    if (!masterTile || !masterAsset?.pixelsPerSquare || !masterAsset.imageWidth) return;
+    const masterPps   = masterAsset.pixelsPerSquare;
+    const masterScale = masterTile.scale ?? 1;
+    const masterImgW  = masterAsset.imageWidth;
+    for (const tile of tiles) {
+      if (tile === masterTile) continue;
+      // Unlocked-aspect tiles → non-square source cells in the
+      // composite frame → can't be summarised as a single pps.
+      if (tile.scaleY != null) continue;
+      const tileAsset = await MapAssetStore.get(tile.mapAssetId);
+      if (!tileAsset?.imageWidth) continue;
+      // Preserve GM's manual / high-trust calibration.
+      const conf = tileAsset.scaleConfidence;
+      if (conf === 'manual' || conf === 'scaled') continue;
+      // Formula: setting the tile's source-cell pitch to match the
+      // master's cell pitch on the composite canvas gives
+      //   pps_T = (scale_master * pps_master * imageWidth_T)
+      //         / (scale_T      * imageWidth_master)
+      const tileScale = tile.scale ?? 1;
+      const inferred = (masterScale * masterPps * tileAsset.imageWidth)
+                     / (Math.max(0.001, tileScale) * masterImgW);
+      const rounded = Math.max(1, Math.round(inferred));
+      await MapAssetStore.update(tileAsset.id, {
+        pixelsPerSquare: rounded,
+        scaleConfidence: 'inferred',
+      });
+    }
   }
 
   private async _editCurrentTextMap(): Promise<void> {
