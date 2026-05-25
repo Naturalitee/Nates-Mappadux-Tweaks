@@ -241,6 +241,28 @@
       </div>
     </section>
 
+    <!-- v2.16 — Stagecraft panel. Hidden by default; StagecraftPanel
+         flips hidden=false once at least one WLED endpoint or HA
+         connection is configured in Settings. -->
+    <section class="panel" id="stagecraft-panel" hidden>
+      <div class="panel-header">
+        <button type="button" class="panel-title" aria-expanded="false">Lighting / Automation</button>
+      </div>
+      <div class="panel-body" hidden>
+        <p class="panel-intro" id="stagecraft-intro">
+          Pick a WLED preset or Home Assistant scene to fire when this
+          map is loaded. Set them up in WLED / HA first; this panel
+          only references presets / scenes that already exist there.
+        </p>
+        <div id="stagecraft-assignments"></div>
+        <div class="settings-btn-row" style="margin-top:6px">
+          <button type="button" class="btn btn--ghost btn--sm" id="stagecraft-refresh-btn">Refresh devices</button>
+          <button type="button" class="btn btn--ghost btn--sm" id="stagecraft-test-btn">Fire now (test)</button>
+        </div>
+        <p class="settings-stat-sub" id="stagecraft-status" style="margin-top:6px"></p>
+      </div>
+    </section>
+
     <section class="panel" id="markers-panel">
       <div class="panel-header">
         <button type="button" class="panel-title" aria-expanded="false">Markers</button>

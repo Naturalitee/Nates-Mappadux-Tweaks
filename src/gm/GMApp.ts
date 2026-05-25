@@ -50,6 +50,8 @@ import { PasswordPromptDialog } from './PasswordPromptDialog.ts';
 import { AboutDialog } from './AboutDialog.ts';
 import { NewPackDialog } from './NewPackDialog.ts';
 import { SettingsDialog } from './SettingsDialog.ts';
+import { StagecraftPanel } from './StagecraftPanel.ts';
+import { fireStagecraftForAsset } from '../stagecraft/stagecraftDispatcher.ts';
 import { BundleUrlPromptDialog } from './BundleUrlPromptDialog.ts';
 import { saveBlob } from '../utils/saveBlob.ts';
 import { applyTheme } from '../utils/applyTheme.ts';
@@ -194,6 +196,13 @@ export class GMApp {
   private undoMgr!: CanvasUndoManager;
   private undoBtn:  HTMLButtonElement | null = null;
   private redoBtn:  HTMLButtonElement | null = null;
+  /** v2.16 — Stagecraft (lighting + automation) panel. Lazily
+   *  constructed in init(); show/hide is decided live based on
+   *  whether the user has configured a WLED endpoint or HA link. */
+  private stagecraftPanel: StagecraftPanel | null = null;
+  /** v2.16 — Track which map last had its Stagecraft assignments
+   *  fired so a same-map state refresh doesn't re-trigger lighting. */
+  private _lastStagecraftFiredMapId: string | null = null;
   private host:   Host;
   private renderer!:       Renderer;
   private fogEditor!:      FogEditor;
@@ -676,6 +685,52 @@ export class GMApp {
   private _refreshUndoButtons(): void {
     if (this.undoBtn) this.undoBtn.disabled = !this.undoMgr.canUndo();
     if (this.redoBtn) this.redoBtn.disabled = !this.undoMgr.canRedo();
+  }
+
+  /** v2.16 — Wire the Stagecraft (Lighting / Automation) panel. The
+   *  panel is hidden unless at least one connection (WLED endpoint or
+   *  HA config) exists in Settings; refresh() is called on init + on
+   *  every Settings close + on every map switch. */
+  private _bindStagecraftPanel(): void {
+    this.stagecraftPanel = new StagecraftPanel({
+      getActiveMapAsset: async () => {
+        const mapId = this.state.snapshot().map?.id;
+        if (!mapId) return null;
+        const { getMap } = await import('../storage/db.ts');
+        const stored = await getMap(mapId);
+        if (!stored) return null;
+        const { MapAssetStore } = await import('../maps/MapAssetStore.ts');
+        return (await MapAssetStore.get(stored.mapAssetId)) ?? null;
+      },
+      saveAssignment: async (connectionId, assignment) => {
+        const mapId = this.state.snapshot().map?.id;
+        if (!mapId) return;
+        const { getMap } = await import('../storage/db.ts');
+        const stored = await getMap(mapId);
+        if (!stored) return;
+        const { MapAssetStore } = await import('../maps/MapAssetStore.ts');
+        const asset = await MapAssetStore.get(stored.mapAssetId);
+        if (!asset) return;
+        const next = { ...(asset.stagecraft ?? {}) };
+        if (assignment === null) delete next[connectionId];
+        else                     next[connectionId] = assignment;
+        const updated = { ...asset, stagecraft: next };
+        const { saveMapAsset } = await import('../storage/db.ts');
+        await saveMapAsset(updated);
+      },
+      fireForActiveMap: async () => {
+        const mapId = this.state.snapshot().map?.id;
+        if (!mapId) return;
+        const { getMap } = await import('../storage/db.ts');
+        const stored = await getMap(mapId);
+        if (!stored) return;
+        const { MapAssetStore } = await import('../maps/MapAssetStore.ts');
+        const asset = await MapAssetStore.get(stored.mapAssetId);
+        if (!asset) return;
+        await fireStagecraftForAsset(asset);
+      },
+    });
+    void this.stagecraftPanel.refresh();
   }
 
   /**
@@ -1488,6 +1543,7 @@ export class GMApp {
     this.bindHamburgerMenu();
     this._bindWorkspacePanZoom();
     this._bindCanvasUndo();
+    this._bindStagecraftPanel();
 
     // Resume positional audio context on first user gesture (autoplay policy)
     const resumePA = () => this.audio.tryResume();
@@ -5088,6 +5144,17 @@ export class GMApp {
     this._updateMapGridPanel();
     // v2.14.77 — also refresh the upper-layer-opacity row visibility.
     void this._updateUpperLayerPanel();
+    // v2.16 — Stagecraft. Refresh the panel so its dropdowns reflect
+    // the new map's assignments + fire the assigned WLED preset / HA
+    // scene for the incoming map. Skipped when the map id matches the
+    // last-fired one so a same-map state refresh (e.g. handout edit
+    // round-trip) doesn't re-strobe the table lights. Both calls are
+    // fire-and-forget; nothing here blocks on a flaky device.
+    if (this.stagecraftPanel) void this.stagecraftPanel.refresh();
+    if (this._lastStagecraftFiredMapId !== mapState.id) {
+      this._lastStagecraftFiredMapId = mapState.id;
+      void fireStagecraftForAsset(asset);
+    }
     // Active-map calibration warning — visible when the map has no pps.
     if (warnEl) warnEl.hidden = !!asset.pixelsPerSquare;
     // Push fresh map metadata to the live primary projector so it re-crops at
@@ -6021,6 +6088,10 @@ export class GMApp {
         location.reload();
       },
     });
+    // v2.16 — Stagecraft connections may have been added or removed
+    // in Settings. Refresh the panel so it appears / disappears and
+    // re-fetches device state to match.
+    if (this.stagecraftPanel) void this.stagecraftPanel.refresh({ force: true });
   }
 
   /** Open the About / splash dialog. Reads pack name + splash + theme from

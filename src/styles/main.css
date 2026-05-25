@@ -3943,6 +3943,72 @@ option.select-option--add {
   display: flex;
   gap: var(--space-sm);
 }
+/* v2.16 — Stagecraft Settings subsection rows (WLED endpoint list +
+   HA form). Visually unrelated to .settings-key-list but they sit in
+   the same panel rhythm — same gap + padding + background tones. */
+.settings-stagecraft-wled-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.settings-stagecraft-wled-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  padding: 6px var(--space-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  gap: 8px;
+}
+.settings-stagecraft-wled-add,
+.settings-stagecraft-ha-form {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.settings-stagecraft-wled-add input,
+.settings-stagecraft-ha-form input {
+  flex: 1 1 140px;
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font: inherit;
+}
+.settings-stagecraft-ha {
+  margin-top: 10px;
+}
+
+/* Sidebar Stagecraft panel — assignment rows. One per configured
+   connection. Label on the left, dropdown on the right. */
+#stagecraft-assignments {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.stagecraft-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+.stagecraft-row label {
+  flex: 0 0 auto;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+.stagecraft-select {
+  flex: 1 1 auto;
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font: inherit;
+}
+
 .settings-key-list {
   list-style: none;
   margin: 0;

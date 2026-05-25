@@ -70,6 +70,11 @@ interface StoredMapAssetEntry {
    *  don't round-trip through JSON. Reconstructed on import. */
   revealBackingMimeType?: string;
   revealBackingB64?:      string;
+  /** v2.16 — Stagecraft per-map preset/scene assignments. Travels
+   *  in bundles so a recipient with their own WLED / HA setup gets
+   *  the GM's preset references. Connection details (URL, token)
+   *  stay local to each machine and never travel. */
+  stagecraft?: MapAsset['stagecraft'];
 }
 
 /** Map asset known only by URL — metadata travels, blob does not. */
@@ -322,6 +327,7 @@ export async function exportBundle(opts?: { password?: string }): Promise<Export
         compositeTiles:   asset.compositeTiles,
         compositeAspect:  asset.compositeAspect,
         compositeMode:    asset.compositeMode,
+        stagecraft:       asset.stagecraft,
         revealBackingMimeType: backingBits.mimeType,
         revealBackingB64:      backingBits.b64,
       }) as StoredMapAssetEntry);
@@ -556,6 +562,7 @@ export async function importBundleText(
           compositeTiles:  e.compositeTiles,
           compositeAspect: e.compositeAspect,
           compositeMode:   e.compositeMode,
+          stagecraft:      e.stagecraft,
           revealBackingBlob: revealBacking,
           addedAt:         e.addedAt,
         }) as MapAsset;
