@@ -21,6 +21,8 @@ import {
   removeWledEndpoint,
   getHaConfig,
   setHaConfig,
+  isSoundtracksEnabled,
+  setSoundtracksEnabled,
 } from '../stagecraft/stagecraftStorage.ts';
 import { fetchInfo as fetchWledInfo, normaliseEndpoint } from '../stagecraft/wledClient.ts';
 import { generateId } from '../utils/id.ts';
@@ -450,8 +452,49 @@ export class SettingsDialog {
     sec.appendChild(this._buildWledSubsection());
     sec.appendChild(document.createElement('hr'));
     sec.appendChild(this._buildHaSubsection());
+    sec.appendChild(document.createElement('hr'));
+    sec.appendChild(this._buildSoundtracksSubsection());
 
     return sec;
+  }
+
+  private _buildSoundtracksSubsection(): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'settings-stagecraft-soundtracks';
+
+    const heading = document.createElement('strong');
+    heading.textContent = 'Soundtracks (YouTube)';
+    wrap.appendChild(heading);
+
+    const sub = document.createElement('div');
+    sub.className = 'settings-stat-sub';
+    sub.style.marginBottom = '6px';
+    sub.innerHTML =
+      'Pack-level background music that survives map switches. Paste ' +
+      'YouTube (or YouTube Music) URLs into the Soundtracks panel ' +
+      'slots — Theme, Intro, Outro, Playlist. No login needed for ' +
+      'YouTube. Spotify slots arrive in a later patch. The actual ' +
+      'track URLs travel with your <code>.mappadux</code> bundle.';
+    wrap.appendChild(sub);
+
+    const row = document.createElement('div');
+    row.className = 'settings-danger-row';
+    const label = document.createElement('div');
+    label.innerHTML = '<strong>Enable Soundtracks panel</strong><br>' +
+      '<span class="settings-stat-sub">Adds a "Soundtracks" panel to the sidebar.</span>';
+    const toggle = document.createElement('label');
+    toggle.className = 'toggle-switch';
+    const input = document.createElement('input');
+    input.type = 'checkbox';
+    input.checked = isSoundtracksEnabled();
+    input.addEventListener('change', () => setSoundtracksEnabled(input.checked));
+    const slider = document.createElement('span');
+    slider.className = 'toggle-slider';
+    toggle.append(input, slider);
+    row.append(label, toggle);
+    wrap.appendChild(row);
+
+    return wrap;
   }
 
   private _buildWledSubsection(): HTMLElement {

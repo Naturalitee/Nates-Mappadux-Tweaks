@@ -51,6 +51,7 @@ import { AboutDialog } from './AboutDialog.ts';
 import { NewPackDialog } from './NewPackDialog.ts';
 import { SettingsDialog } from './SettingsDialog.ts';
 import { StagecraftPanel } from './StagecraftPanel.ts';
+import { SoundtracksPanel } from './SoundtracksPanel.ts';
 import { fireStagecraftForAsset } from '../stagecraft/stagecraftDispatcher.ts';
 import { BundleUrlPromptDialog } from './BundleUrlPromptDialog.ts';
 import { saveBlob } from '../utils/saveBlob.ts';
@@ -200,6 +201,14 @@ export class GMApp {
    *  constructed in init(); show/hide is decided live based on
    *  whether the user has configured a WLED endpoint or HA link. */
   private stagecraftPanel: StagecraftPanel | null = null;
+  /** v2.16 — Soundtracks panel. Hidden by default; opt-in via
+   *  Settings → Stagecraft → Soundtracks toggle. Pack-level — the
+   *  configured tracks live on StoredSession.soundtracks and travel
+   *  in `.mappadux` exports. */
+  private soundtracksPanel: SoundtracksPanel | null = null;
+  /** v2.16 — Cached StoredSession for the Soundtracks panel's sync
+   *  getConfig. Loaded lazily in init, updated on every saveConfig. */
+  private _session: import('../types.ts').StoredSession | null = null;
   /** v2.16 — Track which map last had its Stagecraft assignments
    *  fired so a same-map state refresh doesn't re-trigger lighting. */
   private _lastStagecraftFiredMapId: string | null = null;
@@ -731,6 +740,30 @@ export class GMApp {
       },
     });
     void this.stagecraftPanel.refresh();
+  }
+
+  /** v2.16 — Wire the Soundtracks (pack-level music) panel. Hidden
+   *  until isSoundtracksEnabled() is true. Track configuration lives
+   *  on StoredSession.soundtracks so it travels in the bundle. */
+  private _bindSoundtracksPanel(): void {
+    // Prime the cached session so the synchronous getConfig has data.
+    void (async () => {
+      const { loadSession } = await import('../storage/db.ts');
+      this._session = (await loadSession()) ?? null;
+      this.soundtracksPanel?.refresh();
+    })();
+    this.soundtracksPanel = new SoundtracksPanel({
+      getConfig: () => this._session?.soundtracks ?? {},
+      saveConfig: async (cfg) => {
+        const { loadSession, saveSession } = await import('../storage/db.ts');
+        const existing = (await loadSession()) ?? this._session;
+        if (!existing) return;
+        const next = { ...existing, soundtracks: cfg };
+        this._session = next;
+        await saveSession(next);
+      },
+    });
+    this.soundtracksPanel.refresh();
   }
 
   /**
@@ -1544,6 +1577,7 @@ export class GMApp {
     this._bindWorkspacePanZoom();
     this._bindCanvasUndo();
     this._bindStagecraftPanel();
+    this._bindSoundtracksPanel();
 
     // Resume positional audio context on first user gesture (autoplay policy)
     const resumePA = () => this.audio.tryResume();
@@ -6090,8 +6124,9 @@ export class GMApp {
     });
     // v2.16 — Stagecraft connections may have been added or removed
     // in Settings. Refresh the panel so it appears / disappears and
-    // re-fetches device state to match.
+    // re-fetches device state to match. Same for Soundtracks.
     if (this.stagecraftPanel) void this.stagecraftPanel.refresh({ force: true });
+    if (this.soundtracksPanel) this.soundtracksPanel.refresh();
   }
 
   /** Open the About / splash dialog. Reads pack name + splash + theme from

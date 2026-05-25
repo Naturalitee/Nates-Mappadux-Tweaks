@@ -27,13 +27,28 @@ report.
 
 What is **not** in v2.15.5 (next betas):
 
-  - Soundtracks (Spotify / YouTube Music) — pack-level, not per-map.
+  - Spotify Web Playback SDK integration (YouTube IFrame ships in
+    v2.15.7 — see Section G).
   - Pre-flight test button polish; richer device status display.
   - HELP.md + README documentation pass.
   - Migration handling for older bundles that pre-date `.stagecraft`.
     (None needed — the field is optional and missing means "no
     assignment". Old bundles import as if they had no Stagecraft
     settings, which is the intended default.)
+
+## What's in v2.15.6 (incremental)
+
+  - Same as v2.15.5, plus the full Lighting/Automation panel +
+    dispatcher hooks (Sections C, D, E below now testable).
+
+## What's in v2.15.7 (Soundtracks scaffold)
+
+  - YouTube IFrame Player wrapper (no OAuth needed).
+  - Soundtracks panel (Settings → Stagecraft → Soundtracks toggle to
+    show). Four slots: Pre-setup, Theme / Intro, Outro, Playlist.
+  - Paste YouTube / YouTube Music URLs into slots; Play / Pause /
+    Stop per slot; Playlist slot auto-advances + loops.
+  - Soundtracks travel in `.mappadux` exports under `bundle.soundtracks`.
 
 ---
 
@@ -217,6 +232,78 @@ Things to spot-check that should be unaffected:
     is GM-only.
   - GM-canvas undo / redo, marker chrome, composite layering — all
     fine on top of v2.15.4 production behaviour.
+
+---
+
+## G. Soundtracks (YouTube) — v2.15.7
+
+### G1. Enable the panel
+
+  - Settings → Stagecraft → Soundtracks subsection.
+  - Tick "Enable Soundtracks panel".
+  - Close Settings.
+  - Expected: a new **Soundtracks** panel appears in the sidebar
+    above the Lighting / Automation panel.
+
+### G2. Add a YouTube track to a slot
+
+  - Open the Soundtracks panel — four slots: Pre-setup, Theme / Intro,
+    Outro, Playlist.
+  - Paste a YouTube URL into a slot's input (e.g.
+    `https://www.youtube.com/watch?v=dQw4w9WgXcQ` or
+    `https://music.youtube.com/watch?v=...` or just the 11-char id).
+  - Click Add (or press Enter).
+  - Expected: the track appears in the slot's list.
+
+### G3. Play / Pause / Stop a slot
+
+  - Click Play on a slot containing tracks.
+  - Expected: a hidden YouTube IFrame plays the first track. (You
+    don't see it; you hear it.)
+  - The slot's Play button switches to Pause; the active track is
+    highlighted.
+  - Click Pause → audio pauses.
+  - Click Stop → audio stops, the slot returns to idle state.
+
+### G4. Playlist auto-advance
+
+  - Add 2+ tracks to the Playlist slot.
+  - Click Play.
+  - When a track ends, the next track auto-plays.
+  - At the end of the list, it loops back to the first track.
+  - Non-Playlist slots (Pre-setup / Theme / Outro) play once and stop.
+
+### G5. Soundtracks survive map switches
+
+  - Start the Playlist slot.
+  - Switch maps via the Map dropdown.
+  - Expected: music keeps playing. The per-map Audio panel
+    (Soundboard) continues to be the short-term audio layer; the
+    Soundtracks layer is independent and persistent.
+
+### G6. Bundle round-trip
+
+  - Add tracks; Save Map Pack.
+  - Open the `.mappadux` file in a text editor; search for
+    `"soundtracks"`. Expected: the slot structure with track refs
+    is present at the top level.
+  - Load the pack in a fresh browser; expected: the Soundtracks
+    panel shows the same tracks once you enable it.
+
+### G7. Disable the panel
+
+  - Settings → uncheck "Enable Soundtracks panel".
+  - Expected: the panel disappears; any currently-playing track stops.
+
+### G8. Known YouTube quirks
+
+  - Some videos are not embeddable (rights holder restrictions).
+    YouTube IFrame logs an error to the console; the track will
+    silently fail to start. Try a different video.
+  - First-time start may pause briefly while the YouTube IFrame
+    script loads (a few hundred kB from `youtube.com`).
+  - YouTube ads will play if the video has them. Mappadux can't
+    skip them — that's a YouTube-side decision.
 
 ---
 

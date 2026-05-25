@@ -1384,7 +1384,42 @@ export interface StoredSession {
    *  render area is unaffected. Travels with the bundle so creators can
    *  ship a branded look. */
   theme?: ThemeConfig;
+  /** v2.16 — Pack-level Stagecraft Soundtracks. Lives on StoredSession
+   *  so it survives map switches and travels with the bundle. */
+  soundtracks?: SoundtracksConfig;
 }
+
+/** v2.16 — Pack-level Soundtracks. Survives map switches; long-term
+ *  layer underneath the per-map Audio panel. Currently YouTube-only;
+ *  Spotify slots can be added alongside in a later patch without
+ *  breaking the existing shape (the kind tag discriminates). */
+export interface SoundtracksConfig {
+  /** Pre-setup music — plays when the GM opens a session but hasn't
+   *  yet engaged the players (manual play / pause). */
+  preSetup?: SoundtrackSlot;
+  /** Intro / Theme — fires once at session start (manual trigger). */
+  theme?:    SoundtrackSlot;
+  /** Outro / Closing Credits — fires manually when wrapping up. */
+  outro?:    SoundtrackSlot;
+  /** Ambient playlist — auto-crossfades between tracks; the default
+   *  background layer once enabled. */
+  playlist?: SoundtrackSlot;
+}
+
+/** A single Soundtrack slot. List of track references; for the
+ *  Theme / Intro / Outro slots the list is typically 1, for the
+ *  Playlist slot it's many. */
+export interface SoundtrackSlot {
+  /** Default volume for this slot (0..100). Optional. */
+  volume?: number;
+  tracks: SoundtrackTrack[];
+}
+
+/** A single track reference. Discriminated by `kind` so Spotify
+ *  can land alongside YouTube without reshaping. */
+export type SoundtrackTrack =
+  | { kind: 'youtube'; videoId: string; label?: string }
+  | { kind: 'spotify'; trackUri: string; label?: string };
 
 /** Per-pack UI theme. Both fields optional — unset = Mappadux defaults
  *  (dark mode, cyan accent). */

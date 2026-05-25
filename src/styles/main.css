@@ -4009,6 +4009,66 @@ option.select-option--add {
   font: inherit;
 }
 
+/* v2.16 — Soundtracks panel rows. Pack-level music slots, each with
+   a label + transport buttons in the header and a track list + add
+   form below. */
+#soundtracks-slots {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+.soundtrack-slot {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+}
+.soundtrack-slot-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+}
+.soundtrack-slot-label {
+  font-weight: 600;
+  font-size: var(--font-size-sm);
+}
+.soundtrack-tracks {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.soundtrack-track {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 4px;
+  padding: 2px 4px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+.soundtrack-track.is-playing {
+  color: var(--accent);
+  font-weight: 600;
+}
+.soundtrack-add-row {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+}
+.soundtrack-add-row input {
+  flex: 1 1 auto;
+  padding: 3px 6px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font: inherit;
+}
+
 .settings-key-list {
   list-style: none;
   margin: 0;

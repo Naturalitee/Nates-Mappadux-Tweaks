@@ -174,6 +174,10 @@ export interface DMRBundle {
   /** Optional UI theme — light/dark mode + custom accent. Applies to chrome
    *  only. Travels with the bundle so packs ship a branded look. */
   theme?:         ThemeConfig;
+  /** v2.16 — Pack-level Soundtracks (YouTube + future Spotify track
+   *  references). The track URLs travel; per-machine auth tokens do
+   *  not. Recipients see the same tracks queued up on their own player. */
+  soundtracks?:   import('../types.ts').SoundtracksConfig;
   /** ID of the map the creator had open when they saved. Restored on import
    *  so recipients land where the creator left off, useful for guided packs
    *  ("start on the city overview"). Falls through silently if the saved
@@ -438,6 +442,7 @@ export async function exportBundle(opts?: { password?: string }): Promise<Export
     exportedAt:    Date.now(),
     ...(packName.length > 0        ? { packName } : {}),
     ...(splash                     ? { splash } : {}),
+    ...(session?.soundtracks       ? { soundtracks: session.soundtracks } : {}),
     ...(theme                      ? { theme } : {}),
     ...(lastMapId                  ? { lastMapId } : {}),
     maps:          entries,
@@ -732,6 +737,10 @@ export async function importBundleText(
     }
     if (bundle.theme) {
       next.theme = bundle.theme;
+      dirty = true;
+    }
+    if (bundle.soundtracks) {
+      next.soundtracks = bundle.soundtracks;
       dirty = true;
     }
     if (typeof bundle.lastMapId === 'string' && bundle.lastMapId.length > 0) {

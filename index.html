@@ -241,6 +241,24 @@
       </div>
     </section>
 
+    <!-- v2.16 — Soundtracks panel. Pack-level background music
+         (YouTube initially; Spotify later). Hidden by default;
+         appears when the user opts in via Settings → Stagecraft. -->
+    <section class="panel" id="soundtracks-panel" hidden>
+      <div class="panel-header">
+        <button type="button" class="panel-title" aria-expanded="false">Soundtracks</button>
+      </div>
+      <div class="panel-body" hidden>
+        <p class="panel-intro">
+          Pack-level background music. Survives map switches —
+          per-map sound effects still live on the Soundboard.
+          Paste a YouTube (or YouTube Music) URL into a slot.
+        </p>
+        <div id="soundtracks-slots"></div>
+        <p class="settings-stat-sub" id="soundtracks-status" style="margin-top:6px"></p>
+      </div>
+    </section>
+
     <!-- v2.16 — Stagecraft panel. Hidden by default; StagecraftPanel
          flips hidden=false once at least one WLED endpoint or HA
          connection is configured in Settings. -->

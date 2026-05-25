@@ -13,6 +13,7 @@
 
 const WLED_ENDPOINTS_KEY = 'mappadux:stagecraft_wled_endpoints';
 const HA_CONFIG_KEY      = 'mappadux:stagecraft_ha';
+const SOUNDTRACKS_ENABLED_KEY = 'mappadux:stagecraft_soundtracks_enabled';
 
 export interface WledEndpoint {
   /** Stable id (generated when the endpoint is first added). Used to
@@ -89,11 +90,28 @@ export function setHaConfig(cfg: HaConfig | null): void {
   } catch { /* private mode etc. — no-op */ }
 }
 
+// ─── Soundtracks (YouTube) — pack-level enable ─────────────────────────
+
+/** YouTube doesn't need OAuth so the "enable" is really just a user
+ *  opt-in that says "I want the Soundtracks panel to appear". The
+ *  track URLs themselves travel in the bundle on SessionState. */
+export function isSoundtracksEnabled(): boolean {
+  try { return localStorage.getItem(SOUNDTRACKS_ENABLED_KEY) === '1'; }
+  catch { return false; }
+}
+
+export function setSoundtracksEnabled(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.setItem(SOUNDTRACKS_ENABLED_KEY, '1');
+    else         localStorage.removeItem(SOUNDTRACKS_ENABLED_KEY);
+  } catch { /* private mode etc. — no-op */ }
+}
+
 // ─── Convenience: are any Stagecraft connections configured? ──────────
 
-/** True if at least one WLED endpoint or HA config exists — used to
- *  gate the Lighting/Automation panel's visibility in the sidebar.
- *  Users who haven't set up Stagecraft see zero new chrome. */
+/** True if at least one WLED endpoint, HA config, or Soundtracks opt-
+ *  in exists. Drives the Lighting/Automation panel's visibility —
+ *  the Soundtracks panel is independently gated by isSoundtracksEnabled. */
 export function hasAnyStagecraftConnection(): boolean {
   return getWledEndpoints().length > 0 || getHaConfig() !== null;
 }
