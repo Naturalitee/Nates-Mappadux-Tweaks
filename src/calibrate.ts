@@ -1,4 +1,5 @@
 import { ProjectorCalibrationModal } from './gm/ProjectorCalibrationModal.ts';
+import { getActiveInstanceId } from './storage/db.ts';
 
 /**
  * Standalone calibration entry. Launched by the GM as `window.open` so the
@@ -11,8 +12,11 @@ import { ProjectorCalibrationModal } from './gm/ProjectorCalibrationModal.ts';
 // v2.14.2 — self-close if the main GM window broadcasts its closing
 // signal (otherwise an in-flight calibration window would linger after
 // the GM shuts down).
+// v2.14.98 — channel name carries the active instance id so a
+// calibrate window only closes when ITS owning GM closes.
 try {
-  const lifecycle = new BroadcastChannel('mappadux:lifecycle');
+  const inst = getActiveInstanceId();
+  const lifecycle = new BroadcastChannel(`mappadux:lifecycle${inst ? ':' + inst : ''}`);
   lifecycle.onmessage = (e) => {
     if (e?.data?.kind === 'gm-closing') {
       try { window.close(); } catch { /* no-op */ }

@@ -1477,8 +1477,14 @@ export class GMApp {
     // state-sync channels. Popups listen on the same channel and
     // call window.close() — works even though we open them with
     // noopener (no Window ref to close from the opener side).
+    //
+    // v2.14.98 — channel name suffixed with the active instance id
+    // so a second-instance GM only closes ITS own spawned windows,
+    // not every viewer at the same origin. Same trap LocalChannel
+    // had in v2.14.92.
     try {
-      const lifecycle = new BroadcastChannel('mappadux:lifecycle');
+      const inst = getActiveInstanceId();
+      const lifecycle = new BroadcastChannel(`mappadux:lifecycle${inst ? ':' + inst : ''}`);
       window.addEventListener('pagehide', () => {
         try { lifecycle.postMessage({ kind: 'gm-closing' }); } catch { /* channel may already be closed */ }
       });
@@ -3034,7 +3040,7 @@ export class GMApp {
       // user drags the window there and full-sizes it before rulering the
       // live grid. Open as its own popup; the storage listener picks up
       // the saved setup and refreshes the dropdown.
-      window.open('/calibrate.html', '_blank', 'noopener,popup,width=1280,height=800');
+      window.open(`/calibrate.html${this._instanceQuery()}`, '_blank', 'noopener,popup,width=1280,height=800');
       sel.value = 'off';
       return;
     }

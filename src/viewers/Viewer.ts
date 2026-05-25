@@ -21,6 +21,7 @@
  */
 
 import QRCode from 'qrcode';
+import { getActiveInstanceId } from '../storage/db.ts';
 import { bindFullscreenButton } from '../utils/fullscreen.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { MarkerTexture } from '../rendering/MarkerTexture.ts';
@@ -351,7 +352,11 @@ export class Viewer {
   private _attachLifecycleClose(): void {
     if (this._lifecycleChannel) return;
     try {
-      const ch = new BroadcastChannel('mappadux:lifecycle');
+      // v2.14.98 — channel name carries the active instance id so a
+      // viewer only listens to ITS owning GM's close signal, not
+      // every Mappadux GM at the same origin.
+      const inst = getActiveInstanceId();
+      const ch = new BroadcastChannel(`mappadux:lifecycle${inst ? ':' + inst : ''}`);
       ch.onmessage = (e) => {
         if (e?.data?.kind === 'gm-closing') {
           try { window.close(); } catch { /* not opened via window.open — leave alone */ }
