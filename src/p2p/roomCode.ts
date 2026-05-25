@@ -66,3 +66,13 @@ export function generateRoomCode(): string {
   };
   return `${pick()}-${pick()}-${pick()}`;
 }
+
+/**
+ * v2.14.96 — Single-word identifier for the "second instance"
+ * feature. Pulls from the same word pool the room codes use so the
+ * ?instance=NAME URLs stay readable + on-theme (e.g.
+ * ?instance=arcane rather than ?instance=8oilob).
+ */
+export function generateInstanceId(): string {
+  return WORDS[Math.floor(Math.random() * WORDS.length)]!;
+}

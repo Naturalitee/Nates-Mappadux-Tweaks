@@ -28,7 +28,7 @@ import { filterRegistry } from '../filters/FilterRegistry.ts';
 import { TransitionPanel } from '../transitions/TransitionPanel.ts';
 import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
 import { Host } from '../p2p/Host.ts';
-import { generateRoomCode } from '../p2p/roomCode.ts';
+import { generateRoomCode, generateInstanceId } from '../p2p/roomCode.ts';
 import { saveSession, loadSession, getAllMaps, getMap, saveMap, deleteMap, clearAssetLibraries, clearEverything, getActiveInstanceId } from '../storage/db.ts';
 import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY } from '../storage/localSettings.ts';
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
@@ -5561,10 +5561,13 @@ export class GMApp {
       label: 'Open New Instance',
       icon: 'plus-square',
       onSelect: () => {
-        // Short random id, URL-safe. Six chars of base36 are plenty
-        // distinct for one user's tab collection — collisions need
-        // 36^6 ≈ 2 billion attempts to be likely.
-        const id = Math.random().toString(36).slice(2, 8);
+        // v2.14.96 — readable word-based id from the same pool the
+        // room codes use ("?instance=arcane" rather than the old
+        // "?instance=8oilob" base36 string). Two GMs spawning at
+        // the same moment have a 1/256 collision chance, which
+        // for personal-tab use is fine; if it ever bites we can
+        // pair-word it.
+        const id = generateInstanceId();
         const url = new URL(window.location.href);
         url.search = `?instance=${id}`;
         url.hash = '';

@@ -54,6 +54,20 @@ export default defineConfig(({ command }) => ({
         // user's current session keeps running its cached bundle).
         skipWaiting:  true,
         clientsClaim: true,
+        // v2.14.96 — Critical for the second-instance feature.
+        // Without ignoreURLParametersMatching, a precached file
+        // (player.html, projector.html, etc.) requested with a
+        // query string like ?instance=foo does NOT match the
+        // precache route. workbox's default SPA navigateFallback
+        // then returns index.html (the GM bundle) instead — which
+        // is why opening /player.html?instance=foo was showing
+        // the GM screen.
+        ignoreURLParametersMatching: [/^utm_/, /^fbclid$/, /^instance$/],
+        // Also exclude /player.html + /projector.html paths from
+        // the navigateFallback entirely so they always go to the
+        // network (or precache) and never fall through to the SPA
+        // shell. Defence in depth.
+        navigateFallbackDenylist: [/\/player\.html/, /\/projector\.html/],
         runtimeCaching: [
           {
             urlPattern: /^https:\/\/0\.peerjs\.com\/.*/,
