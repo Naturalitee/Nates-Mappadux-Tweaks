@@ -119,6 +119,24 @@ function drawSplatter(
   }
 }
 
+/** v2.14.84 — Returns the lightning-flash white-overlay alpha at a
+ *  given normalised position in the WHOLE transition (0..1). Five
+ *  evenly-spaced flashes across the duration so the lightning carries
+ *  through every phase instead of dying in the first 10% of the
+ *  timeline. Each flash spikes to full white and falls off in ~5% of
+ *  total duration — quick enough to read as a strike, slow enough
+ *  to actually be seen. */
+function lightningAlpha(tGlobal: number): number {
+  const centres = [0.06, 0.26, 0.48, 0.70, 0.90];
+  const half    = 0.030;
+  let alpha = 0;
+  for (const c of centres) {
+    const d = Math.abs(tGlobal - c);
+    if (d < half) alpha = Math.max(alpha, 1 - d / half);
+  }
+  return alpha;
+}
+
 /** Wibbly liquid surface y(x) at the given baseline + animation
  *  phase. Sum of three sines at different frequencies + phases gives
  *  an organic "liquid level" look without reading as a sine wave.
@@ -226,34 +244,30 @@ export default {
     const rgb = hexToRgb(colourHex);
     const useLightning = lightning === 'on';
 
-    // Phase budget (% of total).
-    const dLight = useLightning ? duration * 0.10 : 0;
-    const dFill  = duration * (useLightning ? 0.40 : 0.45);
-    const dWipe  = duration - dLight - dFill;
+    // Phase budget (% of total). v2.14.84 — dedicated lightning
+    // phase removed; flashes now fire on a global timeline through
+    // both phases via lightningAlpha(tGlobal) overlay. Splitting the
+    // duration 45/55 (fill / wipe) gives the splatters enough room
+    // to actually accumulate visibly before the wipe takes over.
+    const dFill = duration * 0.45;
+    const dWipe = duration - dFill;
 
     // Pre-build all splatter positions for this run.
     const splatters = buildSplatters(w, h);
 
-    // ── Phase 1: Lightning ────────────────────────────────────────────
-    if (useLightning) {
-      await animate(dLight, (t) => {
-        ctx.clearRect(0, 0, w, h);
-        ctx.drawImage(snapshot, 0, 0, w, h);
-        const spike = (centre: number, width: number): number => {
-          const d = Math.abs(t - centre);
-          return d > width ? 0 : 1 - d / width;
-        };
-        const flash = Math.max(spike(0.20, 0.10), spike(0.70, 0.10));
-        if (flash > 0) {
-          ctx.fillStyle = `rgba(255, 250, 245, ${flash})`;
-          ctx.fillRect(0, 0, w, h);
-        } else {
-          ctx.fillStyle = 'rgba(0, 0, 0, 0.40)';
-          ctx.fillRect(0, 0, w, h);
-        }
-      }, undefined, signal);
-      if (signal?.aborted) return;
-    }
+    // Helper: stamp the lightning flash over the current frame.
+    // Called LAST in each phase's draw callback so the flash sits on
+    // top of everything (splatters, snapshot, the wibbly wipe, the
+    // newly-revealed map). tGlobal is the position in the WHOLE
+    // transition (0..1) so the five flash centres fire at the right
+    // wall-clock moments regardless of which phase is active.
+    const drawLightning = (tGlobal: number): void => {
+      if (!useLightning) return;
+      const a = lightningAlpha(tGlobal);
+      if (a <= 0) return;
+      ctx.fillStyle = `rgba(255, 250, 245, ${a})`;
+      ctx.fillRect(0, 0, w, h);
+    };
 
     // ── Phase 2: Splatter fill ────────────────────────────────────────
     // Accumulate splatters onto an offscreen canvas so Phase 3 can
@@ -296,6 +310,10 @@ export default {
         ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${washAlpha})`;
         ctx.fillRect(0, 0, w, h);
       }
+
+      // Lightning flash on top of the splatter frame. tGlobal maps
+      // the fill phase to 0..dFill / duration of the total timeline.
+      drawLightning((t * dFill) / duration);
     }, easeOut, signal);
     if (signal?.aborted) return;
 
@@ -323,6 +341,10 @@ export default {
       ctx.drawImage(splatLayer as CanvasImageSource, 0, 0);
       ctx.restore();
       drawWibblyGloss(ctx, cutY, w, phase);
+      // Lightning flash on top of the wipe frame. tGlobal continues
+      // from where the fill phase left off, so the five-flash schedule
+      // keeps firing through the reveal.
+      drawLightning((dFill + t * dWipe) / duration);
     }, undefined, signal);
   },
 } satisfies TransitionDefinition;
