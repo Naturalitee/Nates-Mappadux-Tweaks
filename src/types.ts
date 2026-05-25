@@ -1152,8 +1152,20 @@ export interface MapAsset {
    *  layered composites (the brush falls through to backdrop reveal
    *  same as Make Transparent in that case). */
   revealBackingBlob?: Blob;
+  /** v2.16 — Stagecraft per-map assignments. Travels in `.mappadux`.
+   *  Keys are stable connection ids from stagecraftStorage (WLED
+   *  endpoint id, the literal "ha" for the Home Assistant link,
+   *  future "spotify" / "youtube"). Values discriminate by `kind`. */
+  stagecraft?: Record<string, StagecraftAssignment>;
   addedAt:       number;
 }
+
+/** Per-map preset/scene assignment for a single Stagecraft connection.
+ *  Discriminated by `kind` so we can extend without reshaping existing
+ *  entries. WLED fires a preset id; HA calls a scene or script. */
+export type StagecraftAssignment =
+  | { kind: 'wled'; presetId: number }
+  | { kind: 'ha';   service: 'scene' | 'script'; entity: string };
 
 /** Stream C handout configuration — the body and presentation settings for
  *  a text-map. Animation runs on the player side using the same body. */

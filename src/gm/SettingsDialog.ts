@@ -15,6 +15,15 @@ import {
   UI_SCALE_DEFAULT,
   type StoredApiKey,
 } from '../storage/localSettings.ts';
+import {
+  getWledEndpoints,
+  addWledEndpoint,
+  removeWledEndpoint,
+  getHaConfig,
+  setHaConfig,
+} from '../stagecraft/stagecraftStorage.ts';
+import { fetchInfo as fetchWledInfo, normaliseEndpoint } from '../stagecraft/wledClient.ts';
+import { generateId } from '../utils/id.ts';
 
 /**
  * Settings dialog. Houses:
@@ -89,6 +98,8 @@ export class SettingsDialog {
     body.appendChild(this._buildScaledViewSection());
     // ── Performance section ──────────────────────────────────────────────
     body.appendChild(this._buildPerformanceSection());
+    // ── Stagecraft section (v2.16) ───────────────────────────────────────
+    body.appendChild(this._buildStagecraftSection());
     // ── API Keys section ─────────────────────────────────────────────────
     body.appendChild(this._buildApiKeysSection());
     // ── Danger Zone ──────────────────────────────────────────────────────
@@ -423,9 +434,206 @@ export class SettingsDialog {
 
     return sec;
   }
+
+  // ─── Stagecraft (v2.16) ─────────────────────────────────────────────────
+
+  /** Stagecraft section — connection config for WLED LED strips and
+   *  Home Assistant. Setting up any connection here is what makes the
+   *  Lighting/Automation panel appear in the main sidebar. Users who
+   *  don't use these features see zero extra chrome anywhere. */
+  private _buildStagecraftSection(): HTMLElement {
+    const sec = mkSection(
+      'Stagecraft (Lighting + Automation)',
+      'Connect Mappadux to physical lighting (WLED) and home-automation systems (Home Assistant) so a map switch can fire LED presets and scenes at the table. Mappadux only references presets/scenes you have already authored in those tools — set them up there first, then point Mappadux at the device and pick from the dropdown when assigning per map. None of this travels in Map Pack exports; the connection details stay on this machine.',
+    );
+
+    sec.appendChild(this._buildWledSubsection());
+    sec.appendChild(document.createElement('hr'));
+    sec.appendChild(this._buildHaSubsection());
+
+    return sec;
+  }
+
+  private _buildWledSubsection(): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'settings-stagecraft-wled';
+
+    const heading = document.createElement('strong');
+    heading.textContent = 'WLED endpoints';
+    wrap.appendChild(heading);
+    const sub = document.createElement('div');
+    sub.className = 'settings-stat-sub';
+    sub.style.marginBottom = '6px';
+    sub.textContent =
+      'Each row is one WLED-firmware device on your network. Mappadux ' +
+      'reads its preset list and fires a preset by id when you assign ' +
+      'one to a map. Make sure the device is reachable from this browser ' +
+      '(LAN, .local mDNS or IP).';
+    wrap.appendChild(sub);
+
+    const list = document.createElement('div');
+    list.className = 'settings-stagecraft-wled-list';
+    wrap.appendChild(list);
+
+    const renderList = (): void => {
+      list.innerHTML = '';
+      const endpoints = getWledEndpoints();
+      if (endpoints.length === 0) {
+        const none = document.createElement('div');
+        none.className = 'settings-stat';
+        none.style.fontStyle = 'italic';
+        none.textContent = 'No WLED devices configured.';
+        list.appendChild(none);
+        return;
+      }
+      for (const ep of endpoints) {
+        const row = document.createElement('div');
+        row.className = 'settings-stagecraft-wled-row';
+
+        const labelEl = document.createElement('div');
+        labelEl.innerHTML = `<strong>${escapeHtml(ep.label)}</strong>` +
+          `<br><span class="settings-stat-sub">${escapeHtml(ep.url)}</span>` +
+          `<br><span class="settings-stat-sub" data-status>(not tested yet)</span>`;
+
+        const btnRow = document.createElement('div');
+        btnRow.className = 'settings-btn-row';
+        const testBtn = document.createElement('button');
+        testBtn.type = 'button';
+        testBtn.className = 'btn btn--ghost btn--sm';
+        testBtn.textContent = 'Test';
+        const statusEl = labelEl.querySelector('[data-status]') as HTMLElement;
+        testBtn.addEventListener('click', async () => {
+          statusEl.textContent = '(testing…)';
+          const info = await fetchWledInfo(ep.url);
+          if (info.ok) {
+            statusEl.textContent =
+              `OK — "${info.data.name}", WLED ${info.data.version}, ${info.data.ledCount} LEDs.`;
+          } else {
+            statusEl.textContent = `Failed: ${info.message}`;
+          }
+        });
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn btn--danger btn--sm';
+        delBtn.textContent = 'Remove';
+        delBtn.addEventListener('click', () => {
+          removeWledEndpoint(ep.id);
+          renderList();
+        });
+        btnRow.append(testBtn, delBtn);
+
+        row.append(labelEl, btnRow);
+        list.appendChild(row);
+      }
+    };
+
+    renderList();
+
+    // ── Add-device row ───────────────────────────────────────────────
+    const addRow = document.createElement('div');
+    addRow.className = 'settings-stagecraft-wled-add';
+    addRow.style.marginTop = '8px';
+    addRow.innerHTML =
+      '<input type="text" data-field="label" placeholder="Label (e.g. Table strip)" />' +
+      '<input type="text" data-field="url" placeholder="URL (e.g. 192.168.1.42 or wled-table.local)" />' +
+      '<button type="button" class="btn btn--ghost btn--sm" data-action="add">Add</button>';
+    const labelInput = addRow.querySelector<HTMLInputElement>('[data-field="label"]')!;
+    const urlInput   = addRow.querySelector<HTMLInputElement>('[data-field="url"]')!;
+    const addBtn     = addRow.querySelector<HTMLButtonElement>('[data-action="add"]')!;
+    addBtn.addEventListener('click', () => {
+      const label = labelInput.value.trim();
+      const url   = normaliseEndpoint(urlInput.value);
+      if (!label || !url) return;
+      addWledEndpoint({ id: generateId(), label, url });
+      labelInput.value = '';
+      urlInput.value = '';
+      renderList();
+    });
+    wrap.appendChild(addRow);
+
+    return wrap;
+  }
+
+  private _buildHaSubsection(): HTMLElement {
+    const wrap = document.createElement('div');
+    wrap.className = 'settings-stagecraft-ha';
+
+    const heading = document.createElement('strong');
+    heading.textContent = 'Home Assistant';
+    wrap.appendChild(heading);
+    const sub = document.createElement('div');
+    sub.className = 'settings-stat-sub';
+    sub.style.marginBottom = '6px';
+    sub.innerHTML =
+      'Connect to a Home Assistant instance to fire scenes or scripts on ' +
+      'map switch. Create a <strong>long-lived access token</strong> in HA ' +
+      'under Profile → Long-Lived Access Tokens. Mappadux only calls ' +
+      'existing scenes/scripts you have authored in HA — set them up ' +
+      'there first.';
+    wrap.appendChild(sub);
+
+    const existing = getHaConfig();
+    const form = document.createElement('div');
+    form.className = 'settings-stagecraft-ha-form';
+    form.innerHTML =
+      `<input type="text" data-field="url" placeholder="URL (e.g. http://homeassistant.local:8123)" value="${existing ? escapeHtml(existing.url) : ''}" />` +
+      `<input type="password" data-field="token" placeholder="Long-lived access token" value="${existing ? escapeHtml(existing.token) : ''}" />`;
+    wrap.appendChild(form);
+
+    const btnRow = document.createElement('div');
+    btnRow.className = 'settings-btn-row';
+    btnRow.style.marginTop = '6px';
+    const saveBtn = document.createElement('button');
+    saveBtn.type = 'button';
+    saveBtn.className = 'btn btn--ghost btn--sm';
+    saveBtn.textContent = existing ? 'Save changes' : 'Save';
+    const clearBtn = document.createElement('button');
+    clearBtn.type = 'button';
+    clearBtn.className = 'btn btn--danger btn--sm';
+    clearBtn.textContent = 'Disconnect';
+    clearBtn.hidden = !existing;
+    const status = document.createElement('div');
+    status.className = 'settings-stat-sub';
+    status.style.marginTop = '4px';
+
+    const urlInput   = form.querySelector<HTMLInputElement>('[data-field="url"]')!;
+    const tokenInput = form.querySelector<HTMLInputElement>('[data-field="token"]')!;
+    saveBtn.addEventListener('click', () => {
+      const url = urlInput.value.trim().replace(/\/+$/, '');
+      const token = tokenInput.value.trim();
+      if (!url || !token) {
+        status.textContent = 'Enter both URL and token to save.';
+        return;
+      }
+      setHaConfig({ url, token });
+      saveBtn.textContent = 'Save changes';
+      clearBtn.hidden = false;
+      status.textContent = 'Saved. The Lighting/Automation panel should now show Home Assistant.';
+    });
+    clearBtn.addEventListener('click', () => {
+      setHaConfig(null);
+      urlInput.value = '';
+      tokenInput.value = '';
+      saveBtn.textContent = 'Save';
+      clearBtn.hidden = true;
+      status.textContent = 'Disconnected. Mappadux will stop firing Home Assistant scenes.';
+    });
+
+    btnRow.append(saveBtn, clearBtn);
+    wrap.append(btnRow, status);
+    return wrap;
+  }
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────
+
+function escapeHtml(s: string): string {
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;');
+}
 
 function mkSection(title: string, intro: string, opts?: { open?: boolean }): HTMLElement {
   // Native <details> + <summary> for the collapsible behaviour —
