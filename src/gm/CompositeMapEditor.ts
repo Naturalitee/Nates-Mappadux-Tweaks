@@ -535,6 +535,26 @@ export class CompositeMapEditor {
       </div>
     `;
     if (isSelected) {
+      // v2.14.108 — Visible move handle at the top-left of the
+      // selected tile. The tile body has been draggable from
+      // anywhere all along (see _bindTileDrag below); this just
+      // makes the affordance explicit so the GM sees "drag from
+      // here" at a glance. Click + drag bubbles up through the
+      // tile's existing pointerdown listener, so no extra binding.
+      const dragHandle = document.createElement('div');
+      dragHandle.className = 'composite-editor-tile-drag';
+      dragHandle.title = 'Drag to move this tile.';
+      dragHandle.innerHTML = `
+        <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+          <polyline points="5 9 2 12 5 15"/>
+          <polyline points="9 5 12 2 15 5"/>
+          <polyline points="15 19 12 22 9 19"/>
+          <polyline points="19 9 22 12 19 15"/>
+          <line x1="2" y1="12" x2="22" y2="12"/>
+          <line x1="12" y1="2" x2="12" y2="22"/>
+        </svg>`;
+      el.appendChild(dragHandle);
+
       // v2.14.45 — Mappadux convention: red trashcan handle pinned
       // at bottom-left apex of the selected object.
       const trash = document.createElement('button');

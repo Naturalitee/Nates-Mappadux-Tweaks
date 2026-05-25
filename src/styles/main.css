@@ -131,6 +131,52 @@ body.gm-view {
   cursor: grab;
 }
 
+/* v2.14.108 — GM-canvas undo / redo bar. Floats top-centre over
+   the workspace, semi-transparent so it doesn't obscure the map
+   when idle; opacity ramps on hover. Buttons disable when there's
+   nothing to undo / redo on their respective surface (fog +
+   markers — same stack timeline). */
+.gm-canvas-undo-bar {
+  position: absolute;
+  top: 10px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  gap: 6px;
+  padding: 4px 6px;
+  background: rgba(20, 24, 36, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 999px;
+  backdrop-filter: blur(4px);
+  z-index: 12;
+  opacity: 0.55;
+  transition: opacity 120ms ease;
+  pointer-events: auto;
+}
+.gm-canvas-undo-bar:hover { opacity: 1; }
+.gm-canvas-undo-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  padding: 0;
+  background: rgba(255, 255, 255, 0.04);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 50%;
+  color: rgba(255, 255, 255, 0.9);
+  cursor: pointer;
+}
+.gm-canvas-undo-btn:hover:not(:disabled) {
+  background: rgba(255, 255, 255, 0.12);
+  filter: brightness(1.15);
+}
+.gm-canvas-undo-btn:disabled {
+  cursor: default;
+  color: rgba(255, 255, 255, 0.25);
+  border-color: rgba(255, 255, 255, 0.08);
+}
+
 /* Off-screen viewport indicator (A7) — small edge-pinned pill that
    appears when a player / projector rect has been panned out of the
    visible workspace. Click recentres the camera on the rect. The
@@ -3185,12 +3231,11 @@ option.select-option--add {
 .txt-map-el-resize:active,
 .txt-map-el-delete:active { transform: scale(0.94); }
 .txt-map-el-drag {
-  /* v2.14.105 — Moved off top-left so flip-V can claim that corner
-     (matches Composite Editor + image elements). Now sits on the
-     left edge mid-height — the only edge slot not occupied by
-     another handle for text elements. */
-  top: 50%; left: -11px;
-  transform: translateY(-50%);
+  /* v2.14.108 — Move handle back at top-left. Flip-V now sits at
+     top centre (below the rotation handle) so top-left is free
+     for the explicit move affordance — convention the GM is used
+     to from the rest of the app's chrome. */
+  top: -11px; left: -11px;
   cursor: move;
 }
 .txt-map-el-resize {
@@ -3256,12 +3301,22 @@ option.select-option--add {
   pointer-events: none;
   z-index: 2;
 }
-/* v2.14.105 — Flip pair at the TOP corners of the element for
-   BOTH text + image so the layout reads identically: flip-V at
-   top-left, flip-H at top-right. Text elements' drag handle moves
-   to the left edge mid-height (rule below) to free top-left. */
-.txt-map-el-flip--v { top: -11px; left:  -11px; }
-.txt-map-el-flip--h { top: -11px; right: -11px; }
+/* v2.14.108 — Flip buttons relocated to match the Composite
+   Editor + the "button position matches the axis it flips"
+   convention:
+   - flip-V (top↔bottom mirror): top edge centre, just under
+     the rotation handle.
+   - flip-H (left↔right mirror): right edge mid-height. */
+.txt-map-el-flip--v {
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.txt-map-el-flip--h {
+  top: 50%;
+  right: -11px;
+  transform: translateY(-50%);
+}
 .txt-map-el-flip.is-active {
   background: rgba(90, 240, 122, 0.85);
   color: #0a0e1a;
@@ -4870,12 +4925,14 @@ option.select-option--add {
   background: #dc2626;
 }
 
-/* v2.14.59 — Flip H + Flip V buttons on the top corners of the
-   selected tile. Compact chrome icons; active state when the flip
-   is engaged. */
+/* v2.14.108 — Flip buttons relocated for the "button position
+   matches the axis it flips" convention:
+   - flip-V (top↔bottom mirror): top edge centre, just under the
+     rotation handle.
+   - flip-H (left↔right mirror): right edge mid-height.
+   Both stay circular + share the chrome styling. */
 .composite-editor-tile-flip {
   position: absolute;
-  top: -14px;
   width: 28px;
   height: 28px;
   padding: 0;
@@ -4890,13 +4947,44 @@ option.select-option--add {
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
   z-index: 3;
 }
-.composite-editor-tile-flip--h { right: -14px; }
-.composite-editor-tile-flip--v { left:  -14px; }
+.composite-editor-tile-flip--v {
+  top: -14px;
+  left: 50%;
+  transform: translateX(-50%);
+}
+.composite-editor-tile-flip--h {
+  top: 50%;
+  right: -14px;
+  transform: translateY(-50%);
+}
 .composite-editor-tile-flip:hover { filter: brightness(1.2); }
 .composite-editor-tile-flip.is-active {
   background: rgba(90, 240, 122, 0.85);
   color: #0a0e1a;
 }
+
+/* v2.14.108 — Visible move handle at the top-left of the selected
+   tile. The tile body is draggable from anywhere; this just
+   advertises the affordance. */
+.composite-editor-tile-drag {
+  position: absolute;
+  top: -14px;
+  left: -14px;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: rgba(20, 24, 36, 0.9);
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  color: #fff;
+  cursor: move;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.4);
+  z-index: 3;
+}
+.composite-editor-tile-drag:hover { filter: brightness(1.2); }
 
 /* v2.14.59 — Rotation handle: ball above tile top-centre with a
    dashed stem visualising the connection to the tile. */

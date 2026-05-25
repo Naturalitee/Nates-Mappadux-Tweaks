@@ -1,5 +1,6 @@
 import { StateManager } from './StateManager.ts';
 import { MapManager } from './MapManager.ts';
+import { CanvasUndoManager } from './CanvasUndoManager.ts';
 import { FogEditor } from './FogEditor.ts';
 import { OVERLAY_KIND_REGISTRY, OVERLAY_KIND_ORDER, overlayKind, DEFAULT_EDGE_FADE } from '../mapfx/overlayKindRegistry.ts';
 import { confirmDialog } from './confirmDialog.ts';
@@ -187,6 +188,12 @@ function _toUnicodeBold(s: string): string {
 export class GMApp {
   private state   = new StateManager();
   private maps    = new MapManager();
+  /** v2.14.108 — GM-canvas undo / redo for fog + markers. Wired in
+   *  init(); cleared on every map switch (snapshots from the
+   *  outgoing map shouldn't paste onto the incoming one). */
+  private undoMgr!: CanvasUndoManager;
+  private undoBtn:  HTMLButtonElement | null = null;
+  private redoBtn:  HTMLButtonElement | null = null;
   private host:   Host;
   private renderer!:       Renderer;
   private fogEditor!:      FogEditor;
@@ -581,6 +588,23 @@ export class GMApp {
       if (tag === 'INPUT' || tag === 'TEXTAREA' || tag === 'SELECT') return;
       if ((e.target as HTMLElement | null)?.isContentEditable) return;
 
+      // v2.14.108 — Ctrl/Cmd+Z = undo, Ctrl/Cmd+Y or Ctrl/Cmd+Shift+Z = redo.
+      // Routed to the GM-canvas undo manager (fog + markers). Modal
+      // editors install their own keydown stoppers when open.
+      if (this.undoMgr && (e.ctrlKey || e.metaKey)) {
+        const k = e.key.toLowerCase();
+        if (k === 'z' && !e.shiftKey) {
+          this.undoMgr.undo();
+          e.preventDefault();
+          return;
+        }
+        if (k === 'y' || (k === 'z' && e.shiftKey)) {
+          this.undoMgr.redo();
+          e.preventDefault();
+          return;
+        }
+      }
+
       const step = 0.1 / this.gmTransform.scale;
       let handled = true;
       switch (e.key) {
@@ -596,6 +620,62 @@ export class GMApp {
         this._applyWorkspaceTransform();
       }
     });
+  }
+
+  /** v2.14.108 — Wire the GM-canvas undo manager. Pushes a snapshot
+   *  before each setFog / setMarkers mutation (coalesced by idle gap
+   *  so brush strokes collapse to one entry). Two semi-transparent
+   *  chrome buttons land top-centre of the canvas wrapper; their
+   *  disabled state mirrors the stack depth via the onChange cb. */
+  private _bindCanvasUndo(): void {
+    this.undoMgr = new CanvasUndoManager({
+      getFog:     () => this.state.getState().fog,
+      applyFog:   (fog) => this.state.setFog(fog),
+      getMarkers: () => this.state.getState().markers,
+      applyMarkers: (m) => this.state.setMarkers(m),
+      onChange: () => this._refreshUndoButtons(),
+    });
+    this.state.setUndoHook((kind) => this.undoMgr.recordIfNewAction(kind));
+
+    const wrapper = document.getElementById('canvas-wrapper');
+    if (!wrapper) return;
+    const bar = document.createElement('div');
+    bar.id = 'gm-canvas-undo-bar';
+    bar.className = 'gm-canvas-undo-bar';
+
+    const mkBtn = (label: string, icon: string, click: () => void): HTMLButtonElement => {
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'gm-canvas-undo-btn';
+      b.title = label;
+      b.setAttribute('aria-label', label);
+      b.innerHTML = icon;
+      b.addEventListener('click', click);
+      return b;
+    };
+
+    const undoIcon =
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M3 7v6h6"/>' +
+        '<path d="M3 13a9 9 0 1 0 3-6.7L3 9"/>' +
+      '</svg>';
+    const redoIcon =
+      '<svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M21 7v6h-6"/>' +
+        '<path d="M21 13a9 9 0 1 1-3-6.7L21 9"/>' +
+      '</svg>';
+
+    this.undoBtn = mkBtn('Undo (Ctrl+Z)', undoIcon, () => this.undoMgr.undo());
+    this.redoBtn = mkBtn('Redo (Ctrl+Y)', redoIcon, () => this.undoMgr.redo());
+    bar.appendChild(this.undoBtn);
+    bar.appendChild(this.redoBtn);
+    wrapper.appendChild(bar);
+    this._refreshUndoButtons();
+  }
+
+  private _refreshUndoButtons(): void {
+    if (this.undoBtn) this.undoBtn.disabled = !this.undoMgr.canUndo();
+    if (this.redoBtn) this.redoBtn.disabled = !this.undoMgr.canRedo();
   }
 
   /**
@@ -1407,6 +1487,7 @@ export class GMApp {
     this.bindSoundboardPanel();
     this.bindHamburgerMenu();
     this._bindWorkspacePanZoom();
+    this._bindCanvasUndo();
 
     // Resume positional audio context on first user gesture (autoplay policy)
     const resumePA = () => this.audio.tryResume();
@@ -2473,6 +2554,10 @@ export class GMApp {
     const previousMapId = this.state.snapshot().map?.id;
     const isReload = previousMapId === map.id;
     if (isReload) this._suppressNextMapTransition = true;
+    // v2.14.108 — Reset GM-canvas undo on every real map switch:
+    // snapshots from the outgoing map can't safely re-apply onto
+    // the incoming one. Same-map reloads keep history.
+    if (!isReload && this.undoMgr) this.undoMgr.clear();
     // Compute the entry transition's duration NOW so the autoReveal
     // delay later in this function can wait the right amount of time
     // for the player to finish the map→map transition before the

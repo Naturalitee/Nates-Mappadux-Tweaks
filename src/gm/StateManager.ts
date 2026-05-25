@@ -19,6 +19,10 @@ export class StateManager {
   private state: SessionState = defaultSessionState();
   private listeners: StateListener[] = [];
   private saveTimer: ReturnType<typeof setTimeout> | null = null;
+  /** v2.14.108 — GM-canvas undo hook. Called BEFORE setFog / setMarkers
+   *  mutations so a CanvasUndoManager can snapshot the prior state.
+   *  Optional — null in tests / when undo isn't wired. */
+  private undoHook: ((kind: 'fog' | 'markers') => void) | null = null;
 
   getState(): SessionState {
     return this.state;
@@ -108,8 +112,13 @@ export class StateManager {
   }
 
   setFog(fog: FogState): void {
+    this.undoHook?.('fog');
     this.state = { ...this.state, fog };
     this._notify(['fog']);
+  }
+
+  setUndoHook(hook: ((kind: 'fog' | 'markers') => void) | null): void {
+    this.undoHook = hook;
   }
 
   /** v2.12 — patch shader-param values for a single overlay kind. Merges
@@ -196,6 +205,7 @@ export class StateManager {
   }
 
   setMarkers(markers: Marker[]): void {
+    this.undoHook?.('markers');
     this.state = { ...this.state, markers };
     this._notify(['markers'], undefined, true);
   }
