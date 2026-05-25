@@ -35,9 +35,12 @@ export type PickAssetFn = () => Promise<MapAsset | null>;
 function _snapRotation(deg: number): number {
   const wrap = (a: number) => ((a % 360) + 360) % 360;
   const distTo = (a: number, b: number) => Math.abs(wrap(a - b + 180) - 180);
-  // Right-angle snap (±5°).
+  // v2.14.106 — Right-angle snap dropped to ±2° (was ±5°) so all
+  // three snap families share the same tolerance. Earlier the
+  // generous 5° band was making it tricky to land on near-90
+  // angles deliberately offset — e.g. 87° kept snapping to 90°.
   const near90 = Math.round(deg / 90) * 90;
-  if (distTo(deg, near90) <= 5) return wrap(near90);
+  if (distTo(deg, near90) <= 2) return wrap(near90);
   // 45° family (±2°): 45, 135, 225, 315.
   const near45 = Math.round(deg / 45) * 45;
   if (distTo(deg, near45) <= 2) return wrap(near45);

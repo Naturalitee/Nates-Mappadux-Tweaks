@@ -1306,8 +1306,11 @@ export class TextMapEditor {
   private _snapRotation(deg: number): number {
     const wrap = (a: number): number => ((a % 360) + 360) % 360;
     const distTo = (a: number, b: number): number => Math.abs(wrap(a - b + 180) - 180);
+    // v2.14.106 — Right-angle snap dropped to ±2° (was ±5°) to
+    // match the 45° + 30° families. See CompositeMapEditor for
+    // the same rationale.
     const near90 = Math.round(deg / 90) * 90;
-    if (distTo(deg, near90) <= 5) return wrap(near90);
+    if (distTo(deg, near90) <= 2) return wrap(near90);
     const near45 = Math.round(deg / 45) * 45;
     if (distTo(deg, near45) <= 2) return wrap(near45);
     const near30 = Math.round(deg / 30) * 30;
