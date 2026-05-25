@@ -3185,7 +3185,12 @@ option.select-option--add {
 .txt-map-el-resize:active,
 .txt-map-el-delete:active { transform: scale(0.94); }
 .txt-map-el-drag {
-  top: -11px; left: -11px;
+  /* v2.14.105 — Moved off top-left so flip-V can claim that corner
+     (matches Composite Editor + image elements). Now sits on the
+     left edge mid-height — the only edge slot not occupied by
+     another handle for text elements. */
+  top: 50%; left: -11px;
+  transform: translateY(-50%);
   cursor: move;
 }
 .txt-map-el-resize {
@@ -3251,18 +3256,12 @@ option.select-option--add {
   pointer-events: none;
   z-index: 2;
 }
-/* v2.14.104 — Flip pair at the TOP corners of the element so the
-   layout reads exactly like the Composite Editor: flip-V at top-
-   left, flip-H at top-right. (Image elements drop the drag handle
-   so top-left is free; text elements still need it and keep their
-   right-edge stacked flips via the .txt-map-el--text override
-   below.) */
+/* v2.14.105 — Flip pair at the TOP corners of the element for
+   BOTH text + image so the layout reads identically: flip-V at
+   top-left, flip-H at top-right. Text elements' drag handle moves
+   to the left edge mid-height (rule below) to free top-left. */
 .txt-map-el-flip--v { top: -11px; left:  -11px; }
 .txt-map-el-flip--h { top: -11px; right: -11px; }
-/* Text-element override: top-left is occupied by the drag handle,
-   so text-element flips stack on the right edge instead. */
-.txt-map-el--text .txt-map-el-flip--v { top: 42px; left: auto; right: -11px; }
-.txt-map-el--text .txt-map-el-flip--h { top: 12px; right: -11px; }
 .txt-map-el-flip.is-active {
   background: rgba(90, 240, 122, 0.85);
   color: #0a0e1a;
@@ -3516,7 +3515,10 @@ option.select-option--add {
 }
 
 /* ── About / Splash dialog ─────────────────────────────────────────────── */
-.about-dialog { width: 600px; }
+/* v2.14.105 — bumped 600 → 900px (50% wider) so the About dialog
+   has room for the Customise Pack form + the splash preview side
+   by side without cramping. */
+.about-dialog { width: 900px; }
 
 .about-body {
   flex: 1;
