@@ -1238,6 +1238,13 @@ export interface TextMapImageElement extends TextMapElementBase {
   assetId: string;
   /** Optional tint colour for monochrome SVG icons. */
   tint?:   string;
+  /** v2.14.102 — When true (the default), resizing preserves the
+   *  current width:height ratio so the image doesn't squash. Toggle
+   *  off via the lock button in the element chrome to free-resize
+   *  (matches the Composite Editor's lock-aspect behaviour). Absent
+   *  treated as true. Text elements ignore this — handout text
+   *  boxes are designed for free reflow at any aspect. */
+  lockAspect?: boolean;
 }
 
 export interface TextMapAnimation {

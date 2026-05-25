@@ -1067,7 +1067,18 @@ export class TextMapEditor {
     const host = document.createElement('div');
     host.className = `txt-map-el txt-map-el--${el.type}`;
     host.dataset.elementId = el.id;
-    this._applyGeometry(host, el);
+    // v2.14.102 — _applyGeometry MUST run after the body is mounted
+    // (it queries the body for the flip transform). Earlier this ran
+    // here, before host.appendChild(body) below, so the flip never
+    // applied on first paint and the editor re-entry showed an un-
+    // flipped element even though the asset had the flipH/V flags
+    // set. Set x/y/w/h inline now; defer full geometry (including
+    // rotation + flip) to AFTER body is mounted at the end of this
+    // method.
+    host.style.left   = `${el.x}%`;
+    host.style.top    = `${el.y}%`;
+    host.style.width  = `${el.w}%`;
+    host.style.height = `${el.h}%`;
 
     // Body (the typeable / image-rendering region)
     const body = document.createElement('div');
@@ -1221,8 +1232,35 @@ export class TextMapEditor {
     flipV.addEventListener('click', (ev) => { ev.stopPropagation(); this._toggleFlip(el.id, 'v'); });
     host.appendChild(flipV);
 
+    // v2.14.102 — Aspect-lock toggle for IMAGE elements only. Sits
+    // on the left edge mid-height (the only free corner — top-left
+    // is drag, bottom-left is delete, right edge is flip pair).
+    // Padlock SVG: closed when locked, arch lifted when unlocked.
+    // Text elements skip this — handout text boxes are designed
+    // for free reflow at any aspect.
+    if (el.type === 'image') {
+      const locked = el.lockAspect ?? true;
+      const lockBtn = document.createElement('button');
+      lockBtn.type = 'button';
+      lockBtn.className = `txt-map-el-lock${locked ? ' is-active' : ''}`;
+      lockBtn.title = locked
+        ? 'Aspect ratio LOCKED — resize preserves the image\'s shape. Click to unlock and stretch freely.'
+        : 'Aspect ratio UNLOCKED — width and height resize independently. Click to re-lock.';
+      lockBtn.innerHTML = locked
+        ? '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V7a4 4 0 0 1 8 0v4"/></svg>'
+        : '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="11" width="14" height="9" rx="1"/><path d="M8 11V7a4 4 0 0 1 7.5-2"/></svg>';
+      lockBtn.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+      lockBtn.addEventListener('click', (ev) => { ev.stopPropagation(); this._toggleLockAspect(el.id); });
+      host.appendChild(lockBtn);
+    }
+
     this.pageEl.appendChild(host);
     this.elementNodes.set(el.id, host);
+    // v2.14.102 — Now that the body is in place, apply the full
+    // geometry including rotation + flip. Re-entering the editor
+    // (or any time _renderAllElements rebuilds the DOM) will hit
+    // this path and the flip transform will actually show.
+    this._applyGeometry(host, el);
     return host;
   }
 
@@ -1273,6 +1311,25 @@ export class TextMapEditor {
       handle.addEventListener('pointerup',     onUp);
       handle.addEventListener('pointercancel', onUp);
     });
+  }
+
+  /** v2.14.102 — Toggle the per-element aspect-ratio lock on an
+   *  image element. Pushes undo + re-mounts the element so the
+   *  lock button's icon + active state refresh. */
+  private _toggleLockAspect(elementId: string): void {
+    const el = this.elements.find((x) => x.id === elementId);
+    if (!el || el.type !== 'image') return;
+    this._pushUndo();
+    el.lockAspect = !(el.lockAspect ?? true);
+    // Re-mount so the lock button's SVG + active class swap. Cheap
+    // — the only one element rebuilds, not the whole page.
+    const host = this.elementNodes.get(elementId);
+    if (host) {
+      host.remove();
+      this.elementNodes.delete(elementId);
+    }
+    this._mountElement(el);
+    if (this.selectedId === elementId) this._select(elementId);
   }
 
   /** v2.14.101 — Toggle a flip flag + re-apply transform to the body. */
@@ -1754,8 +1811,26 @@ export class TextMapEditor {
       el.x = state.startGeom.x + dxPct;
       el.y = state.startGeom.y + dyPct;
     } else {
-      el.w = state.startGeom.w + dxPct;
-      el.h = state.startGeom.h + dyPct;
+      let newW = state.startGeom.w + dxPct;
+      let newH = state.startGeom.h + dyPct;
+      // v2.14.102 — Image elements lock aspect ratio on resize by
+      // default (matches the Composite Editor's lockAspect). The
+      // dominant axis wins — whichever the cursor pulled further
+      // from the start drives the other through the start aspect.
+      // Text elements always free-resize; their content reflows.
+      if (el.type === 'image' && (el.lockAspect ?? true)
+          && state.startGeom.w > 0 && state.startGeom.h > 0) {
+        const aspect = state.startGeom.w / state.startGeom.h;
+        const wRel = Math.abs((newW - state.startGeom.w) / state.startGeom.w);
+        const hRel = Math.abs((newH - state.startGeom.h) / state.startGeom.h);
+        if (wRel >= hRel) {
+          newH = newW / aspect;
+        } else {
+          newW = newH * aspect;
+        }
+      }
+      el.w = newW;
+      el.h = newH;
     }
     clampElementGeometry(el);
     const node = this.elementNodes.get(state.elementId);
