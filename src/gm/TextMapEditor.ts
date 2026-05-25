@@ -1114,10 +1114,24 @@ export class TextMapEditor {
       });
     } else if (el.type === 'image') {
       body.classList.add('txt-map-el-body--image');
+      // v2.14.104 — Carry the lock state on the host so the CSS can
+      // toggle object-fit on the inner image (contain when locked,
+      // fill when unlocked).
+      if (el.lockAspect === false) host.classList.add('txt-map-el--unlocked');
       // Async resolve — paint a placeholder while we wait.
       body.textContent = '🖼';
       void renderAssetToInlineHtml(el.assetId, { sizeEm: 1 }).then((html) => {
-        if (html) body.innerHTML = html;
+        if (html) {
+          body.innerHTML = html;
+          // SVG aspect respects preserveAspectRatio; default is
+          // "xMidYMid meet" (= contain-like). When the element is
+          // unlocked the user wants the SVG to stretch with the
+          // box, so flip the SVG's attribute on the fly.
+          if (el.lockAspect === false) {
+            const svg = body.querySelector('svg');
+            if (svg) svg.setAttribute('preserveAspectRatio', 'none');
+          }
+        }
       });
       // Image bodies are draggable from ANYWHERE in their frame.
       // There's no text-edit mode to compete with, and the cursor
@@ -1135,20 +1149,29 @@ export class TextMapEditor {
     // A8: move handle at top-left, resize at bottom-right, delete badge
     // at top-right. All three are visible only when this element is
     // selected (gated via .txt-map-el--selected in CSS).
-    const dragBar = document.createElement('div');
-    dragBar.className = 'txt-map-el-drag';
-    dragBar.title = 'Drag to move';
-    dragBar.innerHTML =
-      '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-        '<polyline points="5 9 2 12 5 15"/>' +
-        '<polyline points="9 5 12 2 15 5"/>' +
-        '<polyline points="15 19 12 22 9 19"/>' +
-        '<polyline points="19 9 22 12 19 15"/>' +
-        '<line x1="2" y1="12" x2="22" y2="12"/>' +
-        '<line x1="12" y1="2" x2="12" y2="22"/>' +
-      '</svg>';
-    dragBar.addEventListener('pointerdown', (e) => this._startDrag(e, el.id, 'move'));
-    host.appendChild(dragBar);
+    //
+    // v2.14.104 — IMAGE elements skip the drag handle entirely; the
+    // body itself starts the drag (bound below). That frees top-left
+    // so the flip-V button can sit there, matching the Composite
+    // Editor's layout pattern (flip-V top-left, flip-H top-right).
+    // Text elements keep the drag handle since their bodies are
+    // contenteditable and can't double as a drag surface.
+    if (el.type === 'text') {
+      const dragBar = document.createElement('div');
+      dragBar.className = 'txt-map-el-drag';
+      dragBar.title = 'Drag to move';
+      dragBar.innerHTML =
+        '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<polyline points="5 9 2 12 5 15"/>' +
+          '<polyline points="9 5 12 2 15 5"/>' +
+          '<polyline points="15 19 12 22 9 19"/>' +
+          '<polyline points="19 9 22 12 19 15"/>' +
+          '<line x1="2" y1="12" x2="22" y2="12"/>' +
+          '<line x1="12" y1="2" x2="12" y2="22"/>' +
+        '</svg>';
+      dragBar.addEventListener('pointerdown', (e) => this._startDrag(e, el.id, 'move'));
+      host.appendChild(dragBar);
+    }
 
     const resize = document.createElement('div');
     resize.className = 'txt-map-el-resize';
@@ -1451,8 +1474,12 @@ export class TextMapEditor {
   }
 
   private _select(id: string | null): void {
-    if (this.selectedId === id) return;
-    if (this.selectedId) {
+    // v2.14.104 — Don't early-return on the same id. When an element
+    // re-mounts (e.g. _toggleLockAspect rebuilds the host so the
+    // lock icon refreshes), the NEW DOM node has no --selected class.
+    // Re-applying is safe + idempotent; the previous DOM node may
+    // already be gone, in which case the remove is a no-op.
+    if (this.selectedId && this.selectedId !== id) {
       const prev = this.elementNodes.get(this.selectedId);
       prev?.classList.remove('txt-map-el--selected');
     }

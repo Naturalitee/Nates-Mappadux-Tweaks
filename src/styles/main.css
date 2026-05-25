@@ -3106,6 +3106,20 @@ option.select-option--add {
   height: 100% !important;
 }
 .txt-map-el--image .txt-map-el-body > img { object-fit: contain; }
+/* v2.14.104 — Aspect-unlocked image elements stretch to fill the
+   bounding box (object-fit: fill) instead of preserving their
+   natural aspect inside it. Lets the GM deliberately squash /
+   stretch images for cinematic / textural effect when needed;
+   default (locked) stays object-fit: contain. */
+.txt-map-el--image.txt-map-el--unlocked .txt-map-el-body > img { object-fit: fill; }
+.txt-map-el--image.txt-map-el--unlocked .txt-map-el-body > span > svg,
+.txt-map-el--image.txt-map-el--unlocked .txt-map-el-body > svg {
+  /* SVGs ignore object-fit; the parent CSS already forces them to
+     width/height 100%, but their preserveAspectRatio attribute
+     still constrains the rendering. The runtime SVG render hook
+     sets preserveAspectRatio="none" on these when the element is
+     unlocked — see _applyImageLockClasses in TextMapEditor. */
+}
 .txt-map-el--image .txt-map-el-body > span > svg {
   display: block !important;
   width:  100% !important;
@@ -3126,6 +3140,12 @@ option.select-option--add {
   outline: 1px dashed var(--accent, #6aa3ff);
   outline-offset: 1px;
   box-shadow: inset 0 0 0 9999px rgba(255, 255, 255, 0.04);
+  /* v2.14.104 — Float the selected element above its neighbours so
+     the chrome icons (resize / lock / reset) sitting outside the
+     bounding box never get shadowed by an overlapping unselected
+     element. Without this, clicking the resize handle in a corner
+     overlapped by another element selected that other element. */
+  z-index: 10;
 }
 .txt-map-el-drag,
 .txt-map-el-resize,
@@ -3231,13 +3251,18 @@ option.select-option--add {
   pointer-events: none;
   z-index: 2;
 }
-/* v2.14.103 — Flip pair sits on the UPPER right edge, stacked just
-   below the top corner so the lower-right cluster (resize + lock +
-   reset) has a clean run from the bottom upward. Matches the
-   composite editor's bottom-right cluster pattern, just adapted for
-   the textmap chrome where the top-left is taken by drag. */
-.txt-map-el-flip--h { top: 12px;  right: -11px; }
-.txt-map-el-flip--v { top: 42px;  right: -11px; }
+/* v2.14.104 — Flip pair at the TOP corners of the element so the
+   layout reads exactly like the Composite Editor: flip-V at top-
+   left, flip-H at top-right. (Image elements drop the drag handle
+   so top-left is free; text elements still need it and keep their
+   right-edge stacked flips via the .txt-map-el--text override
+   below.) */
+.txt-map-el-flip--v { top: -11px; left:  -11px; }
+.txt-map-el-flip--h { top: -11px; right: -11px; }
+/* Text-element override: top-left is occupied by the drag handle,
+   so text-element flips stack on the right edge instead. */
+.txt-map-el--text .txt-map-el-flip--v { top: 42px; left: auto; right: -11px; }
+.txt-map-el--text .txt-map-el-flip--h { top: 12px; right: -11px; }
 .txt-map-el-flip.is-active {
   background: rgba(90, 240, 122, 0.85);
   color: #0a0e1a;
