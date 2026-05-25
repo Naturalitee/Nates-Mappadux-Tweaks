@@ -392,6 +392,11 @@ export class Viewer {
     // players, not back at this projector window.
     if (typeof window === 'undefined') return null;
     const room = window.location.hash.replace(/^#/, '');
-    return `${window.location.origin}/player${room ? '#' + room : ''}`;
+    // v2.14.92 — Carry forward ?instance=NAME so the QR-pointed
+    // late-joiner lands on the same namespaced BroadcastChannel as
+    // the current viewer (matters for same-browser opens; external
+    // devices ignore the param harmlessly).
+    const search = window.location.search;
+    return `${window.location.origin}/player${search}${room ? '#' + room : ''}`;
   }
 }

@@ -29,7 +29,7 @@ import { TransitionPanel } from '../transitions/TransitionPanel.ts';
 import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
 import { Host } from '../p2p/Host.ts';
 import { generateRoomCode } from '../p2p/roomCode.ts';
-import { saveSession, loadSession, getAllMaps, getMap, saveMap, deleteMap, clearAssetLibraries, clearEverything } from '../storage/db.ts';
+import { saveSession, loadSession, getAllMaps, getMap, saveMap, deleteMap, clearAssetLibraries, clearEverything, getActiveInstanceId } from '../storage/db.ts';
 import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY } from '../storage/localSettings.ts';
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { seedAudioAssets } from '../storage/seedAudioAssets.ts';
@@ -393,6 +393,21 @@ export class GMApp {
   /** Per-transition saved params — persisted in-memory for the session */
   private allTransitionParams: Record<string, Record<string, number | string>> = {};
   private playerOrigin   = location.origin; // replaced with LAN IP when on localhost
+
+  /** v2.14.92 — Build a player URL with the active instance carried
+   *  along as ?instance=NAME (no-op for the default instance). Lets
+   *  same-browser player windows tune in to the correct namespaced
+   *  BroadcastChannel so two GM tabs don't cross-broadcast. */
+  private _instanceQuery(): string {
+    const inst = getActiveInstanceId();
+    return inst ? `?instance=${encodeURIComponent(inst)}` : '';
+  }
+  private _buildPlayerUrl(code: string): string {
+    return `${this.playerOrigin}/player${this._instanceQuery()}#${code}`;
+  }
+  private _buildProjectorUrl(code: string): string {
+    return `/projector.html${this._instanceQuery()}#${code}`;
+  }
   private hamburger!: HamburgerMenu;
   /** Pack name suggested by `seedDefaultMaps()` on first run. Consumed by
    *  `onHostReady` once the session record actually exists. */
@@ -1516,7 +1531,7 @@ export class GMApp {
       this.playerOrigin = `${location.protocol}//${__DEV_LAN_IP__}:${location.port}`;
     }
 
-    const playerUrl = `${this.playerOrigin}/player#${roomCode}`;
+    const playerUrl = this._buildPlayerUrl(roomCode);
     this.qrContainer.title = `Click to copy player URL — Room code: ${roomCode}`;
     try {
       await QRCode.toCanvas(
@@ -2963,7 +2978,7 @@ export class GMApp {
       const room = this.host.roomCode;
       if (!room) { this.setStatus('Waiting for P2P… try again in a moment.', 'warn'); return; }
       this._ensureCalibratedMapStartsScaled();
-      window.open(`/projector.html#${room}`, '_blank', 'noopener,popup,width=1280,height=800');
+      window.open(this._buildProjectorUrl(room), '_blank', 'noopener,popup,width=1280,height=800');
     });
   }
 
@@ -3021,7 +3036,7 @@ export class GMApp {
     if (!room) { this.setStatus('Waiting for P2P… try again in a moment.', 'warn'); return; }
     setActiveSetupId(v);
     this._ensureCalibratedMapStartsScaled();
-    window.open(`/projector.html#${room}`, '_blank', 'noopener,popup,width=1280,height=800');
+    window.open(this._buildProjectorUrl(room), '_blank', 'noopener,popup,width=1280,height=800');
   }
 
   /**
@@ -4569,7 +4584,7 @@ export class GMApp {
       const l = Math.round((screen.width  - w) / 2);
       const t = Math.round((screen.height - h) / 2);
       window.open(
-        `${this.playerOrigin}/player#${code}`,
+        this._buildPlayerUrl(code),
         'dmr-player',
         `noopener,width=${w},height=${h},left=${l},top=${t}`
       );
@@ -4580,7 +4595,7 @@ export class GMApp {
     const copyPlayerUrl = () => {
       const code = this.roomCodeEl.textContent?.trim() ?? '';
       if (!code) return;
-      void navigator.clipboard.writeText(`${this.playerOrigin}/player#${code}`);
+      void navigator.clipboard.writeText(this._buildPlayerUrl(code));
       this.setStatus('Player URL copied!', 'ok');
     };
     document.querySelector('#copy-url-btn')?.addEventListener('click', (e) => {

@@ -1,9 +1,18 @@
 import type { GMMessage } from '../types.ts';
+import { getActiveInstanceId } from '../storage/db.ts';
 
 // Two channels: one for GM→Player state, one for Player→GM requests.
 // Using separate channels avoids a tab receiving its own broadcasts.
-const GM_TO_PLAYER  = 'dmr-state';
-const PLAYER_TO_GM  = 'dmr-request';
+//
+// v2.14.92 — Channel names are SUFFIXED with the active instance id
+// (from ?instance=NAME) so two Mappadux tabs at the same origin don't
+// step on each other's same-browser state stream. Default (no
+// instance) keeps the legacy names so existing player connections
+// across versions still work.
+const _instance     = getActiveInstanceId();
+const _suffix       = _instance ? `:${_instance}` : '';
+const GM_TO_PLAYER  = `dmr-state${_suffix}`;
+const PLAYER_TO_GM  = `dmr-request${_suffix}`;
 
 interface LocalRequest {
   type: 'request_state';
