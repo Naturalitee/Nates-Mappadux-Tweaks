@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.15.0 — DRAFT (to be dated at release cut)
+## v2.15.0 — 2026-05-25
 
 ### Map Compositor — tile maps together, layered or modular
 
