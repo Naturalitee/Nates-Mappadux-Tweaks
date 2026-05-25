@@ -5517,7 +5517,15 @@ option.select-option--add {
 .sound-tag--freesound { color: #22c55e; border-color: rgba(34, 197, 94, 0.4); }
 .sound-tag--url       { color: #3b82f6; border-color: rgba(59, 130, 246, 0.4); }
 .sound-tag--local     { color: #94a3b8; border-color: rgba(148, 163, 184, 0.4); }
-.sound-tag--scaled       { color: #fbbf24; border-color: rgba(251, 191, 36, 0.4); }
+/* v2.14.107 — Scale-confidence pill colour scale, high→low trust:
+   - scaled (manual / auto-detector confident) → GREEN, "trust me"
+   - auto-scaled (auto-detector best-guess)   → ORANGE, "double-check"
+   - inferred (filename hint only)             → AMBER, "verify by eye"
+   Earlier all three sat on the warm-amber axis (#fbbf24 / #f97316 /
+   #fb923c) so the manual + inferred badges were easy to confuse;
+   pushing manual scaled to green gives a clear "high trust" anchor
+   the others sit progressively warmer from. */
+.sound-tag--scaled       { color: #4ade80; border-color: rgba(74, 222, 128, 0.4); }
 .sound-tag--auto-scaled  { color: #f97316; border-color: rgba(249, 115, 22, 0.4); }
 /* v2.14.41 — Inferred: scaling derived from a filename hint when the
    image dimensions didn't divide cleanly. Reads as "Scaled" in the
