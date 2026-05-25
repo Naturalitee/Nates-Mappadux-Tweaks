@@ -60,6 +60,14 @@ export class CompositeMapEditor {
    *  modal-open. The Reset-scale button on the selected tile
    *  restores from here. Cleared on close. */
   private _originalScales = new Map<string, { scale: number | undefined; scaleY: number | undefined }>();
+  /** v2.14.91 — undo / redo stacks. Each entry is a deep-cloned
+   *  snapshot of compositeTiles + selectedTileId. New mutations
+   *  push the BEFORE-state to the undo stack and clear redo;
+   *  undo pops one to apply (and pushes current to redo for
+   *  re-application). Both clear on modal close so undo never
+   *  leaks past a session. */
+  private _undoStack: { tiles: CompositeTile[]; selectedTileId: string | null }[] = [];
+  private _redoStack: { tiles: CompositeTile[]; selectedTileId: string | null }[] = [];
   /** v2.14.43 — caller-supplied picker for "+ Add Map". */
   private pickAsset: PickAssetFn | null = null;
   /** v2.14.45 — currently-selected tile id. Click a tile to select;
@@ -103,16 +111,72 @@ export class CompositeMapEditor {
     for (const t of this.working.compositeTiles ?? []) {
       this._originalScales.set(t.id, { scale: t.scale, scaleY: t.scaleY });
     }
+    // v2.14.91 — start with empty undo/redo stacks. First mutation
+    // pushes the initial state automatically (see _pushUndo).
+    this._undoStack = [];
+    this._redoStack = [];
     this.overlay = this._buildOverlay();
     document.body.appendChild(this.overlay);
     await this._renderTiles();
+    this._updateUndoButtons();
     return new Promise<MapAsset | null>((resolve) => { this.resolver = resolve; });
+  }
+
+  /** v2.14.91 — Capture the CURRENT state into the undo stack
+   *  BEFORE a mutation runs. Clears redo (any new action
+   *  invalidates the redo path). Cap at 100 entries so a long
+   *  drag session doesn't grow without bound. */
+  private _pushUndo(): void {
+    if (!this.working) return;
+    this._undoStack.push({
+      tiles: JSON.parse(JSON.stringify(this.working.compositeTiles ?? [])) as CompositeTile[],
+      selectedTileId: this.selectedTileId,
+    });
+    if (this._undoStack.length > 100) this._undoStack.shift();
+    this._redoStack = [];
+    this._updateUndoButtons();
+  }
+
+  private _snapshotCurrent(): { tiles: CompositeTile[]; selectedTileId: string | null } {
+    return {
+      tiles: JSON.parse(JSON.stringify(this.working?.compositeTiles ?? [])) as CompositeTile[],
+      selectedTileId: this.selectedTileId,
+    };
+  }
+
+  private async _undo(): Promise<void> {
+    if (!this.working || this._undoStack.length === 0) return;
+    this._redoStack.push(this._snapshotCurrent());
+    const snap = this._undoStack.pop()!;
+    this.working = { ...this.working, compositeTiles: snap.tiles };
+    this.selectedTileId = snap.selectedTileId;
+    this._updateUndoButtons();
+    await this._renderTiles();
+  }
+
+  private async _redo(): Promise<void> {
+    if (!this.working || this._redoStack.length === 0) return;
+    this._undoStack.push(this._snapshotCurrent());
+    const snap = this._redoStack.pop()!;
+    this.working = { ...this.working, compositeTiles: snap.tiles };
+    this.selectedTileId = snap.selectedTileId;
+    this._updateUndoButtons();
+    await this._renderTiles();
+  }
+
+  private _updateUndoButtons(): void {
+    const undoBtn = this.overlay?.querySelector<HTMLButtonElement>('[data-action="undo"]');
+    const redoBtn = this.overlay?.querySelector<HTMLButtonElement>('[data-action="redo"]');
+    if (undoBtn) undoBtn.disabled = this._undoStack.length === 0;
+    if (redoBtn) redoBtn.disabled = this._redoStack.length === 0;
   }
 
   private _close(value: MapAsset | null): void {
     for (const url of this.tileBlobUrls.values()) URL.revokeObjectURL(url);
     this.tileBlobUrls.clear();
     this._originalScales.clear();
+    this._undoStack = [];
+    this._redoStack = [];
     this._closeTileContextMenu();
     if (this._resizeObserver) {
       this._resizeObserver.disconnect();
@@ -141,6 +205,18 @@ export class CompositeMapEditor {
             <input type="text" class="composite-editor-name-input" value="${this._esc(this.working?.filename ?? '')}" />
           </label>
           <button type="button" class="btn btn--primary btn--sm" data-action="add-map" title="Pick another tile from your library and drop it on the compositor canvas.">+ Add Map</button>
+          <!-- v2.14.91 — Undo / Redo pair. Per-modal-session: the
+               stack starts empty when the editor opens and clears
+               when it closes. Disabled when the relevant stack is
+               empty. Ctrl+Z / Ctrl+Y / Ctrl+Shift+Z also work. -->
+          <div class="composite-editor-undo-group">
+            <button type="button" class="btn btn--ghost btn--xs ui-icon-btn" data-action="undo" title="Undo (Ctrl+Z)" disabled>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>
+            </button>
+            <button type="button" class="btn btn--ghost btn--xs ui-icon-btn" data-action="redo" title="Redo (Ctrl+Y)" disabled>
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 15-6.7L21 13"/></svg>
+            </button>
+          </div>
           <span class="composite-editor-mode-label">${this.working?.compositeMode === 'layered' ? 'Layered' : 'Modular'} mode</span>
           <label class="composite-editor-snap-toggle" title="When on, tiles snap their centre to the nearest reference-grid intersection while you drag. Off = freeform placement.">
             <input type="checkbox" data-action="snap" ${this._snapToGrid ? 'checked' : ''} />
@@ -185,6 +261,10 @@ export class CompositeMapEditor {
         } else if (action === 'reset-view') {
           this._panX = 0; this._panY = 0; this._zoom = 1;
           this._applyTransform();
+        } else if (action === 'undo') {
+          void this._undo();
+        } else if (action === 'redo') {
+          void this._redo();
         } else if (action === 'cancel') {
           this._close(null);
         }
@@ -196,13 +276,30 @@ export class CompositeMapEditor {
       this._snapToGrid = snapEl.checked;
     });
 
-    const onEsc = (ev: KeyboardEvent) => {
+    // v2.14.91 — Ctrl+Z / Cmd+Z = undo; Ctrl+Y or Ctrl+Shift+Z = redo.
+    // Bound at document level so the shortcut works regardless of
+    // which inner element has focus.
+    const onKey = (ev: KeyboardEvent) => {
       if (ev.key === 'Escape') {
-        document.removeEventListener('keydown', onEsc);
+        document.removeEventListener('keydown', onKey);
         this._close(null);
+        return;
+      }
+      if (!(ev.ctrlKey || ev.metaKey)) return;
+      const k = ev.key.toLowerCase();
+      // Don't intercept while the user's typing in an input — they
+      // expect native browser undo on text fields.
+      const target = ev.target as Element | null;
+      if (target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA')) return;
+      if (k === 'z' && !ev.shiftKey) {
+        ev.preventDefault();
+        void this._undo();
+      } else if ((k === 'z' && ev.shiftKey) || k === 'y') {
+        ev.preventDefault();
+        void this._redo();
       }
     };
-    document.addEventListener('keydown', onEsc);
+    document.addEventListener('keydown', onKey);
 
     return overlay;
   }
@@ -595,6 +692,7 @@ export class CompositeMapEditor {
   private async _toggleFlip(id: string, axis: 'h' | 'v'): Promise<void> {
     const tile = this._findTile(id);
     if (!tile) return;
+    this._pushUndo();
     if (axis === 'h') tile.flipH = !tile.flipH;
     else              tile.flipV = !tile.flipV;
     await this._renderTiles();
@@ -611,6 +709,9 @@ export class CompositeMapEditor {
       e.stopPropagation();
       const tile = this._findTile(tileId);
       if (!tile) return;
+      // v2.14.91 — snapshot BEFORE the drag so undo reverts to the
+      // pre-rotation state once the drag commits.
+      this._pushUndo();
       handle.setPointerCapture(e.pointerId);
       const rect = tileEl.getBoundingClientRect();
       const cx = rect.left + rect.width / 2;
@@ -644,6 +745,7 @@ export class CompositeMapEditor {
   private async _toggleLockAspect(id: string): Promise<void> {
     const tile = this._findTile(id);
     if (!tile) return;
+    this._pushUndo();
     const currentlyLocked = (tile.lockAspect ?? true);
     tile.lockAspect = !currentlyLocked;
     // Re-locking after a free-aspect drag: drop scaleY so the next
@@ -662,6 +764,7 @@ export class CompositeMapEditor {
   private async _resetScale(id: string): Promise<void> {
     const tile = this._findTile(id);
     if (!tile) return;
+    this._pushUndo();
     const snap = this._originalScales.get(id);
     if (snap) {
       if (snap.scale  == null) delete tile.scale;  else tile.scale  = snap.scale;
@@ -688,6 +791,9 @@ export class CompositeMapEditor {
       e.stopPropagation();
       const tile = this._findTile(tileId);
       if (!tile) return;
+      // v2.14.91 — snapshot BEFORE the resize so undo reverts to
+      // the pre-drag scale state.
+      this._pushUndo();
       handle.setPointerCapture(e.pointerId);
       // Snapshot start state — drag math is relative so partial drags
       // compound cleanly with later drags.
@@ -868,6 +974,7 @@ export class CompositeMapEditor {
     const tiles = [...(this.working.compositeTiles ?? [])];
     const idx = tiles.findIndex((t) => t.id === id);
     if (idx < 0) return;
+    this._pushUndo();
     const [removed] = tiles.splice(idx, 1);
     if (!removed) return;
     let newIdx = idx;
@@ -883,6 +990,7 @@ export class CompositeMapEditor {
   /** Remove the tile from the working copy + re-render. */
   private async _deleteTile(id: string): Promise<void> {
     if (!this.working) return;
+    this._pushUndo();
     const tiles = (this.working.compositeTiles ?? []).filter((t) => t.id !== id);
     this.working = { ...this.working, compositeTiles: tiles };
     if (this.selectedTileId === id) this.selectedTileId = null;
@@ -909,6 +1017,9 @@ export class CompositeMapEditor {
       e.stopPropagation();
       const tile = this._findTile(tileId);
       if (!tile) return;
+      // v2.14.91 — snapshot BEFORE the position drag so undo reverts
+      // to the pre-drag location.
+      this._pushUndo();
       const startX = e.clientX;
       const startY = e.clientY;
       const startNX = tile.x;
@@ -1027,6 +1138,7 @@ export class CompositeMapEditor {
     if (!this.pickAsset || !this.working) return;
     const asset = await this.pickAsset();
     if (!asset) return;
+    this._pushUndo();
     this._addTile(asset);
     await this._renderTiles();
   }

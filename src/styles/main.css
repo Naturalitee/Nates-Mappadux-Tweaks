@@ -4689,6 +4689,20 @@ option.select-option--add {
   outline-offset: -2px;
   box-shadow: 0 0 12px rgba(90, 240, 122, 0.55);
 }
+
+/* v2.14.91 — Undo / Redo pair in the Composite Editor toolbar.
+   Tight 2px gap so they read as a paired control, not two
+   unrelated buttons. */
+.composite-editor-undo-group {
+  display: flex;
+  gap: 2px;
+  align-items: center;
+}
+.composite-editor-undo-group .btn[disabled] {
+  opacity: 0.35;
+  cursor: default;
+  pointer-events: none;
+}
 /* v2.14.59 — Inner content wrapper takes the flip scale so chrome
    buttons (rotate handle, flip toggles, trashcan) on the outer
    tile don't mirror with the image. */
