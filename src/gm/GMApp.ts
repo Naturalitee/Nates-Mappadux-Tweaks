@@ -403,7 +403,14 @@ export class GMApp {
     return inst ? `?instance=${encodeURIComponent(inst)}` : '';
   }
   private _buildPlayerUrl(code: string): string {
-    return `${this.playerOrigin}/player${this._instanceQuery()}#${code}`;
+    // v2.14.95 — use /player.html directly. The Vercel rewrite
+    // /player -> /player.html misfires when ?instance=NAME is in
+    // the URL: the PWA's service-worker fallback was serving
+    // index.html (the GM bundle) instead of the player. Bypassing
+    // the rewrite entirely is simpler than chasing the misfire
+    // through workbox + Vercel routing — and the projector URL
+    // already takes this approach via /projector.html.
+    return `${this.playerOrigin}/player.html${this._instanceQuery()}#${code}`;
   }
   private _buildProjectorUrl(code: string): string {
     return `/projector.html${this._instanceQuery()}#${code}`;

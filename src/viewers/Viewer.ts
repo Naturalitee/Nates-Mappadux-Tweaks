@@ -396,7 +396,9 @@ export class Viewer {
     // late-joiner lands on the same namespaced BroadcastChannel as
     // the current viewer (matters for same-browser opens; external
     // devices ignore the param harmlessly).
+    // v2.14.95 — /player.html directly, same reasoning as the GM
+    // player-URL builder (avoid the rewrite-with-query-string trap).
     const search = window.location.search;
-    return `${window.location.origin}/player${search}${room ? '#' + room : ''}`;
+    return `${window.location.origin}/player.html${search}${room ? '#' + room : ''}`;
   }
 }
