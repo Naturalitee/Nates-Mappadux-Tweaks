@@ -297,15 +297,13 @@ export class SettingsDialog {
   private _buildScaledViewSection(): HTMLElement {
     const sec = mkSection(
       'Scaled View',
-      'Behaviour overrides for the Scaled View (table-scale) window. Changes apply when you next open a Scaled View window — existing windows keep their current behaviour until reopened.',
+      'Settings apply on next Scaled View open.',
     );
 
     sec.appendChild(this._buildPerfToggle({
       title: 'Enable transitions & animations',
       help:
-        'Off by default. The Scaled View cuts straight to each new frame so the table screen never visibly shudders mid-session — animated handout reveals and map-change transitions feel jarring on a physical table display. ' +
-        'Tick this to opt the Scaled View back into the same animated transition pipeline the Player view uses (typing reveals, map-change CRT collapses, etc.).<br><br>' +
-        '<em>When to enable:</em> table screens used for immersive reveals (story handouts, dramatic map switches). <em>Leave off for:</em> battlemap-only Scaled Views where instant updates beat visual flair.',
+        'Off by default — Scaled View cuts instantly to each new frame so a physical table screen never visibly shudders. Tick to enable map-change transitions + handout reveals (good for cinematic table screens; can feel jarring on bare battlemaps).',
       get: isScaledViewTransitionsEnabled,
       set: setScaledViewTransitionsEnabled,
     }));

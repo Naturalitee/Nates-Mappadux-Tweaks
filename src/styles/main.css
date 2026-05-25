@@ -3768,6 +3768,18 @@ option.select-option--add {
 }
 .settings-danger-row:first-of-type { border-top: 0; }
 
+/* v2.14.89 — Ensure the trailing control (toggle / button) stays
+   anchored to the right and stays clickable even when the label
+   text is verbose. The label cell can shrink + wrap; the control
+   cell refuses to shrink below its natural size. */
+.settings-danger-row > :first-child {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.settings-danger-row > :last-child {
+  flex: 0 0 auto;
+}
+
 .about-title {
   margin: 0;
   font-size: 1.45rem;
