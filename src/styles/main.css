@@ -4144,27 +4144,11 @@ option.select-option--add {
   font: inherit;
 }
 
-/* Provider badge before each track label. */
-.soundtrack-track-label::before {
-  display: inline-block;
-  margin-right: 4px;
-  padding: 0 4px;
-  border-radius: 2px;
-  font-size: 10px;
-  font-weight: 600;
-  letter-spacing: 0.04em;
-  vertical-align: middle;
-}
-.soundtrack-track-label--youtube::before {
-  content: 'YT';
-  background: #ff0033;
-  color: #ffffff;
-}
-.soundtrack-track-label--spotify::before {
-  content: 'SP';
-  background: #1db954;
-  color: #000000;
-}
+/* v2.15.13 — Track labels render identically regardless of provider
+   (per Alex). The provider distinction is functional (different
+   playback engines, different account requirements) but visually
+   the GM should think of tracks as one kind of thing: "a music
+   track in a slot". */
 
 /* Spotify Connect block in Settings. */
 .settings-stagecraft-spotify-connect {

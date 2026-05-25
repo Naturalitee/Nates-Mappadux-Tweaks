@@ -66,10 +66,14 @@ export function parseSpotifyUri(uri: string): { kind: string; id: string } | nul
   return { kind: m[1]!, id: m[2]! };
 }
 
-/** Human-readable label for a track when the user hasn't set one. */
+/** Human-readable label for a track when the user hasn't set one.
+ *  Both providers render in the same shape so the UI looks identical
+ *  regardless of source: bare id with no provider prefix. We'll
+ *  layer real track-title lookup on top later (YouTube oEmbed +
+ *  Spotify API). */
 export function defaultTrackLabel(track: SoundtrackTrack): string {
-  if (track.kind === 'youtube') return `YouTube: ${track.videoId}`;
+  if (track.kind === 'youtube') return track.videoId;
   const parts = parseSpotifyUri(track.trackUri);
-  if (!parts) return `Spotify: ${track.trackUri}`;
-  return `Spotify ${parts.kind}: ${parts.id}`;
+  if (!parts) return track.trackUri;
+  return parts.id;
 }

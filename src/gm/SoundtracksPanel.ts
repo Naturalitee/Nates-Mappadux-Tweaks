@@ -257,7 +257,7 @@ export class SoundtracksPanel {
       if (this.activeSlotId === slot.id && i === this.activeIndex) trEl.classList.add('is-playing');
       const desc = document.createElement('span');
       desc.textContent = t.label ?? defaultTrackLabel(t);
-      desc.className   = `soundtrack-track-label soundtrack-track-label--${t.kind}`;
+      desc.className   = 'soundtrack-track-label';
       const rmBtn = document.createElement('button');
       rmBtn.type = 'button';
       rmBtn.className = 'btn btn--danger btn--sm';
