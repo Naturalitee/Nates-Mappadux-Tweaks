@@ -9,7 +9,7 @@ import { UNICODE_LICENSE_LABEL } from './seedImageAssets.ts';
 import { ensureFontsLoaded, pangramFor, registerLocalFontsFromAssets, registerLocalFontAsset } from './fontCatalog.ts';
 import { fuzzySearch } from '../utils/fuzzySearch.ts';
 import { cleanTintableSvg } from '../utils/resolveAssetImages.ts';
-import { iconPencil } from '../gm/uiIcons.ts';
+import { iconPencil, iconX } from '../gm/uiIcons.ts';
 
 /** Result of the shared-attribution prompt for bulk uploads. Empty
  *  strings mean "skip that field on this batch". categoryId is the
@@ -1386,9 +1386,9 @@ export class ImageAssetModal {
 
       const del = document.createElement('button');
       del.type = 'button';
-      del.className = 'img-modal-font-action img-modal-font-action--danger';
+      del.className = 'img-modal-font-action img-modal-font-action--danger ui-icon-btn';
       del.title = 'Delete this font';
-      del.textContent = '×';
+      del.innerHTML = iconX();
       del.addEventListener('click', async () => {
         if (!confirm(`Delete font "${font.name}"? Text maps using it will revert to fallback fonts.`)) return;
         await ImageAssetStore.delete(font.id);
