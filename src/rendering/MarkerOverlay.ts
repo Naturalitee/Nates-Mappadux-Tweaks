@@ -87,6 +87,12 @@ export interface OverlayItem {
    * selection-only handles (resize now; rotate in A3b5) below it.
    */
   selected?: boolean;
+
+  /** v2.14.109 — current flip state for the selected marker, so the
+   *  flip-H / flip-V badges can render an active highlight when the
+   *  axis is engaged. Ignored when not selected. */
+  flipH?: boolean;
+  flipV?: boolean;
 }
 
 export type MoveDragHandler = (
@@ -168,6 +174,10 @@ export interface OverlayHandlers {
   onRotateDrag?: RotateDragHandler;
   /** Delete handle click — remove the selected marker. */
   onDeleteClick?: (markerId: string) => void;
+  /** v2.14.109 — click on the flip-H badge (right-edge mid). */
+  onFlipHClick?:  (markerId: string) => void;
+  /** v2.14.109 — click on the flip-V badge (top-centre under rotation). */
+  onFlipVClick?:  (markerId: string) => void;
 
   /** v2.12/M4 — MapFX selector-icon click → select that entity. */
   onMapFXSelect?:    (entityId: string) => void;
@@ -239,6 +249,9 @@ interface MarkerElements {
   selectionRing: HTMLDivElement | null;
   resizeHandle:  HTMLDivElement | null;
   rotateHandle:  HTMLDivElement | null;
+  rotateStem:    HTMLDivElement | null;
+  flipVHandle:   HTMLDivElement | null;
+  flipHHandle:   HTMLDivElement | null;
   deleteHandle:  HTMLDivElement | null;
   lockGlyph:     HTMLDivElement | null;
 }
@@ -728,7 +741,8 @@ export class MarkerOverlay {
     this.container.appendChild(root);
     return {
       root, label: null, moveHandle: null, badgesRow: null,
-      badges: new Map(), selectionRing: null, resizeHandle: null, rotateHandle: null,
+      badges: new Map(), selectionRing: null, resizeHandle: null,
+      rotateHandle: null, rotateStem: null, flipVHandle: null, flipHHandle: null,
       deleteHandle: null, lockGlyph: null,
     };
   }
@@ -810,12 +824,22 @@ export class MarkerOverlay {
       el.resizeHandle = null;
     }
 
-    // Rotate handle (v2.11/A3b5) — sits to the right of the resize handle.
-    // Press + drag around the marker centre to rotate the icon body.
+    // Rotate handle (v2.14.109 — relocated to ABOVE the icon with a
+    // stem, matching the Composite + Text Map editors' "lollipop" design.
+    // Press + drag in a circle around the marker centre to rotate; snap
+    // ±2° to right angles / 45° / 30° via MarkerEditor._snapRotation.
+    if (want && !el.rotateStem) {
+      el.rotateStem = document.createElement('div');
+      el.rotateStem.className = 'marker-rotate-stem';
+      el.root.appendChild(el.rotateStem);
+    } else if (!want && el.rotateStem) {
+      el.rotateStem.remove();
+      el.rotateStem = null;
+    }
     if (want && !el.rotateHandle) {
       el.rotateHandle = document.createElement('div');
       el.rotateHandle.className = 'marker-handle marker-handle--rotate';
-      el.rotateHandle.title = 'Drag in a circle around the marker to rotate';
+      el.rotateHandle.title = 'Drag in a circle around the marker to rotate (snaps at 30°/45°/90°)';
       el.rotateHandle.innerHTML = `
         <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
              stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
@@ -828,6 +852,55 @@ export class MarkerOverlay {
     } else if (!want && el.rotateHandle) {
       el.rotateHandle.remove();
       el.rotateHandle = null;
+    }
+
+    // v2.14.109 — Flip-V (top↔bottom mirror) at top-centre under the
+    // rotation handle. Flip-H (left↔right mirror) at right-edge mid.
+    // Both follow the editor convention "button position matches the
+    // axis it flips". Active state highlighted when the axis is engaged.
+    const flipVIcon = `
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="7 4 12 1 17 4"/>
+        <polyline points="7 20 12 23 17 20"/>
+        <line x1="3" y1="12" x2="21" y2="12"/>
+      </svg>
+    `;
+    const flipHIcon = `
+      <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
+           stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+        <polyline points="4 7 1 12 4 17"/>
+        <polyline points="20 7 23 12 20 17"/>
+        <line x1="12" y1="3" x2="12" y2="21"/>
+      </svg>
+    `;
+    if (want && !el.flipVHandle) {
+      el.flipVHandle = document.createElement('div');
+      el.flipVHandle.className = 'marker-handle marker-handle--flip-v';
+      el.flipVHandle.title = 'Mirror top ↔ bottom';
+      el.flipVHandle.innerHTML = flipVIcon;
+      this._bindFlipHandle(el.flipVHandle, item.id, 'v');
+      el.root.appendChild(el.flipVHandle);
+    } else if (!want && el.flipVHandle) {
+      el.flipVHandle.remove();
+      el.flipVHandle = null;
+    }
+    if (el.flipVHandle) {
+      el.flipVHandle.classList.toggle('is-active', !!item.flipV);
+    }
+    if (want && !el.flipHHandle) {
+      el.flipHHandle = document.createElement('div');
+      el.flipHHandle.className = 'marker-handle marker-handle--flip-h';
+      el.flipHHandle.title = 'Mirror left ↔ right';
+      el.flipHHandle.innerHTML = flipHIcon;
+      this._bindFlipHandle(el.flipHHandle, item.id, 'h');
+      el.root.appendChild(el.flipHHandle);
+    } else if (!want && el.flipHHandle) {
+      el.flipHHandle.remove();
+      el.flipHHandle = null;
+    }
+    if (el.flipHHandle) {
+      el.flipHHandle.classList.toggle('is-active', !!item.flipH);
     }
 
     // Delete handle — red trashcan at the icon's bottom-left, mirroring the
@@ -862,6 +935,18 @@ export class MarkerOverlay {
     handle.addEventListener('click', (e) => {
       e.stopPropagation();
       this.handlers.onDeleteClick?.(markerId);
+    });
+  }
+
+  /** v2.14.109 — Flip-H / Flip-V badge: click toggles the axis. Pointer
+   *  events are swallowed at the handle so the icon body underneath
+   *  doesn't start a marker drag. */
+  private _bindFlipHandle(handle: HTMLDivElement, markerId: string, axis: 'h' | 'v'): void {
+    handle.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+    handle.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (axis === 'h') this.handlers.onFlipHClick?.(markerId);
+      else              this.handlers.onFlipVClick?.(markerId);
     });
   }
 

@@ -342,9 +342,9 @@ export class MarkerEditor {
     if (angle === null) return;
     const deltaRad = angle - this._overlayRotate.initialAngle;
     const deltaDeg = (deltaRad * 180) / Math.PI;
-    // Normalise to [0, 360).
     let next = (this._overlayRotate.initialRotation + deltaDeg) % 360;
     if (next < 0) next += 360;
+    next = this._snapRotation(next);
     const id = this._overlayRotate.id;
     this.markers = this.markers.map((m) => (m.id !== id ? m : { ...m, rotation: next }));
     this._redraw();
@@ -353,6 +353,42 @@ export class MarkerEditor {
   endOverlayRotate(): void {
     if (!this._overlayRotate) return;
     this._overlayRotate = null;
+    this._onChange([...this.markers]);
+  }
+
+  /** v2.14.109 — match the Composite + Text Map editors' snap
+   *  policy: ±2° tolerance to right angles, 45°, and 30° families. */
+  private _snapRotation(deg: number): number {
+    const wrap = (a: number) => ((a % 360) + 360) % 360;
+    const distTo = (a: number, b: number) => Math.abs(wrap(a - b + 180) - 180);
+    const near90 = Math.round(deg / 90) * 90;
+    if (distTo(deg, near90) <= 2) return wrap(near90);
+    const near45 = Math.round(deg / 45) * 45;
+    if (distTo(deg, near45) <= 2) return wrap(near45);
+    const near30 = Math.round(deg / 30) * 30;
+    if (distTo(deg, near30) <= 2) return wrap(near30);
+    return wrap(deg);
+  }
+
+  /** v2.14.109 — toggle horizontal mirror on the selected marker. */
+  toggleFlipH(markerId: string): void {
+    const marker = this.markers.find((m) => m.id === markerId);
+    if (!marker || marker.locked) return;
+    this.markers = this.markers.map((m) =>
+      m.id !== markerId ? m : { ...m, flipH: !m.flipH }
+    );
+    this._redraw();
+    this._onChange([...this.markers]);
+  }
+
+  /** v2.14.109 — toggle vertical mirror on the selected marker. */
+  toggleFlipV(markerId: string): void {
+    const marker = this.markers.find((m) => m.id === markerId);
+    if (!marker || marker.locked) return;
+    this.markers = this.markers.map((m) =>
+      m.id !== markerId ? m : { ...m, flipV: !m.flipV }
+    );
+    this._redraw();
     this._onChange([...this.markers]);
   }
 

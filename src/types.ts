@@ -206,6 +206,12 @@ export interface Marker {
    *  other marker field. Selection ring + label + handles stay un-rotated
    *  (screen-fixed) — only the icon itself spins. */
   rotation: number;
+  /** v2.14.109 — mirror flags applied to the icon body. Same
+   *  semantics as the Composite + Text Map editors: scale(±1, ±1)
+   *  inside the rotation transform so chrome stays un-mirrored.
+   *  Optional + default false for backward compatibility. */
+  flipH?: boolean;
+  flipV?: boolean;
 
   // Visibility
   hidden:    boolean; // hides from players; GM sees with ghost opacity

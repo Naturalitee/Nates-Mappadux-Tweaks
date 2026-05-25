@@ -614,14 +614,45 @@ body.projector-view .marker-overlay {
   left: calc(var(--icon-half-w, 0px) + 4px);
   cursor: nwse-resize;
 }
-/* Rotate handle — bottom-centre below the icon. Drag in a circle around
-   the marker centre to rotate. */
+/* v2.14.109 — Rotate handle relocated to ABOVE the icon with a stem,
+   matching the Composite + Text Map editors' "lollipop" pattern. Drag
+   in a circle around the marker centre to rotate; MarkerEditor snaps
+   ±2° to right-angle / 45° / 30° families. */
 .marker-handle--rotate {
-  top:  calc(var(--icon-half-h, 0px) + 4px);
+  top:  calc(-1 * var(--icon-half-h, 0px) - 32px);
   left: 0;
   cursor: grab;
 }
 .marker-handle--rotate:active { cursor: grabbing; }
+.marker-rotate-stem {
+  position: absolute;
+  top: calc(-1 * var(--icon-half-h, 0px) - 20px);
+  left: 50%;
+  width: 0;
+  height: 20px;
+  transform: translateX(-50%);
+  border-left: 2px solid rgba(90, 240, 122, 0.6);
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* v2.14.109 — Flip-V: top-centre, just below the rotation handle.
+   Flip-H: right-edge mid. Both follow the editor convention. Active
+   state highlights when the axis is currently mirrored. */
+.marker-handle--flip-v {
+  top:  calc(-1 * var(--icon-half-h, 0px) - 14px);
+  left: 0;
+}
+.marker-handle--flip-h {
+  top:  0;
+  left: calc(var(--icon-half-w, 0px) + 4px);
+}
+.marker-handle--flip-v.is-active,
+.marker-handle--flip-h.is-active {
+  background: rgba(90, 240, 122, 0.85);
+  color: #0a0e1a;
+  border-color: rgba(90, 240, 122, 0.95);
+}
 
 /* Delete handle — red trashcan at the icon's bottom-left, mirroring the
    text-map editor's per-element delete affordance for a consistent

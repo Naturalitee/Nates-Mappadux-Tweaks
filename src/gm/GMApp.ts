@@ -5186,6 +5186,8 @@ export class GMApp {
           else                       this.markerEditor.endOverlayRotate();
         },
         onDeleteClick:    (id) => this._deleteMarker(id),
+        onFlipHClick:     (id) => this.markerEditor.toggleFlipH(id),
+        onFlipVClick:     (id) => this.markerEditor.toggleFlipV(id),
         onRectMoveDrag:   (kind, clientX, clientY, phase) => this._handleRectMoveDrag(kind, clientX, clientY, phase),
         onRectResizeDrag: (kind, clientX, clientY, phase) => this._handleRectResizeDrag(kind, clientX, clientY, phase),
         onRectAspectLock:    (kind) => this._handleRectAspect(kind),

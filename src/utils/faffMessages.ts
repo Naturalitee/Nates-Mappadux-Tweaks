@@ -69,6 +69,18 @@ export const FAFF_MESSAGES: readonly string[] = [
   'Asking the windows nicely to close themselves later.',
   'Welcoming a new beta tester. Hi! Maps may behave oddly.',
   'Re-naming everything to "Scaled" because it sounded clever.',
+  // ── v2.15.0 release batch ────────────────────────────────────────────────
+  '60,000 lines of code and I still haven’t worked out my next game.',
+  'Inertial dampeners on the fritz. Brace yourselves.',
+  'Rebooting the holodeck. Safety protocols are a suggestion.',
+  'The wizard insists on a longer rest. He’s old.',
+  'The bard is composing a ballad about your last mistake.',
+  'Negotiating with the goblin union.',
+  'Something is breathing in the next room. We’ll get to that.',
+  'Counting the eyes in the painting. There are more than there were.',
+  'The candles keep going out by themselves. Helpful.',
+  'The party splits. The GM weeps.',
+  'Searching for that one rule we definitely agreed on last session.',
 ];
 
 let _lastIndex = -1;

@@ -200,11 +200,14 @@ export function drawMarkerShape(
   //    so the rotation doesn't leak into the screen-space overlay positioning
   //    or any subsequent canvas operations.
   const rotRad = ((m.rotation ?? 0) * Math.PI) / 180;
-  const rotated = rotRad !== 0;
-  if (rotated) {
+  const sx = m.flipH ? -1 : 1;
+  const sy = m.flipV ? -1 : 1;
+  const transformed = rotRad !== 0 || sx !== 1 || sy !== 1;
+  if (transformed) {
     ctx.save();
     ctx.translate(cx, cy);
-    ctx.rotate(rotRad);
+    if (rotRad !== 0) ctx.rotate(rotRad);
+    if (sx !== 1 || sy !== 1) ctx.scale(sx, sy);
     ctx.translate(-cx, -cy);
   }
   if (isImage) {
@@ -228,7 +231,7 @@ export function drawMarkerShape(
     ctx.fillStyle = m.color;
     ctx.fillText(m.icon || '?', cx, cy);
   }
-  if (rotated) ctx.restore();
+  if (transformed) ctx.restore();
 
   // 4. Label — moved to the HTML screen-space overlay layer in v2.11/A3a
   //    so it stays readable regardless of map zoom. drawMarkerShape no
@@ -435,6 +438,8 @@ export class MarkerLayer {
         ...(badges && badges.length > 0 ? { badges } : {}),
         ...(m.locked ? { locked: true } : {}),
         ...(isSelected ? { selected: true } : {}),
+        ...(isSelected && m.flipH ? { flipH: true } : {}),
+        ...(isSelected && m.flipV ? { flipV: true } : {}),
       });
     }
     this._overlay.update(items);
