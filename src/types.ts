@@ -1201,6 +1201,15 @@ interface TextMapElementBase {
   y:     number;
   w:     number;
   h:     number;
+  /** v2.14.101 — rotation in degrees about the element's centre.
+   *  Editor + rasteriser apply this as a CSS / canvas transform.
+   *  Absent = 0. */
+  rotation?: number;
+  /** v2.14.101 — mirror flags. Same semantics as the Composite Editor:
+   *  applied as scale(±1, ±1) on the inner content so chrome (move
+   *  handle, rotation ball, etc.) doesn't mirror with the content. */
+  flipH?:    boolean;
+  flipV?:    boolean;
   /** When true, this element is part of the handout's STARTING frame —
    *  it shows immediately when the map appears and is not transitioned
    *  in. The reveal animation runs from "background + noAnimate

@@ -3188,6 +3188,67 @@ option.select-option--add {
   color: #fff;
   border-color: #ff8080;
 }
+
+/* v2.14.101 — Rotation handle + Flip H/V buttons on selected
+   text-map elements. Mirror of the Composite Editor's chrome
+   so the language stays consistent across editors. Visible only
+   when the element is selected (gated by .txt-map-el--selected
+   sibling rule below). */
+.txt-map-el-rotate-handle,
+.txt-map-el-flip {
+  position: absolute;
+  display: none;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  background: rgba(20, 24, 36, 0.85);
+  border: 1.5px solid rgba(255, 255, 255, 0.55);
+  color: rgba(255, 255, 255, 0.95);
+  border-radius: 50%;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.6);
+  user-select: none;
+  pointer-events: auto;
+  touch-action: none;
+  z-index: 3;
+}
+.txt-map-el-rotate-handle {
+  top: -42px;
+  left: 50%;
+  transform: translateX(-50%);
+  border: 2px solid rgba(90, 240, 122, 0.85);
+}
+.txt-map-el-rotate-stem {
+  position: absolute;
+  display: none;
+  top: -28px;
+  left: 50%;
+  width: 0;
+  height: 28px;
+  border-left: 1.5px dashed rgba(90, 240, 122, 0.85);
+  pointer-events: none;
+  z-index: 2;
+}
+/* Top-left of the element is occupied by the existing drag handle,
+   bottom corners by delete + resize — so the flip pair stacks on
+   the right edge. Mid-upper for H, mid-lower for V; close enough to
+   read as a paired control without crowding the existing chrome. */
+.txt-map-el-flip--h { top: 30%; right: -11px; }
+.txt-map-el-flip--v { top: 70%; right: -11px; transform: translateY(-100%); }
+.txt-map-el-flip.is-active {
+  background: rgba(90, 240, 122, 0.85);
+  color: #0a0e1a;
+  border-color: #fff;
+}
+.txt-map-el-rotate-handle:hover,
+.txt-map-el-flip:hover { filter: brightness(1.2); }
+/* Show all rotate / flip chrome alongside the existing
+   drag/resize/delete handles when the element is selected. */
+.txt-map-el--selected .txt-map-el-rotate-handle,
+.txt-map-el--selected .txt-map-el-flip,
+.txt-map-el--selected .txt-map-el-rotate-stem { display: flex; }
 /* Per-element controls — live inside the top toolbar so every editing
    knob is in one place. Visible only when an element is selected;
    appended after the page-level controls in the same flex row. */

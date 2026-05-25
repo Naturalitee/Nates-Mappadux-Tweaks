@@ -365,12 +365,24 @@ async function renderElementsForRaster(
 ): Promise<string> {
   const parts: string[] = [];
   for (const el of elements) {
+    // v2.14.101 — rotation lives on the outer box; flip wraps the
+    // content in a nested div so rotation isn't also mirrored.
+    const rotStyle = el.rotation
+      ? `transform:rotate(${el.rotation}deg);transform-origin:center;`
+      : '';
+    const sx = el.flipH ? -1 : 1;
+    const sy = el.flipV ? -1 : 1;
+    const flipped = sx !== 1 || sy !== 1;
+    const flipStyle = flipped
+      ? `display:block;width:100%;height:100%;transform:scale(${sx},${sy});transform-origin:center;`
+      : '';
     const box =
       `position:absolute;`
       + `left:${el.x}%;top:${el.y}%;`
       + `width:${el.w}%;height:${el.h}%;`
       + `box-sizing:border-box;`
-      + `overflow:hidden;`;
+      + `overflow:hidden;`
+      + rotStyle;
     if (el.type === 'text') {
       const style =
         box
@@ -380,7 +392,11 @@ async function renderElementsForRaster(
         + (el.color      ? `color:${el.color};` : '')
         + (el.textAlign  ? `text-align:${el.textAlign};` : '');
       const inner = sanitizeSplashHtml(el.html ?? '');
-      parts.push(`<div style="${style}">${inner}</div>`);
+      if (flipped) {
+        parts.push(`<div style="${style}"><div style="${flipStyle}">${inner}</div></div>`);
+      } else {
+        parts.push(`<div style="${style}">${inner}</div>`);
+      }
     } else if (el.type === 'image') {
       // Image elements get a dedicated raster-context renderer that:
       //  - strips the 1em wrapper span (we want the SVG / img to fill
@@ -393,7 +409,11 @@ async function renderElementsForRaster(
       const style =
         box
         + (el.tint ? `color:${el.tint};` : '');
-      parts.push(`<div style="${style}">${body}</div>`);
+      if (flipped) {
+        parts.push(`<div style="${style}"><div style="${flipStyle}">${body}</div></div>`);
+      } else {
+        parts.push(`<div style="${style}">${body}</div>`);
+      }
     }
   }
   return htmlToXhtml(parts.join(''));

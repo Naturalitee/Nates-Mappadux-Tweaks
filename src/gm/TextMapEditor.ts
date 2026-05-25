@@ -1171,9 +1171,127 @@ export class TextMapEditor {
     });
     host.appendChild(del);
 
+    // v2.14.101 — Rotation handle (composite-editor style): a small
+    // ball above the element's top centre with a dashed stem
+    // connecting down to the element edge. Drag to rotate; snaps to
+    // 0/90/180/270 (±5°), 45 family (±2°), 30 family (±2°).
+    const rotStem = document.createElement('div');
+    rotStem.className = 'txt-map-el-rotate-stem';
+    host.appendChild(rotStem);
+    const rotHandle = document.createElement('button');
+    rotHandle.type = 'button';
+    rotHandle.className = 'txt-map-el-rotate-handle';
+    rotHandle.title = 'Drag to rotate. Snaps to common angles.';
+    rotHandle.innerHTML =
+      '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<path d="M21 12a9 9 0 1 1-3-6.7"/>' +
+        '<polyline points="21 4 21 9 16 9"/>' +
+      '</svg>';
+    this._bindRotateDrag(rotHandle, host, el.id);
+    host.appendChild(rotHandle);
+
+    // v2.14.101 — Flip H + Flip V buttons on the top corners of the
+    // selected element. Match composite editor's visual treatment +
+    // active-state colour when the flip is engaged.
+    const flipH = document.createElement('button');
+    flipH.type = 'button';
+    flipH.className = `txt-map-el-flip txt-map-el-flip--h${el.flipH ? ' is-active' : ''}`;
+    flipH.title = 'Mirror this element horizontally (left ↔ right).';
+    flipH.innerHTML =
+      '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<polyline points="6 4 2 12 6 20"/>' +
+        '<polyline points="18 4 22 12 18 20"/>' +
+        '<line x1="12" y1="2" x2="12" y2="22"/>' +
+      '</svg>';
+    flipH.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+    flipH.addEventListener('click', (ev) => { ev.stopPropagation(); this._toggleFlip(el.id, 'h'); });
+    host.appendChild(flipH);
+
+    const flipV = document.createElement('button');
+    flipV.type = 'button';
+    flipV.className = `txt-map-el-flip txt-map-el-flip--v${el.flipV ? ' is-active' : ''}`;
+    flipV.title = 'Mirror this element vertically (top ↔ bottom).';
+    flipV.innerHTML =
+      '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+        '<polyline points="4 6 12 2 20 6"/>' +
+        '<polyline points="4 18 12 22 20 18"/>' +
+        '<line x1="2" y1="12" x2="22" y2="12"/>' +
+      '</svg>';
+    flipV.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+    flipV.addEventListener('click', (ev) => { ev.stopPropagation(); this._toggleFlip(el.id, 'v'); });
+    host.appendChild(flipV);
+
     this.pageEl.appendChild(host);
     this.elementNodes.set(el.id, host);
     return host;
+  }
+
+  /** v2.14.101 — Snap a free-rotated angle to common tile-set angles
+   *  (matches the Composite Editor's snap rules). */
+  private _snapRotation(deg: number): number {
+    const wrap = (a: number): number => ((a % 360) + 360) % 360;
+    const distTo = (a: number, b: number): number => Math.abs(wrap(a - b + 180) - 180);
+    const near90 = Math.round(deg / 90) * 90;
+    if (distTo(deg, near90) <= 5) return wrap(near90);
+    const near45 = Math.round(deg / 45) * 45;
+    if (distTo(deg, near45) <= 2) return wrap(near45);
+    const near30 = Math.round(deg / 30) * 30;
+    if (distTo(deg, near30) <= 2) return wrap(near30);
+    return wrap(deg);
+  }
+
+  /** v2.14.101 — Bind the rotation-drag handler. atan2-based angle
+   *  from element centre to pointer; live-update host.style.transform
+   *  during the drag for instant visual feedback. */
+  private _bindRotateDrag(handle: HTMLElement, host: HTMLElement, elementId: string): void {
+    handle.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0) return;
+      e.preventDefault();
+      e.stopPropagation();
+      const el = this.elements.find((x) => x.id === elementId);
+      if (!el) return;
+      this._pushUndo();
+      handle.setPointerCapture(e.pointerId);
+      const rect = host.getBoundingClientRect();
+      const cx = rect.left + rect.width / 2;
+      const cy = rect.top  + rect.height / 2;
+      const onMove = (ev: PointerEvent): void => {
+        const dx = ev.clientX - cx;
+        const dy = ev.clientY - cy;
+        const deg = Math.atan2(dy, dx) * 180 / Math.PI + 90;
+        const snapped = this._snapRotation(deg);
+        el.rotation = snapped;
+        host.style.transform = `rotate(${snapped}deg)`;
+      };
+      const onUp = (ev: PointerEvent): void => {
+        try { handle.releasePointerCapture(ev.pointerId); } catch { /* ignore */ }
+        handle.removeEventListener('pointermove', onMove);
+        handle.removeEventListener('pointerup',     onUp);
+        handle.removeEventListener('pointercancel', onUp);
+      };
+      handle.addEventListener('pointermove', onMove);
+      handle.addEventListener('pointerup',     onUp);
+      handle.addEventListener('pointercancel', onUp);
+    });
+  }
+
+  /** v2.14.101 — Toggle a flip flag + re-apply transform to the body. */
+  private _toggleFlip(elementId: string, axis: 'h' | 'v'): void {
+    const el = this.elements.find((x) => x.id === elementId);
+    if (!el) return;
+    this._pushUndo();
+    if (axis === 'h') el.flipH = !el.flipH;
+    else              el.flipV = !el.flipV;
+    const host = this.elementNodes.get(elementId);
+    if (host) this._applyGeometry(host, el);
+    // Toggle the active state on the relevant button so the user
+    // sees the active green chrome immediately without a full
+    // re-mount.
+    if (host) {
+      const sel = axis === 'h' ? '.txt-map-el-flip--h' : '.txt-map-el-flip--v';
+      const btn = host.querySelector<HTMLElement>(sel);
+      btn?.classList.toggle('is-active', !!(axis === 'h' ? el.flipH : el.flipV));
+    }
   }
 
   private _applyGeometry(host: HTMLElement, el: TextMapElement): void {
@@ -1181,6 +1299,18 @@ export class TextMapEditor {
     host.style.top    = `${el.y}%`;
     host.style.width  = `${el.w}%`;
     host.style.height = `${el.h}%`;
+    // v2.14.101 — rotation lives on the host so chrome rotates with
+    // the element; flip stays on the body so chrome stays unmirrored.
+    host.style.transform = el.rotation ? `rotate(${el.rotation}deg)` : '';
+    host.style.transformOrigin = 'center center';
+    // Apply flip to the inner body if mounted.
+    const body = host.querySelector<HTMLElement>('.txt-map-el-body');
+    if (body) {
+      const sx = el.flipH ? -1 : 1;
+      const sy = el.flipV ? -1 : 1;
+      body.style.transform = (sx !== 1 || sy !== 1) ? `scale(${sx}, ${sy})` : '';
+      body.style.transformOrigin = 'center center';
+    }
   }
 
   private _applyTextStyle(body: HTMLElement, el: TextMapTextElement): void {
