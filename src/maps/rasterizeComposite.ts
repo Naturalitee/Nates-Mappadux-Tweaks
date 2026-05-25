@@ -287,11 +287,22 @@ export async function rasterizeComposite(asset: MapAsset): Promise<RasterizeResu
 export async function rasterizeRevealBacking(asset: MapAsset): Promise<RasterizeResult | null> {
   const tiles = asset.compositeTiles ?? [];
   if (tiles.length < 2) return null;
-  // Resolve the FULL tile set for the extent (so the backing matches
-  // the main composite's dimensions), then resolve the SUBSET (minus
-  // last/topmost tile) for what actually gets drawn.
+  // Resolve tile assets first — needed both for the overlap test
+  // (we need image-aspect to compute tile bounds) and for the
+  // rasterise.
   const fullInputs   = await _resolveTileInputs(asset);
   if (fullInputs.length < 2) return null;
+  // v2.15.1 — Bail if no tiles actually overlap. Previously this
+  // generated a backing blob for any composite with 2+ tiles, so
+  // removing all overlaps in the editor left the layered status
+  // (revealBackingBlob + Reveal Map Layer behaviour + Layered pill
+  // — the pill recomputes live but the backing persists) stuck on.
+  // The library "Layered" pill uses the SAME overlap check via the
+  // shared helper so the two never disagree.
+  const { compositeHasOverlap } = await import('./compositeOverlap.ts');
+  const assetById = new Map<string, MapAsset>();
+  for (const inp of fullInputs) assetById.set(inp.asset.id, inp.asset as MapAsset);
+  if (!compositeHasOverlap(asset, assetById)) return null;
   const drawnInputs  = fullInputs.slice(0, -1);
   return rasterizeFromTiles(drawnInputs, asset.compositeAspect ?? DEFAULT_OUTPUT_ASPECT, fullInputs);
 }

@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.15.1 — 2026-05-25
+
+Same-day patch caught during post-release testing — three reported
+symptoms turned out to be one bug.
+
+- **Compositor layer back/forward no longer needs a follow-up click
+  to repaint.** The layer-order context menu used to call the full
+  `_renderTiles()` path which wiped innerHTML and forced each tile
+  to re-decode its image, leaving the old order painted for a frame
+  until the next user gesture flushed it. Replaced with a targeted
+  DOM-node reorder via `appendChild` — moves nodes without
+  re-decoding, paints immediately.
+- **Layered status now resets when overlaps are removed.** Removing
+  all overlapping geometry from a layered composite used to leave
+  the map stuck as layered: the rasteriser generated a reveal-layer
+  backing blob whenever there were 2+ tiles, regardless of whether
+  any actually overlapped. So the Reveal Map Layer brush kept its
+  behaviour, the library Layered pill kept showing (via a separate
+  but accidentally-consistent live check), and the GM view rendered
+  with the backing plane mounted. Now the rasteriser checks
+  overlap before generating the backing — no overlap, no backing,
+  no layered behaviour.
+- **Overlap detection lives in one place.** Shared
+  `src/maps/compositeOverlap.ts` is used by both the library pill
+  and the rasteriser so they can never drift. Existing composites
+  with a stale backing blob from before this fix self-heal on the
+  next Save through the Composite Map editor.
+
 ## v2.15.0 — 2026-05-25
 
 ### Map Compositor — tile maps together, layered or modular

@@ -1,5 +1,6 @@
 import type { MapAsset, StoredMap, CompositeTile } from '../types.ts';
 import { MapAssetStore } from '../maps/MapAssetStore.ts';
+import { compositeHasOverlap as _compositeHasOverlap } from '../maps/compositeOverlap.ts';
 import { downloadAsset } from '../utils/downloadAsset.ts';
 import { MapManager } from './MapManager.ts';
 import { MapCalibrationModal } from './MapCalibrationModal.ts';
@@ -10,53 +11,9 @@ import { TextMapEditor } from './TextMapEditor.ts';
 import { saveMap as _saveMap, saveMapAsset, getAllMaps } from '../storage/db.ts';
 import { iconPencil, iconDownload, iconX } from './uiIcons.ts';
 
-/** v2.14.67 — derive per-tile bounding box (in composite-norm coords)
- *  for the "Layered" pill detection. Mirrors the editor's render-time
- *  geometry so detection matches what the GM sees. */
-function _tileBoundsNorm(
-  tile: import('../types.ts').CompositeTile,
-  asset: MapAsset | undefined,
-  canvasAspect: number,
-): { x0: number; x1: number; y0: number; y1: number } {
-  const widthNormX = tile.scale ?? 1;
-  let heightNormY: number;
-  if (tile.scaleY != null) {
-    heightNormY = tile.scaleY;
-  } else {
-    const aspect = (asset?.imageWidth && asset?.imageHeight)
-      ? asset.imageWidth / asset.imageHeight
-      : 1;
-    // tile px height = (scale * canvasW) / aspect → norm-Y = above / canvasH
-    heightNormY = widthNormX * canvasAspect / aspect;
-  }
-  return {
-    x0: tile.x - widthNormX / 2,
-    x1: tile.x + widthNormX / 2,
-    y0: tile.y - heightNormY / 2,
-    y1: tile.y + heightNormY / 2,
-  };
-}
-
-/** True if any pair of tiles in the composite has overlapping bounding
- *  boxes — drives the Layered pill in the library. Ignores rotation
- *  (over-detects spinning tiles) which is fine: an overlapping rotated
- *  tile is layered either way. */
-function _compositeHasOverlap(
-  asset: MapAsset,
-  assetById: Map<string, MapAsset>,
-): boolean {
-  const tiles = asset.compositeTiles ?? [];
-  if (tiles.length < 2) return false;
-  const canvasAspect = asset.compositeAspect ?? (4 / 3);
-  const bounds = tiles.map((t) => _tileBoundsNorm(t, assetById.get(t.mapAssetId), canvasAspect));
-  for (let i = 0; i < bounds.length; i++) {
-    for (let j = i + 1; j < bounds.length; j++) {
-      const a = bounds[i]!, b = bounds[j]!;
-      if (a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0) return true;
-    }
-  }
-  return false;
-}
+// v2.15.1 — _compositeHasOverlap moved to src/maps/compositeOverlap.ts
+// so the reveal-backing rasteriser and this library pill share one
+// definition (and never disagree). Imported above under the same name.
 
 /** Standard licence options shared with the audio editor. */
 const LICENSE_OPTIONS: string[] = [

@@ -1048,7 +1048,23 @@ export class CompositeMapEditor {
     else if (dir === 'backward') newIdx = Math.max(0, idx - 1);
     tiles.splice(newIdx, 0, removed);
     this.working = { ...this.working, compositeTiles: tiles };
-    await this._renderTiles();
+    // v2.15.1 — Layer-order changes only need to reshuffle existing
+    // DOM nodes; full _renderTiles() wipes innerHTML and forces an
+    // image decode per tile, which briefly leaves the old order
+    // painted until the next user gesture flushes a frame. Re-append
+    // each tile in the new z-order — appendChild on an attached node
+    // MOVES it, so this both reorders the stack and triggers an
+    // immediate paint with no decode delay.
+    this._reorderTileDOM();
+  }
+
+  private _reorderTileDOM(): void {
+    const tilesEl = this.overlay?.querySelector<HTMLElement>('.composite-editor-tiles');
+    if (!tilesEl) return;
+    for (const tile of this.working?.compositeTiles ?? []) {
+      const node = tilesEl.querySelector<HTMLElement>(`[data-tile-id="${tile.id}"]`);
+      if (node) tilesEl.appendChild(node);
+    }
   }
 
   /** Remove the tile from the working copy + re-render. */
