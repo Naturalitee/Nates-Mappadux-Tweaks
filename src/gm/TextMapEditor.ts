@@ -106,6 +106,17 @@ const SVG_CLIPBOARD =
   + 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
   + '<rect x="8" y="2" width="8" height="4" rx="1" ry="1"/>'
   + '<path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/></svg>';
+// v2.14.100 — Undo / Redo icons for the History toolbar section.
+// Matches the same flat-stroke 14px Lucide-style chrome the rest of
+// the toolbar uses.
+const SVG_UNDO =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" '
+  + 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+  + '<path d="M3 7v6h6"/><path d="M21 17a9 9 0 0 0-15-6.7L3 13"/></svg>';
+const SVG_REDO =
+  '<svg xmlns="http://www.w3.org/2000/svg" width="14" height="14" viewBox="0 0 24 24" '
+  + 'fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+  + '<path d="M21 7v6h-6"/><path d="M3 17a9 9 0 0 1 15-6.7L21 13"/></svg>';
 
 type DragMode = 'move' | 'resize';
 
@@ -222,6 +233,7 @@ export class TextMapEditor {
     });
     if (this._undoStack.length > 100) this._undoStack.shift();
     this._redoStack = [];
+    this._updateHistoryButtons();
   }
 
   private _snapshotCurrent(): { elements: TextMapElement[]; selectedId: string | null } {
@@ -239,6 +251,7 @@ export class TextMapEditor {
     this.selectedId = snap.selectedId;
     this._renderAllElements();
     if (this.selectedId) this._select(this.selectedId);
+    this._updateHistoryButtons();
   }
 
   private _redo(): void {
@@ -249,6 +262,7 @@ export class TextMapEditor {
     this.selectedId = snap.selectedId;
     this._renderAllElements();
     if (this.selectedId) this._select(this.selectedId);
+    this._updateHistoryButtons();
   }
 
   /** Snapshot the selected element into the internal clipboard. Deep
@@ -476,6 +490,8 @@ export class TextMapEditor {
     left.appendChild(this._buildToolbarColumn(this._buildAddContentSection(), this._buildAnimationSection()));
     left.appendChild(this._buildToolbarDivider());
     left.appendChild(this._buildClipboardSection());
+    left.appendChild(this._buildToolbarDivider());
+    left.appendChild(this._buildHistorySection());
     tb.appendChild(left);
 
     // ── CENTRE — Element Properties section (label + slot). Hidden
@@ -600,6 +616,28 @@ export class TextMapEditor {
       () => { if (this.clipboardElement) this._pasteFromClipboard(); });
     row.append(cutBtn, copyBtn, pasteBtn);
     return section;
+  }
+
+  /** v2.14.100 — Toolbar section holding the Undo / Redo pair so
+   *  the affordance is visible (not just keyboard-only). Disabled
+   *  states wire the same way the Composite Editor does — refreshed
+   *  any time the stacks change via _updateHistoryButtons. */
+  private _historyUndoBtn: HTMLButtonElement | null = null;
+  private _historyRedoBtn: HTMLButtonElement | null = null;
+  private _buildHistorySection(): HTMLElement {
+    const { section, row } = this._buildSectionShell('History:');
+    const undoBtn = this._mkIconBtn(SVG_UNDO, 'Undo (Ctrl+Z)', () => this._undo());
+    const redoBtn = this._mkIconBtn(SVG_REDO, 'Redo (Ctrl+Y)', () => this._redo());
+    undoBtn.disabled = true;
+    redoBtn.disabled = true;
+    this._historyUndoBtn = undoBtn;
+    this._historyRedoBtn = redoBtn;
+    row.append(undoBtn, redoBtn);
+    return section;
+  }
+  private _updateHistoryButtons(): void {
+    if (this._historyUndoBtn) this._historyUndoBtn.disabled = this._undoStack.length === 0;
+    if (this._historyRedoBtn) this._historyRedoBtn.disabled = this._redoStack.length === 0;
   }
 
   private _buildLayoutSection(): HTMLElement {
@@ -1269,6 +1307,11 @@ export class TextMapEditor {
     colour.className = 'txt-map-color';
     colour.title = 'Text colour for this element';
     colour.value = el.color ?? this.cfg.textColor;
+    // v2.14.100 — Snapshot BEFORE the user drags the colour picker.
+    // pointerdown fires once at the start of interaction; input fires
+    // many times as the picker drags; using pointerdown keeps the
+    // undo stack at one entry per picker session.
+    colour.addEventListener('pointerdown', () => this._pushUndo());
     colour.addEventListener('input', () => {
       el.color = colour.value;
       this._lastColorChosen = colour.value;
@@ -1287,6 +1330,7 @@ export class TextMapEditor {
     size.min = '0.5'; size.max = '4'; size.step = '0.1';
     size.value = String(el.fontScale ?? 1);
     size.className = 'txt-map-element-slider';
+    size.addEventListener('pointerdown', () => this._pushUndo());
     size.addEventListener('input', () => {
       const v = parseFloat(size.value);
       el.fontScale = v;
@@ -1321,6 +1365,7 @@ export class TextMapEditor {
       fontSel.appendChild(o);
     }
     fontSel.addEventListener('change', () => {
+      this._pushUndo();
       el.fontFamily = fontSel.value;
       this._lastFontChosen = fontSel.value;
       fontSel.style.fontFamily = `'${fontSel.value}', sans-serif`;
@@ -1350,6 +1395,7 @@ export class TextMapEditor {
       if (cmd === 'underline') btn.style.textDecoration = 'underline';
       btn.addEventListener('mousedown', (e) => { e.preventDefault(); }); // keep contentEditable focused
       btn.addEventListener('click', () => {
+        this._pushUndo();
         // Make sure the target body is focused (so execCommand acts
         // on the right contentEditable). The GM may have clicked the
         // button without first clicking into the body.
@@ -1379,6 +1425,7 @@ export class TextMapEditor {
       btn.title = a.charAt(0).toUpperCase() + a.slice(1);
       if (el.textAlign === a) btn.classList.add('btn--active');
       btn.addEventListener('click', () => {
+        this._pushUndo();
         el.textAlign = a;
         const node = this.elementNodes.get(el.id);
         const body = node?.querySelector<HTMLElement>('.txt-map-el-body');
