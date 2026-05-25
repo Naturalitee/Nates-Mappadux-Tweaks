@@ -645,17 +645,20 @@ export class MarkerOverlay {
         ? 'Aspect ratio LOCKED — resize preserves W:H. Click to unlock.'
         : 'Aspect ratio unlocked — resize is free. Click to lock to the current ratio.';
       r.ratioLockBtn.classList.toggle('marker-handle--rect-ratio-lock--engaged', locked);
-      // Icon: open rectangle (unlocked) → rectangle with padlock chip (locked).
+      // v2.14.80 — Standard padlock icon (locked = closed arch;
+      // unlocked = arch lifted off). Matches the Composite Editor's
+      // lock-aspect button so the same visual = the same action
+      // wherever it appears.
       r.ratioLockBtn.innerHTML = locked
         ? `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-             <rect x="3" y="6" width="18" height="12" rx="1.5"/>
-             <rect x="14" y="11" width="6" height="6" rx="1" fill="currentColor"/>
-             <path d="M15 11v-1.5a2 2 0 0 1 4 0V11" stroke-width="1.5"/>
+             <rect x="5" y="11" width="14" height="9" rx="1"/>
+             <path d="M8 11V7a4 4 0 0 1 8 0v4"/>
            </svg>`
         : `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor"
                 stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-             <rect x="3" y="6" width="18" height="12" rx="1.5"/>
+             <rect x="5" y="11" width="14" height="9" rx="1"/>
+             <path d="M8 11V7a4 4 0 0 1 7.5-2"/>
            </svg>`;
     }
   }

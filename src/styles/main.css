@@ -404,11 +404,19 @@ body.projector-view .marker-overlay {
   cursor: move;
 }
 
-/* Resize handle — bottom-right corner (opposite move). Player only. */
+/* Resize handle — bottom-right corner (opposite move). Player only.
+   v2.14.80 — unified with the Composite Editor's resize handle:
+   rounded-square instead of a circle, with a 2px GREEN border that
+   reads as "the drag handle, the one that scales the rectangle".
+   The other rect-cluster buttons (lock / aspect / maximise) stay
+   circular so the resize is visually distinct as the drag affordance. */
 .marker-handle--rect-resize {
   top: 100%;
   left: 100%;
   cursor: nwse-resize;
+  border-radius: 6px;
+  border-color: rgba(90, 240, 122, 0.85);
+  border-width: 2px;
 }
 
 /* v2.14.3 — Show Grid icon. Below the move handle, inside the rect's
@@ -455,9 +463,12 @@ body.projector-view .marker-overlay {
   cursor: pointer;
 }
 .marker-handle--rect-ratio-lock--engaged {
-  background: rgba(34, 197, 94, 0.92);
+  /* v2.14.80 — unified with the Composite Editor's lock-aspect
+     active state so every "this toggle is on" green is the same
+     shade across all the editors. */
+  background: rgba(90, 240, 122, 0.85);
   border-color: #fff;
-  color: #fff;
+  color: #0a0e1a;
 }
 
 /* v2.14.5 — top-edge button row, moved-handle-anchored:
@@ -481,14 +492,16 @@ body.projector-view .marker-overlay {
 }
 /* Current rect IS 16:9 — green to signal "you're here already". */
 .marker-handle--rect-aspect--current {
-  background: rgba(34, 197, 94, 0.92);
+  /* v2.14.80 — unified active-green shade with the rest of the
+     editors' "this is on" indicators. */
+  background: rgba(90, 240, 122, 0.85);
   border-color: #fff;
-  color: #fff;
+  color: #0a0e1a;
 }
 /* Current IS 16:9 but ratio-lock is engaged — the snap is moot
    (you're at 16:9 already and locked), so ghost the green. */
 .marker-handle--rect-aspect--ghosted {
-  background: rgba(34, 197, 94, 0.45);
+  background: rgba(90, 240, 122, 0.45);
   border-color: rgba(255, 255, 255, 0.6);
   color: rgba(255, 255, 255, 0.7);
 }
@@ -3125,6 +3138,12 @@ option.select-option--add {
 .txt-map-el-resize {
   bottom: -11px; right: -11px;
   cursor: nwse-resize;
+  /* v2.14.80 — match Composite Editor + viewport rect resize: green-
+     bordered rounded square so the drag affordance is visually
+     distinct from the circular move + delete handles either side. */
+  border-radius: 5px;
+  border-color: rgba(90, 240, 122, 0.85);
+  border-width: 2px;
 }
 .txt-map-el-delete {
   bottom: -11px; left: -11px;
