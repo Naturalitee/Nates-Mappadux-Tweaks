@@ -137,15 +137,19 @@ function lightningAlpha(tGlobal: number, intensity: number): number {
     { c: 0.55, a: 1.00, tier: 0.25 },
     { c: 0.78, a: 1.00, tier: 0.40 },
     { c: 0.04, a: 1.00, tier: 0.50 },
-    { c: 0.93, a: 0.95, tier: 0.60 },
-    { c: 0.18, a: 0.95, tier: 0.70 },
-    { c: 0.45, a: 0.95, tier: 0.78 },
-    { c: 0.68, a: 0.85, tier: 0.85 },
-    { c: 0.09, a: 0.75, tier: 0.90 }, // secondary
-    { c: 0.33, a: 0.70, tier: 0.95 }, // secondary
-    { c: 0.84, a: 0.75, tier: 1.00 }, // secondary
+    { c: 0.93, a: 1.00, tier: 0.60 },
+    { c: 0.18, a: 1.00, tier: 0.70 },
+    { c: 0.45, a: 1.00, tier: 0.78 },
+    { c: 0.68, a: 1.00, tier: 0.85 },
+    { c: 0.09, a: 0.90, tier: 0.90 }, // secondary
+    { c: 0.33, a: 0.85, tier: 0.95 }, // secondary
+    { c: 0.84, a: 0.90, tier: 1.00 }, // secondary
   ];
-  const half = 0.025;       // 5% wide event → ~100 ms at duration=2 s
+  // v2.14.86 — flash window widened 2.5% → 5% so each strike lasts
+  // ~200 ms at a 2 s transition. Long enough that no 60-fps frame
+  // can miss it AND short transitions (down to 800 ms) still get
+  // 80 ms flashes — fully perceptible.
+  const half = 0.05;
   let alpha = 0;
   for (const ev of events) {
     if (ev.tier > intensity) continue;   // doesn't fire at this level
@@ -248,7 +252,7 @@ export default {
       min: 0,
       max: 100,
       step: 5,
-      default: 75,
+      default: 100,
       unit: '%',
     },
   ],
@@ -287,10 +291,20 @@ export default {
     // (e.g. crimson → pink-white). The whole frame flashes WITH the
     // strike — the way a real lightning strike actually catches the
     // scene around it.
+    let _lightningDebugFired = 0;
     const drawLightning = (tGlobal: number): void => {
       if (lightningIntensity <= 0) return;
       const a = lightningAlpha(tGlobal, lightningIntensity);
       if (a <= 0) return;
+      _lightningDebugFired++;
+      // v2.14.86 — once-per-strike console log so we can verify the
+      // flashes are firing on every viewer (GM / player / projector).
+      // tGlobal + alpha tell us WHEN the strike fired and HOW bright;
+      // if these appear in console but the screen looks unchanged
+      // the blend / draw-order is the culprit, not the timing.
+      if (_lightningDebugFired === 1 || _lightningDebugFired % 30 === 0) {
+        console.log(`[blood_splatter] lightning frame #${_lightningDebugFired}: tGlobal=${tGlobal.toFixed(3)}, alpha=${a.toFixed(2)}`);
+      }
       ctx.save();
       ctx.globalCompositeOperation = 'lighter';
       ctx.fillStyle = `rgba(255, 250, 245, ${a})`;
