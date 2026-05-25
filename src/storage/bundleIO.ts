@@ -59,6 +59,17 @@ interface StoredMapAssetEntry {
   noGrid?: boolean;
   /** Stream C text-map payload — only present for source='text-map'. */
   textMap?: MapAsset['textMap'];
+  /** v2.15 composite-map fields — only present for source='composite-map'.
+   *  Without these the bundle would round-trip a composite map as an
+   *  empty shell (no tiles, no aspect, no mode), which is the v2.15
+   *  headline feature broken in transit. */
+  compositeTiles?:    MapAsset['compositeTiles'];
+  compositeAspect?:   number;
+  compositeMode?:     MapAsset['compositeMode'];
+  /** v2.14.70 layered-mode reveal-backing PNG — base64 since blobs
+   *  don't round-trip through JSON. Reconstructed on import. */
+  revealBackingMimeType?: string;
+  revealBackingB64?:      string;
 }
 
 /** Map asset known only by URL — metadata travels, blob does not. */
@@ -277,11 +288,19 @@ export async function exportBundle(opts?: { password?: string }): Promise<Export
   // Stored vs Remote map assets — text-map assets have no blob but still
   // belong in storedMapAssets (their body travels via textMap).
   for (const asset of mapAssetsAll) {
-    const isTextMap = asset.source === 'text-map';
-    if (isTextMap || (asset.locallyStored && asset.blob)) {
-      const blobBits = isTextMap || !asset.blob
+    const isTextMap   = asset.source === 'text-map';
+    const isComposite = asset.source === 'composite-map';
+    if (isTextMap || isComposite || (asset.locallyStored && asset.blob)) {
+      const blobBits = (isTextMap || isComposite) || !asset.blob
         ? { mimeType: undefined, dataB64: undefined }
         : { mimeType: asset.blob.type || 'image/png', dataB64: ab2b64(await asset.blob.arrayBuffer()) };
+      // Layered-mode reveal-backing PNG round-trips via base64.
+      const backingBits = asset.revealBackingBlob
+        ? {
+            mimeType: asset.revealBackingBlob.type || 'image/png',
+            b64:      ab2b64(await asset.revealBackingBlob.arrayBuffer()),
+          }
+        : { mimeType: undefined, b64: undefined };
       storedMapAssets.push(_omitUndefined({
         id:               asset.id,
         filename:         asset.filename,
@@ -300,6 +319,11 @@ export async function exportBundle(opts?: { password?: string }): Promise<Export
         scaleConfidence:  asset.scaleConfidence,
         noGrid:           asset.noGrid,
         textMap:          asset.textMap,
+        compositeTiles:   asset.compositeTiles,
+        compositeAspect:  asset.compositeAspect,
+        compositeMode:    asset.compositeMode,
+        revealBackingMimeType: backingBits.mimeType,
+        revealBackingB64:      backingBits.b64,
       }) as StoredMapAssetEntry);
     } else if (asset.source === 'web-link') {
       const { blob: _b, ...metaOnly } = asset;
@@ -509,6 +533,9 @@ export async function importBundleText(
         const blob = (e.dataB64 && e.mimeType)
           ? b64ToBlob(e.dataB64, e.mimeType)
           : undefined;
+        const revealBacking = (e.revealBackingB64 && e.revealBackingMimeType)
+          ? b64ToBlob(e.revealBackingB64, e.revealBackingMimeType)
+          : undefined;
         const asset = _omitUndefined({
           id:              e.id,
           filename:        e.filename,
@@ -526,6 +553,10 @@ export async function importBundleText(
           scaleConfidence: e.scaleConfidence,
           noGrid:          e.noGrid,
           textMap:         e.textMap,
+          compositeTiles:  e.compositeTiles,
+          compositeAspect: e.compositeAspect,
+          compositeMode:   e.compositeMode,
+          revealBackingBlob: revealBacking,
           addedAt:         e.addedAt,
         }) as MapAsset;
         await saveMapAsset(asset);
