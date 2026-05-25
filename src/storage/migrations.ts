@@ -108,6 +108,7 @@ export function migrateSessionState(saved: any): SessionState | null {
     fog: true, fire: true, firestorm: true, river: true, ocean: true,
     light: true, starfield: true, portal: true, thundercloud: true,
     mist: true, aurora: true, embers: true, noise: true, transparent: true,
+    reveal_layer: true,
   };
   const coerceKind = (k: any): string => (typeof k === 'string' && SUPPORTED_KINDS[k]) ? k : 'fog';
   const rawFog = (cur.fog && Array.isArray(cur.fog.polygons)) ? cur.fog.polygons : [];

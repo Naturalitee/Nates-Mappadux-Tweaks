@@ -680,7 +680,7 @@ export class FogEditor {
       // colour override isn't set (keeps backward compat with pre-kind
       // saves migrated forward).
       const colour = poly.color ?? this.activeColor;
-      this.drawPolygon(poly.vertices, colour, poly.id === this.selectedId, poly.holes);
+      this.drawPolygon(poly.vertices, colour, poly.id === this.selectedId, poly.holes, poly.kind);
     }
 
     if (this.currentVertices.length > 0) {
@@ -866,7 +866,7 @@ export class FogEditor {
     btn.hidden = false;
   }
 
-  private drawPolygon(vertices: FogVertex[], color: string, selected: boolean, holes?: FogVertex[][]): void {
+  private drawPolygon(vertices: FogVertex[], color: string, selected: boolean, holes?: FogVertex[][], kind?: import('../types.ts').OverlayKind): void {
     if (vertices.length < 2) return;
     const b = this.getMapBounds(this.drawW, this.drawH);
     const ctx = this.ctx;
@@ -900,6 +900,12 @@ export class FogEditor {
     // Always draw marching ants around every polygon.
     // Selected: bright white/black ants (high contrast).
     // Unselected: subtle muted ants so the boundary is always visible.
+    // v2.14.75 — reveal_layer kind swaps the second ant colour from
+    // black to purple. The shader plane underneath shows the layer-
+    // below preview, so black marching ants visually clashed with
+    // the rich revealed content; purple reads as "MapFX selection"
+    // and stays legible on most map artwork.
+    const secondAntColour = kind === 'reveal_layer' ? '#a78bfa' : '#000000';
     const period = 8;
     if (selected) {
       ctx.lineWidth = 2;
@@ -908,13 +914,15 @@ export class FogEditor {
       ctx.strokeStyle = '#ffffff';
       ctx.stroke();
       ctx.lineDashOffset = -(this.dashOffset + period / 2);
-      ctx.strokeStyle = '#000000';
+      ctx.strokeStyle = secondAntColour;
       ctx.stroke();
     } else {
       ctx.lineWidth = 1.5;
       ctx.setLineDash([period / 2, period / 2]);
       ctx.lineDashOffset = -this.dashOffset;
-      ctx.strokeStyle = 'rgba(200, 216, 232, 0.55)';
+      ctx.strokeStyle = kind === 'reveal_layer'
+        ? 'rgba(167, 139, 250, 0.65)'
+        : 'rgba(200, 216, 232, 0.55)';
       ctx.stroke();
     }
     ctx.setLineDash([]);
