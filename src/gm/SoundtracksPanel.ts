@@ -44,7 +44,6 @@ export interface SoundtracksPanelHost {
 export class SoundtracksPanel {
   private host:        SoundtracksPanelHost;
   private panelEl:     HTMLElement;
-  private bodyEl:      HTMLElement;
   private slotsEl:     HTMLElement;
   private statusEl:    HTMLElement;
   private player:      YouTubeSoundtrackPlayer | null = null;
@@ -56,10 +55,11 @@ export class SoundtracksPanel {
   constructor(host: SoundtracksPanelHost) {
     this.host     = host;
     this.panelEl  = document.getElementById('soundtracks-panel')!;
-    this.bodyEl   = this.panelEl.querySelector('.panel-body') as HTMLElement;
     this.slotsEl  = document.getElementById('soundtracks-slots')!;
     this.statusEl = document.getElementById('soundtracks-status')!;
-    this._bindPanelToggle();
+    // Panel collapse/expand is handled by GMApp's global panel-title
+    // listener (binds every .panel-title[aria-expanded] button at
+    // bindUIControls time).
   }
 
   /** Show / hide the panel based on Settings toggle + rebuild the
@@ -311,14 +311,4 @@ export class SoundtracksPanel {
     this.activeIndex = 0;
   }
 
-  private _bindPanelToggle(): void {
-    const titleBtn = this.panelEl.querySelector<HTMLButtonElement>('.panel-title');
-    if (!titleBtn) return;
-    titleBtn.addEventListener('click', () => {
-      const expanded = titleBtn.getAttribute('aria-expanded') === 'true';
-      const next = !expanded;
-      titleBtn.setAttribute('aria-expanded', next ? 'true' : 'false');
-      this.bodyEl.hidden = !next;
-    });
-  }
 }

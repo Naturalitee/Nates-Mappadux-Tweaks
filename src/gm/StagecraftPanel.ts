@@ -41,7 +41,6 @@ export interface StagecraftPanelHost {
 export class StagecraftPanel {
   private host: StagecraftPanelHost;
   private panelEl:        HTMLElement;
-  private bodyEl:         HTMLElement;
   private assignmentsEl:  HTMLElement;
   private statusEl:       HTMLElement;
   private refreshBtn:     HTMLButtonElement;
@@ -54,12 +53,12 @@ export class StagecraftPanel {
   constructor(host: StagecraftPanelHost) {
     this.host          = host;
     this.panelEl       = document.getElementById('stagecraft-panel')!;
-    this.bodyEl        = this.panelEl.querySelector('.panel-body') as HTMLElement;
     this.assignmentsEl = document.getElementById('stagecraft-assignments')!;
     this.statusEl      = document.getElementById('stagecraft-status')!;
     this.refreshBtn    = document.getElementById('stagecraft-refresh-btn') as HTMLButtonElement;
     this.testBtn       = document.getElementById('stagecraft-test-btn') as HTMLButtonElement;
-    this._bindPanelToggle();
+    // Panel collapse/expand is handled by GMApp's global panel-title
+    // listener (binds every .panel-title[aria-expanded] button).
     this.refreshBtn.addEventListener('click', () => void this.refresh({ force: true }));
     this.testBtn.addEventListener('click', () => void this._fireTest());
   }
@@ -237,18 +236,4 @@ export class StagecraftPanel {
     }
   }
 
-  /** Mirror the standard panel toggle wiring — clicking the title
-   *  collapses / expands the body. Matches how every other panel
-   *  works (defined in panelToggles.ts in GMApp's UI bindings;
-   *  duplicated here so this panel is self-contained). */
-  private _bindPanelToggle(): void {
-    const titleBtn = this.panelEl.querySelector<HTMLButtonElement>('.panel-title');
-    if (!titleBtn) return;
-    titleBtn.addEventListener('click', () => {
-      const expanded = titleBtn.getAttribute('aria-expanded') === 'true';
-      const next = !expanded;
-      titleBtn.setAttribute('aria-expanded', next ? 'true' : 'false');
-      this.bodyEl.hidden = !next;
-    });
-  }
 }
