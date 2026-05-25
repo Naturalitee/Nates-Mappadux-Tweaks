@@ -397,6 +397,35 @@ body.projector-view .marker-overlay {
   border-color: rgba(255, 255, 255, 0.95);
 }
 
+/* v2.14.81 — Action handles (resize / lock / 16:9 snap / maximise /
+   show-grid) drop the rim-coloured background in favour of the
+   standard editor chrome (dark bg + white border, green active
+   states). Reserves the orange/green role-colour for the IDENTITY
+   handles only — move + view-broadcast eye — so the rim colour
+   carries meaning ("this rect is the player view / projector view")
+   rather than getting spent on every button. */
+.marker-overlay-rect .marker-handle--rect-resize,
+.marker-overlay-rect .marker-handle--rect-ratio-lock,
+.marker-overlay-rect .marker-handle--rect-aspect,
+.marker-overlay-rect .marker-handle--rect-maximise,
+.marker-overlay-rect .marker-handle--rect-show-grid {
+  background: rgba(20, 24, 36, 0.85);
+}
+.marker-overlay-rect .marker-handle--rect-resize:hover,
+.marker-overlay-rect .marker-handle--rect-ratio-lock:hover,
+.marker-overlay-rect .marker-handle--rect-aspect:hover,
+.marker-overlay-rect .marker-handle--rect-maximise:hover,
+.marker-overlay-rect .marker-handle--rect-show-grid:hover {
+  background: rgba(40, 50, 70, 0.95);
+}
+/* Active-state overrides need to win against the 2-class base
+   selector above; bump specificity by chaining the rect ancestor. */
+.marker-overlay-rect .marker-handle--rect-show-grid.marker-handle--rect-show-grid--on,
+.marker-overlay-rect .marker-handle--rect-ratio-lock.marker-handle--rect-ratio-lock--engaged,
+.marker-overlay-rect .marker-handle--rect-aspect.marker-handle--rect-aspect--current {
+  background: rgba(90, 240, 122, 0.85);
+}
+
 /* Move handle — top-left corner. Always visible while the rect is shown. */
 .marker-handle--rect-move {
   top: 0;
@@ -428,9 +457,13 @@ body.projector-view .marker-overlay {
   cursor: pointer;
 }
 .marker-handle--rect-show-grid--on {
-  background: rgba(255, 140, 0, 0.92);
+  /* v2.14.81 — unified with the other action-handle active states.
+     Was orange (--rect-color reused); now uses the same green-on as
+     ratio-lock and 16:9 so "this toggle is engaged" reads the same
+     wherever it appears. */
+  background: rgba(90, 240, 122, 0.85);
   border-color: #fff;
-  color: #fff;
+  color: #0a0e1a;
 }
 
 /* v2.14.3 — view-broadcast eye icon. v2.14.5 moved to top:0, left:30

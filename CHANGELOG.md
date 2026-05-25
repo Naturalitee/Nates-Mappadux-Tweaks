@@ -31,14 +31,11 @@ interior; a magical illusion over a chamber). Highlights:
   what's beneath without painting brushes — never visible to
   players.
 
-### Blood Spatter horror transition
+### Blood Splatter transition
 
-A new map-change transition for the genres where the GM wants the
-table to flinch. Four phases: heartbeat dim → lightning flash →
-crimson splatters erupt across the frame → drip + reveal. Five
-sliders (duration, intensity, spread, lightning brightness, drip
-reach) let you tune the menace. Procedural — no audio, no
-textures.
+A new map-change transition for horror games. Pick a colour
+(crimson, slime green, ichor blue, ink black, toxic purple, acid
+yellow) and toggle the opening lightning flash on or off.
 
 ### Library polish
 
