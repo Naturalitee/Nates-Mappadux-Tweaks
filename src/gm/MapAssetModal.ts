@@ -230,6 +230,15 @@ export class MapAssetModal {
     // don't trip the modal closed mid-task.
     this.el.querySelector('#map-modal-close')?.addEventListener('click', () => this.close());
 
+    // v2.14.112 — Belt-and-braces hover-preview cleanup. A fast cursor
+    // swipe across the modal sometimes outpaces the per-row mouseleave,
+    // and tab-switches / blurs / context menus eat the leave event
+    // entirely. Hide the popover whenever focus or pointer leaves the
+    // modal scope so the preview never lingers as visual residue.
+    this.el.addEventListener('mouseleave', () => this._hidePreview());
+    this.el.addEventListener('focusout',   () => this._hidePreview());
+    window.addEventListener('blur',        () => this._hidePreview());
+
     // Tab switching
     this.el.querySelectorAll('.modal-tab').forEach((tab) => {
       tab.addEventListener('click', () => {
@@ -239,6 +248,9 @@ export class MapAssetModal {
         this.el.querySelectorAll<HTMLElement>('.tab-content').forEach((c) => {
           c.hidden = c.id !== `map-tab-${name}`;
         });
+        // _renderLibrary will hide the preview; non-library tabs need
+        // an explicit hide because rows aren't rebuilt on those.
+        this._hidePreview();
         if (name === 'library') void this._renderLibrary();
       });
     });
@@ -412,6 +424,11 @@ export class MapAssetModal {
   // ─── Library tab ──────────────────────────────────────────────────────────
 
   private async _renderLibrary(): Promise<void> {
+    // v2.14.112 — Clear any stale hover preview before tearing down
+    // the row DOM. Rows about to be removed never get their mouseleave
+    // event, so without this the popover lingers after a tab switch,
+    // filter change, delete, or rename.
+    this._hidePreview();
     const listEl  = this.el.querySelector<HTMLElement>('#map-library-list')!;
     const emptyEl = this.el.querySelector<HTMLElement>('#map-library-empty')!;
     const filter  = (this.el.querySelector<HTMLInputElement>('#map-library-search')?.value ?? '').toLowerCase();

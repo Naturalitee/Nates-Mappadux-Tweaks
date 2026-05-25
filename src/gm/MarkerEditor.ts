@@ -393,18 +393,20 @@ export class MarkerEditor {
   }
 
   /**
-   * Tap an overlay action badge — toggles its state AND selects the marker
-   * (matches the v2.11/A3b spec: every badge tap is both an action and a
-   * selection so the side panel surfaces relevant settings without an
-   * extra step). Maps the badge kind to the legacy _handleBadge target.
+   * Tap an overlay action badge — toggles its state ONLY. Does not
+   * change the selection.
+   *
+   * v2.14.112 — previously every badge tap also selected the marker
+   * (the v2.11/A3b "tap is both an action and a selection" idea).
+   * In practice this opened the side-panel editor every time the GM
+   * just wanted to mute one marker while another was selected — too
+   * much chrome for a single-axis toggle. Selection is now reserved
+   * for the move/select handle (top-left) so badges can be flipped
+   * independently without disturbing the active edit context.
    */
   toggleOverlayBadge(markerId: string, kind: import('../rendering/MarkerOverlay.ts').BadgeKind): void {
     const marker = this.markers.find((m) => m.id === markerId);
     if (!marker || marker.locked) return;
-    if (this.selectedId !== markerId) {
-      this.selectedId = markerId;
-      this._onSelect(marker);
-    }
     const target: 'hidden' | 'audio' | 'motion' =
       kind === 'visibility' ? 'hidden' :
       (kind === 'audio-source' || kind === 'audio-listener') ? 'audio' :
