@@ -45,7 +45,12 @@ export class FreesoundModal {
   private searchResults:    any[] = [];
   private nextPageUrl:      string | null = null;
   private totalCount:       number = 0;
-  private uploadFile:       File | null = null;
+  /** v2.14.87 — multi-file upload queue. Each entry tracks the
+   *  original File handle plus the GM-editable display name (input
+   *  is pre-populated from the filename minus extension). Mirrors
+   *  the Map asset upload pattern so soundboard packs can be
+   *  loaded in one batch with shared attribution. */
+  private uploadFiles:      { file: File; name: string }[] = [];
 
   constructor(onAssign: AssignCallback) {
     this.onAssign = onAssign;
@@ -165,12 +170,11 @@ export class FreesoundModal {
     dropZone.addEventListener('drop', (e) => {
       e.preventDefault();
       dropZone.classList.remove('upload-drop-zone--over');
-      const file = (e as DragEvent).dataTransfer?.files[0];
-      if (file) this._handleUploadFile(file);
+      const files = (e as DragEvent).dataTransfer?.files;
+      if (files && files.length) this._handleUploadFiles(files);
     });
     fileInput.addEventListener('change', () => {
-      const file = fileInput.files?.[0];
-      if (file) this._handleUploadFile(file);
+      if (fileInput.files && fileInput.files.length) this._handleUploadFiles(fileInput.files);
     });
 
     this.el.querySelector('#upload-add-btn')?.addEventListener('click',   () => void this._addUpload());
@@ -611,47 +615,137 @@ export class FreesoundModal {
 
   // ─── Upload tab ───────────────────────────────────────────────────────────
 
-  private _handleUploadFile(file: File): void {
-    this.uploadFile = file;
-    const nameInput = this.el.querySelector<HTMLInputElement>('#upload-name-input')!;
-    nameInput.value = file.name.replace(/\.[^.]+$/, ''); // strip extension
-    this.el.querySelector<HTMLElement>('#upload-drop-zone')!.hidden  = true;
+  /** v2.14.87 — accept one or more files, append to queue, show
+   *  the file-info section with a per-file row + bulk attribution.
+   *  Mirrors MapAssetModal._handleUploadFiles. */
+  private _handleUploadFiles(filesArg: FileList | File[]): void {
+    const files = Array.from(filesArg);
+    for (const file of files) {
+      // Loose check — browsers vary on file.type for audio. The
+      // AudioContext decode in AudioAssetStore.save will reject
+      // anything it can't actually play.
+      this.uploadFiles.push({
+        file,
+        name: file.name.replace(/\.[^.]+$/, ''),
+      });
+    }
+    if (this.uploadFiles.length === 0) return;
+    // Populate the bulk-attribution licence dropdown once on first show.
+    const licenseSel = this.el.querySelector<HTMLSelectElement>('#upload-bulk-license');
+    if (licenseSel && licenseSel.options.length === 0) {
+      licenseSel.innerHTML = '<option value="">— No licence picked —</option>' +
+        LICENSE_OPTIONS.map((l) => `<option value="${this._esc(l)}">${this._esc(l)}</option>`).join('');
+    }
+    this.el.querySelector<HTMLElement>('#upload-drop-zone')!.hidden = true;
     this.el.querySelector<HTMLElement>('#upload-file-info')!.hidden = false;
+    this._renderUploadQueue();
+  }
+
+  /** Re-render the queue list — one row per pending file with name
+   *  input + remove button. */
+  private _renderUploadQueue(): void {
+    const queue = this.el.querySelector<HTMLElement>('#upload-queue');
+    if (!queue) return;
+    queue.innerHTML = '';
+    this.uploadFiles.forEach((entry, idx) => {
+      const row = document.createElement('div');
+      row.className = 'map-upload-queue-row';
+      row.innerHTML = `
+        <input type="text" class="map-upload-queue-name" placeholder="Sound name…" />
+        <span class="map-upload-queue-filename"></span>
+        <button type="button" class="btn btn--ghost btn--xs map-upload-queue-remove ui-icon-btn" title="Remove this file from the queue."></button>
+      `;
+      const nameInput = row.querySelector<HTMLInputElement>('.map-upload-queue-name')!;
+      nameInput.value = entry.name;
+      nameInput.addEventListener('input', () => {
+        const e = this.uploadFiles[idx];
+        if (e) e.name = nameInput.value;
+      });
+      const fnSpan = row.querySelector<HTMLElement>('.map-upload-queue-filename')!;
+      fnSpan.textContent = entry.file.name;
+      fnSpan.title = `${entry.file.name} · ${(entry.file.size / 1024 / 1024).toFixed(1)} MB`;
+      const removeBtn = row.querySelector<HTMLButtonElement>('.map-upload-queue-remove')!;
+      // Inline SVG X — same flat-stroke icon used across the library
+      // chrome. Avoids a cross-module import for one button.
+      removeBtn.innerHTML = '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>';
+      removeBtn.addEventListener('click', () => {
+        this.uploadFiles.splice(idx, 1);
+        if (this.uploadFiles.length === 0) {
+          this._clearUpload();
+        } else {
+          this._renderUploadQueue();
+        }
+      });
+      queue.appendChild(row);
+    });
   }
 
   private _clearUpload(): void {
-    this.uploadFile = null;
+    this.uploadFiles = [];
     const fileInput = this.el.querySelector<HTMLInputElement>('#upload-file-input');
     if (fileInput) fileInput.value = '';
     const dropZone = this.el.querySelector<HTMLElement>('#upload-drop-zone');
     const fileInfo = this.el.querySelector<HTMLElement>('#upload-file-info');
     if (dropZone) dropZone.hidden = false;
-    if (fileInfo) fileInfo.hidden  = true;
+    if (fileInfo) fileInfo.hidden = true;
+    // Clear bulk attribution inputs too — fresh slate on next batch.
+    const sel  = this.el.querySelector<HTMLSelectElement>('#upload-bulk-license');
+    const attr = this.el.querySelector<HTMLInputElement>('#upload-bulk-attribution');
+    const link = this.el.querySelector<HTMLInputElement>('#upload-bulk-link');
+    if (sel)  sel.value  = '';
+    if (attr) attr.value = '';
+    if (link) link.value = '';
+    const queue = this.el.querySelector<HTMLElement>('#upload-queue');
+    if (queue) queue.innerHTML = '';
   }
 
   private async _addUpload(): Promise<void> {
-    if (!this.uploadFile) return;
-    const addBtn    = this.el.querySelector<HTMLButtonElement>('#upload-add-btn')!;
-    const nameInput = this.el.querySelector<HTMLInputElement>('#upload-name-input')!;
-    const name = nameInput.value.trim() || this.uploadFile.name.replace(/\.[^.]+$/, '');
+    if (this.uploadFiles.length === 0) return;
+    const addBtn = this.el.querySelector<HTMLButtonElement>('#upload-add-btn');
+    if (addBtn) { addBtn.disabled = true; addBtn.textContent = `Adding 0 / ${this.uploadFiles.length}…`; }
 
-    addBtn.disabled    = true;
-    addBtn.textContent = 'Saving…';
-    try {
-      const asset: AudioAsset = {
-        id:            generateId(),
-        name,
-        source:        'upload',
-        locallyStored: true,
-        license:       'Unknown / Manual import',
-        addedAt:       Date.now(),
-      };
-      await AudioAssetStore.save(asset, this.uploadFile);
-      this.onAssign(asset);
+    // Pull bulk attribution once — applied to every file in the batch.
+    const bulkLicense     = this.el.querySelector<HTMLSelectElement>('#upload-bulk-license')?.value.trim()     ?? '';
+    const bulkAttribution = this.el.querySelector<HTMLInputElement>('#upload-bulk-attribution')?.value.trim() ?? '';
+    const bulkLink        = this.el.querySelector<HTMLInputElement>('#upload-bulk-link')?.value.trim()        ?? '';
+
+    let added = 0;
+    const total = this.uploadFiles.length;
+    let lastAsset: AudioAsset | null = null;
+    const queue = [...this.uploadFiles];
+    for (const entry of queue) {
+      try {
+        const name = entry.name.trim() || entry.file.name.replace(/\.[^.]+$/, '');
+        const asset: AudioAsset = {
+          id:            generateId(),
+          name,
+          source:        'upload',
+          locallyStored: true,
+          // Bulk licence wins when set; otherwise fall back to the
+          // pre-bulk default so existing single-file flow looks the
+          // same when no bulk attribution is filled in.
+          license:       bulkLicense || 'Unknown / Manual import',
+          ...(bulkAttribution ? { attribution:     bulkAttribution } : {}),
+          ...(bulkLink        ? { attributionLink: bulkLink        } : {}),
+          addedAt:       Date.now(),
+        };
+        await AudioAssetStore.save(asset, entry.file);
+        lastAsset = asset;
+        added++;
+        if (addBtn) addBtn.textContent = `Adding ${added} / ${total}…`;
+      } catch (err) {
+        alert(`${entry.file.name}: ${(err as Error).message}`);
+      }
+    }
+    if (addBtn) { addBtn.disabled = false; addBtn.textContent = 'Add All to Library'; }
+    this._clearUpload();
+    if (added > 0) {
+      // Single-file legacy behaviour: assign the (only) new asset
+      // to the caller + close the modal. For multi-file batches the
+      // caller's slot can only hold one anyway, so we hand back the
+      // LAST added; the rest sit in the library awaiting reuse.
+      if (lastAsset) this.onAssign(lastAsset);
       this.close();
-    } catch {
-      addBtn.disabled    = false;
-      addBtn.textContent = 'Add to Library';
     }
   }
 

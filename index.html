@@ -583,17 +583,35 @@ https://example.com/sound2.wav"></textarea>
         </div>
         <div id="tab-upload" class="tab-content" hidden>
           <div id="upload-drop-zone" class="upload-drop-zone">
-            <p class="upload-drop-label">Drop an audio file here<br>or click to browse</p>
-            <input type="file" id="upload-file-input" accept="audio/*" hidden />
+            <p class="upload-drop-label">Drop one or more audio files here<br>or click to browse (multi-select supported)</p>
+            <input type="file" id="upload-file-input" accept="audio/*" multiple hidden />
           </div>
           <p class="upload-storage-hint">Uploaded sounds are saved locally inside your map pack &mdash; they travel with your bundle export and stay available offline.</p>
           <div id="upload-file-info" class="upload-file-info" hidden>
-            <div class="modal-search-row">
-              <input type="text" id="upload-name-input" class="modal-search-input" placeholder="Sound name…" />
+            <!-- v2.14.87 — Bulk attribution row. Mirror of the Map
+                 upload bulk-attribution UX: licence + credit + source
+                 link applied to every file in the queue. Useful when
+                 uploading a soundboard pack from the same author so
+                 the GM doesn't have to repeat the credit per file. -->
+            <div class="map-upload-bulk-attr">
+              <div class="map-upload-bulk-attr-row">
+                <label>Licence</label>
+                <select id="upload-bulk-license" class="map-edit-license"></select>
+              </div>
+              <div class="map-upload-bulk-attr-row">
+                <label>Credit</label>
+                <input type="text" id="upload-bulk-attribution" placeholder='e.g. "Sounds by Author"' />
+              </div>
+              <div class="map-upload-bulk-attr-row">
+                <label>Source link</label>
+                <input type="url" id="upload-bulk-link" placeholder="https://… (optional)" />
+              </div>
+              <p class="map-upload-bulk-hint">Applied to every file below. Leave blank to skip.</p>
             </div>
-            <p class="upload-license-note">License: Unknown / Manual import</p>
+            <!-- Queue of selected files with per-row name input + remove. -->
+            <div id="upload-queue" class="map-upload-queue"></div>
             <div class="upload-actions">
-              <button id="upload-add-btn" class="btn btn--primary btn--sm">Add to Library</button>
+              <button id="upload-add-btn" class="btn btn--primary btn--sm">Add All to Library</button>
               <button id="upload-clear-btn" class="btn btn--ghost btn--sm">Clear</button>
             </div>
           </div>
