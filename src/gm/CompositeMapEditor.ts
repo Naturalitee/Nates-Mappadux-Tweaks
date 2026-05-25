@@ -903,6 +903,7 @@ export class CompositeMapEditor {
       <button type="button" data-act="backward" ${atBack ? 'disabled' : ''}>Send Backward</button>
       <button type="button" data-act="back" ${atBack ? 'disabled' : ''}>Send to Back</button>
       <div class="composite-editor-context-sep"></div>
+      <button type="button" data-act="duplicate" title="Add a new tile that reuses the same map image (no extra storage). Position / rotation / scale are copied with a slight offset so the duplicate doesn't perfectly overlap.">Duplicate Tile</button>
       <button type="button" data-act="delete" class="composite-editor-context-danger">Delete tile</button>
     `;
     document.body.appendChild(menu);
@@ -922,11 +923,12 @@ export class CompositeMapEditor {
         ev.stopPropagation();
         const act = btn.dataset['act'];
         this._closeTileContextMenu();
-        if (act === 'delete')        void this._deleteTile(id);
-        else if (act === 'front')    void this._moveTileInStack(id, 'front');
-        else if (act === 'forward')  void this._moveTileInStack(id, 'forward');
-        else if (act === 'backward') void this._moveTileInStack(id, 'backward');
-        else if (act === 'back')     void this._moveTileInStack(id, 'back');
+        if (act === 'delete')         void this._deleteTile(id);
+        else if (act === 'front')     void this._moveTileInStack(id, 'front');
+        else if (act === 'forward')   void this._moveTileInStack(id, 'forward');
+        else if (act === 'backward')  void this._moveTileInStack(id, 'backward');
+        else if (act === 'back')      void this._moveTileInStack(id, 'back');
+        else if (act === 'duplicate') void this._duplicateTile(id);
       });
     });
 
@@ -959,6 +961,45 @@ export class CompositeMapEditor {
     const cleanup = (menu as unknown as { _cleanup?: () => void })._cleanup;
     if (cleanup) cleanup();
     menu.remove();
+  }
+
+  /** v2.14.94 — Right-click → Duplicate Tile. Reuses the same
+   *  underlying mapAssetId so there's NO asset copy (zero extra
+   *  bytes in storage / on the wire). Clones the tile's position,
+   *  rotation, scale, flip + lock-aspect state, then nudges the
+   *  duplicate's centre by a small offset so it doesn't perfectly
+   *  overlap. New tile lands on TOP of the z-stack so the GM can
+   *  immediately see + drag it. */
+  private async _duplicateTile(id: string): Promise<void> {
+    if (!this.working) return;
+    const tiles = this.working.compositeTiles ?? [];
+    const src = tiles.find((t) => t.id === id);
+    if (!src) return;
+    this._pushUndo();
+    // Cheap drift: 3% of canvas norm in both axes. Small enough that
+    // the duplicate reads as "the same tile, just moved over a tad",
+    // big enough that the GM sees it landed.
+    const offset = 0.03;
+    const dup: CompositeTile = {
+      ...src,
+      id: generateId(),
+      x: Math.max(0.02, Math.min(0.98, src.x + offset)),
+      y: Math.max(0.02, Math.min(0.98, src.y + offset)),
+    };
+    // Carry the source tile's reset-scale baseline forward so a
+    // later "reset scale" on the duplicate restores the same value
+    // the source would restore to (not a fresh "from when this
+    // tile was added" baseline).
+    const srcSnap = this._originalScales.get(src.id);
+    this._originalScales.set(dup.id, srcSnap
+      ? { scale: srcSnap.scale, scaleY: srcSnap.scaleY }
+      : { scale: src.scale, scaleY: src.scaleY });
+    this.working = {
+      ...this.working,
+      compositeTiles: [...tiles, dup],
+    };
+    this.selectedTileId = dup.id;
+    await this._renderTiles();
   }
 
   /** v2.14.66 — Reorder a tile within compositeTiles. Convention:
