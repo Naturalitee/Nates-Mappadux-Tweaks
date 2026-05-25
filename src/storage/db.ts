@@ -55,8 +55,38 @@ interface DMRSchema extends DBSchema {
   };
 }
 
-const DB_NAME = 'dynamic-map-renderer';
+/** v2.14.90 — Optional per-tab DB namespace. The URL query
+ *  `?instance=NAME` opens an entirely separate IndexedDB so two
+ *  Mappadux tabs at the same origin run independent worlds — own
+ *  maps, own audio, own session state. Default (no param) uses
+ *  the legacy DB name so existing installs are untouched.
+ *
+ *  Spawning a fresh instance is done via the hamburger ("Open New
+ *  Instance") which opens a new tab with a random instance id. No
+ *  syncing between instances; if the user opens two tabs pointing
+ *  at the same instance id by hand, they share + race on the same
+ *  DB — same caveats as having two tabs of the default instance. */
+function _instanceFromQuery(): string {
+  if (typeof window === 'undefined') return '';
+  try {
+    const v = new URLSearchParams(window.location.search).get('instance');
+    if (!v) return '';
+    // Allow letters, digits, dash, underscore, dot. Anything else
+    // gets sanitised so a malformed URL can't smash other DBs.
+    return v.replace(/[^a-zA-Z0-9._-]/g, '').slice(0, 64);
+  } catch { return ''; }
+}
+const INSTANCE_ID = _instanceFromQuery();
+const DB_NAME = INSTANCE_ID
+  ? `dynamic-map-renderer:${INSTANCE_ID}`
+  : 'dynamic-map-renderer';
 const DB_VERSION = 6;
+
+/** Exposed for diagnostics + UI ("you're on instance X"). Empty
+ *  string = default / legacy instance. */
+export function getActiveInstanceId(): string {
+  return INSTANCE_ID;
+}
 
 let _db: IDBPDatabase<DMRSchema> | null = null;
 

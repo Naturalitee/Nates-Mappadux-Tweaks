@@ -5530,6 +5530,26 @@ export class GMApp {
       onSelect: () => { void this.openSettings(); },
     });
 
+    // v2.14.90 — Spawn a fresh Mappadux instance in a new tab with
+    // its own IndexedDB. Useful for splitting the party (two
+    // running encounters), keeping handouts on one tab + maps on
+    // another, or just experimenting without touching the live
+    // pack. No syncing between instances — each is independent.
+    this.hamburger.addItem({
+      label: 'Open New Instance',
+      icon: 'plus-square',
+      onSelect: () => {
+        // Short random id, URL-safe. Six chars of base36 are plenty
+        // distinct for one user's tab collection — collisions need
+        // 36^6 ≈ 2 billion attempts to be likely.
+        const id = Math.random().toString(36).slice(2, 8);
+        const url = new URL(window.location.href);
+        url.search = `?instance=${id}`;
+        url.hash = '';
+        window.open(url.toString(), '_blank', 'noopener');
+      },
+    });
+
     // Footer — About pinned at the very bottom (auto-divider above).
     this.hamburger.addItem({
       label: 'About…',
