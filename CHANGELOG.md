@@ -37,6 +37,40 @@ A new map-change transition for horror games. Pick any colour
 from the colour picker, and dial lightning intensity from 0
 (none) to 100 (frequent strikes that illuminate the scene).
 
+### Run multiple GMs side-by-side
+
+- **`?instance=NAME`** in the URL opens a fully isolated
+  Mappadux: its own IndexedDB, its own broadcast channel, its
+  own player / projector spawn URLs. Two tabs no longer share
+  state or stomp each other's player windows on close.
+- Spawn a new instance from the hamburger menu ("New Mappadux
+  instance"). Each instance picks a word-pair name (e.g.
+  "amber-falcon") so the URL bar tells you which is which.
+
+### Editors aligned to one chrome language
+
+- The Composite Map Editor, Text Map Editor, and Marker
+  selection chrome all share the same conventions: move handle
+  top-left, rotation handle above with a stem (snaps ±2° to
+  90 / 45 / 30 degree families), flip-V badge top-centre,
+  flip-H badge right-edge mid-height, delete handle bottom-left,
+  resize handle bottom-right.
+- **Text-map elements rotate + flip + lock-aspect** just like
+  composite tiles. Image element bounding-box drag respects the
+  lock-aspect toggle; unlock and the image stretches to the box.
+- **Per-modal undo / redo** in the Composite and Text Map
+  editors — stack lives for the duration of the modal session
+  so a slip during a layout pass doesn't lose ten minutes of
+  work.
+
+### Undo on the GM canvas itself
+
+Two semi-transparent buttons land top-centre of the workspace
+(or Ctrl/Cmd+Z and Ctrl/Cmd+Y). Covers fog / MapFX polygons
+and marker placements; brush strokes coalesce to one undo
+entry so a single Ctrl+Z is enough to wipe a run-on stroke.
+Stack clears on map switch.
+
 ### Library polish
 
 - **Click pills to filter.** Above the My Library list, a row of
@@ -66,6 +100,19 @@ from the colour picker, and dial lightning intensity from 0
   dropdown after cloning.
 - reveal_layer brush polygons no longer revert to plain fog on
   reload (storage migration was dropping the unknown kind).
+- Composite maps now survive .mappadux export / import — the
+  bundle schema was missing every composite-specific field, so
+  earlier round-trips would deliver an empty shell. Layered-mode
+  reveal-backing PNG travels too.
+- Calibration HxV input now actually rewrites the grid pps
+  (was reading back the bounded line and computing the wrong
+  pixels-per-square).
+- "Unused" pill on the Map Library now counts composite tiles
+  as real usages. Previously a map asset used ONLY as a tile
+  inside a composite (never as a top-level map) reported
+  Unused, so the GM could safely-delete it and quietly break
+  the composite. Iterates to a fixpoint so nested composites
+  propagate usage through every level.
 
 ## v2.14.36 — 2026-05-24
 

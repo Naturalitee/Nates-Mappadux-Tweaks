@@ -35,19 +35,21 @@ Pack-level actions live behind the hamburger.
 
 ## Running multiple sessions from one machine *(power-user tip)*
 
-One GM window = one room code = one room of players + projectors. If you want to drive *different* content to different devices at the same time — say a battlemap on a table tablet AND a handout on a player tablet, simultaneously and independently — open Mappadux a second time in a **private / incognito window**.
+One GM window = one room code = one room of players + projectors. If you want to drive *different* content to different devices at the same time — say a battlemap on a table tablet AND a handout on a player tablet, simultaneously and independently — open a **second Mappadux instance**.
 
-The private window is fully isolated from your normal window: separate storage, separate room code, separate broker registration. Two GM windows side-by-side, each running its own room, each broadcasting its own map to its own set of devices.
+**Easiest path *(new in v2.15)*** — pick **New Mappadux instance** from the ☰ menu. The new tab opens with `?instance=NAME` in the URL (e.g. `?instance=amber-falcon`); each instance has its own IndexedDB, its own room code, and its own player / projector spawn URLs. Two GMs side-by-side, each running their own game, no crosstalk.
 
-To share the same pack between both:
+You can also still use a **private / incognito window** for full browser-level isolation if that suits you better.
+
+To share the same pack between both instances:
 
 1. In the first window, **☰ → Save Map Pack…** to a `.mappadux` file.
-2. Open a private / incognito window and load Mappadux.
+2. Open the second instance and load Mappadux.
 3. **☰ → Load Map Pack** → pick the file you just saved.
 
-Or, if you've hosted the pack at a URL, open both windows with `?bundle=<URL>` and they'll both auto-load it.
+Or, if you've hosted the pack at a URL, open both windows with `?bundle=<URL>` and they'll both auto-load it. The `?bundle=` and `?instance=` params can be combined.
 
-Use cases this unlocks: floorplan tablet (room A's projector view) + handout tablet (room B's player view), or multiple battlemaps in parallel, or a "rehearsal" window where you stage the next scene while the live window keeps the players' current view going.
+Use cases this unlocks: floorplan tablet (room A's projector view) + handout tablet (room B's player view), multiple battlemaps in parallel, a "rehearsal" window where you stage the next scene while the live window keeps the players' current view going.
 
 ---
 
@@ -75,6 +77,7 @@ Room codes stay the same across page reloads. If a player's connection drops, th
 - **My Library** — every map image already in your pack. Hover for a thumbnail preview. Click **Use** to spin up a new map instance pointing at it (one image can back many maps with their own fog / markers / tracker config). Per-row **Store** / pen-edit / **⬇ download** / delete + footer bulk buttons (Store All Used / Store All / Delete All Unused), plus **ℹ Attributions & Licences**.
 - **Web Links** — paste image URLs (PNG / JPG / WebP). Each is validated; valid ones land in your library tagged `URL` and stream from the source at runtime.
 - **Upload** — drop a local image, name it, add. Uploaded images are always stored.
+- **+ Create a New Composite Map** *(v2.15)* — opens the Composite Map editor so you can tile multiple images into one map. See **Composite Maps** below.
 
 **Clone Map** — Duplicates the active map with a `- copy` suffix. The image is shared with the original (no extra storage); fog, markers, audio, and tracker settings are copied independently so you can edit each map separately.
 
@@ -90,7 +93,26 @@ Room codes stay the same across page reloads. If a player's connection drops, th
 
 **Start Animation** — visible only when the current handout has an animated reveal configured. Triggers the reveal on every connected player + projector.
 
+**Upper-layer transparency** *(v2.15, layered composites only)* — a slider on the Map panel that fades the topmost tile of a layered composite so you can preview what's beneath without painting Reveal Map Layer brushes. GM-only — players never see the partial fade.
+
 > Saving the whole pack — including all map / audio / image assets, fog, markers, splash, and theme — is in the **☰ menu** (Save Map Pack… / Save Encrypted Pack…). See **App Menu** above.
+
+---
+
+## Composite Maps *(new in v2.15)*
+
+A composite map stitches several image maps together into one playable surface. Two flavours:
+
+- **Modular** — tiles laid side-by-side: dungeon corridors, hex regions, overland strips. The grid pitch is taken from the master tile so squares line up.
+- **Layered** — tiles stacked on top of each other: a roof over an interior, a magical illusion concealing a chamber, a covered well. The **Reveal Map Layer** brush (in the MapFX dropdown next to Make Transparent) punches holes through the top tile to expose whatever's underneath.
+
+Open the Composite Map editor from the Add Map dialog's **+ Create a New Composite Map**, or right-click an existing composite in the library to re-open it.
+
+Inside the editor, every selected tile shows the unified chrome (see **Editor chrome** at the end of this file): move handle top-left, rotation handle above with a stem (snaps ±2° to 90 / 45 / 30 degree angles), flip-V top-centre, flip-H right-edge mid, lock-aspect + reset stacked above the bottom-right resize handle, red trashcan bottom-left. Right-click a tile for **Bring to Front / Forward / Send Backward / Send to Back** plus **Duplicate Map** and **Delete**.
+
+**Layered pill** lights up next to **Composite** on library rows when at least one pair of tiles overlaps — the signal that the layered-composite tools (Reveal Map Layer brush, Upper-layer transparency slider) light up on this map.
+
+The editor has per-modal Undo / Redo (Ctrl+Z / Ctrl+Y) for the duration of the session.
 
 ---
 
@@ -183,6 +205,8 @@ The GM canvas itself is now a workspace you can pan and zoom through:
 - **Off-screen indicators** — if you pan a viewport rectangle out of sight, a small pill appears at the edge of the canvas pointing toward it. Click to recentre the camera on that rect.
 
 The workspace is **GM-only** — players and projectors always render at the rectangle the GM has chosen, not the GM's current zoom level. Zoom in on the GM canvas to place markers precisely, then frame whatever you want players to see with the player viewport rect.
+
+**Undo / Redo *(new in v2.15)*** — two semi-transparent buttons sit at the top-centre of the GM canvas; they fade up on hover. Keyboard: **Ctrl+Z** undo, **Ctrl+Y** or **Ctrl+Shift+Z** redo. Covers fog / MapFX polygons and marker placements. Brush strokes collapse to a single undo entry so one Ctrl+Z wipes a whole run-on stroke rather than a single mouse-move's worth. The stack clears when you switch to a different map.
 
 ---
 
