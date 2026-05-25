@@ -19,7 +19,15 @@ export interface TransitionSelectParam {
   default: string;
 }
 
-export type TransitionParam = TransitionSliderParam | TransitionSelectParam;
+export interface TransitionColorParam {
+  type: 'color';
+  id: string;
+  label: string;
+  /** '#rrggbb' hex string. */
+  default: string;
+}
+
+export type TransitionParam = TransitionSliderParam | TransitionSelectParam | TransitionColorParam;
 
 // ─── Runtime Context ──────────────────────────────────────────────────────────
 

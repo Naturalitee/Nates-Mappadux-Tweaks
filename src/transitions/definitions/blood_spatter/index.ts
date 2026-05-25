@@ -7,20 +7,22 @@ import { animate, easeIn, easeOut } from '../../easing.ts';
  *   1. Lightning flashes  — two rapid white frames with a dark gap.
  *                           Skip with the toggle for non-horror uses
  *                           (e.g. a green-slime variant).
- *   2. Splatter fill      — coloured blots accumulate on a jittered
- *                           grid until the screen is completely
- *                           covered in the chosen colour.
- *   3. Runoff             — the filled splatter layer slides down
- *                           off-screen, revealing the new map as if
- *                           the blood is running off the bottom.
+ *   2. Splatter fill      — coloured blots accumulate across a
+ *                           dense grid; in the final stretch a
+ *                           same-colour wash fades in so the screen
+ *                           is FULLY filled with the chosen colour
+ *                           before the wipe starts.
+ *   3. Wibbly wipe        — a wavy liquid line descends down the
+ *                           frame, revealing the new map above as
+ *                           it falls. Glossy specular highlight
+ *                           rides the wave so the line reads as a
+ *                           liquid surface.
  *
- * Default colour is crimson (blood); pick the colour select for
- * green slime, blue ichor, black ink, purple poison, yellow acid.
+ * Controls: Duration / Colour (full picker) / Lightning on-off.
  *
- * v2.14.81 — rewrite. The previous five-control version was hard to
- * tune and rarely produced a satisfying full-screen result. This
- * version guarantees fill via a dense overlapping grid and reduces
- * the surface area to: duration / colour / lightning on-off.
+ * v2.14.82 — colour picker replaces the named-colour select; phase 2
+ * guarantees full fill before the wipe; phase 3 swapped from drip-
+ * edged to a wibbly liquid wave line.
  */
 
 /** Fixed-seed pseudo-random: deterministic per integer seed, ~uniform
@@ -44,16 +46,6 @@ interface Splatter {
   cy:     number;
   radius: number;
   lobes:  { dx: number; dy: number; r: number }[];
-}
-
-/** One pendant-shaped drip hanging off the descending wipe line.
- *  `halfWidth` + `length` are in CSS px; placement is determinist-
- *  ically jittered across the frame width so the silhouette feels
- *  organic, not regular. */
-interface Drip {
-  x:         number;
-  halfWidth: number;
-  length:    number;
 }
 
 /** Build a dense overlapping grid of splatter positions sized so the
@@ -104,117 +96,6 @@ function buildSplatters(w: number, h: number): Splatter[] {
   return splatters;
 }
 
-/** Build drip silhouettes for the runoff wipe. ~one drip per 60 CSS
- *  px so the line reads as drips-not-zigzag at any aspect; lengths
- *  vary 30..90 px so some hang lower than others (a pure even row
- *  reads as a regular comb). */
-function buildDrips(w: number): Drip[] {
-  const drips: Drip[] = [];
-  const count = Math.max(10, Math.round(w / 60));
-  for (let i = 0; i < count; i++) {
-    const slot = (i + 0.5) / count;
-    const jitter = (srand(i * 53 + 11) - 0.5) * 0.4 / count;
-    const x = (slot + jitter) * w;
-    drips.push({
-      x,
-      halfWidth: 14 + srand(i * 53 + 13) * 14,
-      length:    30 + srand(i * 53 + 17) * 60,
-    });
-  }
-  return drips;
-}
-
-/** Trace the bottom-edge clip path for the runoff wipe at cutY.
- *  Starts off-canvas left at the bottom, climbs to the cut line,
- *  draws each drip as a downward pendant, then closes back along
- *  the bottom. The resulting region == "the splat layer is still
- *  visible here". */
-function buildDripPath(
-  ctx:   CanvasRenderingContext2D,
-  cutY:  number,
-  drips: Drip[],
-  w:     number,
-  h:     number,
-): void {
-  ctx.beginPath();
-  ctx.moveTo(-10, h + 10);
-  ctx.lineTo(-10, cutY);
-  let lastX = -10;
-  for (const d of drips) {
-    const left  = d.x - d.halfWidth;
-    const right = d.x + d.halfWidth;
-    if (left > lastX) ctx.lineTo(left, cutY);
-    // Pendant: bezier control points pull out + down then inward
-    // to the tip, giving a teardrop bulge.
-    ctx.bezierCurveTo(
-      left - 2,              cutY + d.length * 0.45,
-      d.x - d.halfWidth * 0.30, cutY + d.length * 0.92,
-      d.x,                   cutY + d.length,
-    );
-    ctx.bezierCurveTo(
-      d.x + d.halfWidth * 0.30, cutY + d.length * 0.92,
-      right + 2,             cutY + d.length * 0.45,
-      right,                 cutY,
-    );
-    lastX = right;
-  }
-  if (lastX < w + 10) ctx.lineTo(w + 10, cutY);
-  ctx.lineTo(w + 10, h + 10);
-  ctx.closePath();
-}
-
-/** Stroke a thin glossy highlight along the drip silhouette so the
- *  blood reads as wet + reflective rather than flat. Uses a soft
- *  white-to-transparent gradient + a tiny offset above the cut line
- *  (suggests an overhead light source). */
-function drawDripGloss(
-  ctx:   CanvasRenderingContext2D,
-  cutY:  number,
-  drips: Drip[],
-  rgb:   { r: number; g: number; b: number },
-): void {
-  ctx.save();
-  // Thin bright stroke along the silhouette edge — fakes the
-  // reflective rim of wet liquid catching a key light.
-  ctx.lineWidth = 2;
-  ctx.strokeStyle = `rgba(255, 240, 240, 0.75)`;
-  ctx.beginPath();
-  ctx.moveTo(-10, cutY);
-  for (const d of drips) {
-    const left  = d.x - d.halfWidth;
-    const right = d.x + d.halfWidth;
-    ctx.lineTo(left, cutY);
-    ctx.bezierCurveTo(
-      left - 2,              cutY + d.length * 0.45,
-      d.x - d.halfWidth * 0.30, cutY + d.length * 0.92,
-      d.x,                   cutY + d.length,
-    );
-    ctx.bezierCurveTo(
-      d.x + d.halfWidth * 0.30, cutY + d.length * 0.92,
-      right + 2,             cutY + d.length * 0.45,
-      right,                 cutY,
-    );
-  }
-  ctx.stroke();
-  // Per-drip inner highlight: a small bright ellipse offset to the
-  // upper-left of each drip's bulge, suggesting a wet specular hit.
-  for (const d of drips) {
-    const hx = d.x - d.halfWidth * 0.35;
-    const hy = cutY + d.length * 0.55;
-    const rx = d.halfWidth * 0.18;
-    const ry = d.length * 0.10;
-    const grad = ctx.createRadialGradient(hx, hy, 0, hx, hy, Math.max(rx, ry) * 3);
-    grad.addColorStop(0,   `rgba(255, 255, 255, 0.55)`);
-    grad.addColorStop(0.6, `rgba(${rgb.r + 40}, ${rgb.g + 40}, ${rgb.b + 40}, 0.20)`);
-    grad.addColorStop(1,   'rgba(0, 0, 0, 0)');
-    ctx.fillStyle = grad;
-    ctx.beginPath();
-    ctx.ellipse(hx, hy, rx * 3, ry * 3, 0, 0, Math.PI * 2);
-    ctx.fill();
-  }
-  ctx.restore();
-}
-
 /** Draw one splatter (full opacity) into ctx using the supplied RGB.
  *  Uses overlapping radial gradients so the edge stays irregular. */
 function drawSplatter(
@@ -238,6 +119,67 @@ function drawSplatter(
   }
 }
 
+/** Wibbly liquid surface y(x) at the given baseline + animation
+ *  phase. Sum of three sines at different frequencies + phases gives
+ *  an organic "liquid level" look without reading as a sine wave. */
+function wibblyY(x: number, baseY: number, w: number, phase: number): number {
+  const u = x / Math.max(1, w);
+  const wave1 = Math.sin(u * Math.PI * 3.0 + phase * 0.6) * 18;
+  const wave2 = Math.sin(u * Math.PI * 7.5 + phase * 1.4) *  6;
+  const wave3 = Math.sin(u * Math.PI * 11.0 - phase * 0.9) *  3;
+  return baseY + wave1 + wave2 + wave3;
+}
+
+/** Trace the closed clip path: everything BELOW the wibbly line at
+ *  cutY (with off-canvas margins so nothing leaks at the edges). */
+function buildWibblyPath(
+  ctx:   CanvasRenderingContext2D,
+  cutY:  number,
+  w:     number,
+  h:     number,
+  phase: number,
+): void {
+  ctx.beginPath();
+  ctx.moveTo(-10, h + 10);
+  ctx.lineTo(-10, wibblyY(0, cutY, w, phase));
+  // Step across the width sampling the wave. 4 px per sample is dense
+  // enough for smooth curves at typical viewport sizes.
+  const step = 4;
+  for (let x = 0; x <= w; x += step) {
+    ctx.lineTo(x, wibblyY(x, cutY, w, phase));
+  }
+  ctx.lineTo(w + 10, wibblyY(w, cutY, w, phase));
+  ctx.lineTo(w + 10, h + 10);
+  ctx.closePath();
+}
+
+/** Stroke the wibbly line with a glossy specular highlight so the
+ *  liquid surface reads as wet + reflective. */
+function drawWibblyGloss(
+  ctx:   CanvasRenderingContext2D,
+  cutY:  number,
+  w:     number,
+  phase: number,
+): void {
+  ctx.save();
+  ctx.lineWidth = 2.5;
+  ctx.strokeStyle = 'rgba(255, 250, 250, 0.65)';
+  ctx.beginPath();
+  const step = 4;
+  ctx.moveTo(-10, wibblyY(0, cutY, w, phase));
+  for (let x = 0; x <= w; x += step) {
+    ctx.lineTo(x, wibblyY(x, cutY, w, phase));
+  }
+  ctx.lineTo(w + 10, wibblyY(w, cutY, w, phase));
+  ctx.stroke();
+  // Soft inner glow just below the highlight stroke — sells the
+  // liquid's body picking up the light.
+  ctx.lineWidth = 6;
+  ctx.strokeStyle = 'rgba(255, 240, 240, 0.18)';
+  ctx.stroke();
+  ctx.restore();
+}
+
 export default {
   id: 'blood_spatter',
   label: 'Blood Splatter',
@@ -253,17 +195,9 @@ export default {
       unit: 'ms',
     },
     {
-      type: 'select',
+      type: 'color',
       id: 'colour',
       label: 'Colour',
-      options: [
-        { value: '#8c080c', label: 'Crimson (blood)'      },
-        { value: '#15803d', label: 'Forest Green (slime)' },
-        { value: '#1e3a8a', label: 'Deep Blue (ichor)'    },
-        { value: '#111111', label: 'Ink Black'            },
-        { value: '#6b21a8', label: 'Toxic Purple'         },
-        { value: '#ca8a04', label: 'Acid Yellow'          },
-      ],
       default: '#8c080c',
     },
     {
@@ -288,9 +222,9 @@ export default {
     const useLightning = lightning === 'on';
 
     // Phase budget (% of total).
-    const dLight  = useLightning ? duration * 0.10 : 0;
-    const dFill   = duration * (useLightning ? 0.40 : 0.45);
-    const dRunoff = duration - dLight - dFill;
+    const dLight = useLightning ? duration * 0.10 : 0;
+    const dFill  = duration * (useLightning ? 0.40 : 0.45);
+    const dWipe  = duration - dLight - dFill;
 
     // Pre-build all splatter positions for this run.
     const splatters = buildSplatters(w, h);
@@ -300,7 +234,6 @@ export default {
       await animate(dLight, (t) => {
         ctx.clearRect(0, 0, w, h);
         ctx.drawImage(snapshot, 0, 0, w, h);
-        // Two flash spikes; dark gap between.
         const spike = (centre: number, width: number): number => {
           const d = Math.abs(t - centre);
           return d > width ? 0 : 1 - d / width;
@@ -319,7 +252,7 @@ export default {
 
     // ── Phase 2: Splatter fill ────────────────────────────────────────
     // Accumulate splatters onto an offscreen canvas so Phase 3 can
-    // slide the whole layer downward as one piece.
+    // sample the filled layer with the wibbly clip.
     let splatLayer: OffscreenCanvas | HTMLCanvasElement;
     let splatCtx: OffscreenCanvasRenderingContext2D | CanvasRenderingContext2D;
     if (typeof OffscreenCanvas !== 'undefined') {
@@ -333,56 +266,58 @@ export default {
     }
     let drawnSoFar = 0;
     await animate(dFill, (t) => {
-      // Drive how many splatters should be visible by now.
-      const target = Math.ceil(t * splatters.length);
+      // First 80% of the phase: accumulate splatters one-by-one.
+      // Each splatter only ever needs to be drawn once — its position
+      // doesn't change frame to frame, so the offscreen layer
+      // monotonically gains content.
+      const drawProgress = Math.min(1, t / 0.8);
+      const target = Math.ceil(drawProgress * splatters.length);
       for (let i = drawnSoFar; i < target; i++) {
         drawSplatter(splatCtx, splatters[i]!, rgb);
       }
       drawnSoFar = target;
-      // Composite display: snapshot under, accumulated splatters over.
+
+      // Composite display: snapshot underneath, splatter layer on top.
       ctx.clearRect(0, 0, w, h);
       ctx.drawImage(snapshot, 0, 0, w, h);
       ctx.drawImage(splatLayer as CanvasImageSource, 0, 0);
+
+      // Last 20% of the phase: fade a same-colour wash IN over the
+      // top so the screen smoothly transitions from "individual
+      // splatters with gradient edges" to "fully solid colour".
+      // Guarantees the wipe starts from a 100%-covered frame.
+      if (t > 0.8) {
+        const washAlpha = (t - 0.8) / 0.2;
+        ctx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, ${washAlpha})`;
+        ctx.fillRect(0, 0, w, h);
+      }
     }, easeOut, signal);
     if (signal?.aborted) return;
 
-    // Belt + braces: guarantee 100% fill at end of phase 2. Lay down
-    // every remaining splatter + a final opaque wash so any micro-
-    // gaps between the radial-gradient lobes fully close.
-    for (let i = drawnSoFar; i < splatters.length; i++) {
-      drawSplatter(splatCtx, splatters[i]!, rgb);
-    }
-    splatCtx.globalCompositeOperation = 'source-atop';
+    // Bake the final solid colour onto the splat layer itself so the
+    // wibbly clip in Phase 3 reveals the same solid colour rather
+    // than the now-stale splatter gradients.
     splatCtx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 1)`;
     splatCtx.fillRect(0, 0, w, h);
-    splatCtx.globalCompositeOperation = 'destination-over';
-    splatCtx.fillStyle = `rgba(${rgb.r}, ${rgb.g}, ${rgb.b}, 1)`;
-    splatCtx.fillRect(0, 0, w, h);
-    splatCtx.globalCompositeOperation = 'source-over';
 
-    // ── Phase 3: Runoff (drip-edged downward wipe) ────────────────────
-    // The cut line descends from above the top of the frame to just
-    // below the bottom. Above the line + drips: revealed (new map).
-    // Below: the filled splat layer still shows. A glossy specular
-    // highlight rides the wipe edge so the blood reads as wet,
-    // reflective material rather than a flat paint fill.
-    const drips = buildDrips(w);
-    const maxDrip = drips.reduce((m, d) => Math.max(m, d.length), 0);
-    await animate(dRunoff, (t) => {
+    // ── Phase 3: Wibbly wipe ──────────────────────────────────────────
+    // A wavy liquid line descends from above the top of the frame to
+    // just below the bottom. Above the line: revealed (new map).
+    // Below: the solid splat layer. Glossy specular stroke rides the
+    // line so the liquid surface reads as wet + reflective.
+    const waveMargin = 30; // amplitude headroom so the wave doesn't pop
+    await animate(dWipe, (t) => {
       ctx.clearRect(0, 0, w, h);
-      // Start with the cut line above the top so the first frame is
-      // still fully covered; end well below the bottom so even the
-      // longest drip's tip clears the frame.
-      const cutY = -maxDrip + easeIn(t) * (h + maxDrip * 2);
-      // Clip to the still-covered region (below the drip line) and
-      // draw the filled splat layer there.
+      const cutY = -waveMargin + easeIn(t) * (h + waveMargin * 2);
+      // Phase parameter animates the wave shape over time so the
+      // liquid surface ripples as it falls.
+      const phase = t * 6.0;
       ctx.save();
-      buildDripPath(ctx, cutY, drips, w, h);
+      buildWibblyPath(ctx, cutY, w, h, phase);
       ctx.clip();
       ctx.drawImage(splatLayer as CanvasImageSource, 0, 0);
       ctx.restore();
-      // Gloss highlight along the drip edge.
-      drawDripGloss(ctx, cutY, drips, rgb);
+      drawWibblyGloss(ctx, cutY, w, phase);
     }, undefined, signal);
   },
 } satisfies TransitionDefinition;

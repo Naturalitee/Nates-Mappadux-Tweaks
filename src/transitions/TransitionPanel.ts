@@ -46,6 +46,7 @@ export class TransitionPanel {
     switch (param.type) {
       case 'slider': return this.buildSlider(param);
       case 'select': return this.buildSelect(param);
+      case 'color':  return this.buildColor(param);
     }
   }
 
@@ -100,6 +101,24 @@ export class TransitionPanel {
     });
 
     row.appendChild(select);
+    return row;
+  }
+
+  private buildColor(param: Extract<TransitionParam, { type: 'color' }>): HTMLElement {
+    const row = this.createRow(param.id, param.label);
+    const value = (this.currentParams[param.id] as string) ?? param.default;
+
+    const input = document.createElement('input');
+    input.type = 'color';
+    input.value = value;
+    input.className = 'transition-color';
+
+    input.addEventListener('input', () => {
+      this.currentParams[param.id] = input.value;
+      this.onChangeFn({ ...this.currentParams });
+    });
+
+    row.appendChild(input);
     return row;
   }
 

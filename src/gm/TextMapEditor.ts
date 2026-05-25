@@ -812,7 +812,7 @@ export class TextMapEditor {
           });
           sliderRow.append(slider, valSpan);
           row.appendChild(sliderRow);
-        } else {
+        } else if (p.type === 'select') {
           const optSel = document.createElement('select');
           optSel.className = 'select-full';
           for (const opt of p.options) {
@@ -823,6 +823,16 @@ export class TextMapEditor {
           }
           optSel.addEventListener('change', () => { cur.params[p.id] = optSel.value; });
           row.appendChild(optSel);
+        } else if (p.type === 'color') {
+          // v2.14.82 — colour pickers reach the handout reveal panel
+          // too via the same shared transition param schema. Native
+          // <input type="color"> is enough; reveals only fire once
+          // per handout, so no live preview wiring needed.
+          const colourInput = document.createElement('input');
+          colourInput.type = 'color';
+          colourInput.value = (cur.params[p.id] as string) ?? p.default;
+          colourInput.addEventListener('input', () => { cur.params[p.id] = colourInput.value; });
+          row.appendChild(colourInput);
         }
         paramHost.appendChild(row);
       }
