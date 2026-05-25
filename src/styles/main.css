@@ -4880,6 +4880,15 @@ option.select-option--add {
   cursor: pointer;
 }
 
+/* v2.14.77 — Upper-layer-opacity slider. Sits in the fog-row--kind
+   layout next to Backdrop / Grid colour. Native range input given a
+   flex-grow so it fills the row's available width. */
+#map-upper-layer-opacity {
+  flex: 1 1 auto;
+  min-width: 0;
+  cursor: pointer;
+}
+
 /* v2.14.18 — Reset-view button. Sits just above the Fullscreen button,
    visible only once the player has zoomed/panned away from the GM crop.
    Same low-key chrome so it doesn't distract from the map. */

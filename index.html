@@ -114,6 +114,14 @@
           <span class="fog-row-label">Grid colour</span>
           <input type="color" id="map-grid-colour" class="map-grid-colour" value="#ffffff" title="Grid line colour used by both the Player View and the Scaled View when their Show Grid icon is on. Stored per-map — different maps can use different colours." />
         </div>
+        <!-- v2.14.77 — GM-only fade for the topmost tile of a layered
+             composite. Lets the GM preview the layer beneath without
+             painting reveal_layer polygons. Shown only when the active
+             map is a layered composite; never broadcast to viewers. -->
+        <div class="fog-row fog-row--kind" id="map-upper-layer-row" hidden>
+          <span class="fog-row-label">Upper layer</span>
+          <input type="range" id="map-upper-layer-opacity" min="0" max="100" value="100" title="Fade the topmost tile so the layer beneath shows through on the GM canvas. Preview-only — never affects what the players see." />
+        </div>
         <button id="map-grid-calibrate-btn" class="btn btn--ghost btn--sm btn--full" hidden title="The 1″ grid needs a calibrated pixels-per-inch. Click to calibrate this map first; then the grid colour swatch will appear here.">No Grid — calibrate map&hellip;</button>
         <div class="btn-row">
           <button id="swap-map-asset-btn" class="btn btn--ghost  btn--sm" title="Replace this map's underlying image with a different asset from your library. Fog, markers, and audio all stay attached to the map — only the image changes. Useful when you've redrawn the same map at higher resolution or want to switch between line-art and final-render versions.">Swap Asset&hellip;</button>

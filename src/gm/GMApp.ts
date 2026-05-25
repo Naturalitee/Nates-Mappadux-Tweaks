@@ -895,6 +895,30 @@ export class GMApp {
     });
   }
 
+  /** v2.14.77 — Map panel upper-layer-opacity row. Shows the GM-only
+   *  fade slider when the active map is a layered composite (has a
+   *  revealBackingBlob set), hides otherwise. Fires on every map
+   *  load + on composite save. Resets the slider to 100 on each
+   *  show so leaving + returning to a layered map starts opaque.
+   *
+   *  Called from _updateMapPanels alongside _updateMapGridPanel. */
+  private async _updateUpperLayerPanel(): Promise<void> {
+    const row    = document.getElementById('map-upper-layer-row');
+    const slider = document.getElementById('map-upper-layer-opacity') as HTMLInputElement | null;
+    if (!row || !slider) return;
+    const mapState = this.state.snapshot().map;
+    if (!mapState) { row.hidden = true; return; }
+    const storedMap = await getMap(mapState.id);
+    if (!storedMap) { row.hidden = true; return; }
+    const asset = await MapAssetStore.get(storedMap.mapAssetId);
+    const hasBacking = !!asset?.revealBackingBlob;
+    row.hidden = !hasBacking;
+    if (hasBacking) {
+      slider.value = '100';
+      this.renderer.setMainMapOpacity(1);
+    }
+  }
+
   /** v2.14.31 — Map panel grid-colour row. Shows a colour swatch when
    *  the active map is calibrated, or a "Calibrate first" button
    *  otherwise. Called whenever the active map (or its calibration)
@@ -2728,6 +2752,15 @@ export class GMApp {
     });
     mapGridColour?.addEventListener('change', () => {
       void this._setActiveMapGridColor(mapGridColour.value);
+    });
+
+    // v2.14.77 — GM-only upper-layer opacity slider for layered
+    // composites. Drives renderer.setMainMapOpacity directly — no
+    // broadcast, no IDB write; this is a transient editing aid only.
+    const upperLayerSlider = document.getElementById('map-upper-layer-opacity') as HTMLInputElement | null;
+    upperLayerSlider?.addEventListener('input', () => {
+      const o = parseInt(upperLayerSlider.value, 10) / 100;
+      this.renderer.setMainMapOpacity(isFinite(o) ? o : 1);
     });
     mapGridCalibrateBtn?.addEventListener('click', () => {
       // Re-use the existing recalibrate flow — same UX entry point.
@@ -4845,6 +4878,7 @@ export class GMApp {
       this._lastMapAssetMeta = null;
       this._lastMapAssetGridColor = null;
       this._updateMapGridPanel();
+      void this._updateUpperLayerPanel();
       if (warnEl) warnEl.hidden = true;
       this._broadcastRoles(false);
       return;
@@ -4857,6 +4891,7 @@ export class GMApp {
       this._lastMapAssetMeta = null;
       this._lastMapAssetGridColor = null;
       this._updateMapGridPanel();
+      void this._updateUpperLayerPanel();
       if (warnEl) warnEl.hidden = true;
       this._broadcastRoles(false);
       return;
@@ -4874,6 +4909,8 @@ export class GMApp {
     // v2.14.31 — cache + render the map-scoped grid colour swatch.
     this._lastMapAssetGridColor = asset.gridColor ?? null;
     this._updateMapGridPanel();
+    // v2.14.77 — also refresh the upper-layer-opacity row visibility.
+    void this._updateUpperLayerPanel();
     // Active-map calibration warning — visible when the map has no pps.
     if (warnEl) warnEl.hidden = !!asset.pixelsPerSquare;
     // Push fresh map metadata to the live primary projector so it re-crops at

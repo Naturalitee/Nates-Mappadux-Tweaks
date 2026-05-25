@@ -63,16 +63,15 @@ export class Renderer {
   // Layer meshes
   private mapMesh:      THREE.Mesh | null = null;
   private fogMesh:      THREE.Mesh | null = null;
-  /** v2.14.71 — Reveal-layer backing TEXTURE (no mesh). Painted with
-   *  the composite's "minus topmost tile" rasterise. The reveal_layer
+  /** v2.14.71 — Reveal-layer backing TEXTURE. Painted with the
+   *  composite's "minus topmost tile" rasterise. The reveal_layer
    *  shader samples this texture directly inside its polygon mask to
    *  positively draw the tile-below content on top of the main map.
    *
-   *  v2.14.70 mounted this as a backing PLANE at z<0, hoping the
-   *  'transparent' kind's alpha punching would expose it. That
-   *  failed because the punching is post-process (clip-pass replaces
-   *  with backdrop, not with whatever's behind in the scene). The
-   *  shader-based approach skips that whole pipeline.
+   *  v2.14.77 — also drives the GM-only upper-layer transparency
+   *  preview: a backing mesh at z=-0.005 shows whenever the texture
+   *  exists, so fading the main map's opacity reveals the tile
+   *  below globally without painting reveal_layer polygons.
    *
    *  Null whenever the active map isn't a layered composite. Shaders
    *  that opt in via `wantsBacking` get a 1x1 transparent placeholder
@@ -83,6 +82,17 @@ export class Renderer {
    *  uBacking placeholder when no real backing exists. Built once,
    *  reused across all shader planes on non-layered maps. */
   private _backingPlaceholder: THREE.Texture | null = null;
+  /** v2.14.77 — Backing-texture mesh under the main map (z=-0.005).
+   *  Mounted whenever mapBackingTexture exists; lets the GM-only
+   *  upper-layer transparency slider fade the main map to expose the
+   *  tile beneath without painting any reveal_layer polygons. */
+  private mapBackingMesh: THREE.Mesh | null = null;
+  /** v2.14.77 — GM-only fade applied to the main map's material
+   *  opacity. 1.0 = main map fully covers backing (default); 0 = main
+   *  fully transparent so backing shows through everywhere. Player +
+   *  projector keep this pinned at 1.0; GM wires the slider in the
+   *  Map panel for layered composites. */
+  private mainMapOpacity: number = 1.0;
   /** v2.12 — pack background colour. Tracked here rather than on
    *  scene.background because setting scene.background to a Color
    *  forces alpha = 1 on the framebuffer clear, which would destroy
@@ -901,6 +911,9 @@ export class Renderer {
         if (gen !== this.loadGen) { tex.dispose(); return; }
         tex.colorSpace = THREE.SRGBColorSpace;
         this.mapBackingTexture = tex;
+        // v2.14.77 — Mount the backing mesh if rebuildLayerMeshes
+        // already ran (race: backing decoded after main map).
+        this._ensureBackingMesh();
         // Hot-refresh any already-mounted reveal_layer shader planes
         // so they pick up the freshly-decoded backing texture. (If
         // the backing decode wins the race with the main map / fog
@@ -1971,16 +1984,54 @@ export class Renderer {
     }
   }
 
-  /** v2.14.71 — Dispose the reveal-layer backing texture. Safe to
-   *  call when nothing's set up (no-op). Called on every loadMap
-   *  before kicking off new decodes so a layered map followed by a
-   *  non-layered one cleans up properly. No mesh to remove — the
-   *  shader samples the texture directly. */
+  /** v2.14.77 — Dispose the reveal-layer backing texture + its mesh.
+   *  Safe to call when nothing's set up (no-op). Called on every
+   *  loadMap before kicking off new decodes so a layered map followed
+   *  by a non-layered one cleans up properly. */
   private _disposeBackingTexture(): void {
+    if (this.mapBackingMesh) {
+      this.scene.remove(this.mapBackingMesh);
+      this.mapBackingMesh.geometry.dispose();
+      (this.mapBackingMesh.material as THREE.Material).dispose();
+      this.mapBackingMesh = null;
+    }
     if (this.mapBackingTexture) {
       this.mapBackingTexture.dispose();
       this.mapBackingTexture = null;
     }
+  }
+
+  /** v2.14.77 — Mount the backing mesh under the main map (z=-0.005)
+   *  iff a backing texture exists + the main map mesh is already
+   *  there to give us an aspect ratio. Called from rebuildLayerMeshes
+   *  + from the backing decode callback (in case the backing arrives
+   *  after rebuild). */
+  private _ensureBackingMesh(): void {
+    if (this.mapBackingMesh) return;
+    if (!this.mapBackingTexture) return;
+    if (!this.mapMesh) return;
+    const geo = new THREE.PlaneGeometry(this.aspectRatio, 1);
+    const mat = new THREE.MeshBasicMaterial({
+      map: this.mapBackingTexture,
+      depthWrite: false,
+      transparent: true,
+    });
+    this.mapBackingMesh = new THREE.Mesh(geo, mat);
+    this.mapBackingMesh.position.z = -0.005;
+    this.scene.add(this.mapBackingMesh);
+  }
+
+  /** v2.14.77 — Set the main map plane's opacity. GM uses this to
+   *  fade the topmost tile of a layered composite so the backing
+   *  (tile-below) shows through globally. Player + projector keep it
+   *  pinned at 1.0. Clamped to [0, 1]. */
+  setMainMapOpacity(opacity: number): void {
+    const o = Math.max(0, Math.min(1, opacity));
+    this.mainMapOpacity = o;
+    if (this.mapMesh) {
+      (this.mapMesh.material as THREE.MeshBasicMaterial).opacity = o;
+    }
+    this.needsRender = true;
   }
 
   /** v2.14.71 — Lazy 1x1 transparent placeholder for the uBacking
@@ -2024,14 +2075,18 @@ export class Renderer {
       map: this.mapTexture!,
       depthWrite: false,
       transparent: true,
+      opacity: this.mainMapOpacity,
     });
     this.mapMesh = new THREE.Mesh(geo, mapMat);
     this.mapMesh.position.z = 0;
     this.scene.add(this.mapMesh);
 
-    // v2.14.71 — Reveal-layer backing is sampled directly by the
-    // reveal_layer shader (no scene mesh needed); see uBacking
-    // wiring in the per-kind shader-plane setup below.
+    // v2.14.77 — Re-mount the reveal-layer backing mesh (z=-0.005)
+    // whenever a backing texture exists. The GM-only upper-layer
+    // opacity slider drives mainMapOpacity, fading the main map +
+    // letting this backing plane show through globally — preview
+    // without painting reveal_layer polygons.
+    this._ensureBackingMesh();
 
     // Fog layer — transparent, composited on top. Hosts ALL overlay
     // polygons (fog + MapFX kinds) in the v2.12 unified system.
