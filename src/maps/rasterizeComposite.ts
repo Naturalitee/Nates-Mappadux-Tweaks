@@ -302,7 +302,12 @@ export async function rasterizeRevealBacking(asset: MapAsset): Promise<Rasterize
   const { compositeHasOverlap } = await import('./compositeOverlap.ts');
   const assetById = new Map<string, MapAsset>();
   for (const inp of fullInputs) assetById.set(inp.asset.id, inp.asset as MapAsset);
-  if (!compositeHasOverlap(asset, assetById)) return null;
+  const overlap = compositeHasOverlap(asset, assetById);
+  // Defensive logging while v2.15.1 settles — remove once verified.
+  console.debug('[rasterizeRevealBacking] tiles=', (asset.compositeTiles ?? []).length,
+                'overlap=', overlap,
+                'compositeAspect=', asset.compositeAspect ?? '(default 4/3)');
+  if (!overlap) return null;
   const drawnInputs  = fullInputs.slice(0, -1);
   return rasterizeFromTiles(drawnInputs, asset.compositeAspect ?? DEFAULT_OUTPUT_ASPECT, fullInputs);
 }
