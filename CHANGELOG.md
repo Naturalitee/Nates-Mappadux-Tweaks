@@ -33,9 +33,9 @@ interior; a magical illusion over a chamber). Highlights:
 
 ### Blood Splatter transition
 
-A new map-change transition for horror games. Pick a colour
-(crimson, slime green, ichor blue, ink black, toxic purple, acid
-yellow) and toggle the opening lightning flash on or off.
+A new map-change transition for horror games. Pick any colour
+from the colour picker, and dial lightning intensity from 0
+(none) to 100 (frequent strikes that illuminate the scene).
 
 ### Library polish
 

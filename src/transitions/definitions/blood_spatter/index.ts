@@ -119,20 +119,38 @@ function drawSplatter(
   }
 }
 
-/** v2.14.84 — Returns the lightning-flash white-overlay alpha at a
- *  given normalised position in the WHOLE transition (0..1). Five
- *  evenly-spaced flashes across the duration so the lightning carries
- *  through every phase instead of dying in the first 10% of the
- *  timeline. Each flash spikes to full white and falls off in ~5% of
- *  total duration — quick enough to read as a strike, slow enough
- *  to actually be seen. */
-function lightningAlpha(tGlobal: number): number {
-  const centres = [0.06, 0.26, 0.48, 0.70, 0.90];
-  const half    = 0.030;
+/** v2.14.85 — Lightning-flash white-overlay alpha at a given
+ *  normalised position in the WHOLE transition (0..1). Eleven
+ *  events spread throughout the duration; each has a `tier` that
+ *  governs which intensities the event fires at. Low intensity =
+ *  only the top-tier strikes fire (sparse drama); high intensity
+ *  = all eleven fire including the secondary stroke-and-flicker
+ *  pairs (mimics real lightning's strobe pattern). */
+function lightningAlpha(tGlobal: number, intensity: number): number {
+  if (intensity <= 0) return 0;
+  // Each entry: c = centre (0..1 of total), a = peak alpha,
+  // tier = the intensity threshold above which this event fires.
+  // Events are ordered tier-ascending so lower intensities see the
+  // most dramatic primary strikes first; secondaries kick in higher.
+  const events: { c: number; a: number; tier: number }[] = [
+    { c: 0.28, a: 1.00, tier: 0.10 },
+    { c: 0.55, a: 1.00, tier: 0.25 },
+    { c: 0.78, a: 1.00, tier: 0.40 },
+    { c: 0.04, a: 1.00, tier: 0.50 },
+    { c: 0.93, a: 0.95, tier: 0.60 },
+    { c: 0.18, a: 0.95, tier: 0.70 },
+    { c: 0.45, a: 0.95, tier: 0.78 },
+    { c: 0.68, a: 0.85, tier: 0.85 },
+    { c: 0.09, a: 0.75, tier: 0.90 }, // secondary
+    { c: 0.33, a: 0.70, tier: 0.95 }, // secondary
+    { c: 0.84, a: 0.75, tier: 1.00 }, // secondary
+  ];
+  const half = 0.025;       // 5% wide event → ~100 ms at duration=2 s
   let alpha = 0;
-  for (const c of centres) {
-    const d = Math.abs(tGlobal - c);
-    if (d < half) alpha = Math.max(alpha, 1 - d / half);
+  for (const ev of events) {
+    if (ev.tier > intensity) continue;   // doesn't fire at this level
+    const d = Math.abs(tGlobal - ev.c);
+    if (d < half) alpha = Math.max(alpha, ev.a * (1 - d / half));
   }
   return alpha;
 }
@@ -224,25 +242,26 @@ export default {
       default: '#8c080c',
     },
     {
-      type: 'select',
-      id: 'lightning',
-      label: 'Lightning flash',
-      options: [
-        { value: 'on',  label: 'On'  },
-        { value: 'off', label: 'Off' },
-      ],
-      default: 'on',
+      type: 'slider',
+      id: 'lightning_intensity',
+      label: 'Lightning',
+      min: 0,
+      max: 100,
+      step: 5,
+      default: 75,
+      unit: '%',
     },
   ],
 
   async play({ overlay, snapshot, params, signal }) {
     const duration  = (params['duration']  as number) ?? 2000;
     const colourHex = (params['colour']    as string) ?? '#8c080c';
-    const lightning = (params['lightning'] as string) ?? 'on';
+    const lightningIntensity = Math.max(0, Math.min(1,
+      ((params['lightning_intensity'] as number) ?? 75) / 100,
+    ));
     const ctx = overlay.getContext('2d')!;
     const { width: w, height: h } = overlay;
     const rgb = hexToRgb(colourHex);
-    const useLightning = lightning === 'on';
 
     // Phase budget (% of total). v2.14.84 — dedicated lightning
     // phase removed; flashes now fire on a global timeline through
@@ -258,15 +277,25 @@ export default {
     // Helper: stamp the lightning flash over the current frame.
     // Called LAST in each phase's draw callback so the flash sits on
     // top of everything (splatters, snapshot, the wibbly wipe, the
-    // newly-revealed map). tGlobal is the position in the WHOLE
-    // transition (0..1) so the five flash centres fire at the right
-    // wall-clock moments regardless of which phase is active.
+    // newly-revealed map).
+    //
+    // v2.14.85 — uses 'lighter' blending so the flash ILLUMINATES
+    // whatever's underneath instead of painting pure white over it.
+    // Blood (or any chosen colour) gets brightened toward white as
+    // the strike peaks — at peak alpha=1 the result clamps to pure
+    // white; at lower alpha the colour reads as "lit up from above"
+    // (e.g. crimson → pink-white). The whole frame flashes WITH the
+    // strike — the way a real lightning strike actually catches the
+    // scene around it.
     const drawLightning = (tGlobal: number): void => {
-      if (!useLightning) return;
-      const a = lightningAlpha(tGlobal);
+      if (lightningIntensity <= 0) return;
+      const a = lightningAlpha(tGlobal, lightningIntensity);
       if (a <= 0) return;
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
       ctx.fillStyle = `rgba(255, 250, 245, ${a})`;
       ctx.fillRect(0, 0, w, h);
+      ctx.restore();
     };
 
     // ── Phase 2: Splatter fill ────────────────────────────────────────
