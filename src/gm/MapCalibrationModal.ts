@@ -618,10 +618,19 @@ export class MapCalibrationModal {
       if (dist <= 0 || N <= 0) return null;
       return dist / N;
     };
-    const updateCalGrid = () => {
+    // v2.14.93 — accept an explicit pps so callers that KNOW the
+    // target (H/V solver, DPI dropdown) can bypass derivePps's
+    // line-distance calc. derivePps reads the (possibly clamped)
+    // line endpoints — if repositionLineFromPps had to shorten the
+    // line to fit the map bounds, the derived pps is the SHORTER
+    // line's pps, not what the GM typed. Passing the solver's pps
+    // directly fixes the "grid doesn't update when I type 6x6" bug.
+    const updateCalGrid = (ppsOverride?: number | null) => {
       gridOverlayG.innerHTML = '';
       if (!gridOverlayCb.checked) return;
-      const pps = derivePps();
+      const pps = (ppsOverride !== undefined && ppsOverride !== null)
+        ? ppsOverride
+        : derivePps();
       if (!pps || pps < 2) return;
       // v2.14.32 — absolute origin is map(0, 0). Gridlines are at
       // map.x = n*pps + offsetX, map.y = n*pps + offsetY for every
@@ -642,7 +651,7 @@ export class MapCalibrationModal {
       }
       gridOverlayG.innerHTML = lines.join('');
     };
-    gridOverlayCb.addEventListener('change', updateCalGrid);
+    gridOverlayCb.addEventListener('change', () => updateCalGrid());
     // v2.14.41 — render the grid immediately on open. The hidden
     // checkbox defaults to `checked` so the panel says "on", but
     // nothing drew gridlines until the first interaction. Now the
@@ -710,14 +719,22 @@ export class MapCalibrationModal {
     gridHInput.addEventListener('input', () => {
       autoFillCounterpart('h'); updateGridFeedback();
       const g = solveGrid();
-      if (g.ok && g.pps !== null) repositionLineFromPps(g.pps);
-      updateCalGrid();
+      if (g.ok && g.pps !== null) {
+        repositionLineFromPps(g.pps);
+        updateCalGrid(g.pps);
+      } else {
+        updateCalGrid();
+      }
     });
     gridVInput.addEventListener('input', () => {
       autoFillCounterpart('v'); updateGridFeedback();
       const g = solveGrid();
-      if (g.ok && g.pps !== null) repositionLineFromPps(g.pps);
-      updateCalGrid();
+      if (g.ok && g.pps !== null) {
+        repositionLineFromPps(g.pps);
+        updateCalGrid(g.pps);
+      } else {
+        updateCalGrid();
+      }
     });
 
     // v2.14.2 — picking a DPI back-fills H × V using the map's actual
@@ -738,7 +755,9 @@ export class MapCalibrationModal {
       updateGridFeedback();
       dpiSelect.value = String(dpi);
       repositionLineFromPps(dpi);
-      updateCalGrid();
+      // v2.14.93 — pass the chosen DPI directly so the grid shows
+      // at THAT pitch regardless of whether the line had to clamp.
+      updateCalGrid(dpi);
     });
 
     // v2.14.3 — N is the line's "how many squares does this represent"
