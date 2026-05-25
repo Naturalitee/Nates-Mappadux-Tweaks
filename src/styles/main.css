@@ -4669,6 +4669,14 @@ option.select-option--add {
   outline: 1px solid rgba(255, 255, 255, 0.18);
   outline-offset: -1px;
 }
+/* v2.14.83 — Centre-snap indicator: bright green outline pulse
+   while the dragging tile is magnetised to a matching tile's
+   centre. Tells the GM "you've snapped — let go to lock". */
+.composite-editor-tile--centre-snap {
+  outline: 2px solid rgba(90, 240, 122, 0.95);
+  outline-offset: -2px;
+  box-shadow: 0 0 12px rgba(90, 240, 122, 0.55);
+}
 /* v2.14.59 — Inner content wrapper takes the flip scale so chrome
    buttons (rotate handle, flip toggles, trashcan) on the outer
    tile don't mirror with the image. */

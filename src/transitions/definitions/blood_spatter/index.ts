@@ -121,12 +121,17 @@ function drawSplatter(
 
 /** Wibbly liquid surface y(x) at the given baseline + animation
  *  phase. Sum of three sines at different frequencies + phases gives
- *  an organic "liquid level" look without reading as a sine wave. */
+ *  an organic "liquid level" look without reading as a sine wave.
+ *
+ *  v2.14.83 — amplitudes dropped ~5x. Earlier wave amplitudes (18 /
+ *  6 / 3 px) made the line read as "ribbon flapping" rather than a
+ *  liquid surface; now it's virtually straight with a slight
+ *  organic wiggle, matching the user's "simple line wipe" call. */
 function wibblyY(x: number, baseY: number, w: number, phase: number): number {
   const u = x / Math.max(1, w);
-  const wave1 = Math.sin(u * Math.PI * 3.0 + phase * 0.6) * 18;
-  const wave2 = Math.sin(u * Math.PI * 7.5 + phase * 1.4) *  6;
-  const wave3 = Math.sin(u * Math.PI * 11.0 - phase * 0.9) *  3;
+  const wave1 = Math.sin(u * Math.PI * 2.0 + phase * 0.3) * 4.0;
+  const wave2 = Math.sin(u * Math.PI * 5.0 + phase * 0.7) * 1.5;
+  const wave3 = Math.sin(u * Math.PI * 9.0 - phase * 0.5) * 0.8;
   return baseY + wave1 + wave2 + wave3;
 }
 
@@ -305,7 +310,7 @@ export default {
     // just below the bottom. Above the line: revealed (new map).
     // Below: the solid splat layer. Glossy specular stroke rides the
     // line so the liquid surface reads as wet + reflective.
-    const waveMargin = 30; // amplitude headroom so the wave doesn't pop
+    const waveMargin = 12; // amplitude headroom so the wave doesn't pop
     await animate(dWipe, (t) => {
       ctx.clearRect(0, 0, w, h);
       const cutY = -waveMargin + easeIn(t) * (h + waveMargin * 2);

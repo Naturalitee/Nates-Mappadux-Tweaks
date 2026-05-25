@@ -919,12 +919,56 @@ export class CompositeMapEditor {
       // matches the cursor regardless of pan/zoom state.
       const cssToNormX = 1 / (this._canvasW * this._zoom);
       const cssToNormY = 1 / (this._canvasH * this._zoom);
+
+      // v2.14.83 — Centre-snap targets. Captured ONCE at drag start
+      // (matching tiles don't change during a single drag) — every
+      // tile with the same on-screen pixel dimensions (within 2%
+      // tolerance) becomes a snap point at its centre. The common
+      // layered-composite case is two tiles of identical size
+      // stacked perfectly; this makes that snap-into-place feel
+      // automatic without the GM having to nudge.
+      const draggingW = parseFloat(el.style.width);
+      const draggingH = parseFloat(el.style.height);
+      const matchTol  = 0.02;
+      const centreSnaps: { x: number; y: number }[] = [];
+      const allTileEls = this.overlay?.querySelectorAll<HTMLElement>('.composite-editor-tile') ?? [];
+      for (const otherEl of Array.from(allTileEls)) {
+        if (otherEl === el) continue;
+        const otherW = parseFloat(otherEl.style.width);
+        const otherH = parseFloat(otherEl.style.height);
+        if (!isFinite(otherW) || !isFinite(otherH) || otherW <= 0 || otherH <= 0) continue;
+        if (Math.abs(otherW - draggingW) / draggingW > matchTol) continue;
+        if (Math.abs(otherH - draggingH) / draggingH > matchTol) continue;
+        const otherId = otherEl.dataset['tileId'];
+        if (!otherId) continue;
+        const otherTile = this._findTile(otherId);
+        if (!otherTile) continue;
+        centreSnaps.push({ x: otherTile.x, y: otherTile.y });
+      }
+      // Snap radius in norm — generous enough to "magnet" the tile
+      // when the GM is clearly going for the same centre, tight
+      // enough that they can still freeform-place adjacent.
+      const centreSnapRadius = 0.04;
+
       const onMove = (ev: PointerEvent) => {
         const dxNorm = (ev.clientX - startX) * cssToNormX;
         const dyNorm = (ev.clientY - startY) * cssToNormY;
         let nx = startNX + dxNorm;
         let ny = startNY + dyNorm;
-        // Snap to the master grid if enabled + available.
+        // v2.14.83 — Centre-snap takes priority over grid-snap.
+        // If the cursor lands inside the magnet zone around a
+        // matching tile's centre, lock to that centre exactly.
+        let snappedToCentre = false;
+        for (const m of centreSnaps) {
+          if (Math.abs(nx - m.x) < centreSnapRadius && Math.abs(ny - m.y) < centreSnapRadius) {
+            nx = m.x;
+            ny = m.y;
+            snappedToCentre = true;
+            break;
+          }
+        }
+        // Snap to the master grid if enabled + available — and the
+        // centre-snap didn't already lock the position.
         // v2.14.58 — _masterCellNorm is the cell size in X-norm
         // (= cellPx / canvasW). For non-square editor canvases the Y
         // norm equivalent differs (= cellPx / canvasH). Using the
@@ -934,7 +978,7 @@ export class CompositeMapEditor {
         // grid in Y was at 75%-cell intervals (for a 4:3 canvas)
         // rather than full-cell. Now uses per-axis snap pitches that
         // match the actually-drawn grid pixels.
-        if (this._snapToGrid && this._masterCellNorm && this._masterCellNorm > 0 && this._canvasH > 0) {
+        if (!snappedToCentre && this._snapToGrid && this._masterCellNorm && this._masterCellNorm > 0 && this._canvasH > 0) {
           const cellNormX = this._masterCellNorm;
           const cellNormY = this._masterCellNorm * (this._canvasW / this._canvasH);
           // Grid origin = canvas centre (matches _drawReferenceGrid).
@@ -945,12 +989,19 @@ export class CompositeMapEditor {
         const tileH = parseFloat(el.style.height);
         el.style.left = `${nx * this._canvasW - tileW / 2}px`;
         el.style.top  = `${ny * this._canvasH - tileH / 2}px`;
+        // Visual indicator: green outline when the tile is locked to
+        // a matching centre. Lets the GM SEE the snap engaged.
+        el.classList.toggle('composite-editor-tile--centre-snap', snappedToCentre);
         tile.x = nx;
         tile.y = ny;
       };
       const onUp = (ev: PointerEvent) => {
         el.releasePointerCapture(ev.pointerId);
         el.style.cursor = 'grab';
+        // v2.14.83 — Clear the centre-snap indicator on drop; the
+        // tile keeps its snapped position but the chrome should
+        // settle back to its normal selection state.
+        el.classList.remove('composite-editor-tile--centre-snap');
         el.removeEventListener('pointermove', onMove);
         el.removeEventListener('pointerup',     onUp);
         el.removeEventListener('pointercancel', onUp);
