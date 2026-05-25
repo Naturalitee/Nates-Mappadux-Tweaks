@@ -152,6 +152,13 @@ export class TextMapEditor {
    *  Stores a snapshot of the source element's data (not a live ref) so
    *  paste creates a true duplicate. */
   private clipboardElement: TextMapElement | null = null;
+  /** v2.14.99 — undo / redo stacks (per-modal-session, same pattern
+   *  as the Composite Editor). Snapshots capture the element list +
+   *  current selection. Cleared on close. Ctrl+Z / Ctrl+Y in the
+   *  onKey handler; structural mutations (add / delete / drag start)
+   *  push the BEFORE-state to undo before running. */
+  private _undoStack: { elements: TextMapElement[]; selectedId: string | null }[] = [];
+  private _redoStack: { elements: TextMapElement[]; selectedId: string | null }[] = [];
 
   private onKey = (e: KeyboardEvent): void => {
     if (e.key === 'Escape' && !this.dragState) {
@@ -188,8 +195,61 @@ export class TextMapEditor {
     if (ctrl && e.key.toLowerCase() === 'v' && this.clipboardElement) {
       e.preventDefault();
       this._pasteFromClipboard();
+      return;
+    }
+    // v2.14.99 — Ctrl+Z = undo, Ctrl+Y or Ctrl+Shift+Z = redo.
+    // Same convention as the Composite Editor. Skipped above when
+    // an input / contenteditable has focus so the browser's native
+    // text undo wins inside text elements.
+    if (ctrl && e.key.toLowerCase() === 'z' && !e.shiftKey) {
+      e.preventDefault();
+      this._undo();
+      return;
+    }
+    if (ctrl && (e.key.toLowerCase() === 'y' || (e.key.toLowerCase() === 'z' && e.shiftKey))) {
+      e.preventDefault();
+      this._redo();
     }
   };
+
+  /** v2.14.99 — Push the current element state to the undo stack
+   *  BEFORE a structural mutation. Caps the stack at 100 entries +
+   *  clears redo (new action invalidates the redo path). */
+  private _pushUndo(): void {
+    this._undoStack.push({
+      elements: JSON.parse(JSON.stringify(this.elements)) as TextMapElement[],
+      selectedId: this.selectedId,
+    });
+    if (this._undoStack.length > 100) this._undoStack.shift();
+    this._redoStack = [];
+  }
+
+  private _snapshotCurrent(): { elements: TextMapElement[]; selectedId: string | null } {
+    return {
+      elements: JSON.parse(JSON.stringify(this.elements)) as TextMapElement[],
+      selectedId: this.selectedId,
+    };
+  }
+
+  private _undo(): void {
+    if (this._undoStack.length === 0) return;
+    this._redoStack.push(this._snapshotCurrent());
+    const snap = this._undoStack.pop()!;
+    this.elements = snap.elements;
+    this.selectedId = snap.selectedId;
+    this._renderAllElements();
+    if (this.selectedId) this._select(this.selectedId);
+  }
+
+  private _redo(): void {
+    if (this._redoStack.length === 0) return;
+    this._undoStack.push(this._snapshotCurrent());
+    const snap = this._redoStack.pop()!;
+    this.elements = snap.elements;
+    this.selectedId = snap.selectedId;
+    this._renderAllElements();
+    if (this.selectedId) this._select(this.selectedId);
+  }
 
   /** Snapshot the selected element into the internal clipboard. Deep
    *  enough — TextMapElement values are flat (primitives + string
@@ -215,6 +275,7 @@ export class TextMapEditor {
     } else {
       fresh = { ...src, id: 'img-' + generateId(), x: offsetX, y: offsetY };
     }
+    this._pushUndo();
     this.elements.push(fresh);
     this._mountElement(fresh);
     this._select(fresh.id);
@@ -294,6 +355,10 @@ export class TextMapEditor {
     if (this.overlay) this.overlay.remove();
     this.overlay = null;
     document.removeEventListener('keydown', this.onKey);
+    // v2.14.99 — undo history is per-modal-session; reset on close
+    // so reopening the editor starts with empty stacks.
+    this._undoStack = [];
+    this._redoStack = [];
     this.resolver?.(value);
     this.resolver = null;
   }
@@ -1408,6 +1473,7 @@ export class TextMapEditor {
       if (this._lastFontChosen)  el.fontFamily = this._lastFontChosen;
       if (this._lastColorChosen) el.color      = this._lastColorChosen;
     }
+    this._pushUndo();
     this.elements.push(el);
     const node = this._mountElement(el);
     this._select(el.id);
@@ -1435,6 +1501,7 @@ export class TextMapEditor {
         onPick: (asset) => {
           picked = true;
           const el = newImageElement(asset.id);
+          this._pushUndo();
           this.elements.push(el);
           this._mountElement(el);
           this._select(el.id);
@@ -1457,6 +1524,7 @@ export class TextMapEditor {
   private _deleteElement(id: string): void {
     const idx = this.elements.findIndex((e) => e.id === id);
     if (idx < 0) return;
+    this._pushUndo();
     this.elements.splice(idx, 1);
     const node = this.elementNodes.get(id);
     node?.remove();
@@ -1473,6 +1541,9 @@ export class TextMapEditor {
     this._select(id);
     const el = this.elements.find((x) => x.id === id);
     if (!el) return;
+    // v2.14.99 — snapshot BEFORE the move/resize so undo reverts
+    // to the pre-drag geometry.
+    this._pushUndo();
     const rect = this.pageEl.getBoundingClientRect();
     const target = e.currentTarget as HTMLElement;
     target.setPointerCapture(e.pointerId);
