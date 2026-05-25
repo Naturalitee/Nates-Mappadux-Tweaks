@@ -99,6 +99,73 @@ Room codes stay the same across page reloads. If a player's connection drops, th
 
 ---
 
+## Stagecraft — Lighting + Soundtracks *(new in v2.16, beta)*
+
+Mappadux v2.16 adds a thin reference + recall layer over tools you
+already use for table atmosphere. Mappadux doesn't try to author
+your lighting setup or curate your music — that lives in WLED /
+Home Assistant / YouTube. Mappadux just remembers which preset
+goes with which map and fires it on demand.
+
+### Setup is in Settings
+
+Open **☰ → Settings → Stagecraft (Lighting + Automation)**. Three
+subsections:
+
+- **WLED endpoints** — add one row per WLED-firmware device on
+  your LAN. Label + URL (e.g. `192.168.1.42` or
+  `wled-table.local`). Use **Test** to confirm the device responds.
+  Mappadux only references presets you've already authored in
+  WLED's own UI, so make those first.
+- **Home Assistant** — paste an HA URL + a long-lived access
+  token (HA → Profile → Long-Lived Access Tokens). Mappadux can
+  then call any scene, script, or automation you've defined in HA.
+- **Soundtracks (YouTube)** — toggle to add the **Soundtracks**
+  panel to the sidebar. No login needed; YouTube IFrame Player
+  handles playback in the background.
+
+None of the credentials (WLED endpoints, HA tokens, Spotify auth)
+travel with `.mappadux` bundles. They stay on this machine.
+
+### Lighting / Automation panel — per-map presets
+
+Once you've configured at least one WLED endpoint or HA link, a
+**Lighting / Automation** panel appears in the sidebar. For each
+map you load, you can pick:
+
+- A **WLED preset** per configured device (dropdown lists presets
+  fetched live from the device).
+- An **HA scene / script / automation** to fire.
+
+Switching to a different map fires the assignments for the new
+map. The fire is asynchronous and soft-fails — a flaky LED strip
+never blocks the map switch. **Fire now (test)** re-fires the
+current map's assignments without switching maps. **Refresh
+devices** re-pulls preset / scene lists (use this after authoring
+new presets in WLED).
+
+Per-map assignments DO travel with `.mappadux` bundles. A
+recipient with their own WLED setup can use the same preset
+names / ids to recreate the lighting design.
+
+### Soundtracks panel — pack-level background music
+
+Distinct from the per-map **Soundboard** (which handles sound
+effects and per-map ambience): Soundtracks are pack-level
+background music that survives map switches. Four slots:
+
+- **Pre-setup** — what plays while you prep before the session.
+- **Theme / Intro** — fires manually at session start (one-shot).
+- **Outro** — fires manually at session end (one-shot).
+- **Playlist** — auto-advances between tracks; loops at end.
+
+Paste any YouTube or YouTube Music URL (or the 11-character video
+id) into a slot's input, click Add. Use Play / Pause / Stop and
+the per-slot volume slider. Tracks travel in `.mappadux` exports
+— recipients see the same queued URLs.
+
+---
+
 ## Composite Maps *(new in v2.15)*
 
 A composite map stitches several image maps together into one playable surface. Two flavours:

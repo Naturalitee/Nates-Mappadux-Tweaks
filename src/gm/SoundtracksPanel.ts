@@ -119,6 +119,30 @@ export class SoundtracksPanel {
     header.append(playBtn, stopBtn);
     row.appendChild(header);
 
+    // Volume slider (drives the YT player when this slot is active).
+    const volRow = document.createElement('div');
+    volRow.className = 'soundtrack-volume-row';
+    const volLabel = document.createElement('span');
+    volLabel.className = 'settings-stat-sub';
+    const initialVol = slot?.volume ?? 80;
+    volLabel.textContent = `Vol ${initialVol}%`;
+    const volSlider = document.createElement('input');
+    volSlider.type = 'range';
+    volSlider.min = '0';
+    volSlider.max = '100';
+    volSlider.value = String(initialVol);
+    volSlider.addEventListener('input', () => {
+      const v = parseInt(volSlider.value, 10);
+      volLabel.textContent = `Vol ${v}%`;
+      if (isActive && this.player) this.player.setVolume(v);
+    });
+    volSlider.addEventListener('change', () => {
+      const v = parseInt(volSlider.value, 10);
+      void this._setSlotVolume(key, v);
+    });
+    volRow.append(volLabel, volSlider);
+    row.appendChild(volRow);
+
     // Track list.
     const tracksEl = document.createElement('div');
     tracksEl.className = 'soundtrack-tracks';
@@ -187,6 +211,16 @@ export class SoundtracksPanel {
     };
     await this.host.saveConfig(next);
     this._renderSlots();
+  }
+
+  private async _setSlotVolume(key: SlotKey, volume: number): Promise<void> {
+    const cfg = this.host.getConfig();
+    const slot = cfg[key] ?? { tracks: [] };
+    const next: SoundtracksConfig = {
+      ...cfg,
+      [key]: { ...slot, volume },
+    };
+    await this.host.saveConfig(next);
   }
 
   private async _removeTrack(key: SlotKey, index: number): Promise<void> {
