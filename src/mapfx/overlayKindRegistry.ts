@@ -147,6 +147,15 @@ export interface OverlayKindEntry {
    */
   shader?:           string;
   /**
+   * v2.14.74 — Force this kind's shader plane to render on the GM
+   * canvas too (overriding the GM's general flat-fill-for-shader-
+   * kinds policy). Used by reveal_layer so the GM sees the actual
+   * layer-below preview while painting, not a black blob. Defaults
+   * false — most shader kinds stay flat-fill on GM for perf +
+   * editing simplicity.
+   */
+  gmRendersShader?:  boolean;
+  /**
    * v2.12 — GM-tunable shader parameters for this kind. Each entry
    * declares a slider that appears in the FoW/MapFX panel whenever this
    * kind is active. Values persist per-map via FogState.shaderParams and
@@ -525,7 +534,7 @@ export const OVERLAY_KIND_REGISTRY: Record<OverlayKind, OverlayKindEntry> = {
   // rather than punching framebuffer alpha and letting the clip-pass
   // fill with backdrop (which is what 'transparent' does and why
   // v2.14.70 painted backdrop instead of the layer-below).
-  reveal_layer: { id: 'reveal_layer', label: 'Reveal Map Layer', iconSvg: SVG_REVEAL_LAYER, defaultColor: '#000000', defaultRadius: 30, blend: 'normal',          animated: false, selectByInterior: true,  allowColor: false, z: 1,  shader: 'reveal_layer' },
+  reveal_layer: { id: 'reveal_layer', label: 'Reveal Map Layer', iconSvg: SVG_REVEAL_LAYER, defaultColor: '#000000', defaultRadius: 30, blend: 'normal',          animated: false, selectByInterior: true,  allowColor: false, z: 1,  shader: 'reveal_layer', gmRendersShader: true },
 };
 
 /** Order for the kind dropdown — fog first (most-used + click-priority),

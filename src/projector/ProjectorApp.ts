@@ -397,7 +397,6 @@ export class ProjectorApp {
     const { unpackCompositeBundle } = await import('../maps/compositeWireFormat.ts');
     const { rasterizeFromTiles }    = await import('../maps/rasterizeComposite.ts');
     const inputs = unpackCompositeBundle(blob, composite);
-    console.log(`[reveal_layer] projector: composite unpacked with ${inputs.length} tile(s)`);
     const result = await rasterizeFromTiles(inputs, composite.aspect);
     if (!result) return { renderable: blob };
     const renderable = await result.blob.arrayBuffer();
@@ -405,19 +404,12 @@ export class ProjectorApp {
     // tile). Lets the Reveal Map Layer brush's alpha holes expose
     // the layer below rather than the backdrop. Skip for single-
     // tile composites — nothing underneath.
-    if (inputs.length < 2) {
-      console.log('[reveal_layer] projector: <2 tiles, no backing generated');
-      return { renderable };
-    }
+    if (inputs.length < 2) return { renderable };
     // Pass full inputs as extentInputs so the backing PNG shares the
     // main composite's dimensions exactly.
     const backingResult = await rasterizeFromTiles(inputs.slice(0, -1), composite.aspect, inputs);
-    if (!backingResult) {
-      console.warn('[reveal_layer] projector: backing rasterise returned null');
-      return { renderable };
-    }
+    if (!backingResult) return { renderable };
     const backing = await backingResult.blob.arrayBuffer();
-    console.log(`[reveal_layer] projector: backing rasterised ${backingResult.imageWidth}x${backingResult.imageHeight}, ${backing.byteLength} bytes`);
     return { renderable, backing };
   }
 

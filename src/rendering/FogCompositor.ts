@@ -68,6 +68,12 @@ export class FogCompositor {
       // includeShaderKinds=true so those kinds render as flat fills here
       // instead — the GM gets a simple, perf-friendly view while editing.
       if (kind.shader && !includeShaderKinds) continue;
+      // v2.14.74 — Kinds flagged gmRendersShader (e.g. reveal_layer)
+      // ALWAYS go through their shader plane, on every surface
+      // including the GM. Skip flat-fill regardless of
+      // includeShaderKinds so we don't paint a black blob over the
+      // actual layer-below preview.
+      if (kind.gmRendersShader) continue;
 
       // Per-kind blend mode.
       this.ctx.save();

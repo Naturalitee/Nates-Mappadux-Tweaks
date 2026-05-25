@@ -720,7 +720,7 @@ export class Renderer {
         this._disposeShaderPlanes();
         this.kindMaskCompositor.dispose();
         this.kindMaskCompositor = new KindMaskCompositor();
-        if (this.shaderPlanesEnabled) {
+        if (this.shaderPlanesEnabled || this._anyForcedShaderPolys(this.lastFogState)) {
           this.kindMaskCompositor.redraw(this.lastFogState.polygons);
           this._syncShaderPlanes();
         }
@@ -894,43 +894,23 @@ export class Renderer {
     // leak the old plane.
     this._disposeBackingTexture();
     if (backingBuffer) {
-      console.log(`[reveal_layer] loadMap: backing buffer received, ${backingBuffer.byteLength} bytes — decoding…`);
       const backingBlob = new Blob([backingBuffer]);
       const backingUrl  = URL.createObjectURL(backingBlob);
-      // v2.14.72 — expose the backing as a downloadable URL via a
-      // global helper so the GM can call __dmrDownloadBacking() in
-      // DevTools to inspect the actual pixels. The URL itself is
-      // revoked once the texture decodes — re-blob from the helper.
-      const backingDebugBlob = backingBlob;
-      (window as unknown as { __dmrDownloadBacking: () => void }).__dmrDownloadBacking = () => {
-        const url = URL.createObjectURL(backingDebugBlob);
-        const a = document.createElement('a');
-        a.href = url; a.download = 'reveal-backing.png'; a.click();
-        URL.revokeObjectURL(url);
-      };
       new THREE.TextureLoader().load(backingUrl, (tex) => {
         URL.revokeObjectURL(backingUrl);
         if (gen !== this.loadGen) { tex.dispose(); return; }
         tex.colorSpace = THREE.SRGBColorSpace;
         this.mapBackingTexture = tex;
-        const img = tex.image as HTMLImageElement;
-        console.log(`[reveal_layer] backing decoded: ${img?.naturalWidth}x${img?.naturalHeight}. Call __dmrDownloadBacking() to inspect.`);
-        // v2.14.71 — Hot-refresh any already-mounted reveal_layer
-        // shader planes so they pick up the freshly-decoded backing
-        // texture. (If the backing decode wins the race with the
-        // main map / fog rebuild, shaderPlanes won't exist yet and
-        // the texture is wired at first build instead.)
+        // Hot-refresh any already-mounted reveal_layer shader planes
+        // so they pick up the freshly-decoded backing texture. (If
+        // the backing decode wins the race with the main map / fog
+        // rebuild, shaderPlanes won't exist yet and the texture is
+        // wired at first build instead.)
         for (const entry of this.shaderPlanes.values()) {
           const mat = entry.material;
-          if (mat.uniforms['uBacking'])    mat.uniforms['uBacking']!.value    = tex;
-          if (mat.uniforms['uHasBacking']) mat.uniforms['uHasBacking']!.value = 1.0;
+          if (mat.uniforms['uBacking']) mat.uniforms['uBacking']!.value = tex;
         }
-      }, undefined, (err) => {
-        console.error('[reveal_layer] backing decode FAILED', err);
       });
-    } else {
-      console.log('[reveal_layer] loadMap: no backing buffer (non-layered map or single-tile composite).');
-      delete (window as unknown as { __dmrDownloadBacking?: () => void }).__dmrDownloadBacking;
     }
 
     const mediaKind = Renderer._sniffMediaKind(buffer);
@@ -991,7 +971,7 @@ export class Renderer {
         this._disposeShaderPlanes();
         this.kindMaskCompositor.dispose();
         this.kindMaskCompositor = new KindMaskCompositor();
-        if (this.shaderPlanesEnabled) {
+        if (this.shaderPlanesEnabled || this._anyForcedShaderPolys(this.lastFogState)) {
           this.kindMaskCompositor.redraw(this.lastFogState.polygons);
           this._syncShaderPlanes();
         }
@@ -1013,11 +993,27 @@ export class Renderer {
     // GM view: render shader-driven kinds as flat fills too (perf + simplicity
     // while editing). Player/projector: skip them here, shader planes own them.
     this.fogCompositor.redraw(fog, 0, !this.shaderPlanesEnabled);
-    if (this.shaderPlanesEnabled) {
+    // v2.14.74 — Always sync shader planes when there are any
+    // gmRendersShader polygons (currently reveal_layer), even when
+    // shaderPlanesEnabled is false on the GM. The plane sync filters
+    // polygons internally so the GM only spins up planes for the
+    // forced kinds, not every shader-driven kind.
+    if (this.shaderPlanesEnabled || this._anyForcedShaderPolys(fog)) {
       this.kindMaskCompositor.redraw(fog.polygons);
       this._syncShaderPlanes();
     }
     this.needsRender = true;
+  }
+
+  /** v2.14.74 — Returns true if any polygon's kind opts into
+   *  gmRendersShader. Used so the GM canvas spins up shader planes
+   *  for reveal_layer (etc.) even though general shader plane
+   *  rendering is off. */
+  private _anyForcedShaderPolys(fog: FogState): boolean {
+    for (const p of fog.polygons) {
+      if (overlayKind(p.kind).gmRendersShader) return true;
+    }
+    return false;
   }
 
   /** v2.12 — set whether this Renderer instance should spin up shader
@@ -1045,7 +1041,14 @@ export class Renderer {
    *  longer exist. Re-positions / re-sizes existing planes when their
    *  polygon's bbox changes (vertex drag, etc.). */
   private _syncShaderPlanes(): void {
-    const activePolys = this.kindMaskCompositor.activePolygons();
+    // v2.14.74 — on the GM (shaderPlanesEnabled=false) we only spin
+    // up planes for kinds that explicitly opt in via gmRendersShader
+    // (currently reveal_layer). Player / projector keep the full
+    // set as before.
+    const activePolys = this.kindMaskCompositor.activePolygons().filter((p) => {
+      if (this.shaderPlanesEnabled) return true;
+      return overlayKind(p.kind).gmRendersShader === true;
+    });
     const activeIds = new Set(activePolys.map((p) => p.id));
 
     // Drop planes for polygons that no longer exist.
@@ -1146,10 +1149,8 @@ export class Renderer {
         // because the backing PNG was rasterised at the main map's
         // exact dimensions — same plane → same map-UV.
         if (shader.wantsBacking) {
-          baseUniforms['uBacking']    = { value: this.mapBackingTexture ?? this._getBackingPlaceholder() };
-          baseUniforms['uBackingUv']  = { value: new THREE.Vector4(mapUvX, mapUvY, mapUvW, mapUvH) };
-          baseUniforms['uHasBacking'] = { value: this.mapBackingTexture ? 1.0 : 0.0 };
-          console.log(`[reveal_layer] plane built for poly ${poly.id} kind=${poly.kind}, uHasBacking=${this.mapBackingTexture ? 1 : 0}, bbox=${mapUvX.toFixed(2)},${mapUvY.toFixed(2)} ${mapUvW.toFixed(2)}x${mapUvH.toFixed(2)}`);
+          baseUniforms['uBacking']   = { value: this.mapBackingTexture ?? this._getBackingPlaceholder() };
+          baseUniforms['uBackingUv'] = { value: new THREE.Vector4(mapUvX, mapUvY, mapUvW, mapUvH) };
         }
         // Blend mode follows the kind. Fire ('screen') and similar
         // glow-y kinds use additive so radiance reads as light over
@@ -1216,8 +1217,6 @@ export class Renderer {
         if (backU) backU.value = this.mapBackingTexture ?? this._getBackingPlaceholder();
         const backUvU = entry.material.uniforms['uBackingUv'];
         if (backUvU) (backUvU.value as THREE.Vector4).set(mapUvX, mapUvY, mapUvW, mapUvH);
-        const hasBackU = entry.material.uniforms['uHasBacking'];
-        if (hasBackU) hasBackU.value = this.mapBackingTexture ? 1.0 : 0.0;
       }
     }
 
