@@ -1,5 +1,75 @@
 # Changelog
 
+## v2.15.0 — DRAFT (to be dated at release cut)
+
+### Map Compositor — tile maps together, layered or modular
+
+The v2.15 headline. You can now combine multiple map images into
+a single playable map — side-by-side for modular layouts (towns,
+overland regions), or stacked for layered effects (a roof over an
+interior; a magical illusion over a chamber). Highlights:
+
+- **Composite Map editor.** New full-screen modal you reach via
+  "+ Create a New Composite Map" in the library. Drag tiles to
+  position; rotate (snaps to 90 / 45 / 30 degree families); resize
+  from the corner with aspect-lock + reset-to-default; flip
+  horizontally / vertically. Snap-to-grid by default so tiles align
+  on the master tile's grid pitch.
+- **Right-click any tile** for the layer menu: Bring to Front /
+  Forward / Send Backward / Send to Back, plus Delete. Stack order
+  survives Save + carries to every viewer.
+- **"Layered" pill** appears next to "Composite" on library rows
+  whenever a composite's tiles overlap — signals that the layered-
+  composite tools (below) light up on this map.
+- **Reveal Map Layer brush.** Pick it from the MapFX dropdown
+  (next to Make Transparent). On a layered composite, painting
+  exposes the tile directly underneath; on non-layered maps it's
+  a visual no-op. Marching-ant border draws purple to read clearly
+  over the revealed content.
+- **Upper-layer transparency slider** (GM-only) on the Map panel
+  for layered composites. Fade the top tile globally to preview
+  what's beneath without painting brushes — never visible to
+  players.
+
+### Blood Spatter horror transition
+
+A new map-change transition for the genres where the GM wants the
+table to flinch. Four phases: heartbeat dim → lightning flash →
+crimson splatters erupt across the frame → drip + reveal. Five
+sliders (duration, intensity, spread, lightning brightness, drip
+reach) let you tune the menace. Procedural — no audio, no
+textures.
+
+### Library polish
+
+- **Click pills to filter.** Above the My Library list, a row of
+  clickable pills mirrors the asset tags (Composite, Layered,
+  Text, Animated, Stored, Unused, Scaled, ...). Click a pill to
+  narrow the view; multi-select ANDs the filters; Clear chip
+  appears on the right when any filter is active.
+- **Hazard markers for missing maps.** If a map in your selection
+  list points at an asset that's been deleted (or didn't ride
+  along in a bundle import), the row now flags itself with a
+  warning glyph and orange text instead of silently masquerading
+  as a normal image map.
+- **Flat-stroke icons** replaced the older glyph icons (edit
+  pencil, download arrow, remove X) across the Map / Image /
+  Sound asset modals. Inherits the host button colour so danger
+  buttons go red, ghost buttons go dim.
+
+### Smaller fixes you may notice
+
+- Grid colour you pick in the Map panel now actually sticks across
+  reloads (previously broadcast in-session but never persisted).
+- Full-map view's "drag the move handle to pop a 50% rect"
+  shortcut removed — was jarring after the broader rect-edit
+  improvements; use the explicit view presets / resize handles
+  instead.
+- Clone Map now keeps "+ Add New Map" at the very bottom of the
+  dropdown after cloning.
+- reveal_layer brush polygons no longer revert to plain fog on
+  reload (storage migration was dropping the unknown kind).
+
 ## v2.14.36 — 2026-05-24
 
 ### View-windows refactor to unify, calibration improvements + fixes
