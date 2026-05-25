@@ -302,23 +302,7 @@ export async function rasterizeRevealBacking(asset: MapAsset): Promise<Rasterize
   const { compositeHasOverlap } = await import('./compositeOverlap.ts');
   const assetById = new Map<string, MapAsset>();
   for (const inp of fullInputs) assetById.set(inp.asset.id, inp.asset as MapAsset);
-  const overlap = compositeHasOverlap(asset, assetById);
-  // Defensive logging while the v2.15.x layered-state fix settles —
-  // remove once verified. console.log (not debug) so it shows at
-  // default DevTools verbosity. Also dumps tile geometry so we can
-  // diagnose any false-positive overlap.
-  const tilesSummary = (asset.compositeTiles ?? []).map((t) => ({
-    id: t.id.slice(0, 6),
-    x: +t.x.toFixed(3),
-    y: +t.y.toFixed(3),
-    scale: t.scale,
-    scaleY: t.scaleY,
-    rotation: t.rotation,
-  }));
-  console.log('[rasterizeRevealBacking] overlap=', overlap,
-              'compositeAspect=', asset.compositeAspect ?? '(default 4/3)',
-              'tiles=', tilesSummary);
-  if (!overlap) return null;
+  if (!compositeHasOverlap(asset, assetById)) return null;
   const drawnInputs  = fullInputs.slice(0, -1);
   return rasterizeFromTiles(drawnInputs, asset.compositeAspect ?? DEFAULT_OUTPUT_ASPECT, fullInputs);
 }

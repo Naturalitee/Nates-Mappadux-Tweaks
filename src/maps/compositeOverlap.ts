@@ -44,6 +44,20 @@ export function tileBoundsNorm(
   };
 }
 
+/** Minimum overlap (in composite-norm units) for two tiles to count
+ *  as actually overlapping. ~0.1% of canvas in either axis — small
+ *  enough to catch any genuine overlap, large enough to absorb the
+ *  floating-point residue left by snap math + the grid-snap rounding
+ *  that "perfectly butted" tiles always sit a few ULPs off-edge from.
+ *
+ *  v2.15.4 — chosen after Alex spotted that two grid-snapped 6×6
+ *  tiles butted edge-to-edge (x = 0.25, x = 0.5, both scale 0.25)
+ *  were registering as overlapping. Their bounds shared the edge
+ *  at x = 0.375 nominally, but the actual stored x carried a tiny
+ *  positive bias from `Math.round((nx - 0.5) / cell) * cell + 0.5`
+ *  in the snap path, pushing one bound past the other by ~1e-7. */
+const OVERLAP_EPS = 0.001;
+
 export function compositeHasOverlap(
   asset: MapAsset,
   assetById: Map<string, MapAsset>,
@@ -55,7 +69,10 @@ export function compositeHasOverlap(
   for (let i = 0; i < bounds.length; i++) {
     for (let j = i + 1; j < bounds.length; j++) {
       const a = bounds[i]!, b = bounds[j]!;
-      if (a.x0 < b.x1 && a.x1 > b.x0 && a.y0 < b.y1 && a.y1 > b.y0) return true;
+      if (a.x0 < b.x1 - OVERLAP_EPS && a.x1 > b.x0 + OVERLAP_EPS
+       && a.y0 < b.y1 - OVERLAP_EPS && a.y1 > b.y0 + OVERLAP_EPS) {
+        return true;
+      }
     }
   }
   return false;

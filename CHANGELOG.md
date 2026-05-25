@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.15.4 — 2026-05-25
+
+Followup to v2.15.1's overlap-gated layering: edge-touching tiles
+(grid-snapped, butted side-by-side) were registering as overlapping
+because the snap path leaves the stored x / y a few floating-point
+ULPs off the nominal edge. Strict `<` in the AABB test treated that
+sliver as overlap. Added a 0.001 (composite-norm) epsilon so tiles
+have to overlap by more than ~0.1% of canvas in both axes before
+counting as layered. Still catches every genuine overlap; ignores
+the float noise.
+
+(v2.15.2 + v2.15.3 were diagnostic-only — log lines to locate this
+bug. The logs are gone in v2.15.4.)
+
 ## v2.15.1 — 2026-05-25
 
 Same-day patch caught during post-release testing — three reported
