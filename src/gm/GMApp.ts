@@ -929,7 +929,13 @@ export class GMApp {
   private _lastMapAssetGridColor: string | null = null;
 
   /** v2.14.31 — persist the new grid colour on the active map's
-   *  asset and push it to live viewers via map_meta_update. */
+   *  asset and push it to live viewers via map_meta_update.
+   *  v2.14.76 — was calling MapAssetStore.update with `mapState.id`,
+   *  which is the StoredMap id, NOT the MapAsset id. update silently
+   *  no-ops on unknown ids so the broadcast worked (colour visible
+   *  in-session) but the persist never happened — on next map load
+   *  the picked colour was gone. Now fetches the StoredMap first and
+   *  passes its mapAssetId. */
   private async _setActiveMapGridColor(color: string): Promise<void> {
     const mapState = this.state.snapshot().map;
     if (!mapState) return;
@@ -938,7 +944,10 @@ export class GMApp {
     // joining AFTER this colour pick sees it on initial connect
     // (without us having to wait for the next refreshProjectorMapInfo).
     this.host.setLastMapGridColor(color);
-    await MapAssetStore.update(mapState.id, { gridColor: color });
+    const storedMap = await getMap(mapState.id);
+    if (storedMap) {
+      await MapAssetStore.update(storedMap.mapAssetId, { gridColor: color });
+    }
     this.host.broadcast({
       type: 'map_meta_update',
       gridColor: color,
@@ -5501,6 +5510,20 @@ export class GMApp {
       }
     }
     this.mapSelect.insertBefore(opt, insertBefore);
+    // v2.14.76 — defensive: ensure the + Add Map sentinel + its
+    // separator always end up LAST in the dropdown after any
+    // insertion. Earlier clones were reportedly landing below the
+    // sentinel; whatever the cause (race / refresh / stale anchor)
+    // this guarantees the sentinel is always at the end so the GM
+    // never sees a real map below "+ Add New Map…".
+    if (addSentinel) {
+      if (separator && separator !== this.mapSelect.lastElementChild?.previousElementSibling) {
+        this.mapSelect.appendChild(separator);
+      }
+      if (addSentinel !== this.mapSelect.lastElementChild) {
+        this.mapSelect.appendChild(addSentinel);
+      }
+    }
   }
 
   /** Persist a rename of the active map, triggered from the EditableSelect.
