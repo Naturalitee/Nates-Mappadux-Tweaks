@@ -88,6 +88,7 @@ Players connect over peer-to-peer (PeerJS); no server infrastructure beyond stat
   | Wipe | Directional wipe (6 directions) with a bright edge glow |
   | Terminal Clear | 80×25 character-grid wipe with phosphor green flash |
   | Static Dissolve | Randomised block-by-block dissolve with static noise |
+  | Blood Splatter | For horror games. Pick any colour, dial lightning intensity 0–100. |
 
   Transitions are extensible — each lives in its own folder under `src/transitions/definitions/` with its own configurable parameters.
 
@@ -138,7 +139,16 @@ Players connect over peer-to-peer (PeerJS); no server infrastructure beyond stat
 
 - **Image Assets Library** *(new in v2.11)* — a third first-class asset library alongside Maps and Sounds. Marker icons + handout images live here with the same Library / Web Links / Upload taxonomy as audio, plus built-in connectors for **Lucide** (~1500 MIT-licensed icons) and **game-icons.net** (~4000 CC-BY 3.0 fantasy / sci-fi / abstract icons). Attribution flows through the unified credits modal.
 
+- **Composite Maps** *(new in v2.15)* — combine multiple map images into a single playable map. Two flavours, mix-and-match in the same composite:
+  - **Modular** — tile maps side-by-side (towns, dungeon corridors, overland regions). Drop tiles onto the canvas, drag to position, snap to a master grid so cells line up across tiles.
+  - **Layered** — stack tiles for roof-over-interior, illusion-over-chamber, before-and-after reveals. When two tiles are the same dimensions, dragging the upper one magnetically snaps to the lower one's centre for pixel-perfect alignment.
+  - **Per-tile controls** — rotate (with snap to 90 / 45 / 30 degree angles), resize with optional aspect lock, flip horizontally / vertically, reset to original scale. Right-click any tile for Bring to Front / Forward / Backward / Send to Back, plus **Duplicate Tile** (cheap clone — same image asset, no extra storage).
+  - **Reveal Map Layer** MapFX brush — on a layered composite, paint to expose the tile directly underneath rather than the backdrop. The GM canvas previews the reveal as you paint; a slider above the map fades the top tile globally for inspection without painting.
+  - **Undo / Redo** — toolbar buttons inside the editor (and Ctrl+Z / Ctrl+Y) walk back through any change you've made this session. Stack clears when you close the editor — no lingering history.
+  - **The Library knows** — composites get a purple **Composite** pill; layered composites (with overlapping tiles) get an additional cyan **Layered** pill, signalling that the Reveal Map Layer brush is meaningful here.
+
 - **Bundle import/export** — save and restore your entire pack as a single `.json` file. **Stored** assets (uploads + anything you've explicitly Stored) travel with their blobs and work offline on the recipient. **URL** assets travel as references only and re-fetch on first use, keeping bundle size small.
+- **Open New Instance** *(new in v2.15)* — Hamburger → **Open New Instance** opens a fresh, independent Mappadux in a new browser tab with its own library and its own room. Use it to split the party across two GM screens (each with its own player connections), or to keep handouts on one tab + battlemaps on the other, or to experiment without touching your live pack. The two instances don't sync — drag a `.mappadux` bundle into the new tab if you want the same pack in both.
 - **Auto-save** — all per-map settings (fog polygons, filter, view position, background colour) save automatically to browser IndexedDB.
 - **PWA support** — installable as an app on desktop and mobile.
 - **GPU-efficient rendering** — static filters render only on change; animated filters run at full frame rate only when needed.
