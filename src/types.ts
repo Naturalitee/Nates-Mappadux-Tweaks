@@ -1446,6 +1446,14 @@ export interface SoundtrackSlot {
    *  content track lands in the slot; ignored for single-track
    *  content. */
   shuffle?: boolean;
+  /** v2.15.34 — Restart-vs-resume on switch-back. When true, the
+   *  slot starts from the beginning every time it's selected;
+   *  when false, it resumes from where it left off. Missing =
+   *  use the per-content default: single tracks default to
+   *  Restart, loops + playlists default to Resume (those are
+   *  the cases where carrying on where you left off feels
+   *  natural). User toggle stores the explicit value. */
+  restart?: boolean;
   /** Trim — only meaningful when `track` is a single track. */
   startSec?: number;
   endSec?:   number;

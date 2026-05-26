@@ -54,6 +54,21 @@ const ICON_SHUFFLE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none
 const ICON_TYPE_SILENT   = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" y1="9" x2="16" y2="15"/><line x1="16" y1="9" x2="22" y2="15"/></svg>';
 const ICON_TYPE_TRACK    = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
 const ICON_TYPE_PLAYLIST = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15V6"/><circle cx="18.5" cy="17.5" r="2.5"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/></svg>';
+// v2.15.34 — Restart-vs-resume toggle. Lucide rotate-ccw — a clear
+// "back to the start" arrow distinct from the prev-track icon used
+// by the transport bar.
+const ICON_RESTART = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
+
+/** Effective Restart-vs-Resume for a slot. If the user has
+ *  explicitly set slot.restart, use that. Otherwise default by
+ *  content kind: single tracks restart; playlists + loops resume. */
+function _effectiveRestart(slot: SoundtrackSlot): boolean {
+  if (slot.restart !== undefined) return slot.restart;
+  if (!slot.track) return true;
+  if (_isPlaylistContent(slot.track)) return false;
+  if (slot.loop) return false;
+  return true;
+}
 
 interface ResumeState {
   /** Position in seconds within the current track. */
@@ -361,7 +376,7 @@ export class SoundtracksPanel {
         row.appendChild(nextBtn);
       }
     }
-    // Loop + (Shuffle if playlist) always present alongside.
+    // Loop + (Shuffle if playlist) + Restart/Resume toggle.
     row.appendChild(this._renderIconToggle({
       icon:    ICON_LOOP,
       title:   'Loop',
@@ -376,6 +391,16 @@ export class SoundtracksPanel {
         onClick: () => void this._updateSlot(slot.id, { shuffle: !(slot.shuffle !== false) }),
       }));
     }
+    // v2.15.34 — Restart-vs-Resume toggle. Active state (accent
+    // highlight) = Restart (always start at the slot's start
+    // point); inactive = Resume (continue where it left off).
+    const restartOn = _effectiveRestart(slot);
+    row.appendChild(this._renderIconToggle({
+      icon:    ICON_RESTART,
+      title:   restartOn ? 'Restart' : 'Resume',
+      active:  restartOn,
+      onClick: () => void this._updateSlot(slot.id, { restart: !restartOn }),
+    }));
     return row;
   }
 
@@ -695,7 +720,13 @@ export class SoundtracksPanel {
     const loop            = !!slot.loop;
     const shuffle         = slot.shuffle !== false;  // default true
 
-    const resume = this.resumeStates.get(slot.id);
+    // v2.15.34 — Restart mode skips the saved resume state for
+    // this slot. Single-track Restart still honours slot.startSec
+    // (which may be > 0) — that's the configured trim point, not a
+    // literal zero — because the load path falls through to
+    // slot.startSec when no resume position is supplied.
+    const useResume = !_effectiveRestart(slot);
+    const resume = useResume ? this.resumeStates.get(slot.id) : undefined;
     if (track.kind === 'youtube') {
       const isFirst = !this.ytPlayer;
       const p = await this._ensureYouTubePlayer(isFirst ? { videoId: track.videoId } : undefined);
