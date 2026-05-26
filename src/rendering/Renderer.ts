@@ -923,6 +923,12 @@ export class Renderer {
           const mat = entry.material;
           if (mat.uniforms['uBacking']) mat.uniforms['uBacking']!.value = tex;
         }
+        // v2.15.30 — Kick a render pass. Without this, the uniform
+        // gets updated but the next frame might not draw until some
+        // unrelated state-change ticks the loop, which is what made
+        // map reveals "sometimes" not appear on the player view
+        // until a browser refresh.
+        this.needsRender = true;
       });
     }
 

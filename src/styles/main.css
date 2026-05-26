@@ -4047,6 +4047,18 @@ option.select-option--add {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
+  /* v2.15.30 — min-width:0 on flex children lets the label-input
+     shrink below its content width when the slot is narrow,
+     otherwise the input bullies the buttons out past the right
+     edge of the slot card. */
+  min-width: 0;
+}
+.soundtrack-slot-header > .btn {
+  flex: 0 0 auto;
+}
+.soundtrack-slot-header > .soundtrack-slot-label-input {
+  flex: 1 1 auto;
+  min-width: 0;
 }
 .soundtrack-slot-label {
   font-weight: 600;

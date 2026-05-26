@@ -304,10 +304,25 @@ export async function createYouTubePlayer(opts?: CreateYouTubePlayerOpts): Promi
       if (opts?.startSeconds !== undefined) arg.startSeconds = opts.startSeconds;
       if (auto) player.loadPlaylist(arg);
       else      player.cuePlaylist(arg);
-      // setLoop / setShuffle have to come AFTER the playlist load
-      // (they're no-ops without a loaded playlist).
-      try { player.setLoop(opts?.loop ?? false); }       catch { /* nothing */ }
-      try { player.setShuffle(opts?.shuffle ?? false); } catch { /* nothing */ }
+      // setLoop reliably works immediately after load — it just sets
+      // a flag the player consults at end-of-playlist.
+      try { player.setLoop(opts?.loop ?? false); } catch { /* nothing */ }
+      // v2.15.30 — setShuffle is documented as needing the playlist
+      // to be loaded first; calling it synchronously after
+      // loadPlaylist no-ops on most YT IFrame versions because the
+      // playlist queue hasn't been built yet. Defer to the FIRST
+      // onStateChange (any state except UNSTARTED=-1 means the
+      // playlist is processed enough for setShuffle to take).
+      if (opts?.shuffle !== undefined) {
+        const wantShuffle = opts.shuffle;
+        const onceOnState = (state: number): void => {
+          if (state === YT_STATE.UNSTARTED) return;
+          try { player.setShuffle(wantShuffle); } catch { /* nothing */ }
+          const i = stateListeners.indexOf(onceOnState);
+          if (i >= 0) stateListeners.splice(i, 1);
+        };
+        stateListeners.push(onceOnState);
+      }
     },
     getCurrentTime() { try { return player.getCurrentTime(); }   catch { return 0; } },
     getPlaylistIndex() { try { return player.getPlaylistIndex(); } catch { return -1; } },
