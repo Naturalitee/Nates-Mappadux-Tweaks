@@ -998,7 +998,20 @@ export class SoundtracksPanel {
   /** Volume ramp on the named engine. Returns when the fade is done
    *  (or has been cancelled by a newer _selectSlot). */
   private async _fade(kind: 'youtube' | 'spotify', from: number, to: number, durationMs: number): Promise<void> {
-    if (durationMs <= 0) return;
+    if (durationMs <= 0) {
+      // v2.15.40 — Single-track loop calls _playSlotTrack with
+      // crossfadeMs=0 to retrigger the same track instantly. Without
+      // this branch the load (which starts at volume 0) never ramps
+      // up, so the second + subsequent loops are silent. Snap to
+      // target instead.
+      const p = kind === 'youtube' ? this.ytPlayer : this.spotifyPlayer;
+      if (p) {
+        if (kind === 'spotify') void (p as SpotifySoundtrackPlayer).setVolume(to);
+        else                     (p as YouTubeSoundtrackPlayer).setVolume(to);
+      }
+      void from;
+      return;
+    }
     const stepMs = Math.max(20, Math.floor(durationMs / CROSSFADE_STEPS));
     const steps  = Math.max(1, Math.floor(durationMs / stepMs));
     return new Promise((resolve) => {
@@ -1120,9 +1133,12 @@ export class SoundtracksPanel {
         loop:     h.loop,
         shuffle:  h.shuffle,
         // For unshuffled playlists, start at the next track in
-        // sequence. Shuffled playlists ignore index (YT re-orders
-        // anyway).
-        ...(h.shuffle ? {} : { index: Math.max(0, h.startIndex) }),
+        // sequence. Shuffled playlists ignore index — they cue +
+        // shuffle + jump to a random track via randomStart, which
+        // avoids audibly starting from track 0 of the ordered list.
+        ...(h.shuffle
+          ? { randomStart: true }
+          : { index: Math.max(0, h.startIndex) }),
       });
       this._endTrimFired = false;
       return;

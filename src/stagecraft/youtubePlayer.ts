@@ -115,6 +115,8 @@ interface YTPlayerLike {
   getCurrentTime(): number;
   getDuration(): number;
   getPlaylistIndex(): number;
+  getPlaylist(): string[];
+  playVideoAt(index: number): void;
   destroy(): void;
 }
 
@@ -135,7 +137,15 @@ export interface YouTubeSoundtrackPlayer {
    *  it cycle back to the first track when the list ends; `shuffle`
    *  randomises the order. `index` + `startSeconds` resume from a
    *  saved position (for the slot-resume feature). */
-  loadPlaylist(listId: string, opts?: { autoplay?: boolean; volume?: number; loop?: boolean; shuffle?: boolean; index?: number; startSeconds?: number }): void;
+  loadPlaylist(listId: string, opts?: { autoplay?: boolean; volume?: number; loop?: boolean; shuffle?: boolean; index?: number; startSeconds?: number;
+    /** v2.15.40 — When set with shuffle:true, the wrapper cues the
+     *  playlist (no play), enables shuffle, then jumps to a random
+     *  index before starting. Without this, loadPlaylist auto-plays
+     *  track 0 of the ordered playlist BEFORE setShuffle takes
+     *  effect, so the listener hears the unshuffled head of the
+     *  playlist. Used by the shuffle-stable resume handoff. */
+    randomStart?: boolean;
+  }): void;
   /** Current playback position within the active video (seconds). */
   getCurrentTime(): number;
   /** Seek the current track to the given second. */
@@ -313,6 +323,34 @@ export async function createYouTubePlayer(opts?: CreateYouTubePlayerOpts): Promi
       };
       if (opts?.index       !== undefined) arg.index       = opts.index;
       if (opts?.startSeconds !== undefined) arg.startSeconds = opts.startSeconds;
+      // v2.15.40 — Shuffle-stable random start. Cue without playing,
+      // wait for the queue to be ready, enable shuffle, then jump to
+      // a random index. This avoids the audible "plays track 0 of
+      // the ordered playlist, then jumps" behaviour that arises when
+      // loadPlaylist auto-plays before setShuffle has been honoured.
+      if (opts?.shuffle && opts?.randomStart) {
+        player.cuePlaylist(arg);
+        try { player.setLoop(opts?.loop ?? false); } catch { /* nothing */ }
+        const onceCued = (state: number): void => {
+          if (state !== YT_STATE.CUED) return;
+          const i = stateListeners.indexOf(onceCued);
+          if (i >= 0) stateListeners.splice(i, 1);
+          try { player.setShuffle(true); } catch { /* nothing */ }
+          let length = 0;
+          try {
+            const list = player.getPlaylist();
+            if (Array.isArray(list)) length = list.length;
+          } catch { /* nothing */ }
+          if (length > 1) {
+            const r = Math.floor(Math.random() * length);
+            try { player.playVideoAt(r); } catch { player.playVideo(); }
+          } else {
+            player.playVideo();
+          }
+        };
+        stateListeners.push(onceCued);
+        return;
+      }
       if (auto) player.loadPlaylist(arg);
       else      player.cuePlaylist(arg);
       // setLoop reliably works immediately after load — it just sets
