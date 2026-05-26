@@ -4211,14 +4211,30 @@ option.select-option--add {
 }
 /* v2.15.35 — Clickable progress bar for seek. Slightly taller so
    the click target is forgiving; cursor + hover hint so the
-   affordance reads. */
+   affordance reads. position:relative anchors the start/end tick
+   marks added in v2.15.38. */
 .sb-progress-track.soundtrack-progress--clickable {
   height: 5px;
   cursor: pointer;
+  position: relative;
 }
 .sb-progress-track.soundtrack-progress--clickable:hover {
   filter: brightness(1.2);
 }
+
+/* v2.15.38 — Start / End trim tick marks overlaid on the progress
+   bar. 2 px wide, full bar height, slightly taller than the track
+   itself so they stick out a hair on both top + bottom for
+   visibility. */
+.soundtrack-progress-tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  pointer-events: none;
+}
+.soundtrack-progress-tick--start { background: #5af07a; }
+.soundtrack-progress-tick--end   { background: #ff8e6c; }
 
 /* v2.15.31 — Active-slot highlight beefed up so the currently-
    playing slot is obvious at a glance. Tinted background + accent

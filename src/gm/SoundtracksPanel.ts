@@ -161,6 +161,13 @@ export class SoundtracksPanel {
    *  the active playlist. Bails out at 4 to avoid spinning through
    *  an entirely-broken playlist (private list, region-locked, etc.). */
   private _consecutiveSkips = 0;
+  /** v2.15.38 — Suppression latch for the end-trim poll. After we
+   *  fire _onTrackEnded because position crossed slot.endSec, hold
+   *  off re-firing until position drops back below endSec (the
+   *  loop/restart will pull it back to startSec, which is below).
+   *  Without this, the half-second poll keeps re-firing during the
+   *  reload window. Resets on slot change. */
+  private _endTrimFired = false;
 
   constructor(host: SoundtracksPanelHost) {
     this.host     = host;
@@ -483,6 +490,21 @@ export class SoundtracksPanel {
     const fill = document.createElement('div');
     fill.className = 'sb-progress-fill';
     track.appendChild(fill);
+    // v2.15.38 — Start / End tick marks on the timeline. Positions
+    // are updated by the poll tick alongside the fill width. Hidden
+    // until duration > 0 and the slot has a corresponding trim
+    // value set.
+    const startTick = document.createElement('div');
+    startTick.className = 'soundtrack-progress-tick soundtrack-progress-tick--start';
+    startTick.dataset['nowPlayingTickStart'] = '1';
+    startTick.title = 'Start trim — playback begins here';
+    startTick.hidden = true;
+    const endTick = document.createElement('div');
+    endTick.className = 'soundtrack-progress-tick soundtrack-progress-tick--end';
+    endTick.dataset['nowPlayingTickEnd'] = '1';
+    endTick.title = 'End trim — playback stops (or loops back to Start) here';
+    endTick.hidden = true;
+    track.append(startTick, endTick);
     wrap.append(text, track);
     return wrap;
   }
@@ -716,6 +738,7 @@ export class SoundtracksPanel {
     // Fresh slot = fresh skip counter; any previous run-of-bad-tracks
     // is unrelated.
     this._consecutiveSkips = 0;
+    this._endTrimFired = false;
 
     if (!target || target.kind === 'silent' || !target.track) {
       this._stopNowPlayingPoll();
@@ -752,14 +775,52 @@ export class SoundtracksPanel {
           ? (np.author ? `${np.title} — ${np.author}` : np.title)
           : '…';
       }
-      // Update progress fill width (position / duration).
+      // Update progress fill width + start/end tick positions.
       const progressTrack = this.slotsEl.querySelector<HTMLElement>('[data-now-playing-progress="1"]');
-      if (progressTrack) {
+      const slot = this.cfg.slots.find((s) => s.id === this.activeSlotId);
+      if (progressTrack && slot) {
         const fill = progressTrack.querySelector<HTMLElement>('.sb-progress-fill');
         const { positionSec, durationSec } = this._currentProgress();
         const pct = durationSec > 0 ? Math.min(100, (positionSec / durationSec) * 100) : 0;
         if (fill) fill.style.width = `${pct}%`;
         progressTrack.hidden = durationSec <= 0;
+        // Tick marks — only meaningful for single-track slots.
+        const tickStartEl = progressTrack.querySelector<HTMLElement>('[data-now-playing-tick-start="1"]');
+        const tickEndEl   = progressTrack.querySelector<HTMLElement>('[data-now-playing-tick-end="1"]');
+        const showTicks   = durationSec > 0 && !!slot.track && !_isPlaylistContent(slot.track);
+        if (tickStartEl) {
+          const s = slot.startSec;
+          if (showTicks && s !== undefined && s > 0 && s < durationSec) {
+            tickStartEl.hidden = false;
+            tickStartEl.style.left = `${(s / durationSec) * 100}%`;
+          } else {
+            tickStartEl.hidden = true;
+          }
+        }
+        if (tickEndEl) {
+          const e = slot.endSec;
+          if (showTicks && e !== undefined && e > 0 && e < durationSec) {
+            tickEndEl.hidden = false;
+            tickEndEl.style.left = `${(e / durationSec) * 100}%`;
+          } else {
+            tickEndEl.hidden = true;
+          }
+        }
+        // v2.15.38 — Enforce slot.endSec. Neither YT nor Spotify
+        // SDK have native "stop at X" so we poll-watch the playhead
+        // and intervene. Only meaningful for single-track slots.
+        // The suppression latch prevents re-firing during the
+        // brief reload window after _onTrackEnded triggers a loop
+        // or restart; it clears once position has dropped back
+        // below endSec (the seek-to-startSec brings it down).
+        if (showTicks && slot.endSec !== undefined && slot.endSec > 0) {
+          if (this._endTrimFired) {
+            if (positionSec < slot.endSec - 1) this._endTrimFired = false;
+          } else if (positionSec >= slot.endSec - 0.25) {
+            this._endTrimFired = true;
+            this._onTrackEnded();
+          }
+        }
       }
     };
     tick();
