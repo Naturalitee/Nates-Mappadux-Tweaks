@@ -158,6 +158,11 @@ export interface YouTubeSoundtrackPlayer {
   /** Current playing track's metadata (best-effort). Undefined
    *  until the IFrame Player reports it. */
   getNowPlaying(): { title?: string; author?: string } | null;
+  /** Specific videoId currently playing (null if unknown). Used to
+   *  capture playlist resume state in a shuffle-stable way — the
+   *  playlistIndex gets re-randomised on reload but the videoId
+   *  identifies the exact track regardless of shuffle order. */
+  getCurrentVideoId(): string | null;
 }
 
 /** YouTube IFrame Player error codes (from the official docs).
@@ -347,6 +352,12 @@ export async function createYouTubePlayer(opts?: CreateYouTubePlayerOpts): Promi
       try {
         const d = player.getVideoData();
         return d?.title ? { title: d.title, ...(d.author ? { author: d.author } : {}) } : null;
+      } catch { return null; }
+    },
+    getCurrentVideoId() {
+      try {
+        const d = player.getVideoData();
+        return d?.video_id ?? null;
       } catch { return null; }
     },
   };

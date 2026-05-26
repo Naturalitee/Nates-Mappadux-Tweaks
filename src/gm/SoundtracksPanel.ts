@@ -90,12 +90,39 @@ function _effectiveRestart(slot: SoundtrackSlot): boolean {
 interface ResumeState {
   /** Position in seconds within the current track. */
   positionSec: number;
-  /** YT playlist index, if the slot was playing a YT playlist. */
+  /** YT playlist index, if the slot was playing a YT playlist.
+   *  v2.15.39 — kept as a hint for the post-resume playlist handoff
+   *  (so an unshuffled playlist continues with the NEXT track in
+   *  order). Shuffled playlists ignore it and re-randomise. */
   playlistIndex?: number;
+  /** YT video id of the specific track playing when we switched
+   *  away. v2.15.39 — shuffle re-randomises the playlist queue on
+   *  reload, so playlistIndex alone resumes onto the wrong track.
+   *  Capturing the videoId lets us play THIS exact track first (via
+   *  a one-shot single-video load), then hand off to the playlist
+   *  for the rest. */
+  youtubeVideoId?: string;
   /** Spotify current-track URI within the playing context (for
    *  best-effort resume — Spotify can only resume from the same
    *  context-uri unless we use the offset parameter on play). */
   spotifyTrackUri?: string;
+}
+
+/** v2.15.39 — pending handoff back into a YT playlist after a
+ *  single-track shuffle-stable resume finishes. When set, the next
+ *  ENDED state event for the active slot triggers loadPlaylist
+ *  instead of falling to the silent anchor. */
+interface YouTubePlaylistHandoff {
+  slotId: string;
+  listId: string;
+  loop: boolean;
+  shuffle: boolean;
+  /** Index to start the playlist at — for unshuffled playlists we
+   *  continue from savedIndex + 1; shuffled playlists ignore this. */
+  startIndex: number;
+  /** Volume to apply when the playlist takes over (the active slot's
+   *  configured volume, modulo mute). */
+  volume: number;
 }
 
 /** True if the track is a playlist-style item — the engine iterates
@@ -168,6 +195,8 @@ export class SoundtracksPanel {
    *  Without this, the half-second poll keeps re-firing during the
    *  reload window. Resets on slot change. */
   private _endTrimFired = false;
+  /** v2.15.39 — Pending playlist handoff. See YouTubePlaylistHandoff. */
+  private _ytHandoff: YouTubePlaylistHandoff | null = null;
 
   constructor(host: SoundtracksPanelHost) {
     this.host     = host;
@@ -198,8 +227,10 @@ export class SoundtracksPanel {
     if (this.activeKind === 'youtube' && this.ytPlayer) {
       const positionSec  = this.ytPlayer.getCurrentTime();
       const playlistIndex = this.ytPlayer.getPlaylistIndex();
+      const videoId       = this.ytPlayer.getCurrentVideoId();
       const state: ResumeState = { positionSec };
-      if (playlistIndex >= 0) state.playlistIndex = playlistIndex;
+      if (playlistIndex >= 0) state.playlistIndex   = playlistIndex;
+      if (videoId)            state.youtubeVideoId  = videoId;
       return state;
     }
     if (this.activeKind === 'spotify' && this.spotifyPlayer) {
@@ -739,6 +770,8 @@ export class SoundtracksPanel {
     // is unrelated.
     this._consecutiveSkips = 0;
     this._endTrimFired = false;
+    // Any pending playlist handoff belonged to the slot we just left.
+    this._ytHandoff = null;
 
     if (!target || target.kind === 'silent' || !target.track) {
       this._stopNowPlayingPoll();
@@ -892,30 +925,69 @@ export class SoundtracksPanel {
       this.activeKind = 'youtube';
     } else if (track.kind === 'youtube-playlist') {
       const isFirst = !this.ytPlayer;
-      const p = await this._ensureYouTubePlayer(isFirst ? { listId: track.listId } : undefined);
-      const playlistOpts: Parameters<typeof p.loadPlaylist>[1] = {
-        autoplay: true,
-        volume:   0,
-        loop,
-        shuffle:  playlistContent && shuffle,
-      };
-      if (resume?.playlistIndex !== undefined) playlistOpts.index = resume.playlistIndex;
-      if (resume?.positionSec)                 playlistOpts.startSeconds = resume.positionSec;
-      p.loadPlaylist(track.listId, playlistOpts);
-      this.activeKind = 'youtube';
+      // v2.15.39 — Shuffle-stable resume. If we captured a specific
+      // videoId on switch-away, play THAT exact track first (single-
+      // video load), then hand off to the playlist on ENDED. This
+      // beats relying on playlistIndex which YT re-randomises every
+      // time a shuffled playlist is loaded. Same Spotify approach
+      // below uses { context_uri, offset } to achieve this natively.
+      const useSpecificTrack = !!resume?.youtubeVideoId && !!resume?.positionSec && resume.positionSec > 0;
+      if (useSpecificTrack) {
+        const p = await this._ensureYouTubePlayer(isFirst ? { videoId: resume!.youtubeVideoId! } : undefined);
+        const startSeconds = resume!.positionSec;
+        if (!isFirst) {
+          p.load(resume!.youtubeVideoId!, { autoplay: true, volume: 0, startSeconds });
+        } else {
+          // Player came up with the videoId already queued; reload
+          // with startSeconds to seek there.
+          p.load(resume!.youtubeVideoId!, { autoplay: true, volume: 0, startSeconds });
+        }
+        // Queue the playlist-handoff so the next ENDED kicks the
+        // shuffled / sequenced playlist into life.
+        this._ytHandoff = {
+          slotId:     slot.id,
+          listId:     track.listId,
+          loop,
+          shuffle:    playlistContent && shuffle,
+          startIndex: (resume!.playlistIndex ?? -1) + 1,
+          volume:     targetVolume,
+        };
+        this.activeKind = 'youtube';
+      } else {
+        const p = await this._ensureYouTubePlayer(isFirst ? { listId: track.listId } : undefined);
+        const playlistOpts: Parameters<typeof p.loadPlaylist>[1] = {
+          autoplay: true,
+          volume:   0,
+          loop,
+          shuffle:  playlistContent && shuffle,
+        };
+        if (resume?.playlistIndex !== undefined) playlistOpts.index = resume.playlistIndex;
+        if (resume?.positionSec)                 playlistOpts.startSeconds = resume.positionSec;
+        p.loadPlaylist(track.listId, playlistOpts);
+        this._ytHandoff = null;
+        this.activeKind = 'youtube';
+      }
     } else {
       const p = await this._ensureSpotifyPlayer();
       // Resume position priority: per-slot resume > slot.startSec.
       const positionMs = resume?.positionSec
         ? Math.floor(resume.positionSec * 1000)
         : (slot.startSec ? Math.floor(slot.startSec * 1000) : 0);
-      await p.load(track.trackUri, {
+      // v2.15.39 — Spotify shuffle-stable resume. For playlist-kind
+      // tracks pass offsetTrackUri so the context starts AT the
+      // captured track; the rest of the playlist continues after it
+      // ends, honouring whatever shuffle state we set on play.
+      const loadOpts: Parameters<typeof p.load>[1] = {
         autoplay: true,
         volume:   0,
         repeat:   loop,
         shuffle:  playlistContent && shuffle,
         ...(positionMs ? { positionMs } : {}),
-      });
+      };
+      if (playlistContent && resume?.spotifyTrackUri) {
+        loadOpts.offsetTrackUri = resume.spotifyTrackUri;
+      }
+      await p.load(track.trackUri, loadOpts);
       this.activeKind = 'spotify';
     }
     // Resume consumed — clear so the NEXT switch-away captures fresh.
@@ -1033,6 +1105,28 @@ export class SoundtracksPanel {
     if (!slot || !slot.track) return;
     const crossfadeMs = this.cfg.crossfadeMs ?? 1500;
     const playlistContent = _isPlaylistContent(slot.track);
+    // v2.15.39 — Shuffle-stable playlist resume: a single-track YT
+    // load played as the resume head-start. Now hand off to the
+    // playlist so the rest of the slot's iteration carries on
+    // (re-randomising under shuffle is exactly what we want — the
+    // user got back the SPECIFIC track they left on, and the
+    // playlist continues with a fresh random tail).
+    if (this._ytHandoff && this._ytHandoff.slotId === this.activeSlotId && this.ytPlayer) {
+      const h = this._ytHandoff;
+      this._ytHandoff = null;
+      this.ytPlayer.loadPlaylist(h.listId, {
+        autoplay: true,
+        volume:   h.volume,
+        loop:     h.loop,
+        shuffle:  h.shuffle,
+        // For unshuffled playlists, start at the next track in
+        // sequence. Shuffled playlists ignore index (YT re-orders
+        // anyway).
+        ...(h.shuffle ? {} : { index: Math.max(0, h.startIndex) }),
+      });
+      this._endTrimFired = false;
+      return;
+    }
     if (!playlistContent && slot.loop) {
       // Single track + loop → replay (respects startSec on Spotify).
       void this._playSlotTrack(slot, 0);

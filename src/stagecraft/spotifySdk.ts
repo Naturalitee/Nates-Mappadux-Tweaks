@@ -102,6 +102,12 @@ export interface SpotifySoundtrackPlayer {
     /** Toggle Spotify's shuffle state — only meaningful for
      *  context-uri loads. */
     shuffle?:    boolean;
+    /** Resume-into-context: start a playlist / album AT a specific
+     *  track's URI rather than from track 0. Combined with positionMs
+     *  this lets the panel resume exactly where the GM left off even
+     *  when the context is shuffled. Ignored when uri is a single
+     *  track. */
+    offsetTrackUri?: string;
   }): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;
@@ -223,6 +229,13 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
         : { context_uri: uri };
       if (opts?.positionMs && parts?.kind === 'track') {
         body['position_ms'] = opts.positionMs;
+      }
+      // Resume-into-context: { context_uri, offset: { uri }, position_ms }
+      // lets us drop into a playlist / album at a specific track at a
+      // specific position. Shuffle-stable resume relies on this.
+      if (parts && parts.kind !== 'track' && opts?.offsetTrackUri) {
+        body['offset'] = { uri: opts.offsetTrackUri };
+        if (opts?.positionMs) body['position_ms'] = opts.positionMs;
       }
       if (opts?.volume !== undefined) {
         await player.setVolume(Math.max(0, Math.min(100, opts.volume)) / 100);
