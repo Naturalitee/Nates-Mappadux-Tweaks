@@ -121,6 +121,10 @@ export interface SpotifySoundtrackPlayer {
   currentUri(): string | null;
   /** Live track metadata from the SDK's player_state_changed event. */
   getNowPlaying(): { title?: string; author?: string } | null;
+  /** Position within the current track (milliseconds). */
+  getPositionMs(): number;
+  /** Current track URI within the playing context (for resume). */
+  getCurrentTrackUri(): string | null;
 }
 
 /** Build a connected Spotify Web Playback SDK player. Resolves when
@@ -266,5 +270,7 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
       if (authors)            out.author = authors;
       return out.title ? out : null;
     },
+    getPositionMs()      { return lastPosition; },
+    getCurrentTrackUri() { return lastTrackInfo?.uri ?? null; },
   };
 }

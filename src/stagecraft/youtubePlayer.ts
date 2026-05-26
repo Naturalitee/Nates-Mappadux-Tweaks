@@ -111,6 +111,8 @@ interface YTPlayerLike {
   previousVideo(): void;
   nextVideo(): void;
   getVideoData(): { video_id?: string; title?: string; author?: string };
+  getCurrentTime(): number;
+  getPlaylistIndex(): number;
   destroy(): void;
 }
 
@@ -125,12 +127,17 @@ export const YT_STATE = {
 } as const;
 
 export interface YouTubeSoundtrackPlayer {
-  load(videoId: string, opts?: { autoplay?: boolean; volume?: number }): void;
+  load(videoId: string, opts?: { autoplay?: boolean; volume?: number; startSeconds?: number }): void;
   /** Load a whole YouTube / YouTube Music playlist by list id. The
    *  IFrame Player iterates the playlist internally; `loop` makes
    *  it cycle back to the first track when the list ends; `shuffle`
-   *  randomises the order. */
-  loadPlaylist(listId: string, opts?: { autoplay?: boolean; volume?: number; loop?: boolean; shuffle?: boolean }): void;
+   *  randomises the order. `index` + `startSeconds` resume from a
+   *  saved position (for the slot-resume feature). */
+  loadPlaylist(listId: string, opts?: { autoplay?: boolean; volume?: number; loop?: boolean; shuffle?: boolean; index?: number; startSeconds?: number }): void;
+  /** Current playback position within the active video (seconds). */
+  getCurrentTime(): number;
+  /** Current playlist index (0-based). -1 when not playing a playlist. */
+  getPlaylistIndex(): number;
   play(): void;
   pause(): void;
   stop(): void;
@@ -280,19 +287,30 @@ export async function createYouTubePlayer(opts?: CreateYouTubePlayerOpts): Promi
     load(videoId, opts) {
       const auto = opts?.autoplay !== false;
       if (opts?.volume !== undefined) player.setVolume(Math.max(0, Math.min(100, opts.volume)));
-      if (auto) player.loadVideoById({ videoId });
-      else      player.cueVideoById({ videoId });
+      const arg = opts?.startSeconds !== undefined
+        ? { videoId, startSeconds: opts.startSeconds }
+        : { videoId };
+      if (auto) player.loadVideoById(arg);
+      else      player.cueVideoById(arg);
     },
     loadPlaylist(listId, opts) {
       const auto = opts?.autoplay !== false;
       if (opts?.volume !== undefined) player.setVolume(Math.max(0, Math.min(100, opts.volume)));
-      if (auto) player.loadPlaylist({ list: listId, listType: 'playlist' });
-      else      player.cuePlaylist ({ list: listId, listType: 'playlist' });
+      const arg: { list: string; listType: 'playlist'; index?: number; startSeconds?: number } = {
+        list: listId,
+        listType: 'playlist',
+      };
+      if (opts?.index       !== undefined) arg.index       = opts.index;
+      if (opts?.startSeconds !== undefined) arg.startSeconds = opts.startSeconds;
+      if (auto) player.loadPlaylist(arg);
+      else      player.cuePlaylist(arg);
       // setLoop / setShuffle have to come AFTER the playlist load
       // (they're no-ops without a loaded playlist).
       try { player.setLoop(opts?.loop ?? false); }       catch { /* nothing */ }
       try { player.setShuffle(opts?.shuffle ?? false); } catch { /* nothing */ }
     },
+    getCurrentTime() { try { return player.getCurrentTime(); }   catch { return 0; } },
+    getPlaylistIndex() { try { return player.getPlaylistIndex(); } catch { return -1; } },
     play()  { player.playVideo(); },
     pause() { player.pauseVideo(); },
     stop()  { player.stopVideo(); },

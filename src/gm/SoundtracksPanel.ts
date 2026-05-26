@@ -38,7 +38,7 @@ import {
   type SpotifySoundtrackPlayer,
 } from '../stagecraft/spotifySdk.ts';
 import { isSpotifyConnected, getSpotifyProfile } from '../stagecraft/spotifyAuth.ts';
-import { parseSoundtrackUrl, defaultTrackLabel, parseSpotifyUri } from '../stagecraft/soundtrackUrl.ts';
+import { parseSoundtrackUrl, parseSpotifyUri } from '../stagecraft/soundtrackUrl.ts';
 import { migrateSoundtracksConfig, newUserSlot } from '../stagecraft/soundtracksMigrate.ts';
 
 // Lucide-style inline SVGs. Stroke uses currentColor so they pick
@@ -49,6 +49,17 @@ const ICON_PREV    = '<svg viewBox="0 0 24 24" width="14" height="14" fill="curr
 const ICON_NEXT    = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" stroke="none"><path d="M4 6l10 6-10 6V6zM16 6v12h2V6h-2z"/></svg>';
 const ICON_LOOP    = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>';
 const ICON_SHUFFLE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>';
+
+interface ResumeState {
+  /** Position in seconds within the current track. */
+  positionSec: number;
+  /** YT playlist index, if the slot was playing a YT playlist. */
+  playlistIndex?: number;
+  /** Spotify current-track URI within the playing context (for
+   *  best-effort resume — Spotify can only resume from the same
+   *  context-uri unless we use the offset parameter on play). */
+  spotifyTrackUri?: string;
+}
 
 /** True if the track is a playlist-style item — the engine iterates
  *  it internally rather than playing one item. Drives whether the
@@ -103,6 +114,12 @@ export class SoundtracksPanel {
    *  killed the music last session lands with it killed again. */
   private isMuted = false;
   private muteToggleEl: HTMLInputElement | null = null;
+  /** v2.15.28 — Per-slot resume state. When the user switches
+   *  away from a slot we capture position / playlist-index /
+   *  current-track-uri here; switching back resumes from there.
+   *  In-memory only — clears on reload, which is fine (the user
+   *  can always hit prev to restart from track 0). */
+  private resumeStates = new Map<string, ResumeState>();
 
   constructor(host: SoundtracksPanelHost) {
     this.host     = host;
@@ -125,6 +142,26 @@ export class SoundtracksPanel {
         this._applyMute();
       });
     }
+  }
+
+  /** Snapshot the active engine's playhead so a later switch-back
+   *  to this slot can resume from where we left off. */
+  private _captureResumeState(): ResumeState | null {
+    if (this.activeKind === 'youtube' && this.ytPlayer) {
+      const positionSec  = this.ytPlayer.getCurrentTime();
+      const playlistIndex = this.ytPlayer.getPlaylistIndex();
+      const state: ResumeState = { positionSec };
+      if (playlistIndex >= 0) state.playlistIndex = playlistIndex;
+      return state;
+    }
+    if (this.activeKind === 'spotify' && this.spotifyPlayer) {
+      const positionMs = this.spotifyPlayer.getPositionMs();
+      const trackUri   = this.spotifyPlayer.getCurrentTrackUri();
+      const state: ResumeState = { positionSec: positionMs / 1000 };
+      if (trackUri) state.spotifyTrackUri = trackUri;
+      return state;
+    }
+    return null;
   }
 
   /** Apply the current mute state to the active player. Volume goes
@@ -218,24 +255,6 @@ export class SoundtracksPanel {
       labelInput.addEventListener('change', () => void this._updateSlot(slot.id, { label: labelInput.value.trim() || 'Slot' }));
       header.appendChild(labelInput);
 
-      // Loop + Shuffle compact icon toggles, only when a track is set.
-      if (slot.track) {
-        header.appendChild(this._renderIconToggle({
-          icon:    ICON_LOOP,
-          title:   'Loop',
-          active:  !!slot.loop,
-          onClick: () => void this._updateSlot(slot.id, { loop: !slot.loop }),
-        }));
-        if (_isPlaylistContent(slot.track)) {
-          header.appendChild(this._renderIconToggle({
-            icon:    ICON_SHUFFLE,
-            title:   'Shuffle',
-            active:  slot.shuffle !== false,
-            onClick: () => void this._updateSlot(slot.id, { shuffle: !(slot.shuffle !== false) }),
-          }));
-        }
-      }
-
       const delBtn = document.createElement('button');
       delBtn.type = 'button';
       delBtn.className = 'btn btn--danger btn--sm';
@@ -249,20 +268,77 @@ export class SoundtracksPanel {
     if (isSilent) return row;
 
     if (!slot.track) {
+      // Empty slot — show the URL input. No track chip / playlist
+      // tag once a URL is added; to change a slot's content the
+      // user deletes the slot and creates a fresh one (less chrome,
+      // intentional friction).
       row.appendChild(this._renderUrlInput(slot));
     } else {
-      row.appendChild(this._renderTrackChip(slot, slot.track));
-      // Transport (prev / pause / next) — only when slot is actively
-      // playing. Single tracks just get pause; playlists get all three.
-      if (isActive) row.appendChild(this._renderTransport(slot));
-      // Now-playing line — only while active.
+      // Slot with a track — show the combined controls row
+      // (transport when active + loop/shuffle always) then the
+      // now-playing line and the volume slider.
+      row.appendChild(this._renderControlsRow(slot, isActive));
       if (isActive) row.appendChild(this._renderNowPlaying(slot));
-      // Trim controls — single-track only.
       if (!_isPlaylistContent(slot.track)) row.appendChild(this._renderTimeControls(slot));
     }
 
     // Volume — always.
     row.appendChild(this._renderVolume(slot));
+    return row;
+  }
+
+  /** Single horizontal row that combines:
+   *   - Transport (prev / pause / next) when the slot is actively
+   *     playing. Single tracks omit prev / next.
+   *   - Loop + Shuffle icon toggles always (they apply to playback
+   *     whether or not the slot is currently the active one).
+   *  Shuffle only renders for playlist-style content. */
+  private _renderControlsRow(slot: SoundtrackSlot, isActive: boolean): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'soundtrack-transport';
+    const isPlaylist = !!slot.track && _isPlaylistContent(slot.track);
+    if (isActive) {
+      if (isPlaylist) {
+        const prevBtn = document.createElement('button');
+        prevBtn.type = 'button';
+        prevBtn.className = 'btn btn--ghost btn--sm';
+        prevBtn.title = 'Previous track';
+        prevBtn.innerHTML = ICON_PREV;
+        prevBtn.addEventListener('click', () => this._transportPrev());
+        row.appendChild(prevBtn);
+      }
+      const pauseBtn = document.createElement('button');
+      pauseBtn.type = 'button';
+      pauseBtn.className = 'btn btn--ghost btn--sm';
+      pauseBtn.title = this.isPaused ? 'Resume' : 'Pause';
+      pauseBtn.innerHTML = this.isPaused ? ICON_PLAY : ICON_PAUSE;
+      pauseBtn.addEventListener('click', () => this._transportTogglePause());
+      row.appendChild(pauseBtn);
+      if (isPlaylist) {
+        const nextBtn = document.createElement('button');
+        nextBtn.type = 'button';
+        nextBtn.className = 'btn btn--ghost btn--sm';
+        nextBtn.title = 'Next track';
+        nextBtn.innerHTML = ICON_NEXT;
+        nextBtn.addEventListener('click', () => this._transportNext());
+        row.appendChild(nextBtn);
+      }
+    }
+    // Loop + (Shuffle if playlist) always present alongside.
+    row.appendChild(this._renderIconToggle({
+      icon:    ICON_LOOP,
+      title:   'Loop',
+      active:  !!slot.loop,
+      onClick: () => void this._updateSlot(slot.id, { loop: !slot.loop }),
+    }));
+    if (isPlaylist) {
+      row.appendChild(this._renderIconToggle({
+        icon:    ICON_SHUFFLE,
+        title:   'Shuffle',
+        active:  slot.shuffle !== false,
+        onClick: () => void this._updateSlot(slot.id, { shuffle: !(slot.shuffle !== false) }),
+      }));
+    }
     return row;
   }
 
@@ -279,38 +355,6 @@ export class SoundtracksPanel {
     btn.innerHTML = opts.icon;
     btn.addEventListener('click', opts.onClick);
     return btn;
-  }
-
-  private _renderTransport(slot: SoundtrackSlot): HTMLElement {
-    const row = document.createElement('div');
-    row.className = 'soundtrack-transport';
-    const isPlaylist = !!slot.track && _isPlaylistContent(slot.track);
-    if (isPlaylist) {
-      const prevBtn = document.createElement('button');
-      prevBtn.type = 'button';
-      prevBtn.className = 'btn btn--ghost btn--sm';
-      prevBtn.title = 'Previous track';
-      prevBtn.innerHTML = ICON_PREV;
-      prevBtn.addEventListener('click', () => this._transportPrev());
-      row.appendChild(prevBtn);
-    }
-    const pauseBtn = document.createElement('button');
-    pauseBtn.type = 'button';
-    pauseBtn.className = 'btn btn--ghost btn--sm';
-    pauseBtn.title = this.isPaused ? 'Resume' : 'Pause';
-    pauseBtn.innerHTML = this.isPaused ? ICON_PLAY : ICON_PAUSE;
-    pauseBtn.addEventListener('click', () => this._transportTogglePause());
-    row.appendChild(pauseBtn);
-    if (isPlaylist) {
-      const nextBtn = document.createElement('button');
-      nextBtn.type = 'button';
-      nextBtn.className = 'btn btn--ghost btn--sm';
-      nextBtn.title = 'Next track';
-      nextBtn.innerHTML = ICON_NEXT;
-      nextBtn.addEventListener('click', () => this._transportNext());
-      row.appendChild(nextBtn);
-    }
-    return row;
   }
 
   private _renderNowPlaying(_slot: SoundtrackSlot): HTMLElement {
@@ -395,27 +439,6 @@ export class SoundtracksPanel {
     return row;
   }
 
-  private _renderTrackChip(slot: SoundtrackSlot, track: SoundtrackTrack): HTMLElement {
-    const wrap = document.createElement('div');
-    wrap.className = 'soundtrack-track';
-    if (this.activeSlotId === slot.id) wrap.classList.add('is-playing');
-    const desc = document.createElement('span');
-    desc.className = 'soundtrack-track-label';
-    desc.textContent = track.label ?? defaultTrackLabel(track);
-    const clearBtn = document.createElement('button');
-    clearBtn.type = 'button';
-    clearBtn.className = 'btn btn--danger btn--sm';
-    clearBtn.textContent = '×';
-    clearBtn.title = 'Clear this track';
-    clearBtn.addEventListener('click', () => {
-      // Clear the track. exactOptionalPropertyTypes blocks
-      // { track: undefined } so cast the patch shape — the merge
-      // strips the key, matching SoundtrackSlot's optional track.
-      void this._updateSlot(slot.id, { track: undefined } as unknown as Partial<SoundtrackSlot>);
-    });
-    wrap.append(desc, clearBtn);
-    return wrap;
-  }
 
   private _renderTimeControls(slot: SoundtrackSlot): HTMLElement {
     const wrap = document.createElement('div');
@@ -513,6 +536,14 @@ export class SoundtracksPanel {
     // Cancel any in-flight crossfade.
     if (this.crossfadeTimer) { clearTimeout(this.crossfadeTimer); this.crossfadeTimer = null; }
 
+    // v2.15.28 — Capture the current slot's playhead so switching
+    // back resumes from where we left off. Only captures if there
+    // IS an active slot with an engine running.
+    if (this.activeKind && this.activeSlotId && this._activePlayer()) {
+      const state = this._captureResumeState();
+      if (state) this.resumeStates.set(this.activeSlotId, state);
+    }
+
     // Fade current down (if anything is playing).
     if (this.activeKind && this._activePlayer()) {
       await this._fade(this.activeKind, this._currentVolume(), 0, crossfadeMs);
@@ -588,39 +619,44 @@ export class SoundtracksPanel {
     const loop            = !!slot.loop;
     const shuffle         = slot.shuffle !== false;  // default true
 
+    const resume = this.resumeStates.get(slot.id);
     if (track.kind === 'youtube') {
-      // Pass videoId at create time on FIRST init so the IFrame
-      // embed loads with real content (empty-embed init can wedge
-      // onReady — see youtubePlayer.ts).
       const isFirst = !this.ytPlayer;
       const p = await this._ensureYouTubePlayer(isFirst ? { videoId: track.videoId } : undefined);
-      if (!isFirst) p.load(track.videoId, { autoplay: true, volume: 0 });
-      else          { p.setVolume(0); p.play(); }
+      const startSeconds = resume?.positionSec ?? slot.startSec;
+      if (!isFirst) {
+        p.load(track.videoId, {
+          autoplay: true,
+          volume:   0,
+          ...(startSeconds ? { startSeconds } : {}),
+        });
+      } else if (startSeconds) {
+        // Player came up with the videoId queued; reload with the
+        // saved position to seek there.
+        p.load(track.videoId, { autoplay: true, volume: 0, startSeconds });
+      } else {
+        p.setVolume(0); p.play();
+      }
       this.activeKind = 'youtube';
     } else if (track.kind === 'youtube-playlist') {
       const isFirst = !this.ytPlayer;
       const p = await this._ensureYouTubePlayer(isFirst ? { listId: track.listId } : undefined);
-      if (!isFirst) {
-        p.loadPlaylist(track.listId, {
-          autoplay: true,
-          volume:   0,
-          loop,
-          shuffle:  playlistContent && shuffle,
-        });
-      } else {
-        // Player was created with the playlist already queued.
-        // Apply loop/shuffle + start playback.
-        p.loadPlaylist(track.listId, {
-          autoplay: true,
-          volume:   0,
-          loop,
-          shuffle:  playlistContent && shuffle,
-        });
-      }
+      const playlistOpts: Parameters<typeof p.loadPlaylist>[1] = {
+        autoplay: true,
+        volume:   0,
+        loop,
+        shuffle:  playlistContent && shuffle,
+      };
+      if (resume?.playlistIndex !== undefined) playlistOpts.index = resume.playlistIndex;
+      if (resume?.positionSec)                 playlistOpts.startSeconds = resume.positionSec;
+      p.loadPlaylist(track.listId, playlistOpts);
       this.activeKind = 'youtube';
     } else {
       const p = await this._ensureSpotifyPlayer();
-      const positionMs = slot.startSec ? Math.floor(slot.startSec * 1000) : 0;
+      // Resume position priority: per-slot resume > slot.startSec.
+      const positionMs = resume?.positionSec
+        ? Math.floor(resume.positionSec * 1000)
+        : (slot.startSec ? Math.floor(slot.startSec * 1000) : 0);
       await p.load(track.trackUri, {
         autoplay: true,
         volume:   0,
@@ -630,6 +666,8 @@ export class SoundtracksPanel {
       });
       this.activeKind = 'spotify';
     }
+    // Resume consumed — clear so the NEXT switch-away captures fresh.
+    this.resumeStates.delete(slot.id);
     await this._fade(this.activeKind, 0, targetVolume, crossfadeMs);
   }
 
