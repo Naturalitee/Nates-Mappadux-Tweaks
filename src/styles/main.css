@@ -4102,6 +4102,67 @@ option.select-option--add {
   font-weight: 500;
 }
 
+/* v2.15.26 — Compressed slot controls. Compact icon toggles for
+   loop / shuffle live in the header row alongside the label.
+   Transport (prev / pause / next) appears below the track chip
+   when the slot is actively playing. */
+.soundtrack-icon-toggle {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+.soundtrack-icon-toggle.is-active {
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.06);
+}
+.soundtrack-icon-toggle:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.soundtrack-play-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.soundtrack-slot.is-active .soundtrack-play-btn {
+  color: var(--accent);
+}
+
+.soundtrack-transport {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+  align-items: center;
+}
+.soundtrack-transport .btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.soundtrack-now-playing {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-top: 2px;
+  /* Truncate long titles rather than wrapping into multi-line. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 /* v2.15.12 — N-slot Soundtracks redesign. Each slot is a self-
    contained card with label, mode picker, mode-specific controls,
    tracks list, volume. Active slot gets a coloured outline. */

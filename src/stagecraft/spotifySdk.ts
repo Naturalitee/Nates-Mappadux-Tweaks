@@ -41,6 +41,8 @@ interface SpotifySdkPlayer {
   seek(ms: number):    Promise<void>;
   setVolume(v: number): Promise<void>;
   getCurrentState():    Promise<SpotifyPlayerState | null>;
+  previousTrack():      Promise<void>;
+  nextTrack():          Promise<void>;
   addListener(event: 'ready',            cb: (e: { device_id: string }) => void): void;
   addListener(event: 'not_ready',        cb: (e: { device_id: string }) => void): void;
   addListener(event: 'player_state_changed', cb: (e: SpotifyPlayerState | null) => void): void;
@@ -50,11 +52,17 @@ interface SpotifySdkPlayer {
   addListener(event: 'playback_error',       cb: (e: { message: string }) => void): void;
 }
 
+interface SpotifyTrackInfo {
+  uri:  string;
+  name: string;
+  artists?: Array<{ name: string }>;
+}
+
 interface SpotifyPlayerState {
   paused:   boolean;
   position: number;   // ms
   duration: number;   // ms
-  track_window?: { current_track?: { uri: string; name: string } };
+  track_window?: { current_track?: SpotifyTrackInfo };
 }
 
 let _sdkPromise: Promise<SpotifySdkPlayerCtor> | null = null;
@@ -100,6 +108,8 @@ export interface SpotifySoundtrackPlayer {
   stop(): Promise<void>;
   setVolume(v: number): Promise<void>;          // 0-100 to match YouTube
   seekMs(ms: number): Promise<void>;
+  next(): Promise<void>;
+  previous(): Promise<void>;
   destroy(): void;
   onEnded(cb: () => void): void;
   /** v2.15.19 — fires when the SDK reports an error. `kind`
@@ -109,6 +119,8 @@ export interface SpotifySoundtrackPlayer {
   onError(cb: (kind: 'init' | 'auth' | 'account' | 'playback', message: string) => void): void;
   /** Current spotify:track:<id> URI being played, or null. */
   currentUri(): string | null;
+  /** Live track metadata from the SDK's player_state_changed event. */
+  getNowPlaying(): { title?: string; author?: string } | null;
 }
 
 /** Build a connected Spotify Web Playback SDK player. Resolves when
@@ -152,6 +164,7 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
   let lastPosition  = 0;
   let lastDuration  = 0;
   let lastPaused    = true;
+  let lastTrackInfo: SpotifyTrackInfo | null = null;
   const endedListeners: Array<() => void> = [];
 
   player.addListener('player_state_changed', (state) => {
@@ -161,6 +174,9 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
     lastPosition = state.position;
     lastDuration = state.duration;
     lastPaused   = state.paused;
+    if (state.track_window?.current_track) {
+      lastTrackInfo = state.track_window.current_track;
+    }
     if (justEnded) {
       for (const cb of endedListeners) cb();
     }
@@ -236,9 +252,19 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
     },
     setVolume(v: number)           { return player.setVolume(Math.max(0, Math.min(100, v)) / 100); },
     seekMs(ms: number)             { return player.seek(ms); },
+    next()      { return player.nextTrack(); },
+    previous()  { return player.previousTrack(); },
     destroy()                      { player.disconnect(); },
     onEnded(cb: () => void)        { endedListeners.push(cb); },
     onError(cb)                    { errorListeners.push(cb); },
     currentUri()                   { return lastUri; },
+    getNowPlaying() {
+      if (!lastTrackInfo) return null;
+      const authors = lastTrackInfo.artists?.map((a) => a.name).filter(Boolean).join(', ');
+      const out: { title?: string; author?: string } = {};
+      if (lastTrackInfo.name) out.title = lastTrackInfo.name;
+      if (authors)            out.author = authors;
+      return out.title ? out : null;
+    },
   };
 }

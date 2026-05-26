@@ -108,6 +108,9 @@ interface YTPlayerLike {
   getPlayerState(): number;
   setLoop(loop: boolean): void;
   setShuffle(shuffle: boolean): void;
+  previousVideo(): void;
+  nextVideo(): void;
+  getVideoData(): { video_id?: string; title?: string; author?: string };
   destroy(): void;
 }
 
@@ -131,12 +134,17 @@ export interface YouTubeSoundtrackPlayer {
   play(): void;
   pause(): void;
   stop(): void;
+  next(): void;
+  previous(): void;
   setVolume(v: number): void;
   destroy(): void;
   onStateChange(cb: (state: number) => void): void;
   /** v2.15.19 — fires when the IFrame Player reports an error.
    *  See YT_ERROR_MESSAGES for code → human-readable lookup. */
   onError(cb: (code: number, message: string) => void): void;
+  /** Current playing track's metadata (best-effort). Undefined
+   *  until the IFrame Player reports it. */
+  getNowPlaying(): { title?: string; author?: string } | null;
 }
 
 /** YouTube IFrame Player error codes (from the official docs).
@@ -289,8 +297,16 @@ export async function createYouTubePlayer(opts?: CreateYouTubePlayerOpts): Promi
     pause() { player.pauseVideo(); },
     stop()  { player.stopVideo(); },
     setVolume(v: number) { player.setVolume(Math.max(0, Math.min(100, v))); },
+    next()    { try { player.nextVideo();     } catch { /* nothing */ } },
+    previous() { try { player.previousVideo(); } catch { /* nothing */ } },
     destroy() { try { player.destroy(); } catch { /* nothing */ } },
     onStateChange(cb)    { stateListeners.push(cb); },
     onError(cb)          { errorListeners.push(cb); },
+    getNowPlaying() {
+      try {
+        const d = player.getVideoData();
+        return d?.title ? { title: d.title, ...(d.author ? { author: d.author } : {}) } : null;
+      } catch { return null; }
+    },
   };
 }
