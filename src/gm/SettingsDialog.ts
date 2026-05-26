@@ -40,6 +40,11 @@ import {
   startConnect as startSpotifyConnect,
   getRedirectUri as spotifyRedirectUri,
 } from '../stagecraft/spotifyAuth.ts';
+import {
+  isInProgressEnabled,
+  setInProgressEnabled,
+  inProgressFlagOrigin,
+} from '../storage/featureFlags.ts';
 import { generateId } from '../utils/id.ts';
 
 /**
@@ -115,10 +120,15 @@ export class SettingsDialog {
     body.appendChild(this._buildScaledViewSection());
     // ── Performance section ──────────────────────────────────────────────
     body.appendChild(this._buildPerformanceSection());
-    // ── Stagecraft section (v2.16) — Lighting + Automation ──────────────
-    body.appendChild(this._buildStagecraftSection());
-    // ── Soundtracks section (v2.16) — pack-level music ──────────────────
-    body.appendChild(this._buildSoundtracksSection());
+    // ── v2.16 in-progress features (Stagecraft + Soundtracks) ───────────
+    // Hidden by default on production; the Danger Zone has a toggle
+    // to reveal them so curious users can opt in. Existing users
+    // who've configured these features keep using them — only the
+    // initial configuration UI is gated by the flag.
+    if (isInProgressEnabled()) {
+      body.appendChild(this._buildStagecraftSection());
+      body.appendChild(this._buildSoundtracksSection());
+    }
     // ── API Keys section ─────────────────────────────────────────────────
     body.appendChild(this._buildApiKeysSection());
     // ── Danger Zone ──────────────────────────────────────────────────────
@@ -405,6 +415,36 @@ export class SettingsDialog {
   private _buildDangerZone(cb: SettingsDialogCallbacks): HTMLElement {
     const sec = mkSection('Danger Zone', 'Destructive actions. Make sure you have a Map Pack saved first if you want to keep anything.');
     sec.classList.add('settings-danger');
+
+    // ── In-progress features toggle (v2.15.17) ──────────────────
+    // Reveals the Settings UI for the v2.16 work (Stagecraft +
+    // Soundtracks) that ships ahead of being fully polished.
+    // Hidden by default in production; visible by default on beta /
+    // dev / deploy previews. Users with existing configurations are
+    // unaffected — the sidebar panels continue to work whenever
+    // they're configured, this flag only gates the Settings entry
+    // points. Reload required so newly-toggled-on sections render
+    // (the dialog only checks the flag at open time).
+    const flagRow = document.createElement('div');
+    flagRow.className = 'settings-danger-row';
+    const flagText = document.createElement('div');
+    flagText.innerHTML =
+      '<strong>Show in-progress features</strong><br>' +
+      '<span class="settings-stat-sub">' +
+      'Reveals the configuration UI for features that ship ahead of their final polish — currently <em>Stagecraft</em> (lighting + automation) and <em>Soundtracks</em> (background music). When off, these sections are hidden in Settings; you won\'t see them anywhere unless you already had them configured. Status: ' +
+      escapeHtml(inProgressFlagOrigin()) + '. Reload after toggling.' +
+      '</span>';
+    const flagToggle = document.createElement('label');
+    flagToggle.className = 'toggle-switch';
+    const flagInput = document.createElement('input');
+    flagInput.type = 'checkbox';
+    flagInput.checked = isInProgressEnabled();
+    flagInput.addEventListener('change', () => setInProgressEnabled(flagInput.checked));
+    const flagSlider = document.createElement('span');
+    flagSlider.className = 'toggle-slider';
+    flagToggle.append(flagInput, flagSlider);
+    flagRow.append(flagText, flagToggle);
+    sec.appendChild(flagRow);
 
     const row1 = document.createElement('div');
     row1.className = 'settings-danger-row';
