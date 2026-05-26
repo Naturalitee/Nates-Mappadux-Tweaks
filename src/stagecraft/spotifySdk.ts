@@ -82,7 +82,19 @@ export function loadSdk(): Promise<SpotifySdkPlayerCtor> {
 }
 
 export interface SpotifySoundtrackPlayer {
-  load(uri: string, opts?: { autoplay?: boolean; volume?: number; positionMs?: number }): Promise<void>;
+  load(uri: string, opts?: {
+    autoplay?:   boolean;
+    volume?:     number;
+    positionMs?: number;
+    /** Toggle Spotify's repeat-context state — only meaningful when
+     *  loading a playlist / album. Matches the YouTube IFrame's
+     *  setLoop semantics so a slot's mode controls both engines
+     *  uniformly. */
+    repeat?:     boolean;
+    /** Toggle Spotify's shuffle state — only meaningful for
+     *  context-uri loads. */
+    shuffle?:    boolean;
+  }): Promise<void>;
   play(): Promise<void>;
   pause(): Promise<void>;
   stop(): Promise<void>;
@@ -169,8 +181,8 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
       await _transferIfNeeded();
       lastUri = uri;
       const parts = parseSpotifyUri(uri);
-      // /me/player/play accepts either { uris: [trackUri] } for one or
-      // many tracks, or { context_uri: ... } for albums / playlists.
+      // /me/player/play accepts { uris: [trackUri] } for one or many
+      // tracks, or { context_uri } for albums / playlists / shows.
       const body: Record<string, unknown> = parts && parts.kind === 'track'
         ? { uris: [uri] }
         : { context_uri: uri };
@@ -180,6 +192,18 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
       if (opts?.volume !== undefined) {
         await player.setVolume(Math.max(0, Math.min(100, opts.volume)) / 100);
       }
+      // v2.15.15 — Set shuffle + repeat BEFORE the play call.
+      // Spotify's player honours these on the next context load.
+      // Only meaningful for context-uri loads (playlist / album).
+      if (parts && parts.kind !== 'track') {
+        if (opts?.shuffle !== undefined) {
+          await _api(`/me/player/shuffle?state=${opts.shuffle}&device_id=${deviceId}`, { method: 'PUT' });
+        }
+        if (opts?.repeat !== undefined) {
+          const state = opts.repeat ? 'context' : 'off';
+          await _api(`/me/player/repeat?state=${state}&device_id=${deviceId}`,   { method: 'PUT' });
+        }
+      }
       await _api(`/me/player/play?device_id=${deviceId}`, {
         method:  'PUT',
         headers: { 'Content-Type': 'application/json' },
@@ -188,7 +212,6 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
       if (opts?.autoplay === false) {
         // Spotify's play endpoint always starts. Pause immediately
         // if the caller wanted the track loaded but not playing.
-        // Small delay so the play has actually taken effect.
         setTimeout(() => { void player.pause(); }, 200);
       }
     },

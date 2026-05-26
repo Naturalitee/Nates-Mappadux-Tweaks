@@ -438,9 +438,15 @@ export class SoundtracksPanel {
     } else {
       const p = await this._ensureSpotifyPlayer();
       const positionMs = slot.startSec ? Math.floor(slot.startSec * 1000) : 0;
+      // Mirror the YT-playlist behaviour: slot mode + shuffle become
+      // Spotify's repeat-context + shuffle state. Only meaningful
+      // for context URIs (playlist / album / show) — the SDK ignores
+      // these on a single-track URI.
       await p.load(track.trackUri, {
         autoplay: true,
         volume:   0,
+        repeat:   slot.mode === 'loop' || slot.mode === 'playlist',
+        shuffle:  !!slot.shuffle,
         ...(positionMs ? { positionMs } : {}),
       });
       this.activeKind = 'spotify';

@@ -277,34 +277,64 @@ export async function rasterizeComposite(asset: MapAsset): Promise<RasterizeResu
   return rasterizeFromTiles(inputs, asset.compositeAspect ?? DEFAULT_OUTPUT_ASPECT);
 }
 
-/** v2.14.70 — Reveal-layer backing rasterise. Produces the composite
- *  WITHOUT the topmost tile (last in the array — array order = z-
- *  order so the last drawn tile is the visual top). Used by the
- *  renderer to show through when the Reveal Map Layer brush punches
- *  alpha holes in the main map. Returns null when there's nothing
- *  underneath the topmost tile (one tile, no tile assets resolve,
- *  etc.) — caller skips persisting in that case. */
+/** Reveal-layer backing rasterise. Produces the composite WITHOUT
+ *  the tiles that are visually "on top". The renderer shows the
+ *  backing through alpha holes the GM paints with the Reveal Map
+ *  Layer brush, or globally via the upper-layer transparency slider.
+ *
+ *  v2.15.15 — A tile belongs to the BACKING if at least one OTHER
+ *  tile (drawn later, so visually above it) overlaps it. Tiles
+ *  with nothing above them are "topmost" and get excluded.
+ *
+ *  Earlier (v2.14.70 .. v2.15.14) excluded only the single LAST
+ *  tile in the array. That worked for two-tile stacks but broke
+ *  the moment two top tiles each covered the same bottom — only
+ *  one became transparent under the slider; the other stayed
+ *  fully opaque because it ended up in the backing.
+ *
+ *  Returns null when no overlap exists / no resolvable tiles. */
 export async function rasterizeRevealBacking(asset: MapAsset): Promise<RasterizeResult | null> {
   const tiles = asset.compositeTiles ?? [];
   if (tiles.length < 2) return null;
-  // Resolve tile assets first — needed both for the overlap test
-  // (we need image-aspect to compute tile bounds) and for the
-  // rasterise.
-  const fullInputs   = await _resolveTileInputs(asset);
+  const fullInputs = await _resolveTileInputs(asset);
   if (fullInputs.length < 2) return null;
-  // v2.15.1 — Bail if no tiles actually overlap. Previously this
-  // generated a backing blob for any composite with 2+ tiles, so
-  // removing all overlaps in the editor left the layered status
-  // (revealBackingBlob + Reveal Map Layer behaviour + Layered pill
-  // — the pill recomputes live but the backing persists) stuck on.
-  // The library "Layered" pill uses the SAME overlap check via the
-  // shared helper so the two never disagree.
-  const { compositeHasOverlap } = await import('./compositeOverlap.ts');
+
+  const { compositeHasOverlap, tileBoundsNorm } = await import('./compositeOverlap.ts');
   const assetById = new Map<string, MapAsset>();
   for (const inp of fullInputs) assetById.set(inp.asset.id, inp.asset as MapAsset);
   if (!compositeHasOverlap(asset, assetById)) return null;
-  const drawnInputs  = fullInputs.slice(0, -1);
-  return rasterizeFromTiles(drawnInputs, asset.compositeAspect ?? DEFAULT_OUTPUT_ASPECT, fullInputs);
+
+  // Build bounds per tile (in composite-norm coords). A tile is
+  // "covered" if any LATER tile (higher z) overlaps its bbox; EPS
+  // absorbs float residue from snap maths (matches the rule in
+  // compositeOverlap.ts).
+  const canvasAspect = asset.compositeAspect ?? DEFAULT_OUTPUT_ASPECT;
+  const bounds = tiles.map((t) => tileBoundsNorm(t, assetById.get(t.mapAssetId), canvasAspect));
+  const EPS = 0.001;
+  const isCovered = (i: number): boolean => {
+    const a = bounds[i]!;
+    for (let j = i + 1; j < bounds.length; j++) {
+      const b = bounds[j]!;
+      if (a.x0 < b.x1 - EPS && a.x1 > b.x0 + EPS
+       && a.y0 < b.y1 - EPS && a.y1 > b.y0 + EPS) return true;
+    }
+    return false;
+  };
+
+  // Backing = every tile that has at least one tile drawn over it.
+  // fullInputs follows the same tile order as asset.compositeTiles
+  // (just possibly with gaps where _resolveTileInputs skipped
+  // unresolvable entries), so map by tile.id to find the original
+  // index for the cover test.
+  const idIndex = new Map<string, number>();
+  tiles.forEach((t, i) => idIndex.set(t.id, i));
+  const drawnInputs = fullInputs.filter((inp) => {
+    const i = idIndex.get(inp.tile.id);
+    return i !== undefined && isCovered(i);
+  });
+  if (drawnInputs.length === 0) return null;
+
+  return rasterizeFromTiles(drawnInputs, canvasAspect, fullInputs);
 }
 
 /** Internal — fetch + decode every tile's asset + blob for the
