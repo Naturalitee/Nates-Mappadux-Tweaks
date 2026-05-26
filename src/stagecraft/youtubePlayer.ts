@@ -219,24 +219,31 @@ export async function createYouTubePlayer(opts?: CreateYouTubePlayerOpts): Promi
       settled = true;
       const iframe = outer.querySelector('iframe');
       const diag = iframe
-        ? `iframe present; src="${iframe.src.slice(0, 80)}…"; readyState=${(iframe as HTMLIFrameElement).contentDocument?.readyState ?? 'cross-origin'}`
+        ? `iframe present; FULL src="${iframe.src}"; readyState=${(iframe as HTMLIFrameElement).contentDocument?.readyState ?? 'cross-origin'}`
         : 'NO iframe element was created — YT.Player(new) probably threw or never inserted.';
       console.warn('[soundtracks][yt-timeout]', diag);
       reject(new Error(
         'YouTube player didn\'t respond in 10 seconds. ' +
-        'Check DevTools → Network for requests to youtube.com/embed/. ' +
-        'Diagnostic: ' + diag,
+        'See console for the full iframe URL. ' +
+        diag.slice(0, 200),
       ));
     }, 10_000);
+    // v2.15.24 — Explicit host + origin so the IFrame Player's
+    // postMessage handshake knows where to look. Without these,
+    // YT's widgetapi has been observed to post messages with
+    // mismatched target origins on subdomain origins (beta.*).
     const config: Record<string, unknown> = {
       width:  '1',
       height: '1',
+      host:   'https://www.youtube.com',
       playerVars: {
-        autoplay: 0,
-        controls: 0,
-        disablekb: 1,
+        autoplay:    0,
+        controls:    0,
+        disablekb:   1,
         modestbranding: 1,
-        rel: 0,
+        rel:         0,
+        enablejsapi: 1,
+        origin:      location.origin,
         ...(opts?.listId
           ? { list: opts.listId, listType: 'playlist' }
           : {}),
