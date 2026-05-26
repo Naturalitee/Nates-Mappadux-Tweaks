@@ -1,5 +1,81 @@
 # Changelog
 
+## v2.16.0 — 2026-05-26
+
+### Soundtracks — pack-level background music
+
+The v2.16 headline. Mappadux now hosts a Soundtracks panel that
+plays YouTube and Spotify content as the running score for a
+session, distinct from the per-map Soundboard. Highlights:
+
+- **Two providers.** YouTube / YouTube Music (no user sign-in;
+  IFrame Player handles playback) and Spotify (Web Playback SDK +
+  Web API, requires a Premium account and a one-time Developer
+  App registration walked through in Settings). Both providers
+  run side-by-side; the panel multiplexes one slot at a time.
+- **N user-defined slots** with a permanent Silence anchor at the
+  top. Each slot holds a single track or a full playlist / album.
+  Selecting a slot crossfades from whatever was playing.
+- **Loop / Shuffle / Restart-vs-Resume** per slot. Shuffled
+  playlists start on a random track (cue + shuffle + jump, not
+  loadPlaylist + setShuffle which used to play track 0 first).
+- **Shuffle-stable resume** for playlists. Switching away mid-
+  track captures the specific track URI; switching back replays
+  that exact track at the saved position, then hands off to the
+  playlist (re-shuffled) for the rest. Works on both providers —
+  Spotify gets it natively via `/me/player/play`'s `offset`
+  parameter; YouTube via a single-video load + post-end handoff.
+- **Start / End trim** for single tracks. Click the "Start" /
+  "End" label while a track is playing to grab the current
+  playhead position; type a value to override. End is actively
+  enforced — looping single tracks stop / restart cleanly at the
+  chosen point. Tick marks on the progress bar mark the trim
+  points; clicking anywhere on the bar seeks.
+- **External transport awareness.** Pausing via a Bluetooth
+  remote, OS media keys, or lock screen flips the panel's pause
+  icon so the GM can resume from the GM UI without it being out
+  of sync with the speaker.
+- **Spotify runtime auth probe.** On panel open we probe the
+  access-token path; if the refresh token has been revoked
+  (Spotify side, or after long inactivity) the panel surfaces an
+  inline Reconnect button next to the existing status hint.
+
+Track URLs travel in `.mappadux` bundles. Spotify Client ID and
+OAuth tokens stay on the machine and never leak through bundle
+exports.
+
+### Settings polish
+
+- Settings dialog widened to 840px (was 560px) and the body now
+  actually scrolls when too tall (`min-height: 0` unlocks
+  overflow inside a flex column).
+- Spotify Client ID appears in the API Keys list alongside the
+  Freesound key, with per-row Delete buttons (rather than a
+  single shared Delete-all underneath) so the list scales as
+  more service keys land.
+- New Spotify setup walkthrough explains we use both Web
+  Playback SDK and Web API, lists the OAuth scopes that will be
+  granted, and points out the multi-Redirect-URI trick so one
+  Developer App can cover beta + production for a single user.
+
+### Stagecraft (Lighting + Automation) — still in-progress
+
+The WLED / Home Assistant / QLC+ Settings sections remain
+hidden behind the in-progress feature toggle. Headed for v2.18
+once the hardware-test pass lands.
+
+### Other fixes
+
+- Composite map AABB used a tile's raw width/height even when
+  the tile was rotated, which truncated rotated-tile bounding
+  boxes. Now uses `|w·cos θ| + |h·sin θ|`.
+- Multi-tile map reveal sometimes failed to repaint on the
+  player view; the renderer's hot-refresh of the backing
+  uniform was missing a `needsRender = true`.
+- Single-track loop went silent after the first iteration
+  because the zero-duration crossfade was a no-op that left the
+  engine pinned at volume 0. Snap to target on instant fades.
+
 ## v2.15.4 — 2026-05-25
 
 Followup to v2.15.1's overlap-gated layering: edge-touching tiles

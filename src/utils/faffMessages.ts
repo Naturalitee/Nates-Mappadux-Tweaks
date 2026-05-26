@@ -81,6 +81,10 @@ export const FAFF_MESSAGES: readonly string[] = [
   'The candles keep going out by themselves. Helpful.',
   'The party splits. The GM weeps.',
   'Searching for that one rule we definitely agreed on last session.',
+  // ── v2.16 release batch — Soundtracks ────────────────────────────────────
+  'Finding the soundtrack to death by facehugger.',
+  'Auditioning the chase music. The dragon insists on dramatic strings.',
+  'Crossfading from tavern lute to ominous drone. Slowly.',
 ];
 
 let _lastIndex = -1;

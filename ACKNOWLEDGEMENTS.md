@@ -42,6 +42,20 @@ etiquette.
 | Map-Griffinholm.jpg | Elven Tower Cartography | CC-BY 4.0 | https://www.elventower.com/ |
 | Rons-Moto-1979.png | kidneykid1800 | Permission granted | https://www.reddit.com/r/mothershiprpg/comments/18c71ep/8bit_map_nostromo_alien_inspired_map/ |
 
+## Soundtracks Engines *(v2.16)*
+
+The Soundtracks panel multiplexes two third-party playback engines
+behind one slot UI. Both are loaded lazily — a pack that doesn't
+use Soundtracks never pulls either script.
+
+| Provider | Script | Notes |
+|---|---|---|
+| **YouTube IFrame Player API** | `https://www.youtube.com/iframe_api` | Used under YouTube's [API Services Terms of Service](https://developers.google.com/youtube/terms/api-services-terms-of-service). No API key needed; the embed plays through YouTube's own IFrame. Mappadux drives play / pause / seek / volume programmatically. |
+| **Spotify Web Playback SDK** | `https://sdk.scdn.co/spotify-player.js` | Used under the [Spotify Developer Terms of Service](https://developer.spotify.com/terms/). Each user registers their own Spotify Developer App (PKCE OAuth, no Client Secret). Web Playback SDK requires a Spotify Premium account. Mappadux uses the [Spotify Web API](https://developer.spotify.com/documentation/web-api) for transport commands (play / pause / shuffle / repeat / device transfer) and the SDK for in-browser audio output. |
+
+Tokens and credentials stay on the user's machine; they never
+travel in `.mappadux` pack bundles or to any Mappadux server.
+
 ## UI Icons
 
 The hamburger menu, library buttons, and other in-app icon affordances use
