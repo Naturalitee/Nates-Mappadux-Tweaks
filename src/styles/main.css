@@ -4288,6 +4288,26 @@ option.select-option--add {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
+/* v2.15.45 — Start/End label split off from the input so clicking
+   the label grabs the playhead while clicking the input lets the
+   GM type a value without it being overwritten. */
+.soundtrack-time-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+.soundtrack-time-grab {
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  user-select: none;
+}
+.soundtrack-time-grab:hover {
+  background: var(--bg-base);
+  color: var(--text-primary);
+}
 .soundtrack-time-row input[type="number"] {
   width: 70px;
   padding: 3px 6px;

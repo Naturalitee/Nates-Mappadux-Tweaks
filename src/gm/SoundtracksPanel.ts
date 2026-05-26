@@ -698,23 +698,22 @@ export class SoundtracksPanel {
     const wrap = document.createElement('div');
     wrap.className = 'soundtrack-time-row';
     const mkInput = (label: string, key: 'startSec' | 'endSec'): HTMLElement => {
-      const lbl = document.createElement('label');
-      const val = document.createElement('input');
-      val.type = 'number';
-      val.min  = '0';
-      val.step = '0.5';
-      val.placeholder = label === 'Start' ? '0' : '(end)';
-      val.title = label === 'Start'
-        ? 'Start point in seconds — where the track begins each time you play this slot. CLICK during playback to grab the current playhead position; or type a value directly.'
-        : 'End point in seconds — where the track stops (and loops back to Start if Loop is on). CLICK during playback to grab the current playhead position; or type a value. Leave blank to play to the end of the track.';
-      const cur = slot[key];
-      val.value = cur !== undefined ? String(cur) : '';
-      // v2.15.35 — Click while slot is actively playing captures
-      // the current playback position into this field. Lets the
-      // GM trim a track by playing → clicking the progress bar
-      // to scrub → clicking Start / End to grab. The user can
-      // still type to manually override after the grab.
-      val.addEventListener('click', () => {
+      // v2.15.45 — The grab-time hot zone is now the LABEL only, not
+      // the input. Previously the click handler was on the input,
+      // which meant clicking to type a value also grabbed the
+      // playhead and overwrote what you were about to type. Now:
+      //   - Click the "Start" / "End" label → grab the current
+      //     playhead position into the field.
+      //   - Click / focus the input → type freely.
+      const cell = document.createElement('div');
+      cell.className = 'soundtrack-time-cell';
+      const grab = document.createElement('span');
+      grab.className = 'soundtrack-time-grab';
+      grab.textContent = label;
+      grab.title = label === 'Start'
+        ? 'Click while a track is playing to grab the current playhead position as the Start trim. Or type the value directly into the box.'
+        : 'Click while a track is playing to grab the current playhead position as the End trim. Or type the value directly into the box. Leave blank to play to the natural end.';
+      grab.addEventListener('click', () => {
         if (this.activeSlotId !== slot.id) return;
         const { positionSec } = this._currentProgress();
         if (positionSec <= 0) return;
@@ -722,6 +721,16 @@ export class SoundtracksPanel {
         val.value = String(rounded);
         void this._updateSlot(slot.id, { [key]: rounded } as Partial<SoundtrackSlot>);
       });
+      const val = document.createElement('input');
+      val.type = 'number';
+      val.min  = '0';
+      val.step = '0.5';
+      val.placeholder = label === 'Start' ? '0' : '(end)';
+      val.title = label === 'Start'
+        ? 'Start point in seconds — where the track begins each time you play this slot. Type a value, or click the "Start" label to grab the current playhead.'
+        : 'End point in seconds — where the track stops (and loops back to Start if Loop is on). Type a value, or click the "End" label to grab the current playhead. Leave blank to play to the natural end.';
+      const cur = slot[key];
+      val.value = cur !== undefined ? String(cur) : '';
       val.addEventListener('change', () => {
         const num = parseFloat(val.value);
         const patch = Number.isFinite(num) && num >= 0
@@ -729,8 +738,8 @@ export class SoundtracksPanel {
           : ({ [key]: undefined } as unknown as Partial<SoundtrackSlot>);
         void this._updateSlot(slot.id, patch);
       });
-      lbl.append(document.createTextNode(label + ' '), val);
-      return lbl;
+      cell.append(grab, val);
+      return cell;
     };
     wrap.append(mkInput('Start', 'startSec'), mkInput('End', 'endSec'));
     return wrap;
