@@ -240,6 +240,7 @@ export class SoundtracksPanel {
     addBtn.className = 'btn btn--ghost btn--sm btn--full';
     addBtn.style.marginTop = '8px';
     addBtn.textContent = '+ Add slot';
+    addBtn.title = 'Add a new soundtrack slot. Each slot holds one track or playlist; switching between slots crossfades.';
     addBtn.addEventListener('click', () => void this._addSlot());
     this.slotsEl.appendChild(addBtn);
 
@@ -278,7 +279,9 @@ export class SoundtracksPanel {
     playBtn.innerHTML = isActive
       ? '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" stroke="none"><rect x="6" y="6" width="12" height="12" rx="1"/></svg>'
       : ICON_PLAY;
-    playBtn.title = isActive ? 'Currently playing this slot' : 'Crossfade to this slot';
+    playBtn.title = isActive
+      ? 'Currently playing — click again to do nothing (use Silence to stop)'
+      : 'Click to start this slot. Crossfades from whatever\'s playing now.';
     playBtn.disabled = !isSilent && !slot.track;
     playBtn.addEventListener('click', () => void this._selectSlot(slot.id));
     header.appendChild(playBtn);
@@ -289,17 +292,17 @@ export class SoundtracksPanel {
     typeEl.className = 'soundtrack-slot-type';
     if (isSilent) {
       typeEl.innerHTML = ICON_TYPE_SILENT;
-      typeEl.title = 'Silence';
+      typeEl.title = 'Silence — selecting this fades the music out.';
     } else if (slot.track && _isPlaylistContent(slot.track)) {
       typeEl.innerHTML = ICON_TYPE_PLAYLIST;
-      typeEl.title = 'Playlist / album';
+      typeEl.title = 'Playlist / album — the engine iterates through tracks. Loop + Shuffle below control how.';
     } else if (slot.track) {
       typeEl.innerHTML = ICON_TYPE_TRACK;
-      typeEl.title = 'Single track';
+      typeEl.title = 'Single track — plays once, then stops unless Loop is on.';
     } else {
       typeEl.innerHTML = ICON_TYPE_TRACK;
       typeEl.style.opacity = '0.3';
-      typeEl.title = 'Empty slot — paste a URL to fill it';
+      typeEl.title = 'Empty slot — paste a YouTube or Spotify URL below to fill it.';
     }
     header.appendChild(typeEl);
 
@@ -321,6 +324,7 @@ export class SoundtracksPanel {
       labelInput.type = 'text';
       labelInput.value = slot.label;
       labelInput.className = 'soundtrack-slot-label-input';
+      labelInput.title = 'Slot name — click to rename. Use anything that helps you remember what\'s in it.';
       labelInput.addEventListener('change', () => void this._updateSlot(slot.id, { label: labelInput.value.trim() || 'Slot' }));
       header.appendChild(labelInput);
 
@@ -330,39 +334,44 @@ export class SoundtracksPanel {
         const provider = document.createElement('span');
         provider.className = 'soundtrack-provider-badge';
         provider.innerHTML = _providerIconFor(slot.track) ?? '';
-        provider.title = _providerNameFor(slot.track);
+        provider.title = `Powered by ${_providerNameFor(slot.track)}. Sign in to ${_providerNameFor(slot.track)} (Premium) in another tab for ad-free playback.`;
         header.appendChild(provider);
       }
 
-      const delBtn = document.createElement('button');
-      delBtn.type = 'button';
-      delBtn.className = 'btn btn--danger btn--sm';
-      delBtn.textContent = '×';
-      delBtn.title = 'Remove slot';
-      delBtn.addEventListener('click', () => void this._removeSlot(slot.id));
-      header.appendChild(delBtn);
+      // v2.15.37 — Delete button visible only when the slot is the
+      // active one OR doesn't have a track yet (so the GM can
+      // dispose of an empty slot they don't want, but can't
+      // accidentally one-click-delete an inactive slot they've
+      // configured). To delete a configured inactive slot: click
+      // to make it active first, then click ×.
+      if (isActive || !slot.track) {
+        const delBtn = document.createElement('button');
+        delBtn.type = 'button';
+        delBtn.className = 'btn btn--danger btn--sm';
+        delBtn.textContent = '×';
+        delBtn.title = 'Remove this slot. To change the track in a slot, delete + recreate.';
+        delBtn.addEventListener('click', () => void this._removeSlot(slot.id));
+        header.appendChild(delBtn);
+      }
     }
     row.appendChild(header);
 
     if (isSilent) return row;
 
+    // v2.15.37 — Body controls (transport, time-trim, volume,
+    // now-playing) only render when the slot is ACTIVE. Inactive
+    // populated slots collapse to just the header so the panel
+    // stays compact and the GM sees the configured slots at a
+    // glance. Empty slots show the URL input so they're still
+    // fillable.
     if (!slot.track) {
-      // Empty slot — show the URL input. No track chip / playlist
-      // tag once a URL is added; to change a slot's content the
-      // user deletes the slot and creates a fresh one (less chrome,
-      // intentional friction).
       row.appendChild(this._renderUrlInput(slot));
-    } else {
-      // Slot with a track — show the combined controls row
-      // (transport when active + loop/shuffle always) then the
-      // now-playing line and the volume slider.
-      row.appendChild(this._renderControlsRow(slot, isActive));
-      if (isActive) row.appendChild(this._renderNowPlaying(slot));
+    } else if (isActive) {
+      row.appendChild(this._renderControlsRow(slot, true));
+      row.appendChild(this._renderNowPlaying(slot));
       if (!_isPlaylistContent(slot.track)) row.appendChild(this._renderTimeControls(slot));
+      row.appendChild(this._renderVolume(slot));
     }
-
-    // Volume — always.
-    row.appendChild(this._renderVolume(slot));
     return row;
   }
 
@@ -381,7 +390,7 @@ export class SoundtracksPanel {
         const prevBtn = document.createElement('button');
         prevBtn.type = 'button';
         prevBtn.className = 'btn btn--ghost btn--sm';
-        prevBtn.title = 'Previous track';
+        prevBtn.title = 'Previous track in this playlist. Click from the first track to restart from the beginning.';
         prevBtn.innerHTML = ICON_PREV;
         prevBtn.addEventListener('click', () => this._transportPrev());
         row.appendChild(prevBtn);
@@ -389,7 +398,9 @@ export class SoundtracksPanel {
       const pauseBtn = document.createElement('button');
       pauseBtn.type = 'button';
       pauseBtn.className = 'btn btn--ghost btn--sm';
-      pauseBtn.title = this.isPaused ? 'Resume' : 'Pause';
+      pauseBtn.title = this.isPaused
+        ? 'Resume playback from where it paused'
+        : 'Pause — keeps position; click again to resume from here';
       pauseBtn.innerHTML = this.isPaused ? ICON_PLAY : ICON_PAUSE;
       pauseBtn.addEventListener('click', () => this._transportTogglePause());
       row.appendChild(pauseBtn);
@@ -397,7 +408,7 @@ export class SoundtracksPanel {
         const nextBtn = document.createElement('button');
         nextBtn.type = 'button';
         nextBtn.className = 'btn btn--ghost btn--sm';
-        nextBtn.title = 'Next track';
+        nextBtn.title = 'Skip to the next track in this playlist';
         nextBtn.innerHTML = ICON_NEXT;
         nextBtn.addEventListener('click', () => this._transportNext());
         row.appendChild(nextBtn);
@@ -406,16 +417,25 @@ export class SoundtracksPanel {
     // Loop + (Shuffle if playlist) + Restart/Resume toggle.
     row.appendChild(this._renderIconToggle({
       icon:    ICON_LOOP,
-      title:   'Loop',
+      title:   slot.loop
+        ? (isPlaylist
+            ? 'Loop is ON — the playlist will cycle back to the start when it ends. Click to turn off.'
+            : 'Loop is ON — the track will replay (using Start/End trim) when it ends. Click to turn off.')
+        : (isPlaylist
+            ? 'Loop is OFF — playlist plays through once then stops. Click to enable looping.'
+            : 'Loop is OFF — track plays once then stops. Click to enable looping.'),
       active:  !!slot.loop,
       onClick: () => void this._updateSlot(slot.id, { loop: !slot.loop }),
     }));
     if (isPlaylist) {
+      const shuffleOn = slot.shuffle !== false;
       row.appendChild(this._renderIconToggle({
         icon:    ICON_SHUFFLE,
-        title:   'Shuffle',
-        active:  slot.shuffle !== false,
-        onClick: () => void this._updateSlot(slot.id, { shuffle: !(slot.shuffle !== false) }),
+        title:   shuffleOn
+          ? 'Shuffle is ON — tracks play in a random order. Click to play in playlist order.'
+          : 'Shuffle is OFF — tracks play in playlist order. Click to randomise.',
+        active:  shuffleOn,
+        onClick: () => void this._updateSlot(slot.id, { shuffle: !shuffleOn }),
       }));
     }
     // v2.15.34 — Restart-vs-Resume toggle. Active state (accent
@@ -424,7 +444,9 @@ export class SoundtracksPanel {
     const restartOn = _effectiveRestart(slot);
     row.appendChild(this._renderIconToggle({
       icon:    ICON_RESTART,
-      title:   restartOn ? 'Restart' : 'Resume',
+      title:   restartOn
+        ? 'Restart on play — selecting this slot starts from the beginning (or from the Start trim) every time. Click for Resume mode.'
+        : 'Resume on play — selecting this slot picks up where it left off. Click for Restart mode (always start from the beginning).',
       active:  restartOn,
       onClick: () => void this._updateSlot(slot.id, { restart: !restartOn }),
     }));
@@ -456,7 +478,7 @@ export class SoundtracksPanel {
     const track = document.createElement('div');
     track.className = 'sb-progress-track soundtrack-progress soundtrack-progress--clickable';
     track.dataset['nowPlayingProgress'] = '1';
-    track.title = 'Click to jump to that point';
+    track.title = 'Playback progress. Click anywhere on the bar to jump to that point in the track.';
     track.addEventListener('click', (ev) => this._onProgressClick(ev, track));
     const fill = document.createElement('div');
     fill.className = 'sb-progress-fill';
@@ -523,10 +545,12 @@ export class SoundtracksPanel {
     const input = document.createElement('input');
     input.type = 'text';
     input.placeholder = this._urlPlaceholder();
+    input.title = 'Paste a YouTube, YouTube Music, or Spotify URL. Single tracks AND playlists / albums are both accepted — the provider iterates a playlist for you.';
     const addBtn = document.createElement('button');
     addBtn.type = 'button';
     addBtn.className = 'btn btn--ghost btn--sm';
     addBtn.textContent = 'Add';
+    addBtn.title = 'Save this URL into the slot. To change later, delete the slot and create a new one.';
     const submit = (): void => {
       const t = parseSoundtrackUrl(input.value);
       if (!t) {
@@ -565,7 +589,9 @@ export class SoundtracksPanel {
       val.min  = '0';
       val.step = '0.5';
       val.placeholder = label === 'Start' ? '0' : '(end)';
-      val.title = 'Click during playback to grab the current time';
+      val.title = label === 'Start'
+        ? 'Start point in seconds — where the track begins each time you play this slot. CLICK during playback to grab the current playhead position; or type a value directly.'
+        : 'End point in seconds — where the track stops (and loops back to Start if Loop is on). CLICK during playback to grab the current playhead position; or type a value. Leave blank to play to the end of the track.';
       const cur = slot[key];
       val.value = cur !== undefined ? String(cur) : '';
       // v2.15.35 — Click while slot is actively playing captures
@@ -607,6 +633,7 @@ export class SoundtracksPanel {
     slider.min  = '0';
     slider.max  = '100';
     slider.value = String(initialVol);
+    slider.title = 'Volume for this slot (0-100%). Drag while playing for a live adjust. Overridden by the panel mute toggle in the header.';
     slider.addEventListener('input', () => {
       const v = parseInt(slider.value, 10);
       label.textContent = `Vol ${v}%`;
