@@ -181,6 +181,16 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
   let lastPosition  = 0;
   let lastDuration  = 0;
   let lastPaused    = true;
+  /** v2.15.49 — Wall-clock time we received the most recent
+   *  player_state_changed event. Used to interpolate the live
+   *  position between events: state changes fire sparsely (often
+   *  only on track change / pause / seek), so a cached lastPosition
+   *  drifts behind the real playhead. For single-track loads in
+   *  particular the SDK emits one PLAYING event and then goes
+   *  quiet, freezing the panel's progress bar + breaking the
+   *  Start/End grab. Interpolation makes the bar move and the grab
+   *  capture the real playhead. */
+  let lastReceivedAt = Date.now();
   let lastTrackInfo: SpotifyTrackInfo | null = null;
   const endedListeners:  Array<() => void> = [];
   const pausedListeners: Array<(paused: boolean) => void> = [];
@@ -190,9 +200,10 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
     const wasNearEnd = lastDuration > 0 && lastPosition >= lastDuration - 1000 && !lastPaused;
     const justEnded  = wasNearEnd && state.paused && state.position === 0;
     const pausedChanged = state.paused !== lastPaused;
-    lastPosition = state.position;
-    lastDuration = state.duration;
-    lastPaused   = state.paused;
+    lastPosition   = state.position;
+    lastDuration   = state.duration;
+    lastPaused     = state.paused;
+    lastReceivedAt = Date.now();
     if (state.track_window?.current_track) {
       lastTrackInfo = state.track_window.current_track;
     }
@@ -215,15 +226,21 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
     });
   }
 
+  // v2.15.49 — Track whether we've already transferred playback to
+  // this device in this session. Subsequent load() calls would
+  // re-transfer needlessly, and on an already-active device the
+  // transfer call can briefly glitch the audio of whatever's
+  // paused-but-cued — which is exactly what caused the "stumble"
+  // when crossfading from a Spotify playlist into a single track.
+  let transferDone = false;
   async function _transferIfNeeded(): Promise<void> {
-    // Tell Spotify Connect to focus on our SDK device. Without this,
-    // play() on a fresh page may target whatever device the user
-    // last used.
+    if (transferDone) return;
     await _api(`/me/player`, {
       method:  'PUT',
       headers: { 'Content-Type': 'application/json' },
       body:    JSON.stringify({ device_ids: [deviceId], play: false }),
     });
+    transferDone = true;
   }
 
   return {
@@ -275,8 +292,12 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
     play()                         { return player.resume(); },
     pause()                        { return player.pause(); },
     async stop() {
+      // v2.15.49 — Pause only; the previous seek(0) was a YT-parity
+      // gesture but on Spotify it nudges the paused-but-cued context
+      // in a way that audibly glitches when load() immediately
+      // replaces the context for a slot crossfade. The next load()
+      // replaces playback wholesale so we don't need a hard reset.
       try { await player.pause(); } catch { /* nothing */ }
-      try { await player.seek(0); } catch { /* nothing */ }
     },
     setVolume(v: number)           { return player.setVolume(Math.max(0, Math.min(100, v)) / 100); },
     seekMs(ms: number)             { return player.seek(ms); },
@@ -295,7 +316,18 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
       if (authors)            out.author = authors;
       return out.title ? out : null;
     },
-    getPositionMs()      { return lastPosition; },
+    getPositionMs() {
+      // v2.15.49 — Interpolate from the last received state event.
+      // Without this the progress bar would freeze on single-track
+      // loads (where state events fire only on PLAYING / pause /
+      // seek / track-end) even though the SDK itself knows the live
+      // position (proven by seekMs working). Math.min clamps so the
+      // interpolated value can't overshoot the duration we cached.
+      if (lastPaused) return lastPosition;
+      const elapsed = Math.max(0, Date.now() - lastReceivedAt);
+      const live = lastPosition + elapsed;
+      return lastDuration > 0 ? Math.min(lastDuration, live) : live;
+    },
     getDurationMs()      { return lastDuration; },
     getCurrentTrackUri() { return lastTrackInfo?.uri ?? null; },
   };
