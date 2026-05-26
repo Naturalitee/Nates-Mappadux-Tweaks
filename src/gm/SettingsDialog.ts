@@ -1,5 +1,6 @@
 import {
   getStoredApiKeys,
+  deleteApiKey,
   deleteAllApiKeys,
   isVideoCap1080Enabled,
   setVideoCap1080Enabled,
@@ -244,39 +245,62 @@ export class SettingsDialog {
       none.textContent = 'No API keys stored.';
       sec.appendChild(none);
     } else {
+      // v2.15.51 — Each row now carries its own Delete button on
+      // the right so the list scales as more service keys land
+      // (Spotify, future Syrinscape, etc.). The bulk "Delete all"
+      // stays underneath but only when there's more than one key.
       const list = document.createElement('ul');
       list.className = 'settings-key-list';
+      const rerender = (): void => {
+        const next = this._buildApiKeysSection();
+        sec.replaceWith(next);
+      };
       for (const k of keys) {
         const li = document.createElement('li');
         const label = document.createElement('span');
+        label.className = 'settings-key-label';
         label.textContent = k.label;
         const preview = document.createElement('span');
         preview.className = 'settings-key-preview';
         preview.textContent = k.preview;
-        li.append(label, preview);
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn btn--danger btn--sm settings-key-del';
+        del.textContent = 'Delete';
+        del.title = `Remove the ${k.label} from this browser. External services using it will stop working until you re-enter the key.`;
+        del.addEventListener('click', () => {
+          const ok = confirm(
+            `Delete the ${k.label}?\n\n` +
+            `Anything that uses it will stop working until you re-enter it.`,
+          );
+          if (!ok) return;
+          deleteApiKey(k.key);
+          rerender();
+        });
+        li.append(label, preview, del);
         list.appendChild(li);
       }
       sec.appendChild(list);
 
-      const btnRow = document.createElement('div');
-      btnRow.className = 'settings-btn-row';
-      const deleteAll = document.createElement('button');
-      deleteAll.type = 'button';
-      deleteAll.className = 'btn btn--danger btn--sm';
-      deleteAll.textContent = `Delete ${keys.length === 1 ? 'this key' : 'all API keys'}`;
-      deleteAll.addEventListener('click', () => {
-        const ok = confirm(
-          `Delete ${keys.length === 1 ? 'this API key' : 'all stored API keys'}?\n\n` +
-          `External services using these credentials will stop working until you re-enter them.`,
-        );
-        if (!ok) return;
-        deleteAllApiKeys();
-        // Re-render this section in place.
-        const next = this._buildApiKeysSection();
-        sec.replaceWith(next);
-      });
-      btnRow.appendChild(deleteAll);
-      sec.appendChild(btnRow);
+      if (keys.length > 1) {
+        const btnRow = document.createElement('div');
+        btnRow.className = 'settings-btn-row';
+        const deleteAll = document.createElement('button');
+        deleteAll.type = 'button';
+        deleteAll.className = 'btn btn--danger btn--sm';
+        deleteAll.textContent = 'Delete all API keys';
+        deleteAll.addEventListener('click', () => {
+          const ok = confirm(
+            `Delete all ${keys.length} stored API keys?\n\n` +
+            `External services using these credentials will stop working until you re-enter them.`,
+          );
+          if (!ok) return;
+          deleteAllApiKeys();
+          rerender();
+        });
+        btnRow.appendChild(deleteAll);
+        sec.appendChild(btnRow);
+      }
     }
 
     return sec;

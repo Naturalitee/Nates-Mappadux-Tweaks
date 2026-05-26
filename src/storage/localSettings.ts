@@ -184,6 +184,12 @@ export function isBetaHost(): boolean {
  *  delete credentials separately from other local state. */
 export const API_KEY_ENTRIES: Array<{ key: string; label: string }> = [
   { key: 'dmr_freesound_api_key', label: 'Freesound API key' },
+  // v2.15.51 — Spotify Client ID surfaces in the API Keys list so a
+  // GM doing housekeeping can see it alongside other service creds.
+  // The OAuth tokens (access / refresh) deliberately don't appear
+  // here — those are session credentials, not config; they're
+  // managed via the Soundtracks Connect / Disconnect flow.
+  { key: 'mappadux:spotify_client_id', label: 'Spotify Client ID' },
 ];
 
 /** All localStorage entries Mappadux owns. Two prefix conventions

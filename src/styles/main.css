@@ -4367,6 +4367,17 @@ option.select-option--add {
   font-family: var(--font-mono);
   color: var(--text-secondary);
 }
+/* v2.15.51 — Per-row Delete button sits to the right of the
+   redacted preview. Three-column flex: label takes the slack,
+   preview is its natural mono width, button is fixed at the end. */
+.settings-key-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.settings-key-del {
+  flex: 0 0 auto;
+  margin-left: var(--space-sm);
+}
 .settings-danger { border-color: rgba(224, 62, 62, 0.4); }
 .settings-danger-row {
   display: flex;
