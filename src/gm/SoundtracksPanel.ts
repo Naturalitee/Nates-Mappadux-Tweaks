@@ -96,12 +96,46 @@ export class SoundtracksPanel {
   /** Whether the active player is currently paused. Flips the
    *  pause/play transport icon. */
   private isPaused = false;
+  /** v2.15.27 — panel-level mute. Suppresses the audio output of
+   *  whichever player is active without stopping playback (so
+   *  toggling back on resumes from where it would have been).
+   *  Defaults to NOT muted; persisted in localStorage so a GM who
+   *  killed the music last session lands with it killed again. */
+  private isMuted = false;
+  private muteToggleEl: HTMLInputElement | null = null;
 
   constructor(host: SoundtracksPanelHost) {
     this.host     = host;
     this.panelEl  = document.getElementById('soundtracks-panel')!;
     this.slotsEl  = document.getElementById('soundtracks-slots')!;
     this.statusEl = document.getElementById('soundtracks-status')!;
+    this.muteToggleEl = document.getElementById('soundtracks-mute-toggle') as HTMLInputElement | null;
+    if (this.muteToggleEl) {
+      try {
+        this.isMuted = localStorage.getItem('mappadux:soundtracks_muted') === '1';
+      } catch { /* nothing */ }
+      this.muteToggleEl.checked = !this.isMuted;
+      this.muteToggleEl.addEventListener('click', (e) => e.stopPropagation());
+      this.muteToggleEl.addEventListener('change', () => {
+        this.isMuted = !this.muteToggleEl!.checked;
+        try {
+          if (this.isMuted) localStorage.setItem('mappadux:soundtracks_muted', '1');
+          else              localStorage.removeItem('mappadux:soundtracks_muted');
+        } catch { /* nothing */ }
+        this._applyMute();
+      });
+    }
+  }
+
+  /** Apply the current mute state to the active player. Volume goes
+   *  to 0 when muted; restores to the active slot's volume when
+   *  unmuted. Called on toggle + after every track load + crossfade. */
+  private _applyMute(): void {
+    const p = this._activePlayer();
+    if (!p) return;
+    const target = this.isMuted ? 0 : this._currentVolume();
+    if (this.activeKind === 'spotify') void (p as SpotifySoundtrackPlayer).setVolume(target);
+    else                                (p as YouTubeSoundtrackPlayer).setVolume(target);
   }
 
   refresh(): void {
@@ -424,8 +458,9 @@ export class SoundtracksPanel {
     slider.addEventListener('input', () => {
       const v = parseInt(slider.value, 10);
       label.textContent = `Vol ${v}%`;
-      // Live-drive the active player's volume if THIS slot is playing.
-      if (this.activeSlotId === slot.id) {
+      // Live-drive the active player's volume if THIS slot is
+      // playing AND the panel isn't muted. Muted state pins at 0.
+      if (this.activeSlotId === slot.id && !this.isMuted) {
         const player = this._activePlayer();
         if (player) {
           if (this.activeKind === 'spotify') void (player as SpotifySoundtrackPlayer).setVolume(v);
@@ -544,7 +579,11 @@ export class SoundtracksPanel {
   private async _playSlotTrack(slot: SoundtrackSlot, crossfadeMs: number): Promise<void> {
     const track = slot.track;
     if (!track) return;
-    const targetVolume    = slot.volume ?? DEFAULT_VOLUME;
+    // v2.15.27 — Respect the panel-level mute. When muted we still
+    // load + play the track (so the engine state stays correct);
+    // we just don't ramp the volume up. Toggling mute off later
+    // applies the proper level via _applyMute.
+    const targetVolume    = this.isMuted ? 0 : (slot.volume ?? DEFAULT_VOLUME);
     const playlistContent = _isPlaylistContent(track);
     const loop            = !!slot.loop;
     const shuffle         = slot.shuffle !== false;  // default true
