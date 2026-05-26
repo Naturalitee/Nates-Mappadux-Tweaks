@@ -4199,6 +4199,16 @@ option.select-option--add {
 .sb-progress-track.soundtrack-progress {
   margin-top: 4px;
 }
+/* v2.15.35 — Clickable progress bar for seek. Slightly taller so
+   the click target is forgiving; cursor + hover hint so the
+   affordance reads. */
+.sb-progress-track.soundtrack-progress--clickable {
+  height: 5px;
+  cursor: pointer;
+}
+.sb-progress-track.soundtrack-progress--clickable:hover {
+  filter: brightness(1.2);
+}
 
 /* v2.15.31 — Active-slot highlight beefed up so the currently-
    playing slot is obvious at a glance. Tinted background + accent

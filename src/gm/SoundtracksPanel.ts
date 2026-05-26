@@ -426,16 +426,32 @@ export class SoundtracksPanel {
     text.className = 'soundtrack-now-playing';
     text.textContent = '…';
     text.dataset['nowPlaying'] = '1';
-    // Reuses .sb-progress-track / .sb-progress-fill so the visual
-    // matches the Soundboard's progress bar exactly.
     const track = document.createElement('div');
-    track.className = 'sb-progress-track soundtrack-progress';
+    track.className = 'sb-progress-track soundtrack-progress soundtrack-progress--clickable';
     track.dataset['nowPlayingProgress'] = '1';
+    track.title = 'Click to jump to that point';
+    track.addEventListener('click', (ev) => this._onProgressClick(ev, track));
     const fill = document.createElement('div');
     fill.className = 'sb-progress-fill';
     track.appendChild(fill);
     wrap.append(text, track);
     return wrap;
+  }
+
+  /** v2.15.35 — Click anywhere on the progress bar to seek there.
+   *  Power-user feature for auditioning start/end trim points
+   *  alongside the click-to-grab-time inputs. */
+  private _onProgressClick(ev: MouseEvent, trackEl: HTMLElement): void {
+    const rect = trackEl.getBoundingClientRect();
+    const pct = Math.max(0, Math.min(1, (ev.clientX - rect.left) / rect.width));
+    const { durationSec } = this._currentProgress();
+    if (durationSec <= 0) return;
+    const target = pct * durationSec;
+    if (this.activeKind === 'youtube' && this.ytPlayer) {
+      this.ytPlayer.seekSec(target);
+    } else if (this.activeKind === 'spotify' && this.spotifyPlayer) {
+      void this.spotifyPlayer.seekMs(target * 1000);
+    }
   }
 
   private _transportPrev(): void {
@@ -522,8 +538,22 @@ export class SoundtracksPanel {
       val.min  = '0';
       val.step = '0.5';
       val.placeholder = label === 'Start' ? '0' : '(end)';
+      val.title = 'Click during playback to grab the current time';
       const cur = slot[key];
       val.value = cur !== undefined ? String(cur) : '';
+      // v2.15.35 — Click while slot is actively playing captures
+      // the current playback position into this field. Lets the
+      // GM trim a track by playing → clicking the progress bar
+      // to scrub → clicking Start / End to grab. The user can
+      // still type to manually override after the grab.
+      val.addEventListener('click', () => {
+        if (this.activeSlotId !== slot.id) return;
+        const { positionSec } = this._currentProgress();
+        if (positionSec <= 0) return;
+        const rounded = Math.round(positionSec * 10) / 10;
+        val.value = String(rounded);
+        void this._updateSlot(slot.id, { [key]: rounded } as Partial<SoundtrackSlot>);
+      });
       val.addEventListener('change', () => {
         const num = parseFloat(val.value);
         const patch = Number.isFinite(num) && num >= 0

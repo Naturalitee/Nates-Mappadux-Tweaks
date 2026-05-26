@@ -108,6 +108,7 @@ interface YTPlayerLike {
   getPlayerState(): number;
   setLoop(loop: boolean): void;
   setShuffle(shuffle: boolean): void;
+  seekTo(seconds: number, allowSeekAhead: boolean): void;
   previousVideo(): void;
   nextVideo(): void;
   getVideoData(): { video_id?: string; title?: string; author?: string };
@@ -137,6 +138,8 @@ export interface YouTubeSoundtrackPlayer {
   loadPlaylist(listId: string, opts?: { autoplay?: boolean; volume?: number; loop?: boolean; shuffle?: boolean; index?: number; startSeconds?: number }): void;
   /** Current playback position within the active video (seconds). */
   getCurrentTime(): number;
+  /** Seek the current track to the given second. */
+  seekSec(seconds: number): void;
   /** Current video's total duration (seconds). 0 until known. */
   getDuration(): number;
   /** Current playlist index (0-based). -1 when not playing a playlist. */
@@ -336,6 +339,7 @@ export async function createYouTubePlayer(opts?: CreateYouTubePlayerOpts): Promi
     setVolume(v: number) { player.setVolume(Math.max(0, Math.min(100, v))); },
     next()    { try { player.nextVideo();     } catch { /* nothing */ } },
     previous() { try { player.previousVideo(); } catch { /* nothing */ } },
+    seekSec(sec: number) { try { player.seekTo(Math.max(0, sec), true); } catch { /* nothing */ } },
     destroy() { try { player.destroy(); } catch { /* nothing */ } },
     onStateChange(cb)    { stateListeners.push(cb); },
     onError(cb)          { errorListeners.push(cb); },
