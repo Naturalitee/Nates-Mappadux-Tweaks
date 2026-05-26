@@ -166,17 +166,24 @@ export async function createYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
   await loadYouTubeApi();
   const w = window as unknown as { YT: { Player: new (el: HTMLElement, opts: object) => YTPlayerLike } };
 
-  // Ensure host container exists.
+  // Ensure host container exists. v2.15.22 — kept in normal document
+  // flow (not position:fixed off-screen) because some YouTube embed
+  // anti-abuse paths refuse to fire onReady when the iframe element
+  // has zero rendered area. We still hide it from the user via
+  // opacity:0 + pointer-events:none + tiny size so it's invisible
+  // but counts as "rendered" for the IFrame Player's heuristics.
   let outer = document.getElementById('stagecraft-yt-host');
   if (!outer) {
     outer = document.createElement('div');
     outer.id = 'stagecraft-yt-host';
     outer.style.position = 'fixed';
-    outer.style.left = '-10000px';
-    outer.style.top = '-10000px';
-    outer.style.width = '1px';
-    outer.style.height = '1px';
+    outer.style.bottom = '0';
+    outer.style.right  = '0';
+    outer.style.width  = '2px';
+    outer.style.height = '2px';
+    outer.style.opacity = '0.01';
     outer.style.pointerEvents = 'none';
+    outer.style.zIndex = '-1';
     document.body.appendChild(outer);
   }
   // Fresh inner div per player; IFrame Player replaces it with an iframe.
@@ -188,19 +195,25 @@ export async function createYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
   const stateListeners: Array<(state: number) => void> = [];
   const errorListeners: Array<(code: number, message: string) => void> = [];
 
-  // 10s timeout. If onReady doesn't fire (script blocked by an
-  // ad blocker, network issue, etc.) we surface a clear failure
-  // instead of hanging the status line at "Loading YouTube
-  // player…" forever.
+  // 10s timeout. If onReady doesn't fire (off-screen iframe
+  // rejected, ad blocker, security headers, network) we surface a
+  // diagnostic error instead of hanging at "Loading…". v2.15.22
+  // includes iframe state in the message so we know which of the
+  // possible causes is biting.
   const player: YTPlayerLike = await new Promise<YTPlayerLike>((resolve, reject) => {
     let settled = false;
     const timer = setTimeout(() => {
       if (settled) return;
       settled = true;
+      const iframe = outer.querySelector('iframe');
+      const diag = iframe
+        ? `iframe present; src="${iframe.src.slice(0, 80)}…"; readyState=${(iframe as HTMLIFrameElement).contentDocument?.readyState ?? 'cross-origin'}`
+        : 'NO iframe element was created — YT.Player(new) probably threw or never inserted.';
+      console.warn('[soundtracks][yt-timeout]', diag);
       reject(new Error(
-        'YouTube player didn\'t respond within 10 seconds. ' +
-        'This usually means an ad blocker or privacy extension is ' +
-        'blocking youtube.com — disable it for this site and reload.',
+        'YouTube player didn\'t respond in 10 seconds. ' +
+        'Check DevTools → Network for requests to youtube.com/embed/. ' +
+        'Diagnostic: ' + diag,
       ));
     }, 10_000);
     const p = new w.YT.Player(inner, {
