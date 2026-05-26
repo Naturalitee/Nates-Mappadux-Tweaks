@@ -197,8 +197,19 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
 
   player.addListener('player_state_changed', (state) => {
     if (!state) return;
+    const prevTrackUri = lastTrackInfo?.uri;
+    const newTrackUri  = state.track_window?.current_track?.uri;
+    // v2.15.50 — Track URI guard for "ended" detection. Without this,
+    // Spotify's between-track transitions inside a playlist briefly
+    // emit paused=true position=0 with the NEW current_track. We
+    // were mistaking that for "the slot ended" and crashing the
+    // panel out to Silence mid-playlist — which is the "playlists
+    // randomly restart tracks / change songs" symptom. A real
+    // ending leaves the track URI unchanged (Spotify pauses at 0
+    // on the same track).
+    const trackChanged = !!newTrackUri && !!prevTrackUri && newTrackUri !== prevTrackUri;
     const wasNearEnd = lastDuration > 0 && lastPosition >= lastDuration - 1000 && !lastPaused;
-    const justEnded  = wasNearEnd && state.paused && state.position === 0;
+    const justEnded  = wasNearEnd && state.paused && state.position === 0 && !trackChanged;
     const pausedChanged = state.paused !== lastPaused;
     lastPosition   = state.position;
     lastDuration   = state.duration;
