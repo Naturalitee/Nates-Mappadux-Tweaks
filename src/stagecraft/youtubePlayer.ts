@@ -108,6 +108,15 @@ interface YTPlayerLike {
   getPlayerState(): number;
   setLoop(loop: boolean): void;
   setShuffle(shuffle: boolean): void;
+  seekTo(seconds: number, allowSeekAhead: boolean): void;
+  previousVideo(): void;
+  nextVideo(): void;
+  getVideoData(): { video_id?: string; title?: string; author?: string };
+  getCurrentTime(): number;
+  getDuration(): number;
+  getPlaylistIndex(): number;
+  getPlaylist(): string[];
+  playVideoAt(index: number): void;
   destroy(): void;
 }
 
@@ -122,43 +131,107 @@ export const YT_STATE = {
 } as const;
 
 export interface YouTubeSoundtrackPlayer {
-  load(videoId: string, opts?: { autoplay?: boolean; volume?: number }): void;
+  load(videoId: string, opts?: { autoplay?: boolean; volume?: number; startSeconds?: number }): void;
   /** Load a whole YouTube / YouTube Music playlist by list id. The
    *  IFrame Player iterates the playlist internally; `loop` makes
    *  it cycle back to the first track when the list ends; `shuffle`
-   *  randomises the order. */
-  loadPlaylist(listId: string, opts?: { autoplay?: boolean; volume?: number; loop?: boolean; shuffle?: boolean }): void;
+   *  randomises the order. `index` + `startSeconds` resume from a
+   *  saved position (for the slot-resume feature). */
+  loadPlaylist(listId: string, opts?: { autoplay?: boolean; volume?: number; loop?: boolean; shuffle?: boolean; index?: number; startSeconds?: number;
+    /** v2.15.40 — When set with shuffle:true, the wrapper cues the
+     *  playlist (no play), enables shuffle, then jumps to a random
+     *  index before starting. Without this, loadPlaylist auto-plays
+     *  track 0 of the ordered playlist BEFORE setShuffle takes
+     *  effect, so the listener hears the unshuffled head of the
+     *  playlist. Used by the shuffle-stable resume handoff. */
+    randomStart?: boolean;
+  }): void;
+  /** Current playback position within the active video (seconds). */
+  getCurrentTime(): number;
+  /** Seek the current track to the given second. */
+  seekSec(seconds: number): void;
+  /** Current video's total duration (seconds). 0 until known. */
+  getDuration(): number;
+  /** Current playlist index (0-based). -1 when not playing a playlist. */
+  getPlaylistIndex(): number;
   play(): void;
   pause(): void;
   stop(): void;
+  next(): void;
+  previous(): void;
   setVolume(v: number): void;
   destroy(): void;
   onStateChange(cb: (state: number) => void): void;
+  /** v2.15.19 — fires when the IFrame Player reports an error.
+   *  See YT_ERROR_MESSAGES for code → human-readable lookup. */
+  onError(cb: (code: number, message: string) => void): void;
+  /** Current playing track's metadata (best-effort). Undefined
+   *  until the IFrame Player reports it. */
+  getNowPlaying(): { title?: string; author?: string } | null;
+  /** Specific videoId currently playing (null if unknown). Used to
+   *  capture playlist resume state in a shuffle-stable way — the
+   *  playlistIndex gets re-randomised on reload but the videoId
+   *  identifies the exact track regardless of shuffle order. */
+  getCurrentVideoId(): string | null;
 }
 
-/** Create a YouTube IFrame player bound to a hidden div. Inserts the
- *  div if absent. Resolves once the iframe is ready to receive load /
- *  play commands.
+/** YouTube IFrame Player error codes (from the official docs).
+ *  Mapping to friendly messages so the SoundtracksPanel can guide
+ *  the user toward a fix without leaking the raw code. */
+export const YT_ERROR_MESSAGES: Record<number, string> = {
+  2:   'Invalid YouTube id — check the URL is right and try again.',
+  5:   'YouTube player hit an internal error. Try a different track.',
+  100: 'YouTube couldn\'t find this video / playlist — it may have been removed or set to private.',
+  101: 'This playlist or video doesn\'t allow embedded playback. In YouTube Music, set the playlist privacy to Unlisted or Public (not Private).',
+  150: 'This playlist or video doesn\'t allow embedded playback. In YouTube Music, set the playlist privacy to Unlisted or Public (not Private).',
+};
+
+export function ytErrorMessage(code: number): string {
+  return YT_ERROR_MESSAGES[code] ?? `YouTube error ${code}. Try a different URL.`;
+}
+
+export interface CreateYouTubePlayerOpts {
+  /** Initial video id to load with the player. Either this OR
+   *  `listId` should be provided — the IFrame Player's empty
+   *  embed (`https://www.youtube.com/embed/?...` with no path
+   *  segment) doesn't reliably fire onReady, so we start the
+   *  player with real content. */
+  videoId?: string;
+  listId?:  string;
+}
+
+/** Create a YouTube IFrame player bound to a visually-invisible div
+ *  in the document body. Resolves once the iframe is ready to
+ *  receive load / play commands.
  *
- *  Hosting div lives in the DOM at id="stagecraft-yt-host" — a 1x1
- *  off-screen container. The IFrame Player constructor replaces THIS
- *  element with the actual iframe, so the host has to be a fresh
- *  element each construction. We wrap in an outer keep-alive div. */
-export async function createYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
+ *  v2.15.23 — the player must be created with INITIAL content
+ *  (videoId or listId). Empty-embed initialisation
+ *  (https://www.youtube.com/embed/?...) was observed to never fire
+ *  onReady on some Edge / Chrome combinations, leaving callers
+ *  stuck. Real content lets the iframe finish loading and call
+ *  back normally. */
+export async function createYouTubePlayer(opts?: CreateYouTubePlayerOpts): Promise<YouTubeSoundtrackPlayer> {
   await loadYouTubeApi();
   const w = window as unknown as { YT: { Player: new (el: HTMLElement, opts: object) => YTPlayerLike } };
 
-  // Ensure host container exists.
+  // Ensure host container exists. v2.15.22 — kept in normal document
+  // flow (not position:fixed off-screen) because some YouTube embed
+  // anti-abuse paths refuse to fire onReady when the iframe element
+  // has zero rendered area. We still hide it from the user via
+  // opacity:0 + pointer-events:none + tiny size so it's invisible
+  // but counts as "rendered" for the IFrame Player's heuristics.
   let outer = document.getElementById('stagecraft-yt-host');
   if (!outer) {
     outer = document.createElement('div');
     outer.id = 'stagecraft-yt-host';
     outer.style.position = 'fixed';
-    outer.style.left = '-10000px';
-    outer.style.top = '-10000px';
-    outer.style.width = '1px';
-    outer.style.height = '1px';
+    outer.style.bottom = '0';
+    outer.style.right  = '0';
+    outer.style.width  = '2px';
+    outer.style.height = '2px';
+    outer.style.opacity = '0.01';
     outer.style.pointerEvents = 'none';
+    outer.style.zIndex = '-1';
     document.body.appendChild(outer);
   }
   // Fresh inner div per player; IFrame Player replaces it with an iframe.
@@ -168,49 +241,168 @@ export async function createYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
   outer.appendChild(inner);
 
   const stateListeners: Array<(state: number) => void> = [];
+  const errorListeners: Array<(code: number, message: string) => void> = [];
 
-  const player: YTPlayerLike = await new Promise<YTPlayerLike>((resolve) => {
-    const p = new w.YT.Player(inner, {
+  // 10s timeout. If onReady doesn't fire (off-screen iframe
+  // rejected, ad blocker, security headers, network) we surface a
+  // diagnostic error instead of hanging at "Loading…". v2.15.22
+  // includes iframe state in the message so we know which of the
+  // possible causes is biting.
+  const player: YTPlayerLike = await new Promise<YTPlayerLike>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      const iframe = outer.querySelector('iframe');
+      const diag = iframe
+        ? `iframe present; FULL src="${iframe.src}"; readyState=${(iframe as HTMLIFrameElement).contentDocument?.readyState ?? 'cross-origin'}`
+        : 'NO iframe element was created — YT.Player(new) probably threw or never inserted.';
+      console.warn('[soundtracks][yt-timeout]', diag);
+      reject(new Error(
+        'YouTube player didn\'t respond in 10 seconds. ' +
+        'See console for the full iframe URL. ' +
+        diag.slice(0, 200),
+      ));
+    }, 10_000);
+    // v2.15.24 — Explicit host + origin so the IFrame Player's
+    // postMessage handshake knows where to look. Without these,
+    // YT's widgetapi has been observed to post messages with
+    // mismatched target origins on subdomain origins (beta.*).
+    const config: Record<string, unknown> = {
       width:  '1',
       height: '1',
+      host:   'https://www.youtube.com',
       playerVars: {
-        autoplay: 0,
-        controls: 0,
-        disablekb: 1,
+        autoplay:    0,
+        controls:    0,
+        disablekb:   1,
         modestbranding: 1,
-        rel: 0,
+        rel:         0,
+        enablejsapi: 1,
+        origin:      location.origin,
+        ...(opts?.listId
+          ? { list: opts.listId, listType: 'playlist' }
+          : {}),
       },
       events: {
-        onReady: () => resolve(p),
+        onReady: () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(p);
+        },
         onStateChange: (ev: { data: number }) => {
           for (const cb of stateListeners) cb(ev.data);
         },
+        onError: (ev: { data: number }) => {
+          const msg = ytErrorMessage(ev.data);
+          for (const cb of errorListeners) cb(ev.data, msg);
+        },
       },
-    });
+    };
+    if (opts?.videoId) config['videoId'] = opts.videoId;
+    const p = new w.YT.Player(inner, config);
   });
 
   return {
     load(videoId, opts) {
       const auto = opts?.autoplay !== false;
       if (opts?.volume !== undefined) player.setVolume(Math.max(0, Math.min(100, opts.volume)));
-      if (auto) player.loadVideoById({ videoId });
-      else      player.cueVideoById({ videoId });
+      const arg = opts?.startSeconds !== undefined
+        ? { videoId, startSeconds: opts.startSeconds }
+        : { videoId };
+      if (auto) player.loadVideoById(arg);
+      else      player.cueVideoById(arg);
     },
     loadPlaylist(listId, opts) {
       const auto = opts?.autoplay !== false;
       if (opts?.volume !== undefined) player.setVolume(Math.max(0, Math.min(100, opts.volume)));
-      if (auto) player.loadPlaylist({ list: listId, listType: 'playlist' });
-      else      player.cuePlaylist ({ list: listId, listType: 'playlist' });
-      // setLoop / setShuffle have to come AFTER the playlist load
-      // (they're no-ops without a loaded playlist).
-      try { player.setLoop(opts?.loop ?? false); }       catch { /* nothing */ }
-      try { player.setShuffle(opts?.shuffle ?? false); } catch { /* nothing */ }
+      const arg: { list: string; listType: 'playlist'; index?: number; startSeconds?: number } = {
+        list: listId,
+        listType: 'playlist',
+      };
+      if (opts?.index       !== undefined) arg.index       = opts.index;
+      if (opts?.startSeconds !== undefined) arg.startSeconds = opts.startSeconds;
+      // v2.15.40 — Shuffle-stable random start. Cue without playing,
+      // wait for the queue to be ready, enable shuffle, then jump to
+      // a random index. This avoids the audible "plays track 0 of
+      // the ordered playlist, then jumps" behaviour that arises when
+      // loadPlaylist auto-plays before setShuffle has been honoured.
+      if (opts?.shuffle && opts?.randomStart) {
+        player.cuePlaylist(arg);
+        try { player.setLoop(opts?.loop ?? false); } catch { /* nothing */ }
+        const onceCued = (state: number): void => {
+          if (state !== YT_STATE.CUED) return;
+          const i = stateListeners.indexOf(onceCued);
+          if (i >= 0) stateListeners.splice(i, 1);
+          try { player.setShuffle(true); } catch { /* nothing */ }
+          let length = 0;
+          try {
+            const list = player.getPlaylist();
+            if (Array.isArray(list)) length = list.length;
+          } catch { /* nothing */ }
+          if (length > 1) {
+            const r = Math.floor(Math.random() * length);
+            try { player.playVideoAt(r); } catch { player.playVideo(); }
+          } else {
+            player.playVideo();
+          }
+        };
+        stateListeners.push(onceCued);
+        return;
+      }
+      if (auto) player.loadPlaylist(arg);
+      else      player.cuePlaylist(arg);
+      // setLoop reliably works immediately after load — it just sets
+      // a flag the player consults at end-of-playlist.
+      try { player.setLoop(opts?.loop ?? false); } catch { /* nothing */ }
+      // v2.15.30 — setShuffle is documented as needing the playlist
+      // to be loaded first; calling it synchronously after
+      // loadPlaylist no-ops on most YT IFrame versions because the
+      // playlist queue hasn't been built yet. Defer to the FIRST
+      // onStateChange (any state except UNSTARTED=-1 means the
+      // playlist is processed enough for setShuffle to take).
+      if (opts?.shuffle !== undefined) {
+        const wantShuffle = opts.shuffle;
+        const onceOnState = (state: number): void => {
+          if (state === YT_STATE.UNSTARTED) return;
+          try { player.setShuffle(wantShuffle); } catch { /* nothing */ }
+          const i = stateListeners.indexOf(onceOnState);
+          if (i >= 0) stateListeners.splice(i, 1);
+        };
+        stateListeners.push(onceOnState);
+      }
     },
+    getCurrentTime()   { try { return player.getCurrentTime();   } catch { return 0; } },
+    getDuration()      { try { return player.getDuration();      } catch { return 0; } },
+    getPlaylistIndex() { try { return player.getPlaylistIndex(); } catch { return -1; } },
     play()  { player.playVideo(); },
     pause() { player.pauseVideo(); },
     stop()  { player.stopVideo(); },
     setVolume(v: number) { player.setVolume(Math.max(0, Math.min(100, v))); },
+    next()    { try { player.nextVideo();     } catch { /* nothing */ } },
+    previous() { try { player.previousVideo(); } catch { /* nothing */ } },
+    seekSec(sec: number) { try { player.seekTo(Math.max(0, sec), true); } catch { /* nothing */ } },
     destroy() { try { player.destroy(); } catch { /* nothing */ } },
     onStateChange(cb)    { stateListeners.push(cb); },
+    onError(cb)          { errorListeners.push(cb); },
+    getNowPlaying() {
+      try {
+        const d = player.getVideoData();
+        // v2.15.41 — Strip YouTube's auto-generated " - Topic" suffix
+        // on artist channels. Topic channels are auto-created by YT
+        // when a label distributes a track and the artist has no
+        // official channel; "Sleeping Wolf - Topic" reads cleaner as
+        // just "Sleeping Wolf" in the now-playing line.
+        const author = d?.author ? d.author.replace(/\s*-\s*Topic\s*$/i, '') : undefined;
+        return d?.title ? { title: d.title, ...(author ? { author } : {}) } : null;
+      } catch { return null; }
+    },
+    getCurrentVideoId() {
+      try {
+        const d = player.getVideoData();
+        return d?.video_id ?? null;
+      } catch { return null; }
+    },
   };
 }

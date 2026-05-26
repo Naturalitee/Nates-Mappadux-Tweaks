@@ -1729,7 +1729,12 @@ export class GMApp {
     // Pack name precedence: existing session > bundle-seeded default > none.
     const packName = existing?.packName ?? this._seededPackName ?? '';
     this._seededPackName = null; // consume
+    // v2.15.27 — Spread existing so we preserve fields this code
+    // doesn't explicitly manage (theme, splash, soundtracks, ...).
+    // The old shape wiped them on every host start, which is why
+    // Soundtracks slots vanished on refresh.
     await saveSession({
+      ...(existing ?? {}),
       key:       'current',
       peerId:    roomCode,
       lastMapId: existing?.lastMapId ?? null,

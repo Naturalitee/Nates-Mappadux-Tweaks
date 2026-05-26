@@ -3850,6 +3850,11 @@ option.select-option--add {
 /* ── Settings dialog ──────────────────────────────────────────────────── */
 .settings-body {
   flex: 1;
+  /* v2.15.44 — min-height: 0 unlocks scrolling inside a flex column.
+     Flex items default to min-height: auto, sizing to content, which
+     means the body grew to fit everything and pushed the footer off-
+     screen instead of overflowing inside its own scroll region. */
+  min-height: 0;
   overflow-y: auto;
   padding: var(--space-md);
   display: flex;
@@ -4047,6 +4052,46 @@ option.select-option--add {
   align-items: center;
   justify-content: space-between;
   gap: 6px;
+  /* v2.15.30 — min-width:0 on flex children lets the label-input
+     shrink below its content width when the slot is narrow,
+     otherwise the input bullies the buttons out past the right
+     edge of the slot card. */
+  min-width: 0;
+}
+.soundtrack-slot-header > .btn {
+  flex: 0 0 auto;
+}
+.soundtrack-slot-header > .soundtrack-slot-label-input,
+.soundtrack-slot-header > .soundtrack-slot-label {
+  flex: 1 1 auto;
+  min-width: 0;
+  /* Same horizontal layout for both the editable input (normal
+     slots) and the static text (Silence). v2.15.32 — both sit
+     left-aligned right after the type indicator. */
+}
+/* v2.15.32 — Type indicator (mute / track / playlist) between
+   the play button and the label. */
+.soundtrack-slot-type {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+}
+.soundtrack-slot.is-active .soundtrack-slot-type {
+  color: var(--accent);
+}
+/* v2.15.36 — Provider brand badge to the right of the name. Brand
+   colours come from the SVG fills; we just size + align here. */
+.soundtrack-provider-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
 }
 .soundtrack-slot-label {
   font-weight: 600;
@@ -4093,13 +4138,122 @@ option.select-option--add {
 .soundtrack-volume-row input[type="range"] {
   flex: 1 1 auto;
 }
+/* v2.15.19 — Error state for the Soundtracks status line. Used when
+   the YT IFrame Player or Spotify SDK reports a problem we can
+   guide the user through (private playlist, expired token, Premium
+   required, etc.). */
+.settings-stat-sub.soundtrack-status--error {
+  color: #ff8e6c;
+  font-weight: 500;
+}
 
-/* v2.15.12 — N-slot Soundtracks redesign. Each slot is a self-
-   contained card with label, mode picker, mode-specific controls,
-   tracks list, volume. Active slot gets a coloured outline. */
+/* v2.15.26 — Compressed slot controls. Compact icon toggles for
+   loop / shuffle live in the header row alongside the label.
+   Transport (prev / pause / next) appears below the track chip
+   when the slot is actively playing. */
+.soundtrack-icon-toggle {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-secondary);
+}
+.soundtrack-icon-toggle.is-active {
+  color: var(--accent);
+  background: rgba(255, 255, 255, 0.06);
+}
+.soundtrack-icon-toggle:hover:not(:disabled) {
+  color: var(--text-primary);
+}
+
+.soundtrack-play-btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+.soundtrack-slot.is-active .soundtrack-play-btn {
+  color: var(--accent);
+}
+
+.soundtrack-transport {
+  display: flex;
+  gap: 4px;
+  margin-top: 2px;
+  align-items: center;
+}
+.soundtrack-transport .btn {
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.soundtrack-now-playing {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  font-style: italic;
+  margin-top: 2px;
+  /* Truncate long titles rather than wrapping into multi-line. */
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+/* v2.15.31 — Track-progress bar under the now-playing line.
+   Reuses the Soundboard's .sb-progress-track / .sb-progress-fill
+   visual so both panels match. Just a small margin to detach it
+   from the text above. */
+.sb-progress-track.soundtrack-progress {
+  margin-top: 4px;
+}
+/* v2.15.35 — Clickable progress bar for seek. Slightly taller so
+   the click target is forgiving; cursor + hover hint so the
+   affordance reads. position:relative anchors the start/end tick
+   marks added in v2.15.38. */
+.sb-progress-track.soundtrack-progress--clickable {
+  height: 5px;
+  cursor: pointer;
+  position: relative;
+}
+.sb-progress-track.soundtrack-progress--clickable:hover {
+  filter: brightness(1.2);
+}
+
+/* v2.15.38 — Start / End trim tick marks overlaid on the progress
+   bar. 2 px wide, full bar height, slightly taller than the track
+   itself so they stick out a hair on both top + bottom for
+   visibility. */
+.soundtrack-progress-tick {
+  position: absolute;
+  top: -2px;
+  bottom: -2px;
+  width: 2px;
+  pointer-events: none;
+}
+.soundtrack-progress-tick--start { background: #5af07a; }
+.soundtrack-progress-tick--end   { background: #ff8e6c; }
+
+/* v2.15.31 — Active-slot highlight beefed up so the currently-
+   playing slot is obvious at a glance. Tinted background + accent
+   outline + tinted label colour. The play icon already adopts
+   accent colour via the existing .soundtrack-play-btn rule. */
 .soundtrack-slot.is-active {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-input));
+}
+.soundtrack-slot.is-active .soundtrack-slot-label,
+.soundtrack-slot.is-active .soundtrack-slot-label-input {
+  color: var(--accent);
+  font-weight: 600;
 }
 .soundtrack-slot-label-input {
   flex: 1 1 auto;
@@ -4134,6 +4288,26 @@ option.select-option--add {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
 }
+/* v2.15.45 — Start/End label split off from the input so clicking
+   the label grabs the playhead while clicking the input lets the
+   GM type a value without it being overwritten. */
+.soundtrack-time-cell {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+.soundtrack-time-grab {
+  cursor: pointer;
+  padding: 1px 4px;
+  border-radius: var(--radius-sm);
+  user-select: none;
+}
+.soundtrack-time-grab:hover {
+  background: var(--bg-base);
+  color: var(--text-primary);
+}
 .soundtrack-time-row input[type="number"] {
   width: 70px;
   padding: 3px 6px;
@@ -4160,6 +4334,15 @@ option.select-option--add {
   border-radius: var(--radius-sm);
   font-size: 0.95em;
 }
+/* v2.15.47 — Setup steps list. Tight vertical spacing so the whole
+   guide fits the dialog without dominating it. */
+.settings-spotify-steps {
+  margin: 4px 0 6px;
+  padding-left: 20px;
+}
+.settings-spotify-steps li {
+  margin: 2px 0;
+}
 
 .settings-key-list {
   list-style: none;
@@ -4183,6 +4366,17 @@ option.select-option--add {
 .settings-key-preview {
   font-family: var(--font-mono);
   color: var(--text-secondary);
+}
+/* v2.15.51 — Per-row Delete button sits to the right of the
+   redacted preview. Three-column flex: label takes the slack,
+   preview is its natural mono width, button is fixed at the end. */
+.settings-key-label {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+.settings-key-del {
+  flex: 0 0 auto;
+  margin-left: var(--space-sm);
 }
 .settings-danger { border-color: rgba(224, 62, 62, 0.4); }
 .settings-danger-row {

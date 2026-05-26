@@ -1,5 +1,6 @@
 import {
   getStoredApiKeys,
+  deleteApiKey,
   deleteAllApiKeys,
   isVideoCap1080Enabled,
   setVideoCap1080Enabled,
@@ -91,7 +92,10 @@ export class SettingsDialog {
 
     const dialog = document.createElement('div');
     dialog.className = 'modal-dialog';
-    dialog.style.width = '560px';
+    // v2.15.44 — Widen by 50% (560 → 840) so the longer Stagecraft /
+    // Soundtracks sections don't squash. Width still clamped to
+    // 95vw on narrow viewports via the .modal-dialog base rule.
+    dialog.style.width = '840px';
     overlay.appendChild(dialog);
 
     const header = document.createElement('div');
@@ -120,14 +124,18 @@ export class SettingsDialog {
     body.appendChild(this._buildScaledViewSection());
     // ── Performance section ──────────────────────────────────────────────
     body.appendChild(this._buildPerformanceSection());
-    // ── v2.16 in-progress features (Stagecraft + Soundtracks) ───────────
+    // ── Soundtracks — pack-level background music ──────────────────────
+    // v2.15.43 — Promoted out of the in-progress gate. The YouTube
+    // and Spotify paths have matured enough to ship; Lighting +
+    // Automation remain gated below.
+    body.appendChild(this._buildSoundtracksSection());
+    // ── v2.16 in-progress features (Stagecraft Lighting + Automation) ─
     // Hidden by default on production; the Danger Zone has a toggle
     // to reveal them so curious users can opt in. Existing users
     // who've configured these features keep using them — only the
     // initial configuration UI is gated by the flag.
     if (isInProgressEnabled()) {
       body.appendChild(this._buildStagecraftSection());
-      body.appendChild(this._buildSoundtracksSection());
     }
     // ── API Keys section ─────────────────────────────────────────────────
     body.appendChild(this._buildApiKeysSection());
@@ -237,39 +245,62 @@ export class SettingsDialog {
       none.textContent = 'No API keys stored.';
       sec.appendChild(none);
     } else {
+      // v2.15.51 — Each row now carries its own Delete button on
+      // the right so the list scales as more service keys land
+      // (Spotify, future Syrinscape, etc.). The bulk "Delete all"
+      // stays underneath but only when there's more than one key.
       const list = document.createElement('ul');
       list.className = 'settings-key-list';
+      const rerender = (): void => {
+        const next = this._buildApiKeysSection();
+        sec.replaceWith(next);
+      };
       for (const k of keys) {
         const li = document.createElement('li');
         const label = document.createElement('span');
+        label.className = 'settings-key-label';
         label.textContent = k.label;
         const preview = document.createElement('span');
         preview.className = 'settings-key-preview';
         preview.textContent = k.preview;
-        li.append(label, preview);
+        const del = document.createElement('button');
+        del.type = 'button';
+        del.className = 'btn btn--danger btn--sm settings-key-del';
+        del.textContent = 'Delete';
+        del.title = `Remove the ${k.label} from this browser. External services using it will stop working until you re-enter the key.`;
+        del.addEventListener('click', () => {
+          const ok = confirm(
+            `Delete the ${k.label}?\n\n` +
+            `Anything that uses it will stop working until you re-enter it.`,
+          );
+          if (!ok) return;
+          deleteApiKey(k.key);
+          rerender();
+        });
+        li.append(label, preview, del);
         list.appendChild(li);
       }
       sec.appendChild(list);
 
-      const btnRow = document.createElement('div');
-      btnRow.className = 'settings-btn-row';
-      const deleteAll = document.createElement('button');
-      deleteAll.type = 'button';
-      deleteAll.className = 'btn btn--danger btn--sm';
-      deleteAll.textContent = `Delete ${keys.length === 1 ? 'this key' : 'all API keys'}`;
-      deleteAll.addEventListener('click', () => {
-        const ok = confirm(
-          `Delete ${keys.length === 1 ? 'this API key' : 'all stored API keys'}?\n\n` +
-          `External services using these credentials will stop working until you re-enter them.`,
-        );
-        if (!ok) return;
-        deleteAllApiKeys();
-        // Re-render this section in place.
-        const next = this._buildApiKeysSection();
-        sec.replaceWith(next);
-      });
-      btnRow.appendChild(deleteAll);
-      sec.appendChild(btnRow);
+      if (keys.length > 1) {
+        const btnRow = document.createElement('div');
+        btnRow.className = 'settings-btn-row';
+        const deleteAll = document.createElement('button');
+        deleteAll.type = 'button';
+        deleteAll.className = 'btn btn--danger btn--sm';
+        deleteAll.textContent = 'Delete all API keys';
+        deleteAll.addEventListener('click', () => {
+          const ok = confirm(
+            `Delete all ${keys.length} stored API keys?\n\n` +
+            `External services using these credentials will stop working until you re-enter them.`,
+          );
+          if (!ok) return;
+          deleteAllApiKeys();
+          rerender();
+        });
+        btnRow.appendChild(deleteAll);
+        sec.appendChild(btnRow);
+      }
     }
 
     return sec;
@@ -417,8 +448,9 @@ export class SettingsDialog {
     sec.classList.add('settings-danger');
 
     // ── In-progress features toggle (v2.15.17) ──────────────────
-    // Reveals the Settings UI for the v2.16 work (Stagecraft +
-    // Soundtracks) that ships ahead of being fully polished.
+    // Reveals the Settings UI for the v2.16 work (Stagecraft —
+    // Lighting + Automation) that ships ahead of being fully polished.
+    // Soundtracks graduated out in v2.15.43.
     // Hidden by default in production; visible by default on beta /
     // dev / deploy previews. Users with existing configurations are
     // unaffected — the sidebar panels continue to work whenever
@@ -627,7 +659,7 @@ export class SettingsDialog {
     ));
     wrap.appendChild(this._buildProviderToggleRow(
       'Enable Spotify',
-      'Plays via the Spotify Web Playback SDK — full programmatic control (play / pause / seek / volume / fade / crossfade). Requires a Spotify Premium account AND a one-time Spotify Developer App registration (you get a Client ID). Use the Connect flow below once you\'ve enabled this and pasted a Client ID.',
+      'Plays via the Spotify Web Playback SDK (the in-browser player) with the Spotify Web API for transport commands (play / pause / shuffle / repeat). Both are free for the user — there is no per-call cost. Requirements: a Spotify Premium account (the SDK won\'t play for free accounts) AND a one-time Spotify Developer App registration so we have a Client ID. Setup steps appear when you enable this.',
       isSpotifyEnabled,
       setSpotifyEnabled,
     ));
@@ -643,13 +675,29 @@ export class SettingsDialog {
     wrap.className = 'settings-stagecraft-spotify-connect';
     wrap.style.marginTop = '6px';
 
+    // v2.15.47 — Step-by-step guide. Spotify's Developer flow is
+    // well-trodden but unsigned-up users hit "what do I need?" with
+    // no clear answer; we use both the Web Playback SDK (audio out)
+    // and the Web API (transport commands), and the OAuth scopes
+    // need to match. Stating it explicitly here avoids a support
+    // round-trip every time a new GM hits Connect.
     const sub = document.createElement('div');
     sub.className = 'settings-stat-sub';
     sub.innerHTML =
-      'Register a Spotify Developer App at ' +
-      '<a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>. ' +
-      `Add this exact redirect URI: <code>${escapeHtml(spotifyRedirectUri())}</code>. ` +
-      'Copy the Client ID, paste it below, then Connect.';
+      '<strong>What we use:</strong> Spotify Web Playback SDK (audio playback in the browser) + Spotify Web API (transport: play / pause / shuffle / repeat / device transfer). Both are free for the user.<br>' +
+      '<br>' +
+      '<strong>Setup steps:</strong>' +
+      '<ol class="settings-spotify-steps">' +
+      '<li>Sign in at <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> with your Spotify Premium account.</li>' +
+      '<li>Click <strong>Create app</strong>. Name + description can be anything (e.g. "Mappadux for me"). Website can be blank.</li>' +
+      '<li>For <strong>APIs used</strong>, tick <em>Web API</em> and <em>Web Playback SDK</em>. Both are needed.</li>' +
+      `<li>Under <strong>Redirect URIs</strong>, paste exactly: <code>${escapeHtml(spotifyRedirectUri())}</code> and click Add.${_spotifyMultiOriginTip()}</li>` +
+      '<li>Save. Open the app\'s Settings page and copy the <strong>Client ID</strong>. (You don\'t need the Client Secret — Mappadux uses PKCE, not a server.)</li>' +
+      '<li>Paste the Client ID below, click <strong>Save Client ID</strong>, then <strong>Connect Spotify</strong>. You\'ll be sent to Spotify to approve, then returned here.</li>' +
+      '</ol>' +
+      '<strong>Permissions you\'ll grant:</strong> <code>streaming</code> (audio playback), <code>user-modify-playback-state</code> (play / pause commands), <code>user-read-email</code> + <code>user-read-private</code> (required by Spotify alongside <code>streaming</code>).<br>' +
+      '<br>' +
+      '<strong>Privacy:</strong> the Client ID + access token stay in your browser (localStorage). They never travel in <code>.mappadux</code> pack bundles or to any Mappadux server — there isn\'t one.';
     wrap.appendChild(sub);
 
     const form = document.createElement('div');
@@ -924,6 +972,21 @@ export class SettingsDialog {
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────
+
+/** v2.15.48 — Spotify Developer Apps accept multiple Redirect URIs
+ *  per app, so a user who tests on beta and uses production can drop
+ *  both URIs into one app rather than maintain two Client IDs. On
+ *  production we don't surface this — production-only users don't
+ *  need beta and the noise would just confuse them. On non-production
+ *  origins (beta, deploy previews, localhost) we suggest adding the
+ *  production URI alongside so the same Client ID works wherever
+ *  they open Mappadux. */
+function _spotifyMultiOriginTip(): string {
+  const h = location.hostname;
+  const isProduction = h === 'mappadux.com' || h === 'www.mappadux.com';
+  if (isProduction) return '';
+  return ' <em>Tip:</em> Spotify accepts multiple Redirect URIs in one Developer App, so you can also paste <code>https://mappadux.com/</code> up-front — the same Client ID then works on production too.';
+}
 
 function escapeHtml(s: string): string {
   return s

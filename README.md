@@ -135,6 +135,15 @@ Players connect over peer-to-peer (PeerJS); no server infrastructure beyond stat
   - **Attributions** — the ℹ Attributions button lists all CC-BY sounds currently in use, with full credit text ready to copy.
   - **Preloading** — all sounds assigned to a map are cached on the player client when the map loads, so playback starts instantly with no buffering delay.
 
+- **Soundtracks** *(new in v2.16)* — pack-level background music that persists across map switches, distinct from the Soundboard's per-map effects. YouTube and Spotify both supported:
+  - **YouTube / YouTube Music** — no sign-in for the user; IFrame Player handles playback. Single tracks AND playlists / albums.
+  - **Spotify** — full programmatic control via the Web Playback SDK + Web API. Requires a Premium account (Free accounts can't stream through the SDK) and a one-time Spotify Developer App registration (step-by-step in Settings).
+  - **N user-defined slots**, with a Silence anchor that crossfades to nothing. Each slot holds a single track or a full playlist / album; switching slots crossfades.
+  - **Loop / Shuffle / Restart-vs-Resume** per slot. Shuffled playlists start on a random track (not always track 0) and resume **track-stably** — Mappadux replays the exact track you were on at the saved position, then hands off to the shuffled playlist.
+  - **Start / End trim** for single tracks — click the "Start" / "End" label while playing to grab the current playhead; click anywhere on the progress bar to seek. End trim is actively enforced so a clip loops or stops cleanly at your chosen point.
+  - **External transport awareness** — pausing via a Bluetooth remote, OS media keys, or lock-screen flips the panel's pause icon so the GM can resume from either side.
+  - Track URLs travel with `.mappadux` bundles; Spotify tokens and YouTube state stay on this machine.
+
 - **Text Maps (handouts)** *(new in v2.11)* — a second map type for letters, posters, journal pages, stat blocks, in-fiction documents. Rich element editor with text + image elements, font picker, multiple aspect presets, per-element move/resize, and an optional animated reveal so the handout types itself out for the players.
 
 - **Image Assets Library** *(new in v2.11)* — a third first-class asset library alongside Maps and Sounds. Marker icons + handout images live here with the same Library / Web Links / Upload taxonomy as audio, plus built-in connectors for **Lucide** (~1500 MIT-licensed icons) and **game-icons.net** (~4000 CC-BY 3.0 fantasy / sci-fi / abstract icons). Attribution flows through the unified credits modal.
@@ -186,9 +195,9 @@ The app builds to a static `dist/` folder and can be deployed anywhere that serv
 vercel deploy
 ```
 
-The `vercel.json` sets the required `Cross-Origin-Opener-Policy` and `Cross-Origin-Embedder-Policy` headers (needed for WebRTC) and rewrites `/player` to `player.html`.
+The `vercel.json` rewrites `/player` to `player.html`. For other hosts, ensure `/player` resolves to `player.html`.
 
-For other hosts, ensure those two COOP/COEP headers are set on all responses, and that `/player` resolves to `player.html`.
+> **COOP / COEP headers**: earlier versions set these for SharedArrayBuffer eligibility. They were removed in v2.15.25 because `Cross-Origin-Embedder-Policy: credentialless` blocks YouTube IFrame Player initialisation. SharedArrayBuffer is not used anywhere in Mappadux. See [SECURITY.md](./SECURITY.md) for the threat-model write-up.
 
 ## Usage
 

@@ -99,70 +99,126 @@ Room codes stay the same across page reloads. If a player's connection drops, th
 
 ---
 
-## Stagecraft — Lighting + Soundtracks *(new in v2.16, beta)*
+## Soundtracks *(new in v2.16)*
 
-Mappadux v2.16 adds a thin reference + recall layer over tools you
-already use for table atmosphere. Mappadux doesn't try to author
-your lighting setup or curate your music — that lives in WLED /
-Home Assistant / YouTube. Mappadux just remembers which preset
-goes with which map and fires it on demand.
+Pack-level background music that persists across map switches.
+Distinct from the per-map **Soundboard** (sound effects + per-map
+ambience): Soundtracks are the running score for your whole
+session — the tavern lute that keeps playing as you walk to the
+inn's bedroom and back again. Two providers ship:
+
+- **YouTube / YouTube Music** — no sign-in needed for the user;
+  YouTube's IFrame Player handles playback. Single tracks and
+  playlists both supported.
+- **Spotify** — full programmatic control via Spotify's Web
+  Playback SDK + Web API. Requires a **Premium** account (the
+  SDK refuses to stream for Free accounts) and a one-time
+  Spotify Developer App registration.
 
 ### Setup is in Settings
 
-Open **☰ → Settings → Stagecraft (Lighting + Automation)**. Three
-subsections:
+Open **☰ → Settings → Soundtracks**. Toggle the providers you
+want, then for Spotify follow the on-screen step-by-step to
+register a Developer App and Connect. Setup is a one-time
+operation; tokens persist locally and never travel in
+`.mappadux` bundles.
+
+### Slots
+
+The Soundtracks panel renders a vertical list of **slots**. The
+first slot is always **Silence** — selecting it crossfades
+whatever's playing to nothing. Add more slots via **+ Add slot**;
+each slot holds either a single track or a full playlist / album.
+
+Paste a YouTube or Spotify URL into the slot's input — Mappadux
+recognises whether it's a single track or a playlist and adjusts
+the controls accordingly. URLs travel in `.mappadux` exports.
+
+### Slot controls
+
+When a slot is active (the one currently playing or selected):
+
+- **Play / Pause / Prev / Next** — standard transport. Prev / Next
+  only show for playlists. The pause icon also flips when you
+  pause via an external transport (Bluetooth remote, OS media
+  keys, lock screen).
+- **Loop** — single tracks replay when they end; playlists cycle
+  back to the start.
+- **Shuffle** — playlists only. Default ON for new playlists.
+  Shuffled playlists also start on a random track (not always
+  track 0 of the ordered list).
+- **Restart / Resume** — Restart (default for single tracks)
+  always starts from the slot's Start trim point. Resume (default
+  for playlists + loops) picks up where you left off when you
+  switch back to this slot.
+
+### Start / End trim *(single tracks)*
+
+Two number fields below the transport. Type a value directly, or
+**click the "Start" / "End" label** while a track is playing to
+grab the current playhead position. Tick marks appear on the
+progress bar so the trim points are visible. The End trim is
+actively enforced — playback stops (or loops back to Start when
+Loop is on) when the playhead crosses End.
+
+### Progress bar
+
+Shows the live playhead. **Click anywhere on the bar to seek**
+to that position. Useful for auditioning the track before
+grabbing a Start / End trim point.
+
+### Per-slot volume + panel mute
+
+Each slot has its own volume slider (0–100%). The panel header
+has a master mute toggle that silences soundtracks output without
+stopping playback — toggling it back on resumes mid-track. The
+Soundboard's separate mute affects only sound effects.
+
+### Crossfading between slots
+
+Selecting a different slot crossfades the active engine's volume
+down while the new slot's engine fades up. The default crossfade
+is 1.5s. Switching between providers (YT → Spotify or vice versa)
+works the same way — Mappadux holds both engines in parallel.
+
+### Per-slot resume
+
+When you switch away from a slot mid-track, Mappadux captures the
+position. Switching back later picks up where you left off
+(provided the slot's Restart toggle is off). For shuffled
+playlists the resume is **track-stable** — Mappadux replays the
+exact track you were on at the saved position, then hands off to
+the playlist (re-shuffled) for the rest. Resume state is
+in-memory only — closing the tab resets it.
+
+### What doesn't travel in bundles
+
+Spotify Client ID and OAuth tokens stay on your machine. Bundle
+imports show a clear Reconnect button if Spotify is enabled but
+not authorised for that browser.
+
+---
+
+## Stagecraft — Lighting + Automation *(in-progress, v2.18)*
+
+A thin reference + recall layer over WLED, Home Assistant, and
+QLC+. Mappadux remembers which preset goes with which map and
+fires it on map switch. The configuration UI is currently hidden
+behind the **Settings → Danger Zone → Show in-progress features**
+toggle while the hardware-test pass continues. With the toggle on:
 
 - **WLED endpoints** — add one row per WLED-firmware device on
   your LAN. Label + URL (e.g. `192.168.1.42` or
-  `wled-table.local`). Use **Test** to confirm the device responds.
-  Mappadux only references presets you've already authored in
-  WLED's own UI, so make those first.
+  `wled-table.local`). Use **Test** to confirm. Mappadux only
+  references presets you've already authored in WLED's own UI.
 - **Home Assistant** — paste an HA URL + a long-lived access
-  token (HA → Profile → Long-Lived Access Tokens). Mappadux can
-  then call any scene, script, or automation you've defined in HA.
-- **Soundtracks (YouTube)** — toggle to add the **Soundtracks**
-  panel to the sidebar. No login needed; YouTube IFrame Player
-  handles playback in the background.
+  token (HA → Profile → Long-Lived Access Tokens).
+- **QLC+** — connect to a running QLC+ instance via its
+  WebSocket API.
 
-None of the credentials (WLED endpoints, HA tokens, Spotify auth)
-travel with `.mappadux` bundles. They stay on this machine.
-
-### Lighting / Automation panel — per-map presets
-
-Once you've configured at least one WLED endpoint or HA link, a
-**Lighting / Automation** panel appears in the sidebar. For each
-map you load, you can pick:
-
-- A **WLED preset** per configured device (dropdown lists presets
-  fetched live from the device).
-- An **HA scene / script / automation** to fire.
-
-Switching to a different map fires the assignments for the new
-map. The fire is asynchronous and soft-fails — a flaky LED strip
-never blocks the map switch. **Fire now (test)** re-fires the
-current map's assignments without switching maps. **Refresh
-devices** re-pulls preset / scene lists (use this after authoring
-new presets in WLED).
-
-Per-map assignments DO travel with `.mappadux` bundles. A
-recipient with their own WLED setup can use the same preset
-names / ids to recreate the lighting design.
-
-### Soundtracks panel — pack-level background music
-
-Distinct from the per-map **Soundboard** (which handles sound
-effects and per-map ambience): Soundtracks are pack-level
-background music that survives map switches. Four slots:
-
-- **Pre-setup** — what plays while you prep before the session.
-- **Theme / Intro** — fires manually at session start (one-shot).
-- **Outro** — fires manually at session end (one-shot).
-- **Playlist** — auto-advances between tracks; loops at end.
-
-Paste any YouTube or YouTube Music URL (or the 11-character video
-id) into a slot's input, click Add. Use Play / Pause / Stop and
-the per-slot volume slider. Tracks travel in `.mappadux` exports
-— recipients see the same queued URLs.
+Once at least one device or HA link is configured, a **Lighting /
+Automation** panel appears in the sidebar. Per-map assignments
+travel in `.mappadux` bundles; the credentials don't.
 
 ---
 

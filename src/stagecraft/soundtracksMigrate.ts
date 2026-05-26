@@ -10,11 +10,24 @@
  * and the rest are user-authored.
  */
 
-import type { SoundtracksConfig, SoundtrackSlot } from '../types.ts';
+import type { SoundtracksConfig, SoundtrackSlot, SoundtrackTrack } from '../types.ts';
 import { generateId } from '../utils/id.ts';
 
-interface LegacySlot { tracks?: unknown[]; volume?: number }
-interface LegacyConfig {
+/** Legacy slot shape from v2.15.7..v2.15.19. Carried tracks[] and a
+ *  mode picker; v2.15.20 collapsed it to a single-track-per-slot. */
+interface LegacySlot {
+  id?:       string;
+  label?:    string;
+  mode?:     'silent' | 'play-once' | 'loop' | 'playlist' | 'normal';
+  tracks?:   unknown[];
+  track?:    unknown;
+  volume?:   number;
+  startSec?: number;
+  endSec?:   number;
+  shuffle?:  boolean;
+  loop?:     boolean;
+}
+interface LegacyFixedShape {
   preSetup?: LegacySlot;
   theme?:    LegacySlot;
   outro?:    LegacySlot;
@@ -25,58 +38,102 @@ interface LegacyConfig {
 
 const DEFAULT_CROSSFADE_MS = 1500;
 
-/** Ensure the config has the new shape with a silent first slot. */
-export function migrateSoundtracksConfig(input: SoundtracksConfig | LegacyConfig | undefined): SoundtracksConfig {
+/** Bring any shape (current, fixed-keys legacy, multi-track legacy) up
+ *  to the current single-track-per-slot SoundtracksConfig. */
+export function migrateSoundtracksConfig(input: SoundtracksConfig | LegacyFixedShape | undefined): SoundtracksConfig {
   if (!input) return _withSilent({ slots: [], crossfadeMs: DEFAULT_CROSSFADE_MS });
 
-  // Already-new shape: ensure silent anchor + crossfade default.
+  // Slots-array shape (current or v2.15.7..19 multi-track flavour).
   if (Array.isArray((input as SoundtracksConfig).slots)) {
-    return _withSilent(input as SoundtracksConfig);
+    const slots = ((input as { slots: LegacySlot[] }).slots ?? []).map(_migrateSlot);
+    return _withSilent({
+      slots,
+      crossfadeMs: (input as SoundtracksConfig).crossfadeMs ?? DEFAULT_CROSSFADE_MS,
+    });
   }
 
-  // Legacy shape — translate each populated key into a slot.
-  const legacy = input as LegacyConfig;
-  const slots: SoundtrackSlot[] = [];
-  const carry = (label: string, mode: 'play-once' | 'playlist', s: LegacySlot | undefined): void => {
-    if (!s) return;
-    const tracks = Array.isArray(s.tracks) ? (s.tracks as unknown[]).filter(_isTrack) : [];
-    if (tracks.length === 0) return;
-    slots.push({
-      id: generateId(),
-      label,
-      mode,
-      tracks,
-      ...(s.volume !== undefined ? { volume: s.volume } : {}),
-    });
+  // Original v2.15.7 fixed-keys shape — translate each populated key.
+  const legacy = input as LegacyFixedShape;
+  const out: SoundtrackSlot[] = [];
+  const carry = (label: string, l: LegacySlot | undefined): void => {
+    if (!l) return;
+    const migrated = _migrateSlot({ ...l, label });
+    if (migrated.kind !== 'silent' && (migrated.track || migrated.kind === 'normal')) {
+      out.push(migrated);
+    }
   };
-  carry('Pre-setup', 'play-once', legacy.preSetup);
-  carry('Theme',     'play-once', legacy.theme);
-  carry('Outro',     'play-once', legacy.outro);
-  carry('Playlist',  'playlist',  legacy.playlist);
+  carry('Pre-setup', legacy.preSetup);
+  carry('Theme',     legacy.theme);
+  carry('Outro',     legacy.outro);
+  carry('Playlist',  legacy.playlist);
   return _withSilent({
-    slots,
+    slots: out,
     crossfadeMs: legacy.crossfadeMs ?? DEFAULT_CROSSFADE_MS,
   });
 }
 
-function _isTrack(v: unknown): v is import('../types.ts').SoundtrackTrack {
+function _migrateSlot(raw: LegacySlot): SoundtrackSlot {
+  const id    = typeof raw.id === 'string' ? raw.id : generateId();
+  const label = typeof raw.label === 'string' ? raw.label : 'Slot';
+  // Silent anchor preserved verbatim.
+  if (raw.mode === 'silent') {
+    return { id, label, kind: 'silent' };
+  }
+  // Single-track field already present (current shape).
+  if (_isTrack(raw.track)) {
+    return _buildNormal(id, label, raw.track, raw);
+  }
+  // Legacy tracks[] — keep the first item; drop extras silently.
+  // Variety is now achieved by adding more slots, not by packing
+  // multiple items into one. The user can copy-add the missing
+  // tracks as fresh slots if they want them back.
+  if (Array.isArray(raw.tracks)) {
+    const first = raw.tracks.find(_isTrack);
+    if (first) return _buildNormal(id, label, first, raw);
+  }
+  return { id, label, kind: 'normal' };
+}
+
+function _buildNormal(
+  id: string,
+  label: string,
+  track: SoundtrackTrack,
+  raw: LegacySlot,
+): SoundtrackSlot {
+  const loop = raw.loop ?? (raw.mode === 'loop' || raw.mode === 'playlist');
+  const base: SoundtrackSlot = { id, label, kind: 'normal', track, loop };
+  if (raw.shuffle  !== undefined) base.shuffle  = raw.shuffle;
+  if (raw.startSec !== undefined) base.startSec = raw.startSec;
+  if (raw.endSec   !== undefined) base.endSec   = raw.endSec;
+  if (raw.volume   !== undefined) base.volume   = raw.volume;
+  return base;
+}
+
+function _isTrack(v: unknown): v is SoundtrackTrack {
   if (!v || typeof v !== 'object') return false;
   const r = v as Record<string, unknown>;
-  if (r['kind'] === 'youtube' && typeof r['videoId'] === 'string') return true;
-  if (r['kind'] === 'spotify' && typeof r['trackUri'] === 'string') return true;
+  if (r['kind'] === 'youtube'          && typeof r['videoId']  === 'string') return true;
+  if (r['kind'] === 'youtube-playlist' && typeof r['listId']   === 'string') return true;
+  if (r['kind'] === 'spotify'          && typeof r['trackUri'] === 'string') return true;
   return false;
 }
 
-/** Guarantee a silent anchor slot at index 0. Stable id so the panel
- *  can persist "current slot = silent" across reloads. */
+/** Guarantee a silent anchor slot at index 0. v2.15.31 renamed
+ *  the label from "Silent" to "Silence" so any existing config
+ *  that carries the old label normalises on the way through. */
 function _withSilent(cfg: SoundtracksConfig): SoundtracksConfig {
   const SILENT_ID = '_silent';
   const first = cfg.slots[0];
-  if (first && first.id === SILENT_ID && first.mode === 'silent') return cfg;
+  if (first && first.id === SILENT_ID && first.kind === 'silent') {
+    if (first.label !== 'Silence') {
+      return { ...cfg, slots: [{ ...first, label: 'Silence' }, ...cfg.slots.slice(1)] };
+    }
+    return cfg;
+  }
   return {
     ...cfg,
     slots: [
-      { id: SILENT_ID, label: 'Silent', mode: 'silent', tracks: [] },
+      { id: SILENT_ID, label: 'Silence', kind: 'silent' },
       ...cfg.slots.filter((s) => s.id !== SILENT_ID),
     ],
   };
@@ -84,9 +141,8 @@ function _withSilent(cfg: SoundtracksConfig): SoundtracksConfig {
 
 export function newUserSlot(label = 'New slot'): SoundtrackSlot {
   return {
-    id:     generateId(),
+    id:    generateId(),
     label,
-    mode:   'play-once',
-    tracks: [],
+    kind:  'normal',
   };
 }

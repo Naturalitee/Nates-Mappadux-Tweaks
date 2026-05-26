@@ -214,52 +214,6 @@
       </div>
     </section>
 
-    <section class="panel" id="soundboard-panel">
-      <div class="panel-header">
-        <button type="button" class="panel-title" aria-expanded="false">Soundboard</button>
-        <span class="panel-toggle-icon" aria-hidden="true" title="Audio bypass"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8.5a6.5 6.5 0 1 1 13 0c0 6-6 6-6 10a3.5 3.5 0 1 1-7 0"/><path d="M15 8.5a2.5 2.5 0 0 0-5 0v1a2 2 0 0 1-2 2"/></svg></span>
-        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Enable soundboard audio. Off = Mute all (bypass)">
-          <input type="checkbox" id="mute-all-toggle" checked />
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-      <div class="panel-body" hidden>
-        <div class="param-row param-row--toggle sb-remote-row">
-          <label for="remote-audio-toggle">Broadcast to players</label>
-          <label class="toggle-switch">
-            <input type="checkbox" id="remote-audio-toggle" checked />
-            <span class="toggle-slider"></span>
-          </label>
-        </div>
-        <div id="soundboard-pagination" class="sb-pagination">
-          <button id="sb-prev-btn" class="btn btn--ghost btn--sm">←</button>
-          <span id="sb-page-label">Page 1 / 1</span>
-          <button id="sb-next-btn" class="btn btn--ghost btn--sm">→</button>
-        </div>
-        <div id="soundboard-slots"></div>
-        <button id="sb-add-slot-btn" class="btn btn--ghost btn--sm btn--full">+ Add Slot</button>
-      </div>
-    </section>
-
-    <!-- v2.16 — Soundtracks panel. Pack-level background music
-         (YouTube initially; Spotify later). Hidden by default;
-         appears when the user opts in via Settings → Stagecraft. -->
-    <section class="panel" id="soundtracks-panel" hidden>
-      <div class="panel-header">
-        <button type="button" class="panel-title" aria-expanded="false">Soundtracks</button>
-      </div>
-      <div class="panel-body" hidden>
-        <p class="panel-intro">
-          <strong>Pack-level.</strong> Background music that persists
-          across map switches. One slot plays at a time; switching
-          slots crossfades. Per-map sound effects still live on the
-          Soundboard.
-        </p>
-        <div id="soundtracks-slots"></div>
-        <p class="settings-stat-sub" id="soundtracks-status" style="margin-top:6px"></p>
-      </div>
-    </section>
-
     <!-- v2.16 — Stagecraft panel. Hidden by default; StagecraftPanel
          flips hidden=false once at least one WLED endpoint or HA
          connection is configured in Settings. -->
@@ -554,6 +508,51 @@
       <div class="panel-body" hidden>
         <select id="filter-select" class="select-full"></select>
         <div id="filter-params" class="filter-params-container"></div>
+      </div>
+    </section>
+
+    <section class="panel" id="soundboard-panel">
+      <div class="panel-header">
+        <button type="button" class="panel-title" aria-expanded="false">Soundboard</button>
+        <span class="panel-toggle-icon" aria-hidden="true" title="Audio bypass"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8.5a6.5 6.5 0 1 1 13 0c0 6-6 6-6 10a3.5 3.5 0 1 1-7 0"/><path d="M15 8.5a2.5 2.5 0 0 0-5 0v1a2 2 0 0 1-2 2"/></svg></span>
+        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Enable soundboard audio. Off = Mute all (bypass)">
+          <input type="checkbox" id="mute-all-toggle" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="panel-body" hidden>
+        <div class="param-row param-row--toggle sb-remote-row">
+          <label for="remote-audio-toggle">Broadcast to players</label>
+          <label class="toggle-switch">
+            <input type="checkbox" id="remote-audio-toggle" checked />
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+        <div id="soundboard-pagination" class="sb-pagination">
+          <button id="sb-prev-btn" class="btn btn--ghost btn--sm">←</button>
+          <span id="sb-page-label">Page 1 / 1</span>
+          <button id="sb-next-btn" class="btn btn--ghost btn--sm">→</button>
+        </div>
+        <div id="soundboard-slots"></div>
+        <button id="sb-add-slot-btn" class="btn btn--ghost btn--sm btn--full">+ Add Slot</button>
+      </div>
+    </section>
+
+    <!-- v2.16 — Soundtracks panel. Pack-level background music
+         (YouTube initially; Spotify later). Hidden by default;
+         appears when the user opts in via Settings → Stagecraft. -->
+    <section class="panel" id="soundtracks-panel" hidden>
+      <div class="panel-header">
+        <button type="button" class="panel-title" aria-expanded="false">Soundtracks</button>
+        <span class="panel-toggle-icon" aria-hidden="true" title="Mute soundtracks"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 8.5a6.5 6.5 0 1 1 13 0c0 6-6 6-6 10a3.5 3.5 0 1 1-7 0"/><path d="M15 8.5a2.5 2.5 0 0 0-5 0v1a2 2 0 0 1-2 2"/></svg></span>
+        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Soundtracks output. ON = music plays at slot volume. OFF = silenced but tracks keep their position so toggling back on resumes mid-track. The Soundboard's separate mute affects sound-effects only.">
+          <input type="checkbox" id="soundtracks-mute-toggle" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="panel-body" hidden>
+        <div id="soundtracks-slots"></div>
+        <p class="settings-stat-sub" id="soundtracks-status" style="margin-top:6px"></p>
       </div>
     </section>
 

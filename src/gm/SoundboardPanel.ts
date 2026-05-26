@@ -7,11 +7,11 @@ import { generateId } from '../utils/id.ts';
 /** Play-once: triangle + vertical stop bar */
 const ICON_ONCE = `<svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><polygon points="1,2 10,8 1,14" fill="currentColor"/><rect x="12" y="2" width="2.5" height="12" rx="0.5" fill="currentColor"/></svg>`;
 
-/** Loop: 🔁-style rectangular two-arrow loop */
-const ICON_LOOP = `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 Q2 11 2 9 L2 7 Q2 5 4 5 L11 5"/><polyline points="9 3 11 5 9 7"/><path d="M13 5 Q14 5 14 7 L14 9 Q14 11 12 11 L5 11"/><polyline points="7 9 5 11 7 13"/></svg>`;
-
-/** Random: shuffle icon — two crossing arrows (top-left→bottom-right, bottom-left→top-right) */
-const ICON_RANDOM = `<svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M1 4 Q5 4 8 8 Q11 12 14 12"/><polyline points="11 10 14 12 11 14"/><path d="M1 12 Q5 12 8 8 Q11 4 14 4"/><polyline points="11 2 14 4 11 6"/></svg>`;
+/** Loop + Random: matched to the Soundtracks panel (v2.15.31)
+ *  so the two audio panels read with one visual language. Lucide-
+ *  style 24-grid stroked SVG. */
+const ICON_LOOP = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>`;
+const ICON_RANDOM = `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>`;
 import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { FreesoundModal } from './FreesoundModal.ts';

@@ -138,6 +138,15 @@ export async function rasterizeFromTiles(
   // set as extentInputs so the backing PNG matches the main
   // composite's dimensions exactly; the renderer can then mount
   // the backing on a same-aspect plane without stretching.
+  //
+  // v2.15.29 — bbox now respects tile rotation. A rotated tile
+  // (e.g. a 45° diamond piece) extends OUTSIDE its un-rotated
+  // rectangle; the previous code used `cx ± w/2` axis-aligned
+  // which cropped the actual rendered shape at output time
+  // (visible as a truncated diamond on broadcast viewers). The
+  // closed-form rotated-AABB is `|w·cos θ| + |h·sin θ|` wide and
+  // `|w·sin θ| + |h·cos θ|` tall — the tightest bounding box
+  // around the rotated rectangle.
   const extentSource = extentInputs ?? inputs;
   for (const input of extentSource) {
     const tileWref = (input.tile.scale ?? 1) * refW;
@@ -149,10 +158,15 @@ export async function rasterizeFromTiles(
       : tileWref / aspect;
     const cxRef = input.tile.x * refW;
     const cyRef = input.tile.y * refH;
-    minX = Math.min(minX, cxRef - tileWref / 2);
-    maxX = Math.max(maxX, cxRef + tileWref / 2);
-    minY = Math.min(minY, cyRef - tileHref / 2);
-    maxY = Math.max(maxY, cyRef + tileHref / 2);
+    const rotRad = (input.tile.rotation ?? 0) * Math.PI / 180;
+    const absC = Math.abs(Math.cos(rotRad));
+    const absS = Math.abs(Math.sin(rotRad));
+    const aabbW = tileWref * absC + tileHref * absS;
+    const aabbH = tileWref * absS + tileHref * absC;
+    minX = Math.min(minX, cxRef - aabbW / 2);
+    maxX = Math.max(maxX, cxRef + aabbW / 2);
+    minY = Math.min(minY, cyRef - aabbH / 2);
+    maxY = Math.max(maxY, cyRef + aabbH / 2);
   }
   if (minX === Infinity) return null;  // extentSource produced no usable inputs
 
