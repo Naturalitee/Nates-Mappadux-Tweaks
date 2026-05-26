@@ -6,9 +6,10 @@
  * or Soundtracks, the sidebar panels appear normally regardless of
  * this flag.
  *
- * v2.15.17 — added so the v2.16 Stagecraft + Soundtracks scaffold
- * can ride along on production builds without surfacing to anyone
- * who hasn't been told about it.
+ * v2.15.17 — added so v2.16+ scaffolding work can ride along on
+ * production builds without surfacing to anyone who hasn't been
+ * told about it. Don't name specific features in the user-facing
+ * help text — what's in-progress shifts release-by-release.
  */
 
 const IN_PROGRESS_KEY = 'mappadux:enable_in_progress_features';

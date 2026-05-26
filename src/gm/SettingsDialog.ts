@@ -431,7 +431,7 @@ export class SettingsDialog {
     flagText.innerHTML =
       '<strong>Show in-progress features</strong><br>' +
       '<span class="settings-stat-sub">' +
-      'Reveals the configuration UI for features that ship ahead of their final polish — currently <em>Stagecraft</em> (lighting + automation) and <em>Soundtracks</em> (background music). When off, these sections are hidden in Settings; you won\'t see them anywhere unless you already had them configured. Status: ' +
+      'Reveals configuration UI for features that ship ahead of their final polish. Off by default on production. Status: ' +
       escapeHtml(inProgressFlagOrigin()) + '. Reload after toggling.' +
       '</span>';
     const flagToggle = document.createElement('label');
