@@ -188,7 +188,21 @@ export async function createYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
   const stateListeners: Array<(state: number) => void> = [];
   const errorListeners: Array<(code: number, message: string) => void> = [];
 
-  const player: YTPlayerLike = await new Promise<YTPlayerLike>((resolve) => {
+  // 10s timeout. If onReady doesn't fire (script blocked by an
+  // ad blocker, network issue, etc.) we surface a clear failure
+  // instead of hanging the status line at "Loading YouTube
+  // player…" forever.
+  const player: YTPlayerLike = await new Promise<YTPlayerLike>((resolve, reject) => {
+    let settled = false;
+    const timer = setTimeout(() => {
+      if (settled) return;
+      settled = true;
+      reject(new Error(
+        'YouTube player didn\'t respond within 10 seconds. ' +
+        'This usually means an ad blocker or privacy extension is ' +
+        'blocking youtube.com — disable it for this site and reload.',
+      ));
+    }, 10_000);
     const p = new w.YT.Player(inner, {
       width:  '1',
       height: '1',
@@ -200,7 +214,12 @@ export async function createYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
         rel: 0,
       },
       events: {
-        onReady: () => resolve(p),
+        onReady: () => {
+          if (settled) return;
+          settled = true;
+          clearTimeout(timer);
+          resolve(p);
+        },
         onStateChange: (ev: { data: number }) => {
           for (const cb of stateListeners) cb(ev.data);
         },

@@ -403,7 +403,16 @@ export class SoundtracksPanel {
       return;
     }
 
-    await this._playSlotTrack(target, crossfadeMs);
+    // Surface any engine-start failure (timeout loading player,
+    // missing auth, etc.) in the status line instead of letting
+    // the void caller swallow it.
+    try {
+      await this._playSlotTrack(target, crossfadeMs);
+    } catch (e) {
+      this._showError((e as Error).message ?? 'Couldn\'t start playback.');
+      this.activeSlotId = null;
+      this.activeKind   = null;
+    }
     this._renderSlots();
   }
 
