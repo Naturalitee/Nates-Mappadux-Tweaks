@@ -37,7 +37,7 @@ import {
   createSpotifyPlayer,
   type SpotifySoundtrackPlayer,
 } from '../stagecraft/spotifySdk.ts';
-import { isSpotifyConnected, getSpotifyProfile } from '../stagecraft/spotifyAuth.ts';
+import { isSpotifyConnected, getSpotifyProfile, getAccessToken, startConnect } from '../stagecraft/spotifyAuth.ts';
 import { parseSoundtrackUrl, parseSpotifyUri } from '../stagecraft/soundtrackUrl.ts';
 import { migrateSoundtracksConfig, newUserSlot } from '../stagecraft/soundtracksMigrate.ts';
 
@@ -197,6 +197,12 @@ export class SoundtracksPanel {
   private _endTrimFired = false;
   /** v2.15.39 — Pending playlist handoff. See YouTubePlaylistHandoff. */
   private _ytHandoff: YouTubePlaylistHandoff | null = null;
+  /** v2.15.42 — Result of the latest Spotify auth probe (refresh-
+   *  token still valid?). null = not yet checked or N/A; true = ok;
+   *  false = needs reconnect (refresh token revoked / never set).
+   *  The panel reads this to decide whether to show an inline
+   *  Reconnect prompt. */
+  private _spotifyAuthOk: boolean | null = null;
 
   constructor(host: SoundtracksPanelHost) {
     this.host     = host;
@@ -263,6 +269,22 @@ export class SoundtracksPanel {
     this.panelEl.hidden = false;
     this.cfg = migrateSoundtracksConfig(this.host.getConfig());
     this._renderSlots();
+    // v2.15.42 — Probe the Spotify access-token path in the background
+    // whenever the panel is shown. If the refresh token has been
+    // revoked (Spotify side, or > 1 yr inactivity) this catches it
+    // upfront so the GM sees an inline "Reconnect" prompt instead of
+    // a stuck "Loading Spotify player…" the first time they click play.
+    if (isSpotifyEnabled() && isSpotifyConnected()) {
+      this._spotifyAuthOk = null;
+      void getAccessToken().then((tok) => {
+        this._spotifyAuthOk = !!tok;
+        // Re-render so the Reconnect prompt (or its absence) reflects
+        // the probe result. Cheap — the panel is small.
+        this._renderSlots();
+      });
+    } else {
+      this._spotifyAuthOk = null;
+    }
   }
 
   // ─── Render ─────────────────────────────────────────────────────────
@@ -284,18 +306,35 @@ export class SoundtracksPanel {
 
     // Spotify status note (helpful when SDK won't play).
     if (isSpotifyEnabled()) {
+      const needsReconnect =
+        !isSpotifyConnected() ||
+        this._spotifyAuthOk === false;
       const note = document.createElement('div');
       note.className = 'settings-stat-sub';
       note.style.marginTop = '4px';
-      if (!isSpotifyConnected()) {
-        note.textContent = 'Spotify enabled but not connected — Settings → Stagecraft → Connect to play Spotify tracks.';
+      if (needsReconnect) {
+        note.textContent = !isSpotifyConnected()
+          ? 'Spotify enabled but not connected. '
+          : 'Spotify session expired — reconnect to play. ';
+        const reconnect = document.createElement('button');
+        reconnect.type = 'button';
+        reconnect.className = 'btn btn--ghost btn--sm';
+        reconnect.textContent = 'Reconnect';
+        reconnect.title = 'Open the Spotify authorisation page in this tab. You\'ll be brought back to Mappadux once approved.';
+        reconnect.addEventListener('click', () => {
+          void startConnect().catch((e) => {
+            this._showError((e as Error).message ?? 'Spotify reconnect failed.');
+          });
+        });
+        note.appendChild(reconnect);
+        this.slotsEl.appendChild(note);
       } else {
         const p = getSpotifyProfile();
         if (p && p.product !== 'premium') {
           note.textContent = `Spotify connected as ${p.displayName} (${p.product}). Web Playback SDK requires a Premium account — free accounts can't play full tracks.`;
+          this.slotsEl.appendChild(note);
         }
       }
-      this.slotsEl.appendChild(note);
     }
   }
 
@@ -1107,6 +1146,17 @@ export class SoundtracksPanel {
     if (!isSpotifyConnected()) {
       throw new Error('Spotify not connected. Settings → Soundtracks → Connect Spotify.');
     }
+    // v2.15.42 — Probe the access-token path before standing up the
+    // SDK. If the refresh token is dead the SDK would otherwise spin
+    // on the OAuth callback forever (we silently don't call cb).
+    // Surfacing it here lets the inline Reconnect button do the work.
+    const tok = await getAccessToken();
+    if (!tok) {
+      this._spotifyAuthOk = false;
+      this._renderSlots();
+      throw new Error('Spotify session expired. Click Reconnect in the Soundtracks panel.');
+    }
+    this._spotifyAuthOk = true;
     this.statusEl.textContent = 'Loading Spotify player…';
     this.spotifyPlayer = await createSpotifyPlayer();
     this.statusEl.textContent = '';
