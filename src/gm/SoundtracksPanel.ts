@@ -125,6 +125,10 @@ export class SoundtracksPanel {
    *  In-memory only — clears on reload, which is fine (the user
    *  can always hit prev to restart from track 0). */
   private resumeStates = new Map<string, ResumeState>();
+  /** v2.15.33 — Count of consecutive unembeddable-track skips for
+   *  the active playlist. Bails out at 4 to avoid spinning through
+   *  an entirely-broken playlist (private list, region-locked, etc.). */
+  private _consecutiveSkips = 0;
 
   constructor(host: SoundtracksPanelHost) {
     this.host     = host;
@@ -600,6 +604,9 @@ export class SoundtracksPanel {
     this.activeSlotId = targetSlotId;
     this.activeKind   = null;
     this.isPaused     = false;
+    // Fresh slot = fresh skip counter; any previous run-of-bad-tracks
+    // is unrelated.
+    this._consecutiveSkips = 0;
 
     if (!target || target.kind === 'silent' || !target.track) {
       this._stopNowPlayingPoll();
@@ -781,24 +788,33 @@ export class SoundtracksPanel {
     this.ytPlayer = await createYouTubePlayer(initial);
     this.statusEl.textContent = '';
     this.ytPlayer.onStateChange((s) => {
-      if (s === YT_STATE.ENDED) this._onTrackEnded();
+      if (s === YT_STATE.ENDED)   this._onTrackEnded();
+      // Successful PLAYING means we're past any earlier skip
+      // chain; reset the safety counter.
+      if (s === YT_STATE.PLAYING) this._consecutiveSkips = 0;
     });
     this.ytPlayer.onError((code, message) => this._onYouTubeError(code, message));
     return this.ytPlayer;
   }
 
   /** v2.15.32 — Auto-skip unembeddable tracks within a playlist.
-   *  YT codes 100 / 101 / 150 = video unavailable / not embeddable
-   *  / removed. When we're in a playlist context the right move
-   *  is to advance to the next track silently (with a brief status
-   *  hint) rather than surfacing the error and stopping. Single
-   *  tracks still show the full error since there's nothing to
-   *  advance to. */
+   *  v2.15.33 — Capped at 3 consecutive skips: if four in a row
+   *  fail we assume the whole playlist is broken (private, region-
+   *  locked, all removed) and bail out with a clear error so we
+   *  don't spin forever. The counter resets to 0 the moment YT
+   *  reports PLAYING (= a track successfully started). */
   private _onYouTubeError(code: number, message: string): void {
     const slot = this.cfg.slots.find((s) => s.id === this.activeSlotId);
     const inPlaylist = !!slot?.track && _isPlaylistContent(slot.track);
     if (inPlaylist && (code === 100 || code === 101 || code === 150)) {
-      this._showError('Skipping unplayable track…');
+      this._consecutiveSkips++;
+      if (this._consecutiveSkips > 3) {
+        this._showError('Three tracks in a row couldn\'t play — stopping. The playlist may be private, region-locked, or contain only unembeddable items.');
+        void this._selectSlot(this.cfg.slots[0]?.id ?? null);  // back to Silence
+        this._consecutiveSkips = 0;
+        return;
+      }
+      this._showError(`Skipping unplayable track (${this._consecutiveSkips}/3)…`);
       try { this.ytPlayer?.next(); } catch { /* nothing */ }
       return;
     }
