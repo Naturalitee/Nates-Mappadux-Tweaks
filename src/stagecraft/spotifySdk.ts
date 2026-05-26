@@ -118,6 +118,11 @@ export interface SpotifySoundtrackPlayer {
   previous(): Promise<void>;
   destroy(): void;
   onEnded(cb: () => void): void;
+  /** v2.15.46 — fires whenever the SDK reports a pause / resume.
+   *  Covers external transport actions too (BT remote, lockscreen,
+   *  media keys) so the panel UI can mirror the real engine state
+   *  rather than getting out of sync with what the speaker is doing. */
+  onPaused(cb: (paused: boolean) => void): void;
   /** v2.15.19 — fires when the SDK reports an error. `kind`
    *  matches Spotify's listener event names so the panel can
    *  format different messages per category (Premium required,
@@ -177,12 +182,14 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
   let lastDuration  = 0;
   let lastPaused    = true;
   let lastTrackInfo: SpotifyTrackInfo | null = null;
-  const endedListeners: Array<() => void> = [];
+  const endedListeners:  Array<() => void> = [];
+  const pausedListeners: Array<(paused: boolean) => void> = [];
 
   player.addListener('player_state_changed', (state) => {
     if (!state) return;
     const wasNearEnd = lastDuration > 0 && lastPosition >= lastDuration - 1000 && !lastPaused;
     const justEnded  = wasNearEnd && state.paused && state.position === 0;
+    const pausedChanged = state.paused !== lastPaused;
     lastPosition = state.position;
     lastDuration = state.duration;
     lastPaused   = state.paused;
@@ -191,6 +198,8 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
     }
     if (justEnded) {
       for (const cb of endedListeners) cb();
+    } else if (pausedChanged) {
+      for (const cb of pausedListeners) cb(state.paused);
     }
   });
 
@@ -275,6 +284,7 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
     previous()  { return player.previousTrack(); },
     destroy()                      { player.disconnect(); },
     onEnded(cb: () => void)        { endedListeners.push(cb); },
+    onPaused(cb)                   { pausedListeners.push(cb); },
     onError(cb)                    { errorListeners.push(cb); },
     currentUri()                   { return lastUri; },
     getNowPlaying() {

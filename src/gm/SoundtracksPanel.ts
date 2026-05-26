@@ -1130,7 +1130,17 @@ export class SoundtracksPanel {
       if (s === YT_STATE.ENDED)   this._onTrackEnded();
       // Successful PLAYING means we're past any earlier skip
       // chain; reset the safety counter.
-      if (s === YT_STATE.PLAYING) this._consecutiveSkips = 0;
+      if (s === YT_STATE.PLAYING) {
+        this._consecutiveSkips = 0;
+        // v2.15.46 — Mirror external transport state (BT remote, OS
+        // media keys, lock screen, etc.) into the panel's pause
+        // icon so the GM can resume from our UI without it being
+        // out of sync with what the speaker actually did.
+        if (this.isPaused) { this.isPaused = false; this._renderSlots(); }
+      }
+      if (s === YT_STATE.PAUSED) {
+        if (!this.isPaused) { this.isPaused = true; this._renderSlots(); }
+      }
     });
     this.ytPlayer.onError((code, message) => this._onYouTubeError(code, message));
     return this.ytPlayer;
@@ -1180,6 +1190,11 @@ export class SoundtracksPanel {
     this.spotifyPlayer = await createSpotifyPlayer();
     this.statusEl.textContent = '';
     this.spotifyPlayer.onEnded(() => this._onTrackEnded());
+    // v2.15.46 — Mirror external pause/resume (BT remote, lock
+    // screen, media keys, native Spotify app) into our UI state.
+    this.spotifyPlayer.onPaused((paused) => {
+      if (this.isPaused !== paused) { this.isPaused = paused; this._renderSlots(); }
+    });
     this.spotifyPlayer.onError((_kind, message) => this._showError(message));
     return this.spotifyPlayer;
   }
