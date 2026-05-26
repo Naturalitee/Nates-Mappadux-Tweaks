@@ -120,14 +120,18 @@ export class SettingsDialog {
     body.appendChild(this._buildScaledViewSection());
     // ── Performance section ──────────────────────────────────────────────
     body.appendChild(this._buildPerformanceSection());
-    // ── v2.16 in-progress features (Stagecraft + Soundtracks) ───────────
+    // ── Soundtracks — pack-level background music ──────────────────────
+    // v2.15.43 — Promoted out of the in-progress gate. The YouTube
+    // and Spotify paths have matured enough to ship; Lighting +
+    // Automation remain gated below.
+    body.appendChild(this._buildSoundtracksSection());
+    // ── v2.16 in-progress features (Stagecraft Lighting + Automation) ─
     // Hidden by default on production; the Danger Zone has a toggle
     // to reveal them so curious users can opt in. Existing users
     // who've configured these features keep using them — only the
     // initial configuration UI is gated by the flag.
     if (isInProgressEnabled()) {
       body.appendChild(this._buildStagecraftSection());
-      body.appendChild(this._buildSoundtracksSection());
     }
     // ── API Keys section ─────────────────────────────────────────────────
     body.appendChild(this._buildApiKeysSection());
@@ -417,8 +421,9 @@ export class SettingsDialog {
     sec.classList.add('settings-danger');
 
     // ── In-progress features toggle (v2.15.17) ──────────────────
-    // Reveals the Settings UI for the v2.16 work (Stagecraft +
-    // Soundtracks) that ships ahead of being fully polished.
+    // Reveals the Settings UI for the v2.16 work (Stagecraft —
+    // Lighting + Automation) that ships ahead of being fully polished.
+    // Soundtracks graduated out in v2.15.43.
     // Hidden by default in production; visible by default on beta /
     // dev / deploy previews. Users with existing configurations are
     // unaffected — the sidebar panels continue to work whenever
