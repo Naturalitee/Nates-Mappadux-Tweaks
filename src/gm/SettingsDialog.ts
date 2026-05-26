@@ -667,7 +667,7 @@ export class SettingsDialog {
       '<li>Sign in at <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> with your Spotify Premium account.</li>' +
       '<li>Click <strong>Create app</strong>. Name + description can be anything (e.g. "Mappadux for me"). Website can be blank.</li>' +
       '<li>For <strong>APIs used</strong>, tick <em>Web API</em> and <em>Web Playback SDK</em>. Both are needed.</li>' +
-      `<li>Under <strong>Redirect URIs</strong>, paste exactly: <code>${escapeHtml(spotifyRedirectUri())}</code> and click Add.</li>` +
+      `<li>Under <strong>Redirect URIs</strong>, paste exactly: <code>${escapeHtml(spotifyRedirectUri())}</code> and click Add.${_spotifyMultiOriginTip()}</li>` +
       '<li>Save. Open the app\'s Settings page and copy the <strong>Client ID</strong>. (You don\'t need the Client Secret — Mappadux uses PKCE, not a server.)</li>' +
       '<li>Paste the Client ID below, click <strong>Save Client ID</strong>, then <strong>Connect Spotify</strong>. You\'ll be sent to Spotify to approve, then returned here.</li>' +
       '</ol>' +
@@ -948,6 +948,21 @@ export class SettingsDialog {
 }
 
 // ─── helpers ──────────────────────────────────────────────────────────────
+
+/** v2.15.48 — Spotify Developer Apps accept multiple Redirect URIs
+ *  per app, so a user who tests on beta and uses production can drop
+ *  both URIs into one app rather than maintain two Client IDs. On
+ *  production we don't surface this — production-only users don't
+ *  need beta and the noise would just confuse them. On non-production
+ *  origins (beta, deploy previews, localhost) we suggest adding the
+ *  production URI alongside so the same Client ID works wherever
+ *  they open Mappadux. */
+function _spotifyMultiOriginTip(): string {
+  const h = location.hostname;
+  const isProduction = h === 'mappadux.com' || h === 'www.mappadux.com';
+  if (isProduction) return '';
+  return ' <em>Tip:</em> Spotify accepts multiple Redirect URIs in one Developer App, so you can also paste <code>https://mappadux.com/</code> up-front — the same Client ID then works on production too.';
+}
 
 function escapeHtml(s: string): string {
   return s
