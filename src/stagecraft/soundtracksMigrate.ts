@@ -118,15 +118,22 @@ function _isTrack(v: unknown): v is SoundtrackTrack {
   return false;
 }
 
-/** Guarantee a silent anchor slot at index 0. */
+/** Guarantee a silent anchor slot at index 0. v2.15.31 renamed
+ *  the label from "Silent" to "Silence" so any existing config
+ *  that carries the old label normalises on the way through. */
 function _withSilent(cfg: SoundtracksConfig): SoundtracksConfig {
   const SILENT_ID = '_silent';
   const first = cfg.slots[0];
-  if (first && first.id === SILENT_ID && first.kind === 'silent') return cfg;
+  if (first && first.id === SILENT_ID && first.kind === 'silent') {
+    if (first.label !== 'Silence') {
+      return { ...cfg, slots: [{ ...first, label: 'Silence' }, ...cfg.slots.slice(1)] };
+    }
+    return cfg;
+  }
   return {
     ...cfg,
     slots: [
-      { id: SILENT_ID, label: 'Silent', kind: 'silent' },
+      { id: SILENT_ID, label: 'Silence', kind: 'silent' },
       ...cfg.slots.filter((s) => s.id !== SILENT_ID),
     ],
   };

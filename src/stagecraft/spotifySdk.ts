@@ -123,6 +123,8 @@ export interface SpotifySoundtrackPlayer {
   getNowPlaying(): { title?: string; author?: string } | null;
   /** Position within the current track (milliseconds). */
   getPositionMs(): number;
+  /** Current track's total length (milliseconds). 0 until known. */
+  getDurationMs(): number;
   /** Current track URI within the playing context (for resume). */
   getCurrentTrackUri(): string | null;
 }
@@ -271,6 +273,7 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
       return out.title ? out : null;
     },
     getPositionMs()      { return lastPosition; },
+    getDurationMs()      { return lastDuration; },
     getCurrentTrackUri() { return lastTrackInfo?.uri ?? null; },
   };
 }

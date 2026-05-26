@@ -4174,13 +4174,27 @@ option.select-option--add {
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+/* v2.15.31 — Track-progress bar under the now-playing line.
+   Reuses the Soundboard's .sb-progress-track / .sb-progress-fill
+   visual so both panels match. Just a small margin to detach it
+   from the text above. */
+.sb-progress-track.soundtrack-progress {
+  margin-top: 4px;
+}
 
-/* v2.15.12 — N-slot Soundtracks redesign. Each slot is a self-
-   contained card with label, mode picker, mode-specific controls,
-   tracks list, volume. Active slot gets a coloured outline. */
+/* v2.15.31 — Active-slot highlight beefed up so the currently-
+   playing slot is obvious at a glance. Tinted background + accent
+   outline + tinted label colour. The play icon already adopts
+   accent colour via the existing .soundtrack-play-btn rule. */
 .soundtrack-slot.is-active {
   outline: 2px solid var(--accent);
   outline-offset: -2px;
+  background: color-mix(in srgb, var(--accent) 14%, var(--bg-input));
+}
+.soundtrack-slot.is-active .soundtrack-slot-label,
+.soundtrack-slot.is-active .soundtrack-slot-label-input {
+  color: var(--accent);
+  font-weight: 600;
 }
 .soundtrack-slot-label-input {
   flex: 1 1 auto;

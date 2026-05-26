@@ -246,6 +246,14 @@ export class SoundtracksPanel {
       const labelEl = document.createElement('div');
       labelEl.className = 'soundtrack-slot-label';
       labelEl.textContent = slot.label;
+      // v2.15.31 — Panel-scope explanation moves from a wordy intro
+      // paragraph into a hover on the Silence row (the anchor that
+      // every Soundtracks panel always has).
+      labelEl.title =
+        'Pack-level background music that persists across map switches. ' +
+        'One slot plays at a time; switching slots crossfades. Selecting ' +
+        'Silence fades the music out cleanly. Per-map sound effects still ' +
+        'live on the Soundboard.';
       header.appendChild(labelEl);
     } else {
       const labelInput = document.createElement('input');
@@ -358,12 +366,22 @@ export class SoundtracksPanel {
   }
 
   private _renderNowPlaying(_slot: SoundtrackSlot): HTMLElement {
-    const el = document.createElement('div');
-    el.className = 'soundtrack-now-playing';
-    el.textContent = '…';
-    // Element will be live-updated by _pollNowPlaying via this DOM ref.
-    el.dataset['nowPlaying'] = '1';
-    return el;
+    const wrap = document.createElement('div');
+    wrap.dataset['nowPlayingWrap'] = '1';
+    const text = document.createElement('div');
+    text.className = 'soundtrack-now-playing';
+    text.textContent = '…';
+    text.dataset['nowPlaying'] = '1';
+    // Reuses .sb-progress-track / .sb-progress-fill so the visual
+    // matches the Soundboard's progress bar exactly.
+    const track = document.createElement('div');
+    track.className = 'sb-progress-track soundtrack-progress';
+    track.dataset['nowPlayingProgress'] = '1';
+    const fill = document.createElement('div');
+    fill.className = 'sb-progress-fill';
+    track.appendChild(fill);
+    wrap.append(text, track);
+    return wrap;
   }
 
   private _transportPrev(): void {
@@ -581,6 +599,7 @@ export class SoundtracksPanel {
   private _startNowPlayingPoll(): void {
     this._stopNowPlayingPoll();
     const tick = (): void => {
+      // Update title text.
       const np = this.activeKind === 'youtube'
         ? this.ytPlayer?.getNowPlaying()
         : this.activeKind === 'spotify'
@@ -592,9 +611,34 @@ export class SoundtracksPanel {
           ? (np.author ? `${np.title} — ${np.author}` : np.title)
           : '…';
       }
+      // Update progress fill width (position / duration).
+      const progressTrack = this.slotsEl.querySelector<HTMLElement>('[data-now-playing-progress="1"]');
+      if (progressTrack) {
+        const fill = progressTrack.querySelector<HTMLElement>('.sb-progress-fill');
+        const { positionSec, durationSec } = this._currentProgress();
+        const pct = durationSec > 0 ? Math.min(100, (positionSec / durationSec) * 100) : 0;
+        if (fill) fill.style.width = `${pct}%`;
+        progressTrack.hidden = durationSec <= 0;
+      }
     };
     tick();
-    this.nowPlayingTimer = setInterval(tick, 1000);
+    this.nowPlayingTimer = setInterval(tick, 500);
+  }
+
+  private _currentProgress(): { positionSec: number; durationSec: number } {
+    if (this.activeKind === 'youtube' && this.ytPlayer) {
+      return {
+        positionSec: this.ytPlayer.getCurrentTime(),
+        durationSec: this.ytPlayer.getDuration(),
+      };
+    }
+    if (this.activeKind === 'spotify' && this.spotifyPlayer) {
+      return {
+        positionSec: this.spotifyPlayer.getPositionMs() / 1000,
+        durationSec: this.spotifyPlayer.getDurationMs() / 1000,
+      };
+    }
+    return { positionSec: 0, durationSec: 0 };
   }
 
   private _stopNowPlayingPoll(): void {

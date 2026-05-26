@@ -112,6 +112,7 @@ interface YTPlayerLike {
   nextVideo(): void;
   getVideoData(): { video_id?: string; title?: string; author?: string };
   getCurrentTime(): number;
+  getDuration(): number;
   getPlaylistIndex(): number;
   destroy(): void;
 }
@@ -136,6 +137,8 @@ export interface YouTubeSoundtrackPlayer {
   loadPlaylist(listId: string, opts?: { autoplay?: boolean; volume?: number; loop?: boolean; shuffle?: boolean; index?: number; startSeconds?: number }): void;
   /** Current playback position within the active video (seconds). */
   getCurrentTime(): number;
+  /** Current video's total duration (seconds). 0 until known. */
+  getDuration(): number;
   /** Current playlist index (0-based). -1 when not playing a playlist. */
   getPlaylistIndex(): number;
   play(): void;
@@ -324,7 +327,8 @@ export async function createYouTubePlayer(opts?: CreateYouTubePlayerOpts): Promi
         stateListeners.push(onceOnState);
       }
     },
-    getCurrentTime() { try { return player.getCurrentTime(); }   catch { return 0; } },
+    getCurrentTime()   { try { return player.getCurrentTime();   } catch { return 0; } },
+    getDuration()      { try { return player.getDuration();      } catch { return 0; } },
     getPlaylistIndex() { try { return player.getPlaylistIndex(); } catch { return -1; } },
     play()  { player.playVideo(); },
     pause() { player.pauseVideo(); },
