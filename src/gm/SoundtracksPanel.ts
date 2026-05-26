@@ -268,6 +268,16 @@ export class SoundtracksPanel {
     }
     this.panelEl.hidden = false;
     this.cfg = migrateSoundtracksConfig(this.host.getConfig());
+    // v2.15.44 — When nothing has ever been played in this session,
+    // mark the Silence anchor (always slot index 0) as the active
+    // selection. Visually this highlights "Silence" so the GM sees
+    // a defined state instead of "no slot selected". Functionally
+    // it's already what _selectSlot('silent') would do — engine
+    // stays idle — so the first real slot click just crossfades up
+    // from silence as expected.
+    if (this.activeSlotId === null && this.cfg.slots.length > 0) {
+      this.activeSlotId = this.cfg.slots[0]!.id;
+    }
     this._renderSlots();
     // v2.15.42 — Probe the Spotify access-token path in the background
     // whenever the panel is shown. If the refresh token has been

@@ -3850,6 +3850,11 @@ option.select-option--add {
 /* ── Settings dialog ──────────────────────────────────────────────────── */
 .settings-body {
   flex: 1;
+  /* v2.15.44 — min-height: 0 unlocks scrolling inside a flex column.
+     Flex items default to min-height: auto, sizing to content, which
+     means the body grew to fit everything and pushed the footer off-
+     screen instead of overflowing inside its own scroll region. */
+  min-height: 0;
   overflow-y: auto;
   padding: var(--space-md);
   display: flex;

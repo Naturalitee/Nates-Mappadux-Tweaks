@@ -91,7 +91,10 @@ export class SettingsDialog {
 
     const dialog = document.createElement('div');
     dialog.className = 'modal-dialog';
-    dialog.style.width = '560px';
+    // v2.15.44 — Widen by 50% (560 → 840) so the longer Stagecraft /
+    // Soundtracks sections don't squash. Width still clamped to
+    // 95vw on narrow viewports via the .modal-dialog base rule.
+    dialog.style.width = '840px';
     overlay.appendChild(dialog);
 
     const header = document.createElement('div');
