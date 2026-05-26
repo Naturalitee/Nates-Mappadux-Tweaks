@@ -4056,9 +4056,27 @@ option.select-option--add {
 .soundtrack-slot-header > .btn {
   flex: 0 0 auto;
 }
-.soundtrack-slot-header > .soundtrack-slot-label-input {
+.soundtrack-slot-header > .soundtrack-slot-label-input,
+.soundtrack-slot-header > .soundtrack-slot-label {
   flex: 1 1 auto;
   min-width: 0;
+  /* Same horizontal layout for both the editable input (normal
+     slots) and the static text (Silence). v2.15.32 — both sit
+     left-aligned right after the type indicator. */
+}
+/* v2.15.32 — Type indicator (mute / track / playlist) between
+   the play button and the label. */
+.soundtrack-slot-type {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  color: var(--text-secondary);
+}
+.soundtrack-slot.is-active .soundtrack-slot-type {
+  color: var(--accent);
 }
 .soundtrack-slot-label {
   font-weight: 600;

@@ -49,6 +49,11 @@ const ICON_PREV    = '<svg viewBox="0 0 24 24" width="14" height="14" fill="curr
 const ICON_NEXT    = '<svg viewBox="0 0 24 24" width="14" height="14" fill="currentColor" stroke="none"><path d="M4 6l10 6-10 6V6zM16 6v12h2V6h-2z"/></svg>';
 const ICON_LOOP    = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="17 1 21 5 17 9"/><path d="M3 11V9a4 4 0 0 1 4-4h14"/><polyline points="7 23 3 19 7 15"/><path d="M21 13v2a4 4 0 0 1-4 4H3"/></svg>';
 const ICON_SHUFFLE = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="16 3 21 3 21 8"/><line x1="4" y1="20" x2="21" y2="3"/><polyline points="21 16 21 21 16 21"/><line x1="15" y1="15" x2="21" y2="21"/><line x1="4" y1="4" x2="9" y2="9"/></svg>';
+// v2.15.32 — Slot-type indicators (between the play button and the
+// label so the GM can tell at a glance what each slot contains).
+const ICON_TYPE_SILENT   = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><line x1="22" y1="9" x2="16" y2="15"/><line x1="16" y1="9" x2="22" y2="15"/></svg>';
+const ICON_TYPE_TRACK    = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>';
+const ICON_TYPE_PLAYLIST = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15V6"/><circle cx="18.5" cy="17.5" r="2.5"/><path d="M12 12H3"/><path d="M16 6H3"/><path d="M12 18H3"/></svg>';
 
 interface ResumeState {
   /** Position in seconds within the current track. */
@@ -241,6 +246,26 @@ export class SoundtracksPanel {
     playBtn.disabled = !isSilent && !slot.track;
     playBtn.addEventListener('click', () => void this._selectSlot(slot.id));
     header.appendChild(playBtn);
+
+    // v2.15.32 — Type indicator between play and label so the GM
+    // can scan slot contents at a glance.
+    const typeEl = document.createElement('span');
+    typeEl.className = 'soundtrack-slot-type';
+    if (isSilent) {
+      typeEl.innerHTML = ICON_TYPE_SILENT;
+      typeEl.title = 'Silence';
+    } else if (slot.track && _isPlaylistContent(slot.track)) {
+      typeEl.innerHTML = ICON_TYPE_PLAYLIST;
+      typeEl.title = 'Playlist / album';
+    } else if (slot.track) {
+      typeEl.innerHTML = ICON_TYPE_TRACK;
+      typeEl.title = 'Single track';
+    } else {
+      typeEl.innerHTML = ICON_TYPE_TRACK;
+      typeEl.style.opacity = '0.3';
+      typeEl.title = 'Empty slot — paste a URL to fill it';
+    }
+    header.appendChild(typeEl);
 
     if (isSilent) {
       const labelEl = document.createElement('div');
@@ -758,8 +783,26 @@ export class SoundtracksPanel {
     this.ytPlayer.onStateChange((s) => {
       if (s === YT_STATE.ENDED) this._onTrackEnded();
     });
-    this.ytPlayer.onError((_code, message) => this._showError(message));
+    this.ytPlayer.onError((code, message) => this._onYouTubeError(code, message));
     return this.ytPlayer;
+  }
+
+  /** v2.15.32 — Auto-skip unembeddable tracks within a playlist.
+   *  YT codes 100 / 101 / 150 = video unavailable / not embeddable
+   *  / removed. When we're in a playlist context the right move
+   *  is to advance to the next track silently (with a brief status
+   *  hint) rather than surfacing the error and stopping. Single
+   *  tracks still show the full error since there's nothing to
+   *  advance to. */
+  private _onYouTubeError(code: number, message: string): void {
+    const slot = this.cfg.slots.find((s) => s.id === this.activeSlotId);
+    const inPlaylist = !!slot?.track && _isPlaylistContent(slot.track);
+    if (inPlaylist && (code === 100 || code === 101 || code === 150)) {
+      this._showError('Skipping unplayable track…');
+      try { this.ytPlayer?.next(); } catch { /* nothing */ }
+      return;
+    }
+    this._showError(message);
   }
 
   private async _ensureSpotifyPlayer(): Promise<SpotifySoundtrackPlayer> {
