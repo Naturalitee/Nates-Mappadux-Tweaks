@@ -10,7 +10,7 @@
  */
 
 import type { SoundtrackTrack } from '../types.ts';
-import { extractVideoId } from './youtubePlayer.ts';
+import { extractVideoId, extractPlaylistId } from './youtubePlayer.ts';
 
 export function parseSoundtrackUrl(input: string): SoundtrackTrack | null {
   const s = input.trim();
@@ -20,6 +20,15 @@ export function parseSoundtrackUrl(input: string): SoundtrackTrack | null {
   // unambiguous. If it doesn't match, fall back to YouTube parsing.
   const spotify = parseSpotifyUrl(s);
   if (spotify) return spotify;
+
+  // YouTube. A URL can legitimately carry BOTH ?v=<videoId> AND
+  // ?list=<listId> — pasting it from the YT Music app generally
+  // includes both because the user opened a track inside a playlist.
+  // Prefer the PLAYLIST in that case: a slot with the playlist plays
+  // many tracks; a slot with one video plays only that one. The GM
+  // can paste the bare watch URL if they want just the video.
+  const playlist = extractPlaylistId(s);
+  if (playlist) return { kind: 'youtube-playlist', listId: playlist };
 
   const yt = extractVideoId(s);
   if (yt) return { kind: 'youtube', videoId: yt };
@@ -68,11 +77,11 @@ export function parseSpotifyUri(uri: string): { kind: string; id: string } | nul
 
 /** Human-readable label for a track when the user hasn't set one.
  *  Both providers render in the same shape so the UI looks identical
- *  regardless of source: bare id with no provider prefix. We'll
- *  layer real track-title lookup on top later (YouTube oEmbed +
- *  Spotify API). */
+ *  regardless of source. We'll layer real track-title lookup on top
+ *  later (YouTube oEmbed + Spotify API). */
 export function defaultTrackLabel(track: SoundtrackTrack): string {
-  if (track.kind === 'youtube') return track.videoId;
+  if (track.kind === 'youtube')          return track.videoId;
+  if (track.kind === 'youtube-playlist') return `Playlist · ${track.listId}`;
   const parts = parseSpotifyUri(track.trackUri);
   if (!parts) return track.trackUri;
   return parts.id;

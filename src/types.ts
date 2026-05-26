@@ -1444,10 +1444,20 @@ export interface SoundtrackSlot {
 }
 
 /** A single track reference. Discriminated by `kind` so Spotify
- *  can land alongside YouTube without reshaping. */
+ *  can land alongside YouTube without reshaping.
+ *
+ *  - youtube:          one video by id.
+ *  - youtube-playlist: a whole YouTube / YouTube Music playlist by
+ *                      list id. The IFrame Player iterates the
+ *                      playlist internally (with its own shuffle /
+ *                      loop hooks); the slot treats the playlist as
+ *                      a single playable entity.
+ *  - spotify:          one track / album / playlist / episode via
+ *                      the Web Playback SDK. */
 export type SoundtrackTrack =
-  | { kind: 'youtube'; videoId: string; label?: string }
-  | { kind: 'spotify'; trackUri: string; label?: string };
+  | { kind: 'youtube';          videoId:  string; label?: string }
+  | { kind: 'youtube-playlist'; listId:   string; label?: string }
+  | { kind: 'spotify';          trackUri: string; label?: string };
 
 /** Per-pack UI theme. Both fields optional — unset = Mappadux defaults
  *  (dark mode, cyan accent). */

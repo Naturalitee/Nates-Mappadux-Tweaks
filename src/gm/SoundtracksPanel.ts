@@ -421,8 +421,19 @@ export class SoundtracksPanel {
       const p = await this._ensureYouTubePlayer();
       p.load(track.videoId, { autoplay: true, volume: 0 });
       this.activeKind = 'youtube';
-      // YouTube needs a moment for the player to actually start before
-      // setVolume takes effect; ramp via setVolume regardless.
+      await this._fade('youtube', 0, targetVolume, crossfadeMs);
+    } else if (track.kind === 'youtube-playlist') {
+      const p = await this._ensureYouTubePlayer();
+      // The IFrame iterates the playlist internally. Slot mode maps
+      // onto the IFrame's loop flag: 'loop' / 'playlist' loop the
+      // whole list; 'play-once' lets the list play once and stop.
+      p.loadPlaylist(track.listId, {
+        autoplay: true,
+        volume:   0,
+        loop:     slot.mode === 'loop' || slot.mode === 'playlist',
+        shuffle:  !!slot.shuffle,
+      });
+      this.activeKind = 'youtube';
       await this._fade('youtube', 0, targetVolume, crossfadeMs);
     } else {
       const p = await this._ensureSpotifyPlayer();

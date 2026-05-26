@@ -115,8 +115,10 @@ export class SettingsDialog {
     body.appendChild(this._buildScaledViewSection());
     // ── Performance section ──────────────────────────────────────────────
     body.appendChild(this._buildPerformanceSection());
-    // ── Stagecraft section (v2.16) ───────────────────────────────────────
+    // ── Stagecraft section (v2.16) — Lighting + Automation ──────────────
     body.appendChild(this._buildStagecraftSection());
+    // ── Soundtracks section (v2.16) — pack-level music ──────────────────
+    body.appendChild(this._buildSoundtracksSection());
     // ── API Keys section ─────────────────────────────────────────────────
     body.appendChild(this._buildApiKeysSection());
     // ── Danger Zone ──────────────────────────────────────────────────────
@@ -454,14 +456,14 @@ export class SettingsDialog {
 
   // ─── Stagecraft (v2.16) ─────────────────────────────────────────────────
 
-  /** Stagecraft section — connection config for WLED LED strips and
-   *  Home Assistant. Setting up any connection here is what makes the
-   *  Lighting/Automation panel appear in the main sidebar. Users who
-   *  don't use these features see zero extra chrome anywhere. */
+  /** Stagecraft section — lighting + automation only. WLED, HA, QLC+.
+   *  Soundtracks (audio) live in their own Settings section now —
+   *  Stagecraft was getting busy and the two concerns are independent
+   *  (lighting is per-map; soundtracks are pack-level). */
   private _buildStagecraftSection(): HTMLElement {
     const sec = mkSection(
       'Stagecraft (Lighting + Automation)',
-      'Connect Mappadux to physical lighting (WLED) and home-automation systems (Home Assistant) so a map switch can fire LED presets and scenes at the table. Mappadux only references presets/scenes you have already authored in those tools — set them up there first, then point Mappadux at the device and pick from the dropdown when assigning per map. None of this travels in Map Pack exports; the connection details stay on this machine.',
+      'Connect Mappadux to physical lighting and home-automation so a map switch can fire LED presets, scenes, and DMX cues at the table. Mappadux only references presets you have already authored in those tools — set them up there first, then point Mappadux at the device and pick from the dropdown when assigning per map. None of this travels in Map Pack exports; the connection details stay on this machine.',
     );
 
     sec.appendChild(this._buildWledSubsection());
@@ -469,9 +471,19 @@ export class SettingsDialog {
     sec.appendChild(this._buildHaSubsection());
     sec.appendChild(document.createElement('hr'));
     sec.appendChild(this._buildQlcSubsection());
-    sec.appendChild(document.createElement('hr'));
-    sec.appendChild(this._buildSoundtracksSubsection());
 
+    return sec;
+  }
+
+  /** v2.15.14 — Standalone Soundtracks Settings section. Pack-level
+   *  music providers (YouTube + Spotify). Split out of Stagecraft so
+   *  the lighting and audio configurations don't crowd each other. */
+  private _buildSoundtracksSection(): HTMLElement {
+    const sec = mkSection(
+      'Soundtracks (Background Music)',
+      'Pack-level background music that persists across map switches. Enable the providers you want to use; the Soundtracks panel appears in the sidebar as soon as at least one is on. Track URLs travel with your .mappadux bundle; auth tokens stay on this machine.',
+    );
+    sec.appendChild(this._buildSoundtracksSubsection());
     return sec;
   }
 
@@ -566,22 +578,6 @@ export class SettingsDialog {
   private _buildSoundtracksSubsection(): HTMLElement {
     const wrap = document.createElement('div');
     wrap.className = 'settings-stagecraft-soundtracks';
-
-    const heading = document.createElement('strong');
-    heading.textContent = 'Soundtracks (YouTube + Spotify)';
-    wrap.appendChild(heading);
-
-    const sub = document.createElement('div');
-    sub.className = 'settings-stat-sub';
-    sub.style.marginBottom = '6px';
-    sub.innerHTML =
-      'Pack-level background music that survives map switches. Paste ' +
-      'YouTube, YouTube Music, or Spotify URLs into the Soundtracks ' +
-      'panel slots — Theme, Intro, Outro, Playlist. Enable the ' +
-      'providers you want to use; the Soundtracks panel appears as ' +
-      'soon as at least one is on. The track URLs travel with your ' +
-      '<code>.mappadux</code> bundle (no auth tokens — those stay local).';
-    wrap.appendChild(sub);
 
     wrap.appendChild(this._buildProviderToggleRow(
       'Enable YouTube',

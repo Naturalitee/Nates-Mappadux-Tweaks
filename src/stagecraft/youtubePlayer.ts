@@ -48,6 +48,27 @@ export function extractVideoId(input: string): string | null {
   return null;
 }
 
+/** Extract a YouTube / YouTube Music playlist id from a URL. Accepts:
+ *  - youtube.com/playlist?list=<id>
+ *  - music.youtube.com/playlist?list=<id>
+ *  - youtube.com/watch?v=<videoId>&list=<id>  (returns the listId; the
+ *    embed player will play the playlist starting at videoId)
+ *  Playlist ids vary in length but are alnum + - _ (commonly 13–34).
+ *  Returns null if no id can be parsed. */
+export function extractPlaylistId(input: string): string | null {
+  const trimmed = input.trim();
+  if (!trimmed) return null;
+  let url: URL;
+  try { url = new URL(trimmed); } catch { return null; }
+  if (!/(^|\.)youtube\.com$/.test(url.hostname)) return null;
+  const list = url.searchParams.get('list');
+  if (!list || !/^[A-Za-z0-9_-]+$/.test(list)) return null;
+  // Skip the watch-history meta-list "WL" + auto-mix lists "RD..." —
+  // those don't behave as user-pasteable playlists in the IFrame.
+  if (list === 'WL') return null;
+  return list;
+}
+
 let _apiPromise: Promise<void> | null = null;
 
 /** Lazy-load https://www.youtube.com/iframe_api. Resolves once the
@@ -77,12 +98,16 @@ export function loadYouTubeApi(): Promise<void> {
 interface YTPlayerLike {
   loadVideoById(opts: { videoId: string; startSeconds?: number }): void;
   cueVideoById(opts:  { videoId: string; startSeconds?: number }): void;
+  loadPlaylist(opts:  { list: string; listType?: 'playlist'; index?: number; startSeconds?: number; suggestedQuality?: string }): void;
+  cuePlaylist(opts:   { list: string; listType?: 'playlist'; index?: number; startSeconds?: number }): void;
   playVideo(): void;
   pauseVideo(): void;
   stopVideo(): void;
   setVolume(v: number): void;
   getVolume(): number;
   getPlayerState(): number;
+  setLoop(loop: boolean): void;
+  setShuffle(shuffle: boolean): void;
   destroy(): void;
 }
 
@@ -98,6 +123,11 @@ export const YT_STATE = {
 
 export interface YouTubeSoundtrackPlayer {
   load(videoId: string, opts?: { autoplay?: boolean; volume?: number }): void;
+  /** Load a whole YouTube / YouTube Music playlist by list id. The
+   *  IFrame Player iterates the playlist internally; `loop` makes
+   *  it cycle back to the first track when the list ends; `shuffle`
+   *  randomises the order. */
+  loadPlaylist(listId: string, opts?: { autoplay?: boolean; volume?: number; loop?: boolean; shuffle?: boolean }): void;
   play(): void;
   pause(): void;
   stop(): void;
@@ -165,6 +195,16 @@ export async function createYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
       if (opts?.volume !== undefined) player.setVolume(Math.max(0, Math.min(100, opts.volume)));
       if (auto) player.loadVideoById({ videoId });
       else      player.cueVideoById({ videoId });
+    },
+    loadPlaylist(listId, opts) {
+      const auto = opts?.autoplay !== false;
+      if (opts?.volume !== undefined) player.setVolume(Math.max(0, Math.min(100, opts.volume)));
+      if (auto) player.loadPlaylist({ list: listId, listType: 'playlist' });
+      else      player.cuePlaylist ({ list: listId, listType: 'playlist' });
+      // setLoop / setShuffle have to come AFTER the playlist load
+      // (they're no-ops without a loaded playlist).
+      try { player.setLoop(opts?.loop ?? false); }       catch { /* nothing */ }
+      try { player.setShuffle(opts?.shuffle ?? false); } catch { /* nothing */ }
     },
     play()  { player.playVideo(); },
     pause() { player.pauseVideo(); },
