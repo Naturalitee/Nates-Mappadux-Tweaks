@@ -389,7 +389,13 @@ export async function createYouTubePlayer(opts?: CreateYouTubePlayerOpts): Promi
     getNowPlaying() {
       try {
         const d = player.getVideoData();
-        return d?.title ? { title: d.title, ...(d.author ? { author: d.author } : {}) } : null;
+        // v2.15.41 — Strip YouTube's auto-generated " - Topic" suffix
+        // on artist channels. Topic channels are auto-created by YT
+        // when a label distributes a track and the artist has no
+        // official channel; "Sleeping Wolf - Topic" reads cleaner as
+        // just "Sleeping Wolf" in the now-playing line.
+        const author = d?.author ? d.author.replace(/\s*-\s*Topic\s*$/i, '') : undefined;
+        return d?.title ? { title: d.title, ...(author ? { author } : {}) } : null;
       } catch { return null; }
     },
     getCurrentVideoId() {

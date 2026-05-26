@@ -557,11 +557,24 @@ export class SoundtracksPanel {
   }
 
   private _transportPrev(): void {
+    // v2.15.41 — During a shuffle-stable resume the engine is in
+    // single-video mode (not playlist mode), so previous() no-ops.
+    // Fire the pending handoff so prev becomes "drop me into the
+    // playlist and pick a track". For shuffled, the handoff jumps
+    // to a random track; for sequenced, it goes to the next-in-line.
+    if (this._ytHandoff && this._ytHandoff.slotId === this.activeSlotId && this.ytPlayer) {
+      this._onTrackEnded();
+      return;
+    }
     if (this.activeKind === 'youtube' && this.ytPlayer) this.ytPlayer.previous();
     else if (this.activeKind === 'spotify' && this.spotifyPlayer) void this.spotifyPlayer.previous();
   }
 
   private _transportNext(): void {
+    if (this._ytHandoff && this._ytHandoff.slotId === this.activeSlotId && this.ytPlayer) {
+      this._onTrackEnded();
+      return;
+    }
     if (this.activeKind === 'youtube' && this.ytPlayer) this.ytPlayer.next();
     else if (this.activeKind === 'spotify' && this.spotifyPlayer) void this.spotifyPlayer.next();
   }
@@ -955,11 +968,18 @@ export class SoundtracksPanel {
         this.activeKind = 'youtube';
       } else {
         const p = await this._ensureYouTubePlayer(isFirst ? { listId: track.listId } : undefined);
+        const wantShuffle = playlistContent && shuffle;
         const playlistOpts: Parameters<typeof p.loadPlaylist>[1] = {
           autoplay: true,
           volume:   0,
           loop,
-          shuffle:  playlistContent && shuffle,
+          shuffle:  wantShuffle,
+          // v2.15.41 — fresh shuffled playlist also needs randomStart
+          // so the first track isn't always track 0 of the ordered
+          // list. The wrapper's cue+shuffle+jump-to-random flow does
+          // the right thing. Only applies when there's no resume —
+          // resume goes via the specific-track / handoff path above.
+          ...(wantShuffle && resume?.playlistIndex === undefined ? { randomStart: true } : {}),
         };
         if (resume?.playlistIndex !== undefined) playlistOpts.index = resume.playlistIndex;
         if (resume?.positionSec)                 playlistOpts.startSeconds = resume.positionSec;
