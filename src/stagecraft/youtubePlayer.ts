@@ -154,15 +154,27 @@ export function ytErrorMessage(code: number): string {
   return YT_ERROR_MESSAGES[code] ?? `YouTube error ${code}. Try a different URL.`;
 }
 
-/** Create a YouTube IFrame player bound to a hidden div. Inserts the
- *  div if absent. Resolves once the iframe is ready to receive load /
- *  play commands.
+export interface CreateYouTubePlayerOpts {
+  /** Initial video id to load with the player. Either this OR
+   *  `listId` should be provided — the IFrame Player's empty
+   *  embed (`https://www.youtube.com/embed/?...` with no path
+   *  segment) doesn't reliably fire onReady, so we start the
+   *  player with real content. */
+  videoId?: string;
+  listId?:  string;
+}
+
+/** Create a YouTube IFrame player bound to a visually-invisible div
+ *  in the document body. Resolves once the iframe is ready to
+ *  receive load / play commands.
  *
- *  Hosting div lives in the DOM at id="stagecraft-yt-host" — a 1x1
- *  off-screen container. The IFrame Player constructor replaces THIS
- *  element with the actual iframe, so the host has to be a fresh
- *  element each construction. We wrap in an outer keep-alive div. */
-export async function createYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
+ *  v2.15.23 — the player must be created with INITIAL content
+ *  (videoId or listId). Empty-embed initialisation
+ *  (https://www.youtube.com/embed/?...) was observed to never fire
+ *  onReady on some Edge / Chrome combinations, leaving callers
+ *  stuck. Real content lets the iframe finish loading and call
+ *  back normally. */
+export async function createYouTubePlayer(opts?: CreateYouTubePlayerOpts): Promise<YouTubeSoundtrackPlayer> {
   await loadYouTubeApi();
   const w = window as unknown as { YT: { Player: new (el: HTMLElement, opts: object) => YTPlayerLike } };
 
@@ -216,7 +228,7 @@ export async function createYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
         'Diagnostic: ' + diag,
       ));
     }, 10_000);
-    const p = new w.YT.Player(inner, {
+    const config: Record<string, unknown> = {
       width:  '1',
       height: '1',
       playerVars: {
@@ -225,6 +237,9 @@ export async function createYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
         disablekb: 1,
         modestbranding: 1,
         rel: 0,
+        ...(opts?.listId
+          ? { list: opts.listId, listType: 'playlist' }
+          : {}),
       },
       events: {
         onReady: () => {
@@ -241,7 +256,9 @@ export async function createYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
           for (const cb of errorListeners) cb(ev.data, msg);
         },
       },
-    });
+    };
+    if (opts?.videoId) config['videoId'] = opts.videoId;
+    const p = new w.YT.Player(inner, config);
   });
 
   return {

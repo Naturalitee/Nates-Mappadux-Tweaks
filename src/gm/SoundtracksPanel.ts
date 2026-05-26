@@ -428,17 +428,34 @@ export class SoundtracksPanel {
     const shuffle         = slot.shuffle !== false;  // default true
 
     if (track.kind === 'youtube') {
-      const p = await this._ensureYouTubePlayer();
-      p.load(track.videoId, { autoplay: true, volume: 0 });
+      // Pass videoId at create time on FIRST init so the IFrame
+      // embed loads with real content (empty-embed init can wedge
+      // onReady — see youtubePlayer.ts).
+      const isFirst = !this.ytPlayer;
+      const p = await this._ensureYouTubePlayer(isFirst ? { videoId: track.videoId } : undefined);
+      if (!isFirst) p.load(track.videoId, { autoplay: true, volume: 0 });
+      else          { p.setVolume(0); p.play(); }
       this.activeKind = 'youtube';
     } else if (track.kind === 'youtube-playlist') {
-      const p = await this._ensureYouTubePlayer();
-      p.loadPlaylist(track.listId, {
-        autoplay: true,
-        volume:   0,
-        loop,
-        shuffle:  playlistContent && shuffle,
-      });
+      const isFirst = !this.ytPlayer;
+      const p = await this._ensureYouTubePlayer(isFirst ? { listId: track.listId } : undefined);
+      if (!isFirst) {
+        p.loadPlaylist(track.listId, {
+          autoplay: true,
+          volume:   0,
+          loop,
+          shuffle:  playlistContent && shuffle,
+        });
+      } else {
+        // Player was created with the playlist already queued.
+        // Apply loop/shuffle + start playback.
+        p.loadPlaylist(track.listId, {
+          autoplay: true,
+          volume:   0,
+          loop,
+          shuffle:  playlistContent && shuffle,
+        });
+      }
       this.activeKind = 'youtube';
     } else {
       const p = await this._ensureSpotifyPlayer();
@@ -490,10 +507,10 @@ export class SoundtracksPanel {
     return null;
   }
 
-  private async _ensureYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
+  private async _ensureYouTubePlayer(initial?: { videoId?: string; listId?: string }): Promise<YouTubeSoundtrackPlayer> {
     if (this.ytPlayer) return this.ytPlayer;
     this.statusEl.textContent = 'Loading YouTube player…';
-    this.ytPlayer = await createYouTubePlayer();
+    this.ytPlayer = await createYouTubePlayer(initial);
     this.statusEl.textContent = '';
     this.ytPlayer.onStateChange((s) => {
       if (s === YT_STATE.ENDED) this._onTrackEnded();
