@@ -1413,32 +1413,42 @@ export interface SoundtracksConfig {
   crossfadeMs?: number;
 }
 
-/** A single Soundtrack slot. Holds 0..N tracks; how they're played
- *  depends on `mode`. */
+/** A single Soundtrack slot — holds AT MOST one thing: one track,
+ *  or one playlist URL, or nothing (silent / empty).
+ *
+ *  v2.15.20 — collapsed from a mode-picker + multi-track-array
+ *  design. Variety comes from having more slots, not from packing
+ *  multiple items into one slot.
+ *
+ *  Behaviour is inferred from the track's kind:
+ *   - empty / kind='silent': selecting this slot stops the music.
+ *   - track is a single video / single Spotify track: single-track
+ *     playback. Loop toggles loop. startSec / endSec trim the
+ *     range.
+ *   - track is a YouTube playlist / Spotify playlist / album:
+ *     playlist-style playback (the engine iterates internally).
+ *     Loop toggles whether the playlist cycles. Shuffle randomises
+ *     the order.
+ *
+ *  No mode picker, no manual multi-track lists. */
 export interface SoundtrackSlot {
-  /** Stable id for the slot — used to address it in panel state
-   *  (which slot is currently playing) and bundle round-trip. */
   id: string;
-  /** User-set label (e.g. "Tavern", "Combat", "Spooky"). */
   label: string;
-  /** Mode of operation:
-   *   - 'silent'    — selecting this slot stops the music (no tracks).
-   *   - 'play-once' — single track. Optionally trimmed via startSec /
-   *                   endSec; stops at endSec.
-   *   - 'loop'      — single track, loops the [startSec, endSec] range.
-   *   - 'playlist'  — many tracks, sequential or shuffled, crossfade
-   *                   between them. Loops at the end of the list. */
-  mode: 'silent' | 'play-once' | 'loop' | 'playlist';
-  /** Tracks. Empty for silent. One for play-once / loop. Many for
-   *  playlist. */
-  tracks: SoundtrackTrack[];
-  /** Play-once / loop start time, seconds from track start. Default 0. */
-  startSec?: number;
-  /** Play-once / loop end time, seconds from track start. Default =
-   *  full track length. */
-  endSec?: number;
-  /** Playlist mode: when true, play tracks in random order. */
+  /** 'silent' = anchor slot (always empty, selecting stops the
+   *  music). 'normal' = a user slot whose content is in `track`. */
+  kind: 'silent' | 'normal';
+  /** The one thing in this slot. Undefined = empty slot. */
+  track?: SoundtrackTrack;
+  /** Loop the slot's content. Default false. Universal — applies
+   *  to single tracks and playlists alike. */
+  loop?: boolean;
+  /** Shuffle the playlist order. Default true once a playlist-
+   *  content track lands in the slot; ignored for single-track
+   *  content. */
   shuffle?: boolean;
+  /** Trim — only meaningful when `track` is a single track. */
+  startSec?: number;
+  endSec?:   number;
   /** Volume 0..100. Default 80. */
   volume?: number;
 }
