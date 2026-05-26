@@ -635,7 +635,7 @@ export class SettingsDialog {
     ));
     wrap.appendChild(this._buildProviderToggleRow(
       'Enable Spotify',
-      'Plays via the Spotify Web Playback SDK — full programmatic control (play / pause / seek / volume / fade / crossfade). Requires a Spotify Premium account AND a one-time Spotify Developer App registration (you get a Client ID). Use the Connect flow below once you\'ve enabled this and pasted a Client ID.',
+      'Plays via the Spotify Web Playback SDK (the in-browser player) with the Spotify Web API for transport commands (play / pause / shuffle / repeat). Both are free for the user — there is no per-call cost. Requirements: a Spotify Premium account (the SDK won\'t play for free accounts) AND a one-time Spotify Developer App registration so we have a Client ID. Setup steps appear when you enable this.',
       isSpotifyEnabled,
       setSpotifyEnabled,
     ));
@@ -651,13 +651,29 @@ export class SettingsDialog {
     wrap.className = 'settings-stagecraft-spotify-connect';
     wrap.style.marginTop = '6px';
 
+    // v2.15.47 — Step-by-step guide. Spotify's Developer flow is
+    // well-trodden but unsigned-up users hit "what do I need?" with
+    // no clear answer; we use both the Web Playback SDK (audio out)
+    // and the Web API (transport commands), and the OAuth scopes
+    // need to match. Stating it explicitly here avoids a support
+    // round-trip every time a new GM hits Connect.
     const sub = document.createElement('div');
     sub.className = 'settings-stat-sub';
     sub.innerHTML =
-      'Register a Spotify Developer App at ' +
-      '<a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a>. ' +
-      `Add this exact redirect URI: <code>${escapeHtml(spotifyRedirectUri())}</code>. ` +
-      'Copy the Client ID, paste it below, then Connect.';
+      '<strong>What we use:</strong> Spotify Web Playback SDK (audio playback in the browser) + Spotify Web API (transport: play / pause / shuffle / repeat / device transfer). Both are free for the user.<br>' +
+      '<br>' +
+      '<strong>Setup steps:</strong>' +
+      '<ol class="settings-spotify-steps">' +
+      '<li>Sign in at <a href="https://developer.spotify.com/dashboard" target="_blank" rel="noopener">developer.spotify.com/dashboard</a> with your Spotify Premium account.</li>' +
+      '<li>Click <strong>Create app</strong>. Name + description can be anything (e.g. "Mappadux for me"). Website can be blank.</li>' +
+      '<li>For <strong>APIs used</strong>, tick <em>Web API</em> and <em>Web Playback SDK</em>. Both are needed.</li>' +
+      `<li>Under <strong>Redirect URIs</strong>, paste exactly: <code>${escapeHtml(spotifyRedirectUri())}</code> and click Add.</li>` +
+      '<li>Save. Open the app\'s Settings page and copy the <strong>Client ID</strong>. (You don\'t need the Client Secret — Mappadux uses PKCE, not a server.)</li>' +
+      '<li>Paste the Client ID below, click <strong>Save Client ID</strong>, then <strong>Connect Spotify</strong>. You\'ll be sent to Spotify to approve, then returned here.</li>' +
+      '</ol>' +
+      '<strong>Permissions you\'ll grant:</strong> <code>streaming</code> (audio playback), <code>user-modify-playback-state</code> (play / pause commands), <code>user-read-email</code> + <code>user-read-private</code> (required by Spotify alongside <code>streaming</code>).<br>' +
+      '<br>' +
+      '<strong>Privacy:</strong> the Client ID + access token stay in your browser (localStorage). They never travel in <code>.mappadux</code> pack bundles or to any Mappadux server — there isn\'t one.';
     wrap.appendChild(sub);
 
     const form = document.createElement('div');

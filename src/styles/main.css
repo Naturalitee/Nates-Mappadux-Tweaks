@@ -4334,6 +4334,15 @@ option.select-option--add {
   border-radius: var(--radius-sm);
   font-size: 0.95em;
 }
+/* v2.15.47 — Setup steps list. Tight vertical spacing so the whole
+   guide fits the dialog without dominating it. */
+.settings-spotify-steps {
+  margin: 4px 0 6px;
+  padding-left: 20px;
+}
+.settings-spotify-steps li {
+  margin: 2px 0;
+}
 
 .settings-key-list {
   list-style: none;
