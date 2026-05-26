@@ -519,11 +519,24 @@ export class PlayerApp {
     // reveal). The viewer computes the backing locally from the
     // same wire-shipped tile bytes — no extra bandwidth.
     if (inputs.length < 2) return { renderable };
+    // v2.15.16 — Backing membership = "tiles with something drawn
+    // OVER them" (matches the GM-side rasterizeRevealBacking rule
+    // shared via compositeOverlap.backingTileIndices). Earlier this
+    // used inputs.slice(0, -1) — only the single LAST tile got
+    // excluded, which broke composites with multiple top tiles
+    // covering the same bottom (only one became transparent under
+    // the upper-layer slider on the GM, both broke on the player).
+    const { backingTileIndices } = await import('../maps/compositeOverlap.ts');
+    const covered = backingTileIndices(
+      inputs.map((i) => i.tile),
+      (id) => inputs.find((i) => i.asset.id === id)?.asset,
+      composite.aspect,
+    );
+    if (covered.size === 0) return { renderable };
+    const drawnInputs = inputs.filter((_, idx) => covered.has(idx));
     // Pass full inputs as extentInputs so the backing PNG shares the
-    // main composite's dimensions exactly — otherwise the smaller
-    // subset crops to a different bbox and stretches on the renderer's
-    // fixed-aspect backing plane.
-    const backingResult = await rasterizeFromTiles(inputs.slice(0, -1), composite.aspect, inputs);
+    // main composite's dimensions exactly.
+    const backingResult = await rasterizeFromTiles(drawnInputs, composite.aspect, inputs);
     if (!backingResult) return { renderable };
     const backing = await backingResult.blob.arrayBuffer();
     return { renderable, backing };

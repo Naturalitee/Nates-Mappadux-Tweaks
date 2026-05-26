@@ -21,9 +21,17 @@
 
 import type { CompositeTile, MapAsset } from '../types.ts';
 
+/** Minimum asset shape that tileBoundsNorm needs. Lets viewer-side
+ *  callers pass a stripped subset from the wire format rather than
+ *  the full MapAsset. */
+export interface AssetDims {
+  imageWidth?:  number;
+  imageHeight?: number;
+}
+
 export function tileBoundsNorm(
   tile: CompositeTile,
-  asset: MapAsset | undefined,
+  asset: AssetDims | undefined,
   canvasAspect: number,
 ): { x0: number; x1: number; y0: number; y1: number } {
   const widthNormX = tile.scale ?? 1;
@@ -76,4 +84,37 @@ export function compositeHasOverlap(
     }
   }
   return false;
+}
+
+/** v2.15.16 — Reveal-layer backing membership. Returns the SET of
+ *  tile indices that belong to the backing — i.e. tiles with at
+ *  least one other tile (higher z-order = later in the array)
+ *  overlapping them.
+ *
+ *  Shared by rasterizeRevealBacking (GM-side server save) and by
+ *  PlayerApp / ProjectorApp (viewer-side local re-rasterise). Same
+ *  EPS tolerance as compositeHasOverlap so all three agree.
+ *
+ *  Returns an EMPTY set when no overlaps exist — callers should
+ *  treat that as "non-layered, skip the backing". */
+export function backingTileIndices(
+  tiles: CompositeTile[],
+  resolveAsset: (mapAssetId: string) => AssetDims | undefined,
+  canvasAspect: number,
+): Set<number> {
+  if (tiles.length < 2) return new Set();
+  const bounds = tiles.map((t) => tileBoundsNorm(t, resolveAsset(t.mapAssetId), canvasAspect));
+  const covered = new Set<number>();
+  for (let i = 0; i < bounds.length - 1; i++) {
+    const a = bounds[i]!;
+    for (let j = i + 1; j < bounds.length; j++) {
+      const b = bounds[j]!;
+      if (a.x0 < b.x1 - OVERLAP_EPS && a.x1 > b.x0 + OVERLAP_EPS
+       && a.y0 < b.y1 - OVERLAP_EPS && a.y1 > b.y0 + OVERLAP_EPS) {
+        covered.add(i);
+        break;
+      }
+    }
+  }
+  return covered;
 }

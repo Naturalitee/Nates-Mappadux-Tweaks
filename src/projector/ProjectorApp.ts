@@ -405,9 +405,18 @@ export class ProjectorApp {
     // the layer below rather than the backdrop. Skip for single-
     // tile composites — nothing underneath.
     if (inputs.length < 2) return { renderable };
-    // Pass full inputs as extentInputs so the backing PNG shares the
-    // main composite's dimensions exactly.
-    const backingResult = await rasterizeFromTiles(inputs.slice(0, -1), composite.aspect, inputs);
+    // v2.15.16 — Backing = tiles that have something drawn over
+    // them (shared rule with the GM-side rasterizeRevealBacking).
+    // See PlayerApp's twin for the full reasoning.
+    const { backingTileIndices } = await import('../maps/compositeOverlap.ts');
+    const covered = backingTileIndices(
+      inputs.map((i) => i.tile),
+      (id) => inputs.find((i) => i.asset.id === id)?.asset,
+      composite.aspect,
+    );
+    if (covered.size === 0) return { renderable };
+    const drawnInputs = inputs.filter((_, idx) => covered.has(idx));
+    const backingResult = await rasterizeFromTiles(drawnInputs, composite.aspect, inputs);
     if (!backingResult) return { renderable };
     const backing = await backingResult.blob.arrayBuffer();
     return { renderable, backing };

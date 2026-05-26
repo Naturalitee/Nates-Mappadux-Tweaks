@@ -299,38 +299,21 @@ export async function rasterizeRevealBacking(asset: MapAsset): Promise<Rasterize
   const fullInputs = await _resolveTileInputs(asset);
   if (fullInputs.length < 2) return null;
 
-  const { compositeHasOverlap, tileBoundsNorm } = await import('./compositeOverlap.ts');
+  const { backingTileIndices } = await import('./compositeOverlap.ts');
   const assetById = new Map<string, MapAsset>();
   for (const inp of fullInputs) assetById.set(inp.asset.id, inp.asset as MapAsset);
-  if (!compositeHasOverlap(asset, assetById)) return null;
 
-  // Build bounds per tile (in composite-norm coords). A tile is
-  // "covered" if any LATER tile (higher z) overlaps its bbox; EPS
-  // absorbs float residue from snap maths (matches the rule in
-  // compositeOverlap.ts).
   const canvasAspect = asset.compositeAspect ?? DEFAULT_OUTPUT_ASPECT;
-  const bounds = tiles.map((t) => tileBoundsNorm(t, assetById.get(t.mapAssetId), canvasAspect));
-  const EPS = 0.001;
-  const isCovered = (i: number): boolean => {
-    const a = bounds[i]!;
-    for (let j = i + 1; j < bounds.length; j++) {
-      const b = bounds[j]!;
-      if (a.x0 < b.x1 - EPS && a.x1 > b.x0 + EPS
-       && a.y0 < b.y1 - EPS && a.y1 > b.y0 + EPS) return true;
-    }
-    return false;
-  };
+  const covered = backingTileIndices(tiles, (id) => assetById.get(id), canvasAspect);
+  if (covered.size === 0) return null;
 
-  // Backing = every tile that has at least one tile drawn over it.
-  // fullInputs follows the same tile order as asset.compositeTiles
-  // (just possibly with gaps where _resolveTileInputs skipped
-  // unresolvable entries), so map by tile.id to find the original
-  // index for the cover test.
-  const idIndex = new Map<string, number>();
-  tiles.forEach((t, i) => idIndex.set(t.id, i));
+  // Filter fullInputs to the subset whose source tile is covered.
+  // (fullInputs may skip unresolvable tiles, so we map back by id.)
+  const idToIndex = new Map<string, number>();
+  tiles.forEach((t, i) => idToIndex.set(t.id, i));
   const drawnInputs = fullInputs.filter((inp) => {
-    const i = idIndex.get(inp.tile.id);
-    return i !== undefined && isCovered(i);
+    const i = idToIndex.get(inp.tile.id);
+    return i !== undefined && covered.has(i);
   });
   if (drawnInputs.length === 0) return null;
 
