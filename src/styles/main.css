@@ -4078,6 +4078,16 @@ option.select-option--add {
 .soundtrack-slot.is-active .soundtrack-slot-type {
   color: var(--accent);
 }
+/* v2.15.36 — Provider brand badge to the right of the name. Brand
+   colours come from the SVG fills; we just size + align here. */
+.soundtrack-provider-badge {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+}
 .soundtrack-slot-label {
   font-weight: 600;
   font-size: var(--font-size-sm);

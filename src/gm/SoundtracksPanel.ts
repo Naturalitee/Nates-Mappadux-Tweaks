@@ -59,6 +59,23 @@ const ICON_TYPE_PLAYLIST = '<svg viewBox="0 0 24 24" width="14" height="14" fill
 // by the transport bar.
 const ICON_RESTART = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="1 4 1 10 7 10"/><path d="M3.51 15a9 9 0 1 0 2.13-9.36L1 10"/></svg>';
 
+// v2.15.36 — Provider brand icons. Brand colours baked in so they
+// pop next to the monochrome type icons. Simple Icons paths.
+const ICON_PROVIDER_YT = '<svg viewBox="0 0 24 24" width="14" height="14" fill="#FF0033"><path d="M23.498 6.186a3.016 3.016 0 0 0-2.122-2.136C19.505 3.545 12 3.545 12 3.545s-7.505 0-9.377.505A3.017 3.017 0 0 0 .502 6.186C0 8.07 0 12 0 12s0 3.93.502 5.814a3.016 3.016 0 0 0 2.122 2.136c1.871.505 9.376.505 9.376.505s7.505 0 9.377-.505a3.015 3.015 0 0 0 2.122-2.136C24 15.93 24 12 24 12s0-3.93-.502-5.814zM9.545 15.568V8.432L15.818 12l-6.273 3.568z"/></svg>';
+const ICON_PROVIDER_SP = '<svg viewBox="0 0 24 24" width="14" height="14" fill="#1DB954"><path d="M12 0C5.4 0 0 5.4 0 12s5.4 12 12 12 12-5.4 12-12S18.66 0 12 0zm5.521 17.34c-.24.359-.66.48-1.021.24-2.82-1.74-6.36-2.101-10.561-1.141-.418.122-.779-.179-.899-.539-.12-.421.18-.78.54-.9 4.56-1.021 8.52-.6 11.64 1.32.42.18.479.659.301 1.02zm1.44-3.3c-.301.42-.841.6-1.262.3-3.239-1.98-8.159-2.58-11.939-1.38-.479.12-1.02-.12-1.14-.6-.12-.48.12-1.021.6-1.141C9.6 9.9 15 10.561 18.72 12.84c.361.181.54.78.241 1.2zm.12-3.36C15.24 8.4 8.82 8.16 5.16 9.301c-.6.179-1.2-.181-1.38-.721-.18-.601.18-1.2.72-1.381 4.26-1.26 11.28-1.02 15.721 1.621.539.3.719 1.02.42 1.56-.299.421-1.02.599-1.559.3z"/></svg>';
+
+function _providerIconFor(track: SoundtrackTrack | undefined): string | null {
+  if (!track) return null;
+  if (track.kind === 'spotify') return ICON_PROVIDER_SP;
+  return ICON_PROVIDER_YT;  // 'youtube' or 'youtube-playlist'
+}
+
+function _providerNameFor(track: SoundtrackTrack | undefined): string {
+  if (!track) return '';
+  if (track.kind === 'spotify') return 'Spotify';
+  return 'YouTube';
+}
+
 /** Effective Restart-vs-Resume for a slot. If the user has
  *  explicitly set slot.restart, use that. Otherwise default by
  *  content kind: single tracks restart; playlists + loops resume. */
@@ -306,6 +323,16 @@ export class SoundtracksPanel {
       labelInput.className = 'soundtrack-slot-label-input';
       labelInput.addEventListener('change', () => void this._updateSlot(slot.id, { label: labelInput.value.trim() || 'Slot' }));
       header.appendChild(labelInput);
+
+      // v2.15.36 — Provider brand badge to the right of the name box.
+      // Only meaningful when the slot has a track set.
+      if (slot.track) {
+        const provider = document.createElement('span');
+        provider.className = 'soundtrack-provider-badge';
+        provider.innerHTML = _providerIconFor(slot.track) ?? '';
+        provider.title = _providerNameFor(slot.track);
+        header.appendChild(provider);
+      }
 
       const delBtn = document.createElement('button');
       delBtn.type = 'button';
