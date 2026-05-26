@@ -151,4 +151,4 @@ without affecting any other config:
 ## Reporting security issues
 
 If you find a real security issue in Mappadux, contact
-`ac@epsis.com` directly rather than filing a public GitHub issue.
+`frunk@frunk.net` directly rather than filing a public GitHub issue.
