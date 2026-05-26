@@ -102,6 +102,11 @@ export interface SpotifySoundtrackPlayer {
   seekMs(ms: number): Promise<void>;
   destroy(): void;
   onEnded(cb: () => void): void;
+  /** v2.15.19 — fires when the SDK reports an error. `kind`
+   *  matches Spotify's listener event names so the panel can
+   *  format different messages per category (Premium required,
+   *  token expired, playback hiccup, etc.). */
+  onError(cb: (kind: 'init' | 'auth' | 'account' | 'playback', message: string) => void): void;
   /** Current spotify:track:<id> URI being played, or null. */
   currentUri(): string | null;
 }
@@ -122,13 +127,21 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
     volume: 0.8,
   });
 
-  // Surface errors on the console without throwing — keeps the SDK
-  // alive so transient hiccups (e.g. account paused, ad break) don't
-  // tear down the device.
-  player.addListener('initialization_error',  (e) => console.warn('[spotify-sdk] init error:', e.message));
-  player.addListener('authentication_error',  (e) => console.warn('[spotify-sdk] auth error:', e.message));
-  player.addListener('account_error',         (e) => console.warn('[spotify-sdk] account error (Premium required):', e.message));
-  player.addListener('playback_error',        (e) => console.warn('[spotify-sdk] playback error:', e.message));
+  const errorListeners: Array<(kind: 'init' | 'auth' | 'account' | 'playback', message: string) => void> = [];
+  const fireError = (kind: 'init' | 'auth' | 'account' | 'playback', raw: string): void => {
+    // Friendly messages — guide the user to the fix.
+    const friendly =
+      kind === 'init'     ? `Spotify player couldn't start. Reload the page; if it persists, Disconnect + Reconnect in Settings.` :
+      kind === 'auth'     ? `Spotify token expired or invalid. Open Settings and Reconnect.` :
+      kind === 'account'  ? `Spotify Premium is required for streaming. Free accounts can't play full tracks through Mappadux.` :
+                            `Spotify couldn't play this track. Try another, or check that the URL is correct.`;
+    console.warn(`[spotify-sdk] ${kind} error:`, raw);
+    for (const cb of errorListeners) cb(kind, friendly);
+  };
+  player.addListener('initialization_error',  (e) => fireError('init',     e.message));
+  player.addListener('authentication_error',  (e) => fireError('auth',     e.message));
+  player.addListener('account_error',         (e) => fireError('account',  e.message));
+  player.addListener('playback_error',        (e) => fireError('playback', e.message));
 
   const deviceId: string = await new Promise<string>((resolve) => {
     player.addListener('ready', ({ device_id }) => resolve(device_id));
@@ -225,6 +238,7 @@ export async function createSpotifyPlayer(name = 'Mappadux Soundtracks'): Promis
     seekMs(ms: number)             { return player.seek(ms); },
     destroy()                      { player.disconnect(); },
     onEnded(cb: () => void)        { endedListeners.push(cb); },
+    onError(cb)                    { errorListeners.push(cb); },
     currentUri()                   { return lastUri; },
   };
 }

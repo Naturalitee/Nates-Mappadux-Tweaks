@@ -4093,6 +4093,14 @@ option.select-option--add {
 .soundtrack-volume-row input[type="range"] {
   flex: 1 1 auto;
 }
+/* v2.15.19 — Error state for the Soundtracks status line. Used when
+   the YT IFrame Player or Spotify SDK reports a problem we can
+   guide the user through (private playlist, expired token, Premium
+   required, etc.). */
+.settings-stat-sub.soundtrack-status--error {
+  color: #ff8e6c;
+  font-weight: 500;
+}
 
 /* v2.15.12 — N-slot Soundtracks redesign. Each slot is a self-
    contained card with label, mode picker, mode-specific controls,

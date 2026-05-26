@@ -497,19 +497,36 @@ export class SoundtracksPanel {
     this.ytPlayer.onStateChange((s) => {
       if (s === YT_STATE.ENDED) this._onTrackEnded();
     });
+    this.ytPlayer.onError((_code, message) => this._showError(message));
     return this.ytPlayer;
   }
 
   private async _ensureSpotifyPlayer(): Promise<SpotifySoundtrackPlayer> {
     if (this.spotifyPlayer) return this.spotifyPlayer;
     if (!isSpotifyConnected()) {
-      throw new Error('Spotify not connected. Settings → Stagecraft → Connect Spotify.');
+      throw new Error('Spotify not connected. Settings → Soundtracks → Connect Spotify.');
     }
     this.statusEl.textContent = 'Loading Spotify player…';
     this.spotifyPlayer = await createSpotifyPlayer();
     this.statusEl.textContent = '';
     this.spotifyPlayer.onEnded(() => this._onTrackEnded());
+    this.spotifyPlayer.onError((_kind, message) => this._showError(message));
     return this.spotifyPlayer;
+  }
+
+  /** Surface a player error in the status line + give the engine a
+   *  beat to recover. Errors from YT IFrame or the Spotify SDK both
+   *  funnel through here so the user sees one consistent place for
+   *  troubleshooting hints. Clears after 8 s so it doesn't linger. */
+  private _showError(message: string): void {
+    this.statusEl.textContent = message;
+    this.statusEl.classList.add('soundtrack-status--error');
+    setTimeout(() => {
+      if (this.statusEl.textContent === message) {
+        this.statusEl.textContent = '';
+        this.statusEl.classList.remove('soundtrack-status--error');
+      }
+    }, 8000);
   }
 
   private _onTrackEnded(): void {

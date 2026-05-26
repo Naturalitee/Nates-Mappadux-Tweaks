@@ -134,6 +134,24 @@ export interface YouTubeSoundtrackPlayer {
   setVolume(v: number): void;
   destroy(): void;
   onStateChange(cb: (state: number) => void): void;
+  /** v2.15.19 — fires when the IFrame Player reports an error.
+   *  See YT_ERROR_MESSAGES for code → human-readable lookup. */
+  onError(cb: (code: number, message: string) => void): void;
+}
+
+/** YouTube IFrame Player error codes (from the official docs).
+ *  Mapping to friendly messages so the SoundtracksPanel can guide
+ *  the user toward a fix without leaking the raw code. */
+export const YT_ERROR_MESSAGES: Record<number, string> = {
+  2:   'Invalid YouTube id — check the URL is right and try again.',
+  5:   'YouTube player hit an internal error. Try a different track.',
+  100: 'YouTube couldn\'t find this video / playlist — it may have been removed or set to private.',
+  101: 'This playlist or video doesn\'t allow embedded playback. In YouTube Music, set the playlist privacy to Unlisted or Public (not Private).',
+  150: 'This playlist or video doesn\'t allow embedded playback. In YouTube Music, set the playlist privacy to Unlisted or Public (not Private).',
+};
+
+export function ytErrorMessage(code: number): string {
+  return YT_ERROR_MESSAGES[code] ?? `YouTube error ${code}. Try a different URL.`;
 }
 
 /** Create a YouTube IFrame player bound to a hidden div. Inserts the
@@ -168,6 +186,7 @@ export async function createYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
   outer.appendChild(inner);
 
   const stateListeners: Array<(state: number) => void> = [];
+  const errorListeners: Array<(code: number, message: string) => void> = [];
 
   const player: YTPlayerLike = await new Promise<YTPlayerLike>((resolve) => {
     const p = new w.YT.Player(inner, {
@@ -184,6 +203,10 @@ export async function createYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
         onReady: () => resolve(p),
         onStateChange: (ev: { data: number }) => {
           for (const cb of stateListeners) cb(ev.data);
+        },
+        onError: (ev: { data: number }) => {
+          const msg = ytErrorMessage(ev.data);
+          for (const cb of errorListeners) cb(ev.data, msg);
         },
       },
     });
@@ -212,5 +235,6 @@ export async function createYouTubePlayer(): Promise<YouTubeSoundtrackPlayer> {
     setVolume(v: number) { player.setVolume(Math.max(0, Math.min(100, v))); },
     destroy() { try { player.destroy(); } catch { /* nothing */ } },
     onStateChange(cb)    { stateListeners.push(cb); },
+    onError(cb)          { errorListeners.push(cb); },
   };
 }
