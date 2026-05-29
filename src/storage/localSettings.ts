@@ -80,6 +80,24 @@ export function setScaledViewTransitionsEnabled(enabled: boolean): void {
   } catch { /* private mode etc. — no-op */ }
 }
 
+/** v2.17 Player Voice — GM toggle for player pings. Enabled by default; the
+ *  GM can switch it off if they don't want players highlighting the map.
+ *  Stored as '0' when DISABLED (absence = enabled) so the common case needs
+ *  no key. */
+export const PLAYER_PINGS_DISABLED_KEY = 'mappadux:player_pings_disabled';
+
+export function arePingsEnabled(): boolean {
+  try { return localStorage.getItem(PLAYER_PINGS_DISABLED_KEY) !== '1'; }
+  catch { return true; }
+}
+
+export function setPingsEnabled(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.removeItem(PLAYER_PINGS_DISABLED_KEY);
+    else         localStorage.setItem(PLAYER_PINGS_DISABLED_KEY, '1');
+  } catch { /* private mode etc. — no-op */ }
+}
+
 /** UI scale for the left sidebar. Stored as a number (1.0 = 100%);
  *  values outside MIN/MAX clamp on read. Applied via CSS `zoom` so the
  *  whole box model scales uniformly — fonts, padding, borders, icon

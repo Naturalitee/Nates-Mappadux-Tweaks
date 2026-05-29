@@ -1,6 +1,8 @@
 import { Guest } from '../p2p/Guest.ts';
 import { generateId } from '../utils/id.ts';
 import { PlayerIdentifyModal, type PlayerIdentity } from './PlayerIdentifyModal.ts';
+import { PlayerActionMenu, type ActionMenuItem } from './PlayerActionMenu.ts';
+import { PingLayer } from '../rendering/PingLayer.ts';
 import { Viewer } from '../viewers/Viewer.ts';
 import { PROFILE_PLAYER } from '../viewers/profiles.ts';
 import { drawGrid } from '../viewers/strategies/drawGrid.ts';
@@ -158,6 +160,14 @@ export class PlayerApp {
    *  doesn't re-pop it on every reconnect). */
   private _identityPromptShown = false;
   private _identityModal = new PlayerIdentifyModal();
+  private _actionMenu = new PlayerActionMenu();
+  private pingLayer: PingLayer | null = null;
+  /** Player-Voice features the GM currently allows. Default-on until the GM
+   *  says otherwise (mirrors the default-enabled settings). */
+  private features = { pings: true, messaging: true, movableMarkers: true };
+  /** Long-press detection state for touch ping/menu. */
+  private _pressTimer: number | null = null;
+  private _pressStart: { x: number; y: number } | null = null;
 
   async init(): Promise<void> {
     // v2.15 — Viewer owns the chrome (lifecycle, fullscreen, faff
@@ -189,6 +199,16 @@ export class PlayerApp {
     this.markerSprites   = this.viewer.markerSprites;
     this.markerOverlay   = this.viewer.markerOverlay;
     this.transitionEngine = this.viewer.transitionEngine!;
+
+    // v2.17 Player Voice — ping pulses anchored to map coords, auto-fading.
+    const pingLayerEl = document.getElementById('ping-layer');
+    if (pingLayerEl) {
+      this.pingLayer = new PingLayer(
+        pingLayerEl,
+        (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        { showLabel: false, persistent: false, ttlMs: 10000 },
+      );
+    }
 
     // Post-map-load: marker re-render + overlay refresh. Viewer has
     // already pushed the new aspect ratio into MarkerTexture +
@@ -287,6 +307,30 @@ export class PlayerApp {
 
     // Prevent the browser context menu on right-click (keep canvas clean)
     document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // v2.17 Player Voice — right-click / long-press the map → action menu (ping, …).
+    const mapCanvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
+    mapCanvas?.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      this._openPlayerMenu(e.clientX, e.clientY);
+    });
+    mapCanvas?.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'touch') return;
+      this._pressStart = { x: e.clientX, y: e.clientY };
+      this._clearPressTimer();
+      this._pressTimer = window.setTimeout(() => {
+        this._pressTimer = null;
+        if (this._pressStart) this._openPlayerMenu(this._pressStart.x, this._pressStart.y);
+      }, 500);
+    });
+    mapCanvas?.addEventListener('pointermove', (e) => {
+      if (!this._pressStart) return;
+      if (Math.abs(e.clientX - this._pressStart.x) > 10 || Math.abs(e.clientY - this._pressStart.y) > 10) {
+        this._clearPressTimer(); // became a pan — not a long-press
+      }
+    });
+    mapCanvas?.addEventListener('pointerup',     () => this._clearPressTimer());
+    mapCanvas?.addEventListener('pointercancel', () => this._clearPressTimer());
 
     // v2.17 Player Voice — identity button (set / change who you are).
     document.querySelector('#player-identity-btn')?.addEventListener('click', () => {
@@ -676,6 +720,43 @@ export class PlayerApp {
   async openIdentityModal(): Promise<void> {
     const chosen = await this._identityModal.open(this.identity ?? undefined);
     if (chosen) { this._saveIdentity(chosen); this._sendIdentify(); }
+  }
+
+  // ── v2.17 Player Voice — pings ─────────────────────────────────────────────
+
+  private _clearPressTimer(): void {
+    if (this._pressTimer !== null) { clearTimeout(this._pressTimer); this._pressTimer = null; }
+    this._pressStart = null;
+  }
+
+  /** Open the player action menu at a viewport point, if it maps onto the map. */
+  private _openPlayerMenu(clientX: number, clientY: number): void {
+    const canvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
+    if (!canvas) return;
+    const rect = canvas.getBoundingClientRect();
+    const norm = this.renderer.canvasCssToMapNorm(clientX - rect.left, clientY - rect.top);
+    if (!norm || norm.x < 0 || norm.x > 1 || norm.y < 0 || norm.y > 1) return; // off-map / letterbox
+
+    const items: ActionMenuItem[] = [];
+    if (this.features.pings) {
+      items.push({ label: 'Ping here', onSelect: () => this._sendPing(norm.x, norm.y) });
+    }
+    // Patch 3 adds "Send message…" actions here, gated on this.features.messaging.
+    this._actionMenu.open(clientX, clientY, items);
+  }
+
+  private _sendPing(x: number, y: number): void {
+    if (!this.features.pings) return;
+    // A ping carries the player's colour + name, so make sure we have one first.
+    if (!this.identity) {
+      void this.openIdentityModal().then(() => { if (this.identity) this._emitPing(x, y); });
+      return;
+    }
+    this._emitPing(x, y);
+  }
+
+  private _emitPing(x: number, y: number): void {
+    this.guest.send({ type: 'player_ping', playerId: this.playerId, clientId: this.clientId, x, y });
   }
 
   private _refreshIdentityButton(): void {
@@ -1106,6 +1187,20 @@ export class PlayerApp {
           this._kickTrackerRaf();
         }
         this._playTrackerPing(msg.audioAssetId, msg.audioDataUrl, msg.audioVolume);
+        break;
+      }
+
+      case 'ping_show': {
+        // v2.17 Player Voice — a ping relayed by the GM; pulse it on our map.
+        this.pingLayer?.add({ id: msg.pingId, x: msg.x, y: msg.y, color: msg.color, name: msg.name });
+        break;
+      }
+
+      case 'player_features': {
+        // v2.17 Player Voice — GM toggled which interactions are allowed.
+        if (typeof msg.pings === 'boolean')          this.features.pings          = msg.pings;
+        if (typeof msg.messaging === 'boolean')      this.features.messaging      = msg.messaging;
+        if (typeof msg.movableMarkers === 'boolean') this.features.movableMarkers = msg.movableMarkers;
         break;
       }
     }

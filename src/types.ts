@@ -974,6 +974,45 @@ export interface MsgPlayerRoster {
   }>;
 }
 
+/**
+ * Player → GM: the player pinged a point on their map. Carries normalised map
+ * coords; the GM resolves the player's colour + name from its roster binding
+ * and relays a ping_show to everyone.
+ */
+export interface MsgPlayerPing {
+  type: 'player_ping';
+  playerId: string;
+  clientId: string;
+  x: number; // 0..1 normalised map coord
+  y: number;
+}
+
+/**
+ * GM → all players: show a ping pulse. Sent when the GM relays a player ping
+ * (or originates one). Self-contained — carries colour + name so receivers
+ * render without needing the roster.
+ */
+export interface MsgPingShow {
+  type: 'ping_show';
+  pingId: string;
+  x: number;
+  y: number;
+  color: string;
+  name: string;
+}
+
+/**
+ * GM → all players: which Player-Voice interactions are currently enabled, so
+ * player views can hide affordances the GM has switched off. Fields are
+ * optional; an absent field means "unchanged / keep default (enabled)".
+ */
+export interface MsgPlayerFeatures {
+  type: 'player_features';
+  pings?:          boolean;
+  messaging?:      boolean;
+  movableMarkers?: boolean;
+}
+
 export type GMMessage =
   | MsgFullState
   | MsgViewUpdate
@@ -1005,7 +1044,10 @@ export type GMMessage =
   | MsgMapMetaUpdate
   | MsgPlayerIdentify
   | MsgPlayerBye
-  | MsgPlayerRoster;
+  | MsgPlayerRoster
+  | MsgPlayerPing
+  | MsgPingShow
+  | MsgPlayerFeatures;
 
 // ─── Storage types ───────────────────────────────────────────────────────────
 

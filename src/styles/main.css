@@ -6464,3 +6464,109 @@ option.select-option--add {
   box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
 }
 .player-identity-label { white-space: nowrap; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Ping layer + pulses ────────────────────────────────────────────────── */
+.ping-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  overflow: hidden;
+}
+.ping {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  --ping-color: #3b82f6;
+}
+.ping-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--ping-color);
+  box-shadow: 0 0 8px var(--ping-color), 0 0 0 1.5px rgba(255, 255, 255, 0.85);
+}
+.ping-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border-radius: 50%;
+  border: 2.5px solid var(--ping-color);
+  /* Concentric circles converging inward onto the point. */
+  animation: ping-zero-in 1.35s linear infinite;
+}
+@keyframes ping-zero-in {
+  0%   { transform: scale(3.0); opacity: 0; }
+  25%  { opacity: 0.95; }
+  100% { transform: scale(0.45); opacity: 0; }
+}
+.ping-label {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  padding: 1px 6px;
+  background: rgba(10, 14, 26, 0.6);
+  border-radius: 999px;
+}
+.ping-dismiss {
+  position: absolute;
+  top: -10px;
+  left: 12px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: #fff;
+  background: var(--danger);
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.ping-dismiss:hover { background: var(--danger-hover); }
+
+/* ── Player action menu (right-click / long-press) ──────────────────────── */
+.player-action-menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 150px;
+  padding: 4px;
+  background: rgba(10, 14, 26, 0.96);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+.player-action-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.player-action-menu-item:hover:not(:disabled) { background: var(--bg-hover); }
+.player-action-menu-item:disabled { color: var(--text-dim); cursor: default; }

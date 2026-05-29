@@ -14,6 +14,8 @@ import {
   UI_SCALE_MIN,
   UI_SCALE_MAX,
   UI_SCALE_DEFAULT,
+  arePingsEnabled,
+  setPingsEnabled,
   type StoredApiKey,
 } from '../storage/localSettings.ts';
 import {
@@ -137,6 +139,8 @@ export class SettingsDialog {
     if (isInProgressEnabled()) {
       body.appendChild(this._buildStagecraftSection());
     }
+    // ── Player Voice section ─────────────────────────────────────────────
+    body.appendChild(this._buildPlayerVoiceSection());
     // ── API Keys section ─────────────────────────────────────────────────
     body.appendChild(this._buildApiKeysSection());
     // ── Danger Zone ──────────────────────────────────────────────────────
@@ -439,6 +443,25 @@ export class SettingsDialog {
     toggle.append(input, slider);
     row.append(label, toggle);
     return row;
+  }
+
+  // ─── Player Voice ─────────────────────────────────────────────────────────
+
+  private _buildPlayerVoiceSection(): HTMLElement {
+    const sec = mkSection(
+      'Player Voice',
+      'What connected players can do beyond watching. Each interaction can be switched off if it doesn’t suit your table.',
+    );
+
+    sec.appendChild(this._buildPerfToggle({
+      title: 'Allow player pings',
+      help:
+        'Lets players right-click (or long-press on touch) the map to ping a point. Everyone sees a pulse in that player’s colour for a few seconds; on your screen it stays put, labelled with their name, until you dismiss it.',
+      get: arePingsEnabled,
+      set: setPingsEnabled,
+    }));
+
+    return sec;
   }
 
   // ─── Danger Zone ────────────────────────────────────────────────────────

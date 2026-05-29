@@ -24,6 +24,7 @@ import { getAllSetups, setActiveSetupId, saveSetup } from '../projector/calibrat
 import { SoundboardPanel, type SoundboardBroadcast } from './SoundboardPanel.ts';
 import { PlayersPanel } from './PlayersPanel.ts';
 import { PlayerRegistry } from '../players/PlayerRegistry.ts';
+import { PingLayer } from '../rendering/PingLayer.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { FilterPanel } from '../filters/FilterPanel.ts';
@@ -33,7 +34,7 @@ import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
 import { Host } from '../p2p/Host.ts';
 import { generateRoomCode, generateInstanceId } from '../p2p/roomCode.ts';
 import { saveSession, loadSession, getAllMaps, getMap, saveMap, deleteMap, clearAssetLibraries, clearEverything, getActiveInstanceId } from '../storage/db.ts';
-import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY } from '../storage/localSettings.ts';
+import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, arePingsEnabled } from '../storage/localSettings.ts';
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { seedAudioAssets } from '../storage/seedAudioAssets.ts';
 import { migrateLegacyMaps } from '../storage/seedMapAssets.ts';
@@ -335,6 +336,8 @@ export class GMApp {
   // v2.17 Player Voice — persistent players roster + panel.
   private playerRegistry = new PlayerRegistry();
   private playersPanel!: PlayersPanel;
+  /** Ping pulses relayed from players — persist on the GM until dismissed. */
+  private pingLayer: PingLayer | null = null;
 
   private interactions   = new MarkerInteractionRegistry();
   private audio          = this.interactions.register(new PositionalAudioInteraction());
@@ -3005,6 +3008,17 @@ export class GMApp {
     this.renderer.setShaderPlanesEnabled(false); // GM sees flat fills for MapFX kinds, not the player's fancy shaders
     this.renderer.enableGMOverlay();
     this.renderer.setFogOpacity(0.35);     // GM sees through fog; players get full opacity
+
+    // v2.17 Player Voice — ping pulses persist on the GM with the player's name
+    // + a dismiss button, tracking the map through workspace pan/zoom.
+    const pingLayerEl = document.getElementById('ping-layer');
+    if (pingLayerEl) {
+      this.pingLayer = new PingLayer(
+        pingLayerEl,
+        (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        { showLabel: true, persistent: true, onDismiss: () => { /* GM-local removal only */ } },
+      );
+    }
   }
 
   private bindProjectorEditor(): void {
@@ -3342,6 +3356,7 @@ export class GMApp {
       void this.playerRegistry.identify(_peerId, msg).then(() => {
         this._refreshPlayersPanel();
         this._broadcastRoster();
+        this._broadcastPlayerFeatures();
         const who = msg.playerName || msg.characterName || 'A player';
         this.setStatus(`${who} joined`, 'ok');
       });
@@ -3351,6 +3366,17 @@ export class GMApp {
       this.playerRegistry.bye(msg.clientId);
       this._refreshPlayersPanel();
       this._broadcastRoster();
+      return;
+    }
+    if (msg.type === 'player_ping') {
+      if (!arePingsEnabled()) return; // GM has pings switched off — ignore
+      const player = this.playerRegistry.playerForClient(msg.clientId);
+      const color = player?.color ?? '#3b82f6';
+      const name  = player?.playerName || player?.characterName || 'Player';
+      const pingId = generateId();
+      // Show on the GM (persists until dismissed) and relay to every player.
+      this.pingLayer?.add({ id: pingId, x: msg.x, y: msg.y, color, name });
+      this.host.broadcast({ type: 'ping_show', pingId, x: msg.x, y: msg.y, color, name });
       return;
     }
     if (msg.type === 'projector_bye') {
@@ -5741,6 +5767,12 @@ export class GMApp {
     this.host.broadcast(this.playerRegistry.rosterMessage());
   }
 
+  /** Tell player views which Player-Voice interactions are currently allowed,
+   *  so they can hide disabled affordances. */
+  private _broadcastPlayerFeatures(): void {
+    this.host.broadcast({ type: 'player_features', pings: arePingsEnabled() });
+  }
+
   private bindHamburgerMenu(): void {
     const btn  = document.querySelector<HTMLButtonElement>('#gm-menu-btn');
     const menu = document.querySelector<HTMLElement>('#gm-menu');
@@ -6195,6 +6227,9 @@ export class GMApp {
     // re-fetches device state to match. Same for Soundtracks.
     if (this.stagecraftPanel) void this.stagecraftPanel.refresh({ force: true });
     if (this.soundtracksPanel) this.soundtracksPanel.refresh();
+    // v2.17 Player Voice — the GM may have toggled pings / messaging; push the
+    // current feature flags so player views update their action menus.
+    this._broadcastPlayerFeatures();
   }
 
   /** Open the About / splash dialog. Reads pack name + splash + theme from

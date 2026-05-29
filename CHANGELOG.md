@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.16.2 — 2026-05-29
+
+### Player Voice — pings
+
+Players can now point at the map. Right-click (or long-press on touch) a
+spot on the player view and choose "Ping here".
+
+- **Zeroing-in pulse.** The ping shows as concentric rings converging onto
+  the point in the player's identity colour — a deliberate "look here"
+  gesture rather than a radar blip. Every connected player sees it.
+- **Different lifetimes per side.** On player views the pulse fades after
+  ~10 seconds. On the GM screen it stays put, labelled with the player's
+  name, until the GM dismisses it with its delete button — so a ping during
+  a busy moment isn't missed.
+- **Tracks the map.** Pulses are anchored to map coordinates, so they stay
+  on the right spot as anyone pans or zooms their own view.
+- **GM toggle.** A new Settings → Player Voice section lets the GM switch
+  pings off; player views hide the option when it's disabled.
+
 ## v2.16.1 — 2026-05-29
 
 ### Player Voice — named & persistent players (foundation)
