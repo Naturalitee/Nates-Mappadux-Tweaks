@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.16.6 — 2026-05-29
+
+### Player Voice — LLM connection test + model picker
+
+A quick polish pass on the GM reply assistant's setup. Settings → Player
+Voice → Reply assistant now has:
+
+- **Test connection button.** Hits `/v1/models` on the configured endpoint
+  and shows whether it's reachable + CORS-friendly, so you can confirm LM
+  Studio is running and serving before you actually rely on it during a
+  session.
+- **Auto-populated model dropdown.** A successful test lists every model
+  the endpoint advertises; click one to fill the Model field. The text
+  field stays the source of truth so a model the server hasn't loaded yet
+  doesn't blank your saved choice.
+- **Stale-marker.** Edit the base URL or API key and the dropdown clears
+  so you re-test against the new endpoint rather than picking from a list
+  that no longer applies.
+
 ## v2.16.5 — 2026-05-29
 
 ### Player Voice — player tokens

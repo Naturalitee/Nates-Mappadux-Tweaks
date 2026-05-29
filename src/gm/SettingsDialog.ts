@@ -59,6 +59,7 @@ import {
   inProgressFlagOrigin,
 } from '../storage/featureFlags.ts';
 import { generateId } from '../utils/id.ts';
+import { LLMClient } from '../ai/LLMClient.ts';
 
 /**
  * Settings dialog. Houses:
@@ -572,6 +573,102 @@ export class SettingsDialog {
     keyInput.addEventListener('change', () => setLLMApiKey(keyInput.value));
     keyLab.appendChild(keyInput);
     wrap.appendChild(keyLab);
+
+    // Model dropdown — populated by Test connection. Picking an option fills
+    // the model input above; the input stays the source of truth so a model
+    // unloaded on the server doesn't blank the user's saved choice.
+    const modelsLab = document.createElement('label');
+    modelsLab.style.display = 'flex';
+    modelsLab.style.flexDirection = 'column';
+    modelsLab.style.gap = '3px';
+    modelsLab.className = 'settings-stat-sub';
+    modelsLab.textContent = 'Available models on this endpoint';
+    const modelsSelect = document.createElement('select');
+    modelsSelect.className = 'select-full';
+    modelsSelect.disabled = true;
+    const placeholder = document.createElement('option');
+    placeholder.value = '';
+    placeholder.textContent = 'Click “Test connection” to load…';
+    modelsSelect.appendChild(placeholder);
+    modelsSelect.addEventListener('change', () => {
+      if (modelsSelect.value) { modelInput.value = modelsSelect.value; persist(); }
+    });
+    modelsLab.appendChild(modelsSelect);
+    wrap.appendChild(modelsLab);
+
+    const testRow = document.createElement('div');
+    testRow.style.display = 'flex';
+    testRow.style.alignItems = 'center';
+    testRow.style.gap = 'var(--space-sm)';
+    const testBtn = document.createElement('button');
+    testBtn.type = 'button';
+    testBtn.className = 'btn btn--ghost btn--sm';
+    testBtn.textContent = 'Test connection';
+    const testStatus = document.createElement('span');
+    testStatus.className = 'settings-stat-sub';
+    testStatus.style.minHeight = '1.2em';
+    testRow.append(testBtn, testStatus);
+    wrap.appendChild(testRow);
+
+    const runTest = async (): Promise<void> => {
+      testBtn.disabled = true;
+      testStatus.style.color = 'var(--text-secondary)';
+      testStatus.textContent = 'Connecting…';
+      modelsSelect.disabled = true;
+      modelsSelect.replaceChildren();
+      try {
+        const ids = await LLMClient.listModels(baseInput.value, keyInput.value);
+        if (ids.length === 0) {
+          testStatus.style.color = 'var(--warn)';
+          testStatus.textContent = 'Connected, but no models are loaded on the server.';
+          const opt = document.createElement('option');
+          opt.value = '';
+          opt.textContent = 'No models loaded';
+          modelsSelect.appendChild(opt);
+          return;
+        }
+        testStatus.style.color = 'var(--ok)';
+        testStatus.textContent = `Connected — ${ids.length} model${ids.length === 1 ? '' : 's'} available.`;
+        const blank = document.createElement('option');
+        blank.value = '';
+        blank.textContent = '— pick a model —';
+        modelsSelect.appendChild(blank);
+        const current = modelInput.value.trim();
+        for (const id of ids) {
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = id;
+          if (id === current) opt.selected = true;
+          modelsSelect.appendChild(opt);
+        }
+        modelsSelect.disabled = false;
+      } catch (err) {
+        testStatus.style.color = 'var(--danger)';
+        testStatus.textContent = (err as Error).message;
+        const opt = document.createElement('option');
+        opt.value = '';
+        opt.textContent = 'Connection failed';
+        modelsSelect.appendChild(opt);
+      } finally {
+        testBtn.disabled = false;
+      }
+    };
+    testBtn.addEventListener('click', () => { void runTest(); });
+
+    // Stale-marker — if the user edits the base URL or key after testing, the
+    // listed models no longer reflect the endpoint they're about to use.
+    const markStale = () => {
+      if (modelsSelect.disabled) return;
+      modelsSelect.disabled = true;
+      modelsSelect.replaceChildren();
+      const opt = document.createElement('option');
+      opt.value = '';
+      opt.textContent = 'Endpoint changed — click “Test connection” again';
+      modelsSelect.appendChild(opt);
+      testStatus.textContent = '';
+    };
+    baseInput.addEventListener('input', markStale);
+    keyInput.addEventListener('input', markStale);
 
     const promptLab = document.createElement('label');
     promptLab.style.display = 'flex';

@@ -21,6 +21,30 @@ export class LLMClient {
     return new LLMClient(s.baseUrl.trim(), s.model.trim(), s.systemPrompt, getLLMApiKey());
   }
 
+  /**
+   * Hit `${baseUrl}/models` and return the model ids the endpoint advertises.
+   * Used by Settings to populate the model dropdown + test the connection
+   * (LM Studio, OpenRouter, and most OpenAI-compatible servers all serve it).
+   */
+  static async listModels(baseUrl: string, apiKey: string): Promise<string[]> {
+    if (!baseUrl.trim()) throw new Error('Set a base URL first (e.g. http://localhost:1234/v1).');
+    const url = `${baseUrl.trim().replace(/\/$/, '')}/models`;
+    const headers: Record<string, string> = {};
+    if (apiKey.trim()) headers['Authorization'] = `Bearer ${apiKey.trim()}`;
+    let res: Response;
+    try {
+      res = await fetch(url, { method: 'GET', headers });
+    } catch (err) {
+      throw new Error(`Couldn't reach ${baseUrl} (${(err as Error).message}). Is the server running and is CORS enabled on it?`);
+    }
+    if (!res.ok) {
+      const detail = await res.text().catch(() => '');
+      throw new Error(`Endpoint returned ${res.status}${detail ? ` — ${detail.slice(0, 200)}` : ''}`);
+    }
+    const data = await res.json() as { data?: Array<{ id?: string }> };
+    return (data.data ?? []).map((m) => m.id ?? '').filter(Boolean);
+  }
+
   constructor(
     private baseUrl: string,
     private model: string,
