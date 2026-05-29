@@ -26,6 +26,7 @@ import { PlayersPanel } from './PlayersPanel.ts';
 import { PlayerVoicePanel, type PlayerVoiceMessage } from './PlayerVoicePanel.ts';
 import { PlayerRegistry } from '../players/PlayerRegistry.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
+import { LLMClient } from '../ai/LLMClient.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { FilterPanel } from '../filters/FilterPanel.ts';
@@ -5837,6 +5838,13 @@ export class GMApp {
           toPlayerId,
           text,
         });
+      },
+      // v2.17 — LLM reply assistant. Checked at call time so toggling the
+      // assistant on/off in Settings takes effect without rebuilding the panel.
+      onSuggest: async (msg) => {
+        const client = LLMClient.fromSettings();
+        if (!client) throw new Error('No LLM configured — enable the reply assistant in Settings → Player Voice.');
+        return client.suggest(msg.text);
       },
     });
   }

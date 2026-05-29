@@ -18,6 +18,12 @@ import {
   setPingsEnabled,
   isMessagingEnabled,
   setMessagingEnabled,
+  getLLMSettings,
+  setLLMSettings,
+  getLLMApiKey,
+  setLLMApiKey,
+  DEFAULT_GM_ASSISTANT_PROMPT,
+  type LLMSettings,
   type StoredApiKey,
 } from '../storage/localSettings.ts';
 import {
@@ -471,7 +477,121 @@ export class SettingsDialog {
       set: setMessagingEnabled,
     }));
 
+    sec.appendChild(this._buildLlmAssistantBlock());
+
     return sec;
+  }
+
+  /** GM reply assistant — optional LLM that suggests replies to player
+   *  messages. Works with a local LM Studio server or a hosted OpenAI-compatible
+   *  provider (OpenRouter etc.). The system prompt is fully editable. */
+  private _buildLlmAssistantBlock(): HTMLElement {
+    const cfg: LLMSettings = getLLMSettings();
+
+    const wrap = document.createElement('div');
+    wrap.className = 'settings-danger-row';
+    wrap.style.flexDirection = 'column';
+    wrap.style.alignItems = 'stretch';
+    wrap.style.gap = 'var(--space-sm)';
+
+    const header = document.createElement('div');
+    header.innerHTML =
+      '<strong>Reply assistant (LLM)</strong><br>' +
+      '<span class="settings-stat-sub">Suggests draft replies to player messages — click “Suggest replies” on a message in the Player Voice panel. Use a local <em>LM Studio</em> server (no key) or a hosted provider like <em>OpenRouter</em> (key + model). Everything stays between your browser and the endpoint you choose.</span>';
+    wrap.appendChild(header);
+
+    const enableLabel = document.createElement('label');
+    enableLabel.className = 'toggle-switch';
+    enableLabel.style.alignSelf = 'flex-start';
+    const enableInput = document.createElement('input');
+    enableInput.type = 'checkbox';
+    enableInput.checked = cfg.enabled;
+    const enableSlider = document.createElement('span');
+    enableSlider.className = 'toggle-slider';
+    enableLabel.append(enableInput, enableSlider);
+    const enableRow = document.createElement('div');
+    enableRow.style.display = 'flex';
+    enableRow.style.alignItems = 'center';
+    enableRow.style.gap = 'var(--space-sm)';
+    const enableText = document.createElement('span');
+    enableText.className = 'settings-stat-sub';
+    enableText.textContent = 'Enable reply assistant';
+    enableRow.append(enableLabel, enableText);
+    wrap.appendChild(enableRow);
+
+    const persist = () => setLLMSettings({
+      enabled:      enableInput.checked,
+      baseUrl:      baseInput.value,
+      model:        modelInput.value,
+      systemPrompt: promptArea.value,
+    });
+
+    const mkInput = (labelText: string, placeholder: string, value: string): HTMLInputElement => {
+      const lab = document.createElement('label');
+      lab.style.display = 'flex';
+      lab.style.flexDirection = 'column';
+      lab.style.gap = '3px';
+      lab.className = 'settings-stat-sub';
+      lab.textContent = labelText;
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'select-full';
+      inp.placeholder = placeholder;
+      inp.value = value;
+      inp.autocomplete = 'off';
+      lab.appendChild(inp);
+      wrap.appendChild(lab);
+      return inp;
+    };
+
+    const baseInput  = mkInput('Base URL', 'http://localhost:1234/v1', cfg.baseUrl);
+    const modelInput = mkInput('Model', 'e.g. local-model or anthropic/claude-3.5-sonnet', cfg.model);
+
+    const keyLab = document.createElement('label');
+    keyLab.style.display = 'flex';
+    keyLab.style.flexDirection = 'column';
+    keyLab.style.gap = '3px';
+    keyLab.className = 'settings-stat-sub';
+    keyLab.textContent = 'API key (leave blank for LM Studio / local)';
+    const keyInput = document.createElement('input');
+    keyInput.type = 'password';
+    keyInput.className = 'select-full';
+    keyInput.placeholder = 'sk-… (OpenRouter etc.)';
+    keyInput.value = getLLMApiKey();
+    keyInput.autocomplete = 'off';
+    keyInput.addEventListener('change', () => setLLMApiKey(keyInput.value));
+    keyLab.appendChild(keyInput);
+    wrap.appendChild(keyLab);
+
+    const promptLab = document.createElement('label');
+    promptLab.style.display = 'flex';
+    promptLab.style.flexDirection = 'column';
+    promptLab.style.gap = '3px';
+    promptLab.className = 'settings-stat-sub';
+    promptLab.textContent = 'System prompt (tune it to your LLM + GMing style)';
+    const promptArea = document.createElement('textarea');
+    promptArea.className = 'select-full';
+    promptArea.rows = 8;
+    promptArea.style.resize = 'vertical';
+    promptArea.style.fontFamily = 'var(--font-mono)';
+    promptArea.style.fontSize = 'var(--font-size-sm)';
+    promptArea.value = cfg.systemPrompt;
+    promptLab.appendChild(promptArea);
+    wrap.appendChild(promptLab);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'btn btn--ghost btn--sm';
+    resetBtn.style.alignSelf = 'flex-start';
+    resetBtn.textContent = 'Reset prompt to default';
+    resetBtn.addEventListener('click', () => { promptArea.value = DEFAULT_GM_ASSISTANT_PROMPT; persist(); });
+    wrap.appendChild(resetBtn);
+
+    for (const el of [enableInput, baseInput, modelInput, promptArea]) {
+      el.addEventListener('change', persist);
+    }
+
+    return wrap;
   }
 
   // ─── Danger Zone ────────────────────────────────────────────────────────

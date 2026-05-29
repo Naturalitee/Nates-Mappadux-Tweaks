@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.16.4 — 2026-05-29
+
+### Player Voice — LLM reply assistant
+
+The Player Voice panel can now draft replies for you. On any player message,
+click "Suggest replies" to get a few editable options — use one as-is, tweak
+it, or ignore them and type your own.
+
+- **Bring your own model.** Works with any OpenAI-compatible endpoint: a
+  local LM Studio server (no key needed) or a hosted provider like
+  OpenRouter (key + model). Configure it in Settings → Player Voice. The API
+  key is stored only in your browser and never leaves it (not even in Map
+  Pack exports), and appears in the API Keys list for housekeeping.
+- **Editable prompt.** The assistant ships with a GM-tuned prompt that asks
+  for four distinct response options (a green light, a complication, a hard
+  stop, and a dramatic choice — each ending in a skill-roll cue). The whole
+  prompt is editable so you can tune it to your model and your table, with a
+  one-click reset to the default.
+- **Suggestions are starting points.** Clicking a suggestion drops it into
+  the reply box; nothing is sent until you hit Send.
+
 ## v2.16.3 — 2026-05-29
 
 ### Player Voice — private messages

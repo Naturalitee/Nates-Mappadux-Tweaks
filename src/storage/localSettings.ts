@@ -214,6 +214,83 @@ export function isBetaHost(): boolean {
   } catch { return false; }
 }
 
+// ─── LLM reply assistant (v2.17 Player Voice) ────────────────────────────────
+
+export const LLM_API_KEY            = 'mappadux:llm_api_key';
+const LLM_ENABLED_KEY               = 'mappadux:llm_enabled';
+const LLM_BASE_URL_KEY              = 'mappadux:llm_base_url';
+const LLM_MODEL_KEY                 = 'mappadux:llm_model';
+const LLM_SYSTEM_PROMPT_KEY         = 'mappadux:llm_system_prompt';
+
+/** The default GM-assistant system prompt. Editable in Settings; "Reset to
+ *  default" restores this. Kept verbatim from the spec so GMs recognise it. */
+export const DEFAULT_GM_ASSISTANT_PROMPT =
+`You are a compact, precise GM Assistant for a Tabletop RPG.
+Your job is to analyze incoming player notes and provide 4 distinct, short response options for the GM to copy/paste.
+Never speak to the player directly. Never roleplay as the characters.
+
+Format your output EXACTLY like this for every input:
+
+**1. The Green Light (Positive)**
+> [Insert short positive narrative whisper] "Give me a [Skill Name] roll."
+
+**2. The Complication (Yes, but...)**
+> [Insert narrative hurdle] "Give me a [Skill Name] roll."
+
+**3. The Hard Stop (Negative)**
+> [Insert warning or immediate consequence] "It will require a [Skill Name] roll."
+
+**4. The GM's Choice**
+> [Insert the most dramatically interesting choice] "Make a [Skill Name] roll."`;
+
+export interface LLMSettings {
+  enabled:      boolean;
+  baseUrl:      string;  // OpenAI-compatible base, e.g. http://localhost:1234/v1 (LM Studio) or https://openrouter.ai/api/v1
+  model:        string;  // e.g. "local-model" or "anthropic/claude-3.5-sonnet"
+  systemPrompt: string;
+}
+
+export function getLLMSettings(): LLMSettings {
+  const read = (k: string, fallback: string): string => {
+    try { return localStorage.getItem(k) ?? fallback; } catch { return fallback; }
+  };
+  let enabled = false;
+  try { enabled = localStorage.getItem(LLM_ENABLED_KEY) === '1'; } catch { /* no-op */ }
+  return {
+    enabled,
+    baseUrl:      read(LLM_BASE_URL_KEY, 'http://localhost:1234/v1'),
+    model:        read(LLM_MODEL_KEY, ''),
+    systemPrompt: read(LLM_SYSTEM_PROMPT_KEY, DEFAULT_GM_ASSISTANT_PROMPT),
+  };
+}
+
+export function setLLMSettings(s: LLMSettings): void {
+  try {
+    if (s.enabled) localStorage.setItem(LLM_ENABLED_KEY, '1');
+    else           localStorage.removeItem(LLM_ENABLED_KEY);
+    localStorage.setItem(LLM_BASE_URL_KEY, s.baseUrl.trim());
+    localStorage.setItem(LLM_MODEL_KEY, s.model.trim());
+    // Store the prompt only when it differs from the default, so "reset"
+    // (removing the key) naturally falls back to the canonical prompt.
+    if (s.systemPrompt.trim() && s.systemPrompt.trim() !== DEFAULT_GM_ASSISTANT_PROMPT.trim()) {
+      localStorage.setItem(LLM_SYSTEM_PROMPT_KEY, s.systemPrompt);
+    } else {
+      localStorage.removeItem(LLM_SYSTEM_PROMPT_KEY);
+    }
+  } catch { /* private mode etc. — no-op */ }
+}
+
+export function getLLMApiKey(): string {
+  try { return localStorage.getItem(LLM_API_KEY) ?? ''; } catch { return ''; }
+}
+
+export function setLLMApiKey(key: string): void {
+  try {
+    if (key.trim()) localStorage.setItem(LLM_API_KEY, key.trim());
+    else            localStorage.removeItem(LLM_API_KEY);
+  } catch { /* private mode etc. — no-op */ }
+}
+
 /** Known API key entries kept in localStorage. Used by Settings to list +
  *  delete credentials separately from other local state. */
 export const API_KEY_ENTRIES: Array<{ key: string; label: string }> = [
@@ -224,6 +301,9 @@ export const API_KEY_ENTRIES: Array<{ key: string; label: string }> = [
   // here — those are session credentials, not config; they're
   // managed via the Soundtracks Connect / Disconnect flow.
   { key: 'mappadux:spotify_client_id', label: 'Spotify Client ID' },
+  // v2.17 Player Voice — optional LLM key for the GM reply assistant
+  // (OpenRouter etc.). LM Studio runs locally and needs no key.
+  { key: LLM_API_KEY, label: 'LLM API key (OpenRouter etc.)' },
 ];
 
 /** All localStorage entries Mappadux owns. Two prefix conventions
