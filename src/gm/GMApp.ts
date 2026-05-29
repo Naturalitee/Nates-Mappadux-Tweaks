@@ -22,6 +22,8 @@ import { SELECT_ADD_SENTINEL, appendAddOption } from './selectAdd.ts';
 import { EditableSelect } from './EditableSelect.ts';
 import { getAllSetups, setActiveSetupId, saveSetup } from '../projector/calibrationStorage.ts';
 import { SoundboardPanel, type SoundboardBroadcast } from './SoundboardPanel.ts';
+import { PlayersPanel } from './PlayersPanel.ts';
+import { PlayerRegistry } from '../players/PlayerRegistry.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { FilterPanel } from '../filters/FilterPanel.ts';
@@ -329,6 +331,10 @@ export class GMApp {
   private _lastMapSelectValue = '';
   private soundboardEngine!: SoundboardEngine;
   private soundboardPanel!:  SoundboardPanel;
+
+  // v2.17 Player Voice — persistent players roster + panel.
+  private playerRegistry = new PlayerRegistry();
+  private playersPanel!: PlayersPanel;
 
   private interactions   = new MarkerInteractionRegistry();
   private audio          = this.interactions.register(new PositionalAudioInteraction());
@@ -1573,6 +1579,7 @@ export class GMApp {
     this.bindUIControls();
     this.bindMarkerEditor();
     this.bindSoundboardPanel();
+    this.bindPlayersPanel();
     this.bindHamburgerMenu();
     this._bindWorkspacePanZoom();
     this._bindCanvasUndo();
@@ -1777,6 +1784,10 @@ export class GMApp {
     this.projectorEditor?.setConnection(this._primaryProjector() ?? null);
     this.refreshProjectorStatus();
     this._refreshProjectionPanelMode();
+    // v2.17 Player Voice — clear any persistent-player binding this peer held.
+    this.playerRegistry.disconnectPeer(id);
+    this._refreshPlayersPanel();
+    this._broadcastRoster();
     this._updatePlayerCount();
     this.setStatus(`Player disconnected (${id.slice(0, 8)}…)`, 'warn');
   }
@@ -3325,6 +3336,23 @@ export class GMApp {
   }
 
   private onPeerMessage(_peerId: string, msg: GMMessage): void {
+    if (msg.type === 'player_identify') {
+      // v2.17 Player Voice — a device player introduced themselves. Upsert
+      // the persistent record, bind the live connection, refresh + rebroadcast.
+      void this.playerRegistry.identify(_peerId, msg).then(() => {
+        this._refreshPlayersPanel();
+        this._broadcastRoster();
+        const who = msg.playerName || msg.characterName || 'A player';
+        this.setStatus(`${who} joined`, 'ok');
+      });
+      return;
+    }
+    if (msg.type === 'player_bye') {
+      this.playerRegistry.bye(msg.clientId);
+      this._refreshPlayersPanel();
+      this._broadcastRoster();
+      return;
+    }
     if (msg.type === 'projector_bye') {
       const wasPrimary = this._primaryProjector()?.clientId === msg.clientId;
       this.projectorConnections.delete(msg.clientId);
@@ -5676,6 +5704,41 @@ export class GMApp {
         }
       });
     }
+  }
+
+  // ─── Players (v2.17 Player Voice) ───────────────────────────────────────────
+
+  private bindPlayersPanel(): void {
+    this.playersPanel = new PlayersPanel({
+      onAddManaged: async (name, character, color) => {
+        await this.playerRegistry.addManaged(name, character, color);
+        this._refreshPlayersPanel();
+        this._broadcastRoster();
+      },
+      onUpdate: async (id, patch) => {
+        await this.playerRegistry.update(id, patch);
+        this._refreshPlayersPanel();
+        this._broadcastRoster();
+      },
+      onRemove: async (id) => {
+        await this.playerRegistry.remove(id);
+        this._refreshPlayersPanel();
+        this._broadcastRoster();
+      },
+    });
+    // Load the persisted roster, then render.
+    void this.playerRegistry.load().then(() => this._refreshPlayersPanel());
+  }
+
+  private _refreshPlayersPanel(): void {
+    this.playersPanel?.update(
+      this.playerRegistry.all(),
+      (id) => this.playerRegistry.isConnected(id),
+    );
+  }
+
+  private _broadcastRoster(): void {
+    this.host.broadcast(this.playerRegistry.rosterMessage());
   }
 
   private bindHamburgerMenu(): void {

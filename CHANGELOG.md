@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.16.1 — 2026-05-29
+
+### Player Voice — named & persistent players (foundation)
+
+First slice of the v2.17 Player Voice work, landing on beta. Players who
+join are no longer anonymous: the session now has a roster of persistent
+players that survives map switches and reconnects.
+
+- **Self-identify on connect.** A player who scans the QR is asked once for
+  their name, character name, and an identity colour. Black / near-black is
+  rejected — that range is reserved for the GM and (later) initiative
+  threats. A floating identity button on the player view lets them change
+  any of it and re-announce at any time.
+- **Persistent players.** Identities are keyed by a device-persisted id and
+  stored in a new global `players` store, so the same person keeps the same
+  record across maps and sessions. Re-identifying on reconnect updates the
+  existing record rather than creating a duplicate.
+- **GM Players panel.** A new "Players" panel lists everyone — connected
+  players (with a live online dot) and offline table-mates the GM adds by
+  hand for people without their own device. Each row is inline-editable
+  (name, character, colour) and removable.
+- **Roster sync.** The GM broadcasts the roster to all player views, laying
+  the channel that upcoming patches (pings, private messages, player markers,
+  the initiative tracker) build on.
+
+Security is intentionally absent here, consistent with the rest of the
+LAN-trust P2P model.
+
 ## v2.16.0 — 2026-05-26
 
 ### Soundtracks — pack-level background music

@@ -6313,3 +6313,154 @@ option.select-option--add {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-focus); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Player Voice (v2.17) — players roster panel, identity modal/button
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── GM "Players" roster panel ──────────────────────────────────────────── */
+.players-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+.players-empty {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.player-status-dot {
+  flex: 0 0 auto;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4) inset;
+}
+.player-status-dot.is-online {
+  background: var(--ok);
+  box-shadow: 0 0 5px var(--ok);
+}
+.player-row-colour {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+.player-row-colour::-webkit-color-swatch-wrapper { padding: 2px; }
+.player-row-colour::-webkit-color-swatch { border: none; border-radius: 2px; }
+.player-row-colour.flash-invalid {
+  outline: 2px solid var(--danger);
+  outline-offset: 1px;
+}
+.player-row-names {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.player-row-name,
+.player-row-char {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+  padding: 1px 4px;
+}
+.player-row-char {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+.player-row-name:hover,
+.player-row-char:hover { border-color: var(--border); }
+.player-row-name:focus,
+.player-row-char:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  background: var(--bg-base);
+}
+.player-row-delete {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.player-row-delete:hover { color: var(--danger); background: var(--bg-hover); }
+
+/* ── Player-side identity colour swatches (in the identify modal) ───────── */
+.player-colour-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+.player-colour-swatch {
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+}
+.player-colour-swatch.is-selected {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.45);
+}
+
+/* ── Player-side floating identity button ───────────────────────────────── */
+.player-identity-btn {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 8px;
+  background: rgba(10, 14, 26, 0.7);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  transition: opacity 0.4s ease;
+}
+.player-identity-btn:hover { background: rgba(10, 14, 26, 0.9); }
+.player-identity-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+}
+.player-identity-label { white-space: nowrap; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; }

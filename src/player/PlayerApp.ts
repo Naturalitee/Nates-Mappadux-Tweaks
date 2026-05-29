@@ -1,5 +1,6 @@
 import { Guest } from '../p2p/Guest.ts';
 import { generateId } from '../utils/id.ts';
+import { PlayerIdentifyModal, type PlayerIdentity } from './PlayerIdentifyModal.ts';
 import { Viewer } from '../viewers/Viewer.ts';
 import { PROFILE_PLAYER } from '../viewers/profiles.ts';
 import { drawGrid } from '../viewers/strategies/drawGrid.ts';
@@ -147,6 +148,17 @@ export class PlayerApp {
   /** Interval id for the BC liveness ping. Cleared on disconnect. */
   private _heartbeatInterval: number | null = null;
 
+  // ── v2.17 Player Voice — identity ──────────────────────────────────────────
+  /** Stable device-persisted player id; survives reloads so the GM keeps the
+   *  same persistent player record bound to this device across reconnects. */
+  private playerId: string = this._loadPlayerId();
+  /** Chosen identity (name/character/colour), persisted on this device. */
+  private identity: PlayerIdentity | null = this._loadIdentity();
+  /** True once we've shown the first-connect identify prompt (so a cancel
+   *  doesn't re-pop it on every reconnect). */
+  private _identityPromptShown = false;
+  private _identityModal = new PlayerIdentifyModal();
+
   async init(): Promise<void> {
     // v2.15 — Viewer owns the chrome (lifecycle, fullscreen, faff
     // overlay, mute indicator) AND the rendering pipeline (Renderer,
@@ -275,6 +287,18 @@ export class PlayerApp {
 
     // Prevent the browser context menu on right-click (keep canvas clean)
     document.addEventListener('contextmenu', (e) => e.preventDefault());
+
+    // v2.17 Player Voice — identity button (set / change who you are).
+    document.querySelector('#player-identity-btn')?.addEventListener('click', () => {
+      void this.openIdentityModal();
+    });
+    this._refreshIdentityButton();
+
+    // Clean disconnect so the GM drops our binding immediately — BroadcastChannel
+    // never signals close, so this mirrors the projector_bye pattern.
+    window.addEventListener('pagehide', () => {
+      try { this.guest?.send({ type: 'player_bye', clientId: this.clientId }); } catch { /* unloading */ }
+    });
 
     // Show "Muted" indicator immediately — player starts muted
     this.viewer.showMuteIndicator(this.sbMuted);
@@ -572,7 +596,7 @@ export class PlayerApp {
     this.guest?.destroy();
 
     this.guest = new Guest({
-      onConnected:    () => this.setStatus(''),
+      onConnected:    () => { this.setStatus(''); void this._onConnectedIdentity(); },
       onDisconnected: () => this.setStatus('Disconnected — waiting for GM…'),
       onReconnecting: (attempt, delayMs) => {
         const secs = Math.round(delayMs / 1000);
@@ -592,6 +616,80 @@ export class PlayerApp {
     const beat = () => this.guest.send({ type: 'player_heartbeat', clientId: this.clientId });
     beat();
     this._heartbeatInterval = window.setInterval(beat, 4000);
+  }
+
+  // ── v2.17 Player Voice — identity ──────────────────────────────────────────
+
+  private _loadPlayerId(): string {
+    try {
+      const existing = localStorage.getItem('mappadux:player_id');
+      if (existing) return existing;
+      const fresh = generateId();
+      localStorage.setItem('mappadux:player_id', fresh);
+      return fresh;
+    } catch { return generateId(); }
+  }
+
+  private _loadIdentity(): PlayerIdentity | null {
+    try {
+      const raw = localStorage.getItem('mappadux:player_identity');
+      if (!raw) return null;
+      const parsed = JSON.parse(raw) as Partial<PlayerIdentity>;
+      if (typeof parsed.color !== 'string') return null;
+      return {
+        playerName:    typeof parsed.playerName === 'string' ? parsed.playerName : '',
+        characterName: typeof parsed.characterName === 'string' ? parsed.characterName : '',
+        color:         parsed.color,
+      };
+    } catch { return null; }
+  }
+
+  private _saveIdentity(id: PlayerIdentity): void {
+    this.identity = id;
+    try { localStorage.setItem('mappadux:player_identity', JSON.stringify(id)); } catch { /* private mode */ }
+    this._refreshIdentityButton();
+  }
+
+  /** Push our identity to the GM. No-op if we have none yet. */
+  private _sendIdentify(): void {
+    if (!this.identity) return;
+    this.guest.send({
+      type: 'player_identify',
+      playerId:      this.playerId,
+      clientId:      this.clientId,
+      playerName:    this.identity.playerName,
+      characterName: this.identity.characterName,
+      color:         this.identity.color,
+    });
+  }
+
+  /** On (re)connect: announce existing identity, or prompt once on first join. */
+  private async _onConnectedIdentity(): Promise<void> {
+    if (this.identity) { this._sendIdentify(); return; }
+    if (this._identityPromptShown) return;
+    this._identityPromptShown = true;
+    const chosen = await this._identityModal.open();
+    if (chosen) { this._saveIdentity(chosen); this._sendIdentify(); }
+  }
+
+  /** Re-open the identify modal so the player can change their details. */
+  async openIdentityModal(): Promise<void> {
+    const chosen = await this._identityModal.open(this.identity ?? undefined);
+    if (chosen) { this._saveIdentity(chosen); this._sendIdentify(); }
+  }
+
+  private _refreshIdentityButton(): void {
+    const btn = document.querySelector<HTMLButtonElement>('#player-identity-btn');
+    if (!btn) return;
+    const dot = btn.querySelector<HTMLElement>('.player-identity-dot');
+    const label = btn.querySelector<HTMLElement>('.player-identity-label');
+    if (this.identity) {
+      if (dot) dot.style.background = this.identity.color;
+      if (label) label.textContent = this.identity.playerName || this.identity.characterName || 'You';
+    } else {
+      if (dot) dot.style.background = 'transparent';
+      if (label) label.textContent = 'Set name';
+    }
   }
 
   // ─── Message handling ─────────────────────────────────────────────────────

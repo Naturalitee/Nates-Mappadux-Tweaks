@@ -486,6 +486,37 @@ export function defaultSessionState(): SessionState {
   };
 }
 
+// ─── Players (v2.17 Player Voice) ────────────────────────────────────────────
+
+/**
+ * A persistent player known to the GM. Created when a connected player
+ * self-identifies, or added manually by the GM for offline players (those
+ * at the table without their own device). Lives in the global `players`
+ * IDB store — NOT per-map — so identities + colours + assigned markers
+ * survive map switches and sessions.
+ *
+ * Security is intentionally absent (LAN trust model, same as the rest of
+ * P2P): `id` is a device-persisted token the player hands over on connect.
+ */
+export interface PersistentPlayer {
+  /** Stable id. For device players this is persisted on their machine and
+   *  re-sent on every reconnect; for GM-managed offline players the GM mints it. */
+  id: string;
+  playerName:    string;  // the human's name
+  characterName: string;  // their character's name
+  /** Hex identity colour. Never black / near-black — that range is reserved
+   *  for the GM + initiative threats. */
+  color: string;
+  /** Assigned map marker id (set by the GM in Player Markers, v2.16.4+).
+   *  Persists across maps so the same player keeps the same token. */
+  markerId?: string;
+  /** True for GM-managed offline players (no device of their own). They never
+   *  connect; the GM acts on their behalf. */
+  managedByGm?: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
 // ─── P2P Message Protocol ────────────────────────────────────────────────────
 
 /** Sent once when a player first connects — full snapshot */
@@ -902,6 +933,47 @@ export interface MsgVideoBundle {
   mapBlob: ArrayBuffer;
 }
 
+/**
+ * Player → GM: self-identification, sent on every (re)connect once the
+ * player has chosen / restored an identity. The GM upserts a
+ * PersistentPlayer keyed by playerId and binds this live connection
+ * (clientId) to it.
+ */
+export interface MsgPlayerIdentify {
+  type: 'player_identify';
+  playerId:      string;
+  clientId:      string;
+  playerName:    string;
+  characterName: string;
+  color:         string;
+}
+
+/**
+ * Player → GM: clean disconnect (sent on window unload). Lets the GM drop
+ * the live binding immediately rather than waiting on transport teardown —
+ * BroadcastChannel never signals close, mirroring projector_bye.
+ */
+export interface MsgPlayerBye {
+  type: 'player_bye';
+  clientId: string;
+}
+
+/**
+ * GM → all players: current roster snapshot so player views know who else
+ * is in the session (drives player→player messaging targets and the
+ * initiative tracker). GM-only fields (markerId, managedByGm) are omitted.
+ */
+export interface MsgPlayerRoster {
+  type: 'player_roster';
+  players: Array<{
+    id:            string;
+    playerName:    string;
+    characterName: string;
+    color:         string;
+    connected:     boolean;
+  }>;
+}
+
 export type GMMessage =
   | MsgFullState
   | MsgViewUpdate
@@ -930,7 +1002,10 @@ export type GMMessage =
   | MsgProjectorRole
   | MsgProjectorShutdown
   | MsgProjectorViewportUpdate
-  | MsgMapMetaUpdate;
+  | MsgMapMetaUpdate
+  | MsgPlayerIdentify
+  | MsgPlayerBye
+  | MsgPlayerRoster;
 
 // ─── Storage types ───────────────────────────────────────────────────────────
 
