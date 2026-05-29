@@ -520,6 +520,58 @@ export interface PersistentPlayer {
   updatedAt: number;
 }
 
+// ─── Initiative Tracker (v2.17 Player Voice) ─────────────────────────────────
+
+export type InitiativeCardType = 'player' | 'enemy' | 'round-marker';
+
+/**
+ * A single card in the initiative deck. The sort metric is intentionally a
+ * polymorphic `value: string` so the same tracker handles d20 integers, speed
+ * priorities, popcorn initiative ("Fast" / "Ace"), and so on without hard-
+ * coded edition math.
+ */
+export interface InitiativeCard {
+  id: string;
+  name: string;
+  type: InitiativeCardType;
+  /** Player identity colour for player cards; charcoal for enemies/threats;
+   *  neutral muted tone for the ROUND END marker. */
+  color: string;
+  /** Player cards: optional token / portrait. */
+  markerUrl?: string;
+  /** Enemy cards: discrete tracking letter (A, B, C…) the GM sees on screen
+   *  and references against physical scratch notes. */
+  threatLetter?: string;
+  /** Optional player id for player cards — lets the GM unallocate / re-place
+   *  the same player without re-typing names. */
+  playerId?: string;
+  /** Sort metric — string so it handles numbers, words, anything. */
+  value: string;
+  /** True once the card has acted this round; faded + dim until ROUND END
+   *  passes through index 0 and resets everyone. */
+  isSpent: boolean;
+}
+
+export type InitiativeSortMode = 'high-to-low' | 'low-to-high' | 'manual';
+
+export type InitiativeEdge = 'top' | 'right' | 'bottom' | 'left';
+
+export interface InitiativeState {
+  /** Active rail — index 0 is the current actor. */
+  activeDeck: InitiativeCard[];
+  /** Player profiles not currently in combat (ghosted; click to enter a roll). */
+  unallocated: InitiativeCard[];
+  /** Reserve threat letters for the GM to inject as enemies appear. */
+  threatBench: InitiativeCard[];
+  /** Sort mode — drives where new cards land when they arrive. */
+  sortMode: InitiativeSortMode;
+  /** Which edge of the GM/player view the tracker is pinned to. Horizontal
+   *  fan on top/bottom; vertical fan on left/right. */
+  edge: InitiativeEdge;
+  /** Is the tracker UI visible. */
+  visible: boolean;
+}
+
 // ─── P2P Message Protocol ────────────────────────────────────────────────────
 
 /** Sent once when a player first connects — full snapshot */
@@ -1080,6 +1132,41 @@ export interface MsgPlayerMarkerMove {
   done: boolean;
 }
 
+/**
+ * GM → players: current initiative tracker state. The whole state ships every
+ * time it changes so the player view is a pure mirror — no client-side state
+ * machine, no drift. Players render an atmospheric face (portraits + colours
+ * for players, "???" + "Opposition" for enemies); the GM renders the
+ * mechanical face (giant numbers + threat letters).
+ */
+export interface MsgInitiativeUpdate {
+  type: 'initiative_update';
+  state: InitiativeState;
+}
+
+/**
+ * GM → all players: roll-call broadcast. Player views pop an input prompt for
+ * the player to type their initiative result and send it back. `message` is
+ * an optional explanatory line (system / situation hint).
+ */
+export interface MsgInitiativeCall {
+  type: 'initiative_call';
+  message?: string;
+}
+
+/**
+ * Player → GM: the player's typed initiative value. The GM creates / updates
+ * the player's card and slots it into the active deck per current sort mode.
+ */
+export interface MsgInitiativeRoll {
+  type: 'initiative_roll';
+  playerId: string;
+  clientId: string;
+  /** Polymorphic — "18", "Fast", "Ace" all OK. Sorted lexically/numerically
+   *  depending on tracker sort mode. */
+  value: string;
+}
+
 export type GMMessage =
   | MsgFullState
   | MsgViewUpdate
@@ -1118,7 +1205,10 @@ export type GMMessage =
   | MsgPlayerMessage
   | MsgMessageDeliver
   | MsgPlayerMarkers
-  | MsgPlayerMarkerMove;
+  | MsgPlayerMarkerMove
+  | MsgInitiativeUpdate
+  | MsgInitiativeCall
+  | MsgInitiativeRoll;
 
 // ─── Storage types ───────────────────────────────────────────────────────────
 

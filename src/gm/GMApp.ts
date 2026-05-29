@@ -28,6 +28,8 @@ import { PlayerRegistry } from '../players/PlayerRegistry.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
 import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
 import { LLMClient } from '../ai/LLMClient.ts';
+import { InitiativeTracker } from './InitiativeTracker.ts';
+import { loadInitiativeState } from '../initiative/initiativeState.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { FilterPanel } from '../filters/FilterPanel.ts';
@@ -356,6 +358,8 @@ export class GMApp {
   /** Pre-move token positions, captured when a PLAYER starts moving their own
    *  token, so the GM's "cancel move" can send it back. */
   private _markerMoveOrigin = new Map<string, { x: number; y: number }>();
+  /** Initiative tracker (fanned-deck rail, threat bench, unallocated tray). */
+  private initiativeTracker: InitiativeTracker | null = null;
 
   private interactions   = new MarkerInteractionRegistry();
   private audio          = this.interactions.register(new PositionalAudioInteraction());
@@ -1602,6 +1606,7 @@ export class GMApp {
     this.bindSoundboardPanel();
     this.bindPlayersPanel();
     this.bindPlayerVoicePanel();
+    this.bindInitiativeTracker();
     this.bindHamburgerMenu();
     this._bindWorkspacePanZoom();
     this._bindCanvasUndo();
@@ -3397,6 +3402,8 @@ export class GMApp {
         this._broadcastRoster();
         this._broadcastPlayerFeatures();
         this._refreshPlayerMarkers(); // let the new joiner see existing tokens
+        // Initiative tracker — fire current state to the new joiner.
+        if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: this.initiativeTracker.getState() });
         const who = msg.playerName || msg.characterName || 'A player';
         this.setStatus(`${who} joined`, 'ok');
       });
@@ -3455,6 +3462,15 @@ export class GMApp {
           text: msg.text,
         });
       }
+      return;
+    }
+    if (msg.type === 'initiative_roll') {
+      // A player submitted their initiative value — find them and slot a card in.
+      const player = this.playerRegistry.playerForClient(msg.clientId);
+      if (!player || player.id !== msg.playerId) return;
+      const name = player.characterName || player.playerName || 'Player';
+      this.initiativeTracker?.ingestRoll(player.id, name, player.color, msg.value);
+      this.setStatus(`${name} rolled ${msg.value}`, 'ok');
       return;
     }
     if (msg.type === 'player_marker_move') {
@@ -5962,6 +5978,30 @@ export class GMApp {
     this._refreshPlayersPanel();
   }
 
+  // ── Initiative tracker (v2.16.8 fanned-deck rail) ──────────────────────────
+
+  private bindInitiativeTracker(): void {
+    const el = document.getElementById('initiative-tracker');
+    if (!el) return;
+    const initial = loadInitiativeState();
+    this.initiativeTracker = new InitiativeTracker(el, initial, {
+      onChange: (state) => {
+        // Mirror the state to every player view so they render in lock-step.
+        this.host.broadcast({ type: 'initiative_update', state });
+      },
+      onCallForInitiative: () => {
+        // Seed the unallocated tray with any persistent players who don't
+        // already have a card, then broadcast the prompt to all players.
+        this.initiativeTracker?.seedUnallocatedFromPlayers();
+        this.host.broadcast({ type: 'initiative_call' });
+        this.setStatus('Call for Initiative broadcast', 'ok');
+      },
+      getPlayers: () => this.playerRegistry.all(),
+    });
+    // Broadcast initial state so any already-connected players sync up.
+    this.host.broadcast({ type: 'initiative_update', state: this.initiativeTracker.getState() });
+  }
+
   private bindPlayerVoicePanel(): void {
     this.playerVoicePanel = new PlayerVoicePanel({
       onReply: (toPlayerId, text) => {
@@ -6056,6 +6096,11 @@ export class GMApp {
       label: 'Settings…',
       icon: 'settings',
       onSelect: () => { void this.openSettings(); },
+    });
+    this.hamburger.addItem({
+      label: 'Initiative Tracker',
+      icon: 'swords',
+      onSelect: () => { this.initiativeTracker?.toggle(); },
     });
 
     // v2.14.90 — Spawn a fresh Mappadux instance in a new tab with

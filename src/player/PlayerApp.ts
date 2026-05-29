@@ -6,6 +6,8 @@ import { PlayerMessageComposer } from './PlayerMessageComposer.ts';
 import { PlayerMessageToasts } from './PlayerMessageToasts.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
 import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
+import { PlayerInitiativeRail } from './PlayerInitiativeRail.ts';
+import { PlayerInitiativeRollModal } from './PlayerInitiativeRollModal.ts';
 import { Viewer } from '../viewers/Viewer.ts';
 import { PROFILE_PLAYER } from '../viewers/profiles.ts';
 import { drawGrid } from '../viewers/strategies/drawGrid.ts';
@@ -168,6 +170,8 @@ export class PlayerApp {
   private _msgToasts: PlayerMessageToasts | null = null;
   private pingLayer: PingLayer | null = null;
   private playerMarkerLayer: PlayerMarkerLayer | null = null;
+  private initiativeRail: PlayerInitiativeRail | null = null;
+  private _initiativeRollModal = new PlayerInitiativeRollModal();
   /** Roster broadcast by the GM — used to list other players as message targets. */
   private roster: Array<{ id: string; playerName: string; characterName: string; color: string; connected: boolean }> = [];
   /** Player-Voice features the GM currently allows. Default-on until the GM
@@ -220,6 +224,10 @@ export class PlayerApp {
     // v2.17 Player Voice — incoming-message toasts (GM replies, other players).
     const toastsEl = document.getElementById('player-msg-toasts');
     if (toastsEl) this._msgToasts = new PlayerMessageToasts(toastsEl);
+
+    // v2.17 Player Voice — initiative rail (atmospheric face).
+    const initEl = document.getElementById('player-initiative');
+    if (initEl) this.initiativeRail = new PlayerInitiativeRail(initEl);
 
     // v2.17 Player Voice — player tokens. Players can drag only their own, and
     // only while the GM allows movable markers.
@@ -815,6 +823,18 @@ export class PlayerApp {
     this.guest.send({ type: 'player_ping', pingId: generateId(), playerId: this.playerId, clientId: this.clientId, x, y });
   }
 
+  /** Pop the roll-for-initiative prompt; send the value back to the GM if the
+   *  player types one. Identity is required so the GM can colour + name the card. */
+  private async _handleInitiativeCall(message?: string): Promise<void> {
+    if (!this.identity) {
+      await this.openIdentityModal();
+      if (!this.identity) return;
+    }
+    const value = await this._initiativeRollModal.open(message);
+    if (!value) return;
+    this.guest.send({ type: 'initiative_roll', playerId: this.playerId, clientId: this.clientId, value });
+  }
+
   private _refreshIdentityButton(): void {
     const btn = document.querySelector<HTMLButtonElement>('#player-identity-btn');
     if (!btn) return;
@@ -1269,6 +1289,18 @@ export class PlayerApp {
       case 'player_markers': {
         // v2.17 Player Voice — player tokens placed on the active map.
         this.playerMarkerLayer?.setMarkers(msg.markers);
+        break;
+      }
+
+      case 'initiative_update': {
+        // v2.17 Player Voice — atmospheric initiative rail update.
+        this.initiativeRail?.setState(msg.state);
+        break;
+      }
+
+      case 'initiative_call': {
+        // v2.17 Player Voice — GM asked everyone to roll.
+        void this._handleInitiativeCall(msg.message);
         break;
       }
 

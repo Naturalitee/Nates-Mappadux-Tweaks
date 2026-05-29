@@ -1,5 +1,44 @@
 # Changelog
 
+## v2.16.8 — 2026-05-29
+
+### Player Voice — fanned-deck initiative tracker
+
+The final v2.17 piece, per the system-agnostic fanned-deck spec plus the
+edge-pinnable dual-axis addendum.
+
+- **Open it from the hamburger menu** ("Initiative Tracker"). The tracker
+  overlays whichever edge of the GM view it's pinned to — bottom/top for a
+  horizontal fan, left/right for a vertical one. Drop-down pickers in the
+  controls bar swap edge and sort mode live.
+- **Three zones, GM-side:** the **active rail** (fanned overlapping cards
+  scaling the active card up + dimming spent ones), the **threat bench**
+  (A–F reserve enemies the GM clicks to drop into the rail), and the
+  **unallocated tray** (ghost cards for players who haven't rolled, kept
+  separate from the live rail).
+- **Sort modes:** numeric high→low (d20 default), numeric low→high
+  (roll-under / speed priority), or manual / freeform. Drag-and-drop
+  reorder flips the mode to manual automatically.
+- **ROUND END anchor card** sits at the rear; advancing past it
+  automatically clears every spent flag and parks the marker at the back
+  for the next round.
+- **Right-click a card** to jump it to the front (sudden reactions, boss
+  phase triggers). **× on a card** returns enemies to the threat bench and
+  drops player cards to the unallocated tray, both cleared and ready to
+  re-place.
+- **Call for Initiative** broadcasts a roll-prompt to every connected
+  player. They type their result (number, "Fast", whatever fits the
+  system) and it slots into the rail in the right place for the current
+  sort mode — colour and name come from their persistent identity.
+- **Split view:** the GM sees mechanical values (big numbers or threat
+  letters); players see an atmospheric face — coloured tabs + names for
+  players, uniform charcoal "???" tabs + "Opposition" for enemies, no
+  numbers anywhere.
+- **State persists in your browser** between refreshes (localStorage); it
+  is not part of the Map Pack save file, matching the rest of Player Voice.
+
+Lots of UI finessing still to do; the functionality is broadly intact.
+
 ## v2.16.7 — 2026-05-29
 
 ### Player Voice — LLM suggestions pre-fetch on message arrival
