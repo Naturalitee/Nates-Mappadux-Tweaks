@@ -98,6 +98,22 @@ export function setPingsEnabled(enabled: boolean): void {
   } catch { /* private mode etc. — no-op */ }
 }
 
+/** v2.17 Player Voice — GM toggle for player messaging (player↔GM and
+ *  player↔player). Enabled by default; '0' stored when disabled. */
+export const PLAYER_MESSAGING_DISABLED_KEY = 'mappadux:player_messaging_disabled';
+
+export function isMessagingEnabled(): boolean {
+  try { return localStorage.getItem(PLAYER_MESSAGING_DISABLED_KEY) !== '1'; }
+  catch { return true; }
+}
+
+export function setMessagingEnabled(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.removeItem(PLAYER_MESSAGING_DISABLED_KEY);
+    else         localStorage.setItem(PLAYER_MESSAGING_DISABLED_KEY, '1');
+  } catch { /* private mode etc. — no-op */ }
+}
+
 /** UI scale for the left sidebar. Stored as a number (1.0 = 100%);
  *  values outside MIN/MAX clamp on read. Applied via CSS `zoom` so the
  *  whole box model scales uniformly — fonts, padding, borders, icon

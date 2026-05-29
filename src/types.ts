@@ -981,6 +981,10 @@ export interface MsgPlayerRoster {
  */
 export interface MsgPlayerPing {
   type: 'player_ping';
+  /** Client-generated id — lets the GM dedupe the duplicate that same-machine
+   *  players deliver over both BroadcastChannel and PeerJS, and doubles as the
+   *  broadcast ping id. */
+  pingId: string;
   playerId: string;
   clientId: string;
   x: number; // 0..1 normalised map coord
@@ -1011,6 +1015,35 @@ export interface MsgPlayerFeatures {
   pings?:          boolean;
   messaging?:      boolean;
   movableMarkers?: boolean;
+}
+
+/**
+ * Player → GM: a chat message. `toPlayerId` omitted = addressed to the GM;
+ * otherwise addressed to another player (and always copied to the GM).
+ */
+export interface MsgPlayerMessage {
+  type: 'player_message';
+  messageId:    string;
+  fromPlayerId: string;
+  clientId:     string;
+  toPlayerId?:  string; // undefined = to GM
+  text:         string;
+}
+
+/**
+ * GM → players: deliver a message to a player view. Used to relay
+ * player→player messages and to send GM replies. Broadcast — each player
+ * shows only messages whose `toPlayerId` matches their own id. Carries the
+ * sender's display identity so the receiver can render without the roster.
+ */
+export interface MsgMessageDeliver {
+  type: 'message_deliver';
+  messageId:   string;
+  fromKind:    'gm' | 'player';
+  fromName:    string;
+  fromColor:   string;
+  toPlayerId:  string;
+  text:        string;
 }
 
 export type GMMessage =
@@ -1047,7 +1080,9 @@ export type GMMessage =
   | MsgPlayerRoster
   | MsgPlayerPing
   | MsgPingShow
-  | MsgPlayerFeatures;
+  | MsgPlayerFeatures
+  | MsgPlayerMessage
+  | MsgMessageDeliver;
 
 // ─── Storage types ───────────────────────────────────────────────────────────
 

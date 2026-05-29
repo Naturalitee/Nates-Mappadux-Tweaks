@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.16.3 — 2026-05-29
+
+### Player Voice — private messages
+
+Players can now talk to the table without breaking the fiction out loud.
+Right-click / long-press the map and pick who to message.
+
+- **To the GM, or to another player.** Messaging a player is relayed
+  through the GM and always copied to the GM's panel, so nothing happens
+  behind the screen.
+- **GM Player Voice panel.** Incoming messages collect in a new panel with
+  a red unread-count badge on its header (it clears when you open the
+  panel). Each message has an inline reply box so you can answer a player
+  directly.
+- **Player-side toasts.** Messages arriving at a player view (a GM reply,
+  or another player's note) appear as a colour-coded toast that stays until
+  the player dismisses it.
+- **GM toggle.** Settings → Player Voice can switch messaging off; the
+  option then disappears from the players' map menu.
+
+Same-machine player windows are deduped so a message isn't processed twice
+when it arrives over both local and network channels.
+
 ## v2.16.2 — 2026-05-29
 
 ### Player Voice — pings

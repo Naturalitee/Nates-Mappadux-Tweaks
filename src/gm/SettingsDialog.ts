@@ -16,6 +16,8 @@ import {
   UI_SCALE_DEFAULT,
   arePingsEnabled,
   setPingsEnabled,
+  isMessagingEnabled,
+  setMessagingEnabled,
   type StoredApiKey,
 } from '../storage/localSettings.ts';
 import {
@@ -459,6 +461,14 @@ export class SettingsDialog {
         'Lets players right-click (or long-press on touch) the map to ping a point. Everyone sees a pulse in that player’s colour for a few seconds; on your screen it stays put, labelled with their name, until you dismiss it.',
       get: arePingsEnabled,
       set: setPingsEnabled,
+    }));
+
+    sec.appendChild(this._buildPerfToggle({
+      title: 'Allow player messages',
+      help:
+        'Lets players message you privately, or message each other (those are copied to you). Messages arrive in the Player Voice panel, which shows an unread count.',
+      get: isMessagingEnabled,
+      set: setMessagingEnabled,
     }));
 
     return sec;

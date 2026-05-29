@@ -2,6 +2,8 @@ import { Guest } from '../p2p/Guest.ts';
 import { generateId } from '../utils/id.ts';
 import { PlayerIdentifyModal, type PlayerIdentity } from './PlayerIdentifyModal.ts';
 import { PlayerActionMenu, type ActionMenuItem } from './PlayerActionMenu.ts';
+import { PlayerMessageComposer } from './PlayerMessageComposer.ts';
+import { PlayerMessageToasts } from './PlayerMessageToasts.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
 import { Viewer } from '../viewers/Viewer.ts';
 import { PROFILE_PLAYER } from '../viewers/profiles.ts';
@@ -161,7 +163,11 @@ export class PlayerApp {
   private _identityPromptShown = false;
   private _identityModal = new PlayerIdentifyModal();
   private _actionMenu = new PlayerActionMenu();
+  private _composer = new PlayerMessageComposer();
+  private _msgToasts: PlayerMessageToasts | null = null;
   private pingLayer: PingLayer | null = null;
+  /** Roster broadcast by the GM — used to list other players as message targets. */
+  private roster: Array<{ id: string; playerName: string; characterName: string; color: string; connected: boolean }> = [];
   /** Player-Voice features the GM currently allows. Default-on until the GM
    *  says otherwise (mirrors the default-enabled settings). */
   private features = { pings: true, messaging: true, movableMarkers: true };
@@ -209,6 +215,9 @@ export class PlayerApp {
         { showLabel: false, persistent: false, ttlMs: 10000 },
       );
     }
+    // v2.17 Player Voice — incoming-message toasts (GM replies, other players).
+    const toastsEl = document.getElementById('player-msg-toasts');
+    if (toastsEl) this._msgToasts = new PlayerMessageToasts(toastsEl);
 
     // Post-map-load: marker re-render + overlay refresh. Viewer has
     // already pushed the new aspect ratio into MarkerTexture +
@@ -741,8 +750,35 @@ export class PlayerApp {
     if (this.features.pings) {
       items.push({ label: 'Ping here', onSelect: () => this._sendPing(norm.x, norm.y) });
     }
-    // Patch 3 adds "Send message…" actions here, gated on this.features.messaging.
+    if (this.features.messaging) {
+      items.push({ label: 'Message the GM', onSelect: () => void this._composeAndSend(undefined, 'the GM') });
+      for (const p of this.roster) {
+        if (p.id === this.playerId) continue; // not yourself
+        const label = p.characterName || p.playerName || 'player';
+        items.push({ label: `Message ${label}`, onSelect: () => void this._composeAndSend(p.id, label) });
+      }
+    }
     this._actionMenu.open(clientX, clientY, items);
+  }
+
+  /** Prompt for message text, then send to the GM (toPlayerId undefined) or
+   *  another player. Ensures we have an identity first. */
+  private async _composeAndSend(toPlayerId: string | undefined, label: string): Promise<void> {
+    if (!this.features.messaging) return;
+    if (!this.identity) {
+      await this.openIdentityModal();
+      if (!this.identity) return;
+    }
+    const text = await this._composer.open(label);
+    if (!text) return;
+    this.guest.send({
+      type: 'player_message',
+      messageId:    generateId(),
+      fromPlayerId: this.playerId,
+      clientId:     this.clientId,
+      ...(toPlayerId ? { toPlayerId } : {}),
+      text,
+    });
   }
 
   private _sendPing(x: number, y: number): void {
@@ -756,7 +792,7 @@ export class PlayerApp {
   }
 
   private _emitPing(x: number, y: number): void {
-    this.guest.send({ type: 'player_ping', playerId: this.playerId, clientId: this.clientId, x, y });
+    this.guest.send({ type: 'player_ping', pingId: generateId(), playerId: this.playerId, clientId: this.clientId, x, y });
   }
 
   private _refreshIdentityButton(): void {
@@ -1201,6 +1237,21 @@ export class PlayerApp {
         if (typeof msg.pings === 'boolean')          this.features.pings          = msg.pings;
         if (typeof msg.messaging === 'boolean')      this.features.messaging      = msg.messaging;
         if (typeof msg.movableMarkers === 'boolean') this.features.movableMarkers = msg.movableMarkers;
+        break;
+      }
+
+      case 'player_roster': {
+        // v2.17 Player Voice — who else is in the session (message targets).
+        this.roster = msg.players;
+        break;
+      }
+
+      case 'message_deliver': {
+        // v2.17 Player Voice — a message addressed to us (GM reply or another
+        // player). Broadcast reaches everyone; only show ours.
+        if (msg.toPlayerId === this.playerId) {
+          this._msgToasts?.show({ messageId: msg.messageId, fromName: msg.fromName, fromColor: msg.fromColor, text: msg.text });
+        }
         break;
       }
     }

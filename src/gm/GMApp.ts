@@ -23,6 +23,7 @@ import { EditableSelect } from './EditableSelect.ts';
 import { getAllSetups, setActiveSetupId, saveSetup } from '../projector/calibrationStorage.ts';
 import { SoundboardPanel, type SoundboardBroadcast } from './SoundboardPanel.ts';
 import { PlayersPanel } from './PlayersPanel.ts';
+import { PlayerVoicePanel, type PlayerVoiceMessage } from './PlayerVoicePanel.ts';
 import { PlayerRegistry } from '../players/PlayerRegistry.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
@@ -34,7 +35,7 @@ import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
 import { Host } from '../p2p/Host.ts';
 import { generateRoomCode, generateInstanceId } from '../p2p/roomCode.ts';
 import { saveSession, loadSession, getAllMaps, getMap, saveMap, deleteMap, clearAssetLibraries, clearEverything, getActiveInstanceId } from '../storage/db.ts';
-import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, arePingsEnabled } from '../storage/localSettings.ts';
+import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, arePingsEnabled, isMessagingEnabled } from '../storage/localSettings.ts';
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { seedAudioAssets } from '../storage/seedAudioAssets.ts';
 import { migrateLegacyMaps } from '../storage/seedMapAssets.ts';
@@ -336,8 +337,16 @@ export class GMApp {
   // v2.17 Player Voice — persistent players roster + panel.
   private playerRegistry = new PlayerRegistry();
   private playersPanel!: PlayersPanel;
+  private playerVoicePanel!: PlayerVoicePanel;
   /** Ping pulses relayed from players — persist on the GM until dismissed. */
   private pingLayer: PingLayer | null = null;
+  /** GM sender colour for message replies — a slate that reads clearly on
+   *  player views without straying into the reserved near-black range. */
+  private static readonly GM_MESSAGE_COLOR = '#64748b';
+  /** Recently-seen upstream event ids (pings, messages). Same-machine players
+   *  deliver upstream over BOTH BroadcastChannel and PeerJS, so non-idempotent
+   *  events must be deduped on a client-supplied id. */
+  private _seenUpstreamIds = new Set<string>();
 
   private interactions   = new MarkerInteractionRegistry();
   private audio          = this.interactions.register(new PositionalAudioInteraction());
@@ -1583,6 +1592,7 @@ export class GMApp {
     this.bindMarkerEditor();
     this.bindSoundboardPanel();
     this.bindPlayersPanel();
+    this.bindPlayerVoicePanel();
     this.bindHamburgerMenu();
     this._bindWorkspacePanZoom();
     this._bindCanvasUndo();
@@ -3370,13 +3380,42 @@ export class GMApp {
     }
     if (msg.type === 'player_ping') {
       if (!arePingsEnabled()) return; // GM has pings switched off — ignore
+      if (this._seenUpstream(msg.pingId)) return;
       const player = this.playerRegistry.playerForClient(msg.clientId);
       const color = player?.color ?? '#3b82f6';
       const name  = player?.playerName || player?.characterName || 'Player';
-      const pingId = generateId();
       // Show on the GM (persists until dismissed) and relay to every player.
-      this.pingLayer?.add({ id: pingId, x: msg.x, y: msg.y, color, name });
-      this.host.broadcast({ type: 'ping_show', pingId, x: msg.x, y: msg.y, color, name });
+      this.pingLayer?.add({ id: msg.pingId, x: msg.x, y: msg.y, color, name });
+      this.host.broadcast({ type: 'ping_show', pingId: msg.pingId, x: msg.x, y: msg.y, color, name });
+      return;
+    }
+    if (msg.type === 'player_message') {
+      if (!isMessagingEnabled()) return; // GM has messaging switched off
+      if (this._seenUpstream(msg.messageId)) return;
+      const sender = this.playerRegistry.playerForClient(msg.clientId);
+      const fromName  = sender?.playerName || sender?.characterName || 'Player';
+      const fromColor = sender?.color ?? '#3b82f6';
+      const recipient = msg.toPlayerId ? this.playerRegistry.get(msg.toPlayerId) : undefined;
+      const entry: PlayerVoiceMessage = {
+        id: msg.messageId,
+        fromPlayerId: sender?.id ?? msg.fromPlayerId,
+        fromName, fromColor,
+        ...(msg.toPlayerId ? { toPlayerId: msg.toPlayerId, toName: recipient?.characterName || recipient?.playerName || 'player' } : {}),
+        text: msg.text,
+        at: Date.now(),
+      };
+      this.playerVoicePanel.addMessage(entry);
+      // Player→player: relay to the addressed player (copy stays in the GM panel).
+      if (msg.toPlayerId) {
+        this.host.broadcast({
+          type: 'message_deliver',
+          messageId: msg.messageId,
+          fromKind:  'player',
+          fromName, fromColor,
+          toPlayerId: msg.toPlayerId,
+          text: msg.text,
+        });
+      }
       return;
     }
     if (msg.type === 'projector_bye') {
@@ -5767,10 +5806,39 @@ export class GMApp {
     this.host.broadcast(this.playerRegistry.rosterMessage());
   }
 
+  /** Dedupe a non-idempotent upstream event by its client-supplied id.
+   *  Returns true if it was already seen (caller should drop it). */
+  private _seenUpstream(id: string): boolean {
+    if (this._seenUpstreamIds.has(id)) return true;
+    this._seenUpstreamIds.add(id);
+    if (this._seenUpstreamIds.size > 400) {
+      // Trim oldest ~half — insertion order is preserved by Set.
+      const keep = [...this._seenUpstreamIds].slice(-200);
+      this._seenUpstreamIds = new Set(keep);
+    }
+    return false;
+  }
+
   /** Tell player views which Player-Voice interactions are currently allowed,
    *  so they can hide disabled affordances. */
   private _broadcastPlayerFeatures(): void {
-    this.host.broadcast({ type: 'player_features', pings: arePingsEnabled() });
+    this.host.broadcast({ type: 'player_features', pings: arePingsEnabled(), messaging: isMessagingEnabled() });
+  }
+
+  private bindPlayerVoicePanel(): void {
+    this.playerVoicePanel = new PlayerVoicePanel({
+      onReply: (toPlayerId, text) => {
+        this.host.broadcast({
+          type: 'message_deliver',
+          messageId: generateId(),
+          fromKind:  'gm',
+          fromName:  'GM',
+          fromColor: GMApp.GM_MESSAGE_COLOR,
+          toPlayerId,
+          text,
+        });
+      },
+    });
   }
 
   private bindHamburgerMenu(): void {
