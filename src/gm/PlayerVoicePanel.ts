@@ -8,6 +8,11 @@ export interface PlayerVoiceMessage {
   toName?:      string;
   text:         string;
   at:           number;
+  /** Reply suggestions pre-fetched from the LLM the moment this message
+   *  arrived, if the assistant was configured. The reply box auto-renders
+   *  them on open — by then they're usually already resolved. Errors are
+   *  swallowed; the manual "Suggest replies" button still surfaces them. */
+  suggestionsPromise?: Promise<string[]>;
 }
 
 export interface PlayerVoicePanelCallbacks {
@@ -121,6 +126,19 @@ export class PlayerVoicePanel {
     const replyActions = document.createElement('div');
     replyActions.className = 'pv-reply-actions';
 
+    const renderChips = (opts: string[]): void => {
+      suggestions.replaceChildren();
+      for (const opt of opts) {
+        const chip = document.createElement('button');
+        chip.type = 'button';
+        chip.className = 'pv-suggestion';
+        chip.textContent = opt;
+        chip.title = 'Click to use; edit before sending if you like';
+        chip.addEventListener('click', () => { replyInput.value = opt; replyInput.focus(); });
+        suggestions.appendChild(chip);
+      }
+    };
+
     if (this.cb.onSuggest) {
       const suggestBtn = document.createElement('button');
       suggestBtn.type = 'button';
@@ -131,16 +149,7 @@ export class PlayerVoicePanel {
         suggestBtn.textContent = 'Thinking…';
         try {
           const opts = (await this.cb.onSuggest?.(msg)) ?? [];
-          suggestions.replaceChildren();
-          for (const opt of opts) {
-            const chip = document.createElement('button');
-            chip.type = 'button';
-            chip.className = 'pv-suggestion';
-            chip.textContent = opt;
-            chip.title = 'Click to use; edit before sending if you like';
-            chip.addEventListener('click', () => { replyInput.value = opt; replyInput.focus(); });
-            suggestions.appendChild(chip);
-          }
+          renderChips(opts);
         } catch (err) {
           suggestions.textContent = `Suggestions unavailable: ${(err as Error).message}`;
         } finally {
@@ -150,6 +159,19 @@ export class PlayerVoicePanel {
       });
       replyActions.appendChild(suggestBtn);
     }
+
+    /** Auto-render the pre-fetched suggestions once, the first time the reply
+     *  box is opened. Silent on error — the manual button still surfaces it. */
+    let autoAttached = false;
+    const consumePrefetch = (): void => {
+      if (autoAttached || !msg.suggestionsPromise) return;
+      autoAttached = true;
+      suggestions.textContent = 'Thinking…';
+      suggestions.style.color = 'var(--text-secondary)';
+      void msg.suggestionsPromise
+        .then((opts) => { suggestions.style.color = ''; if (opts && opts.length > 0) renderChips(opts); else suggestions.replaceChildren(); })
+        .catch(() => { suggestions.replaceChildren(); });
+    };
 
     const sendBtn = document.createElement('button');
     sendBtn.type = 'button';
@@ -172,7 +194,7 @@ export class PlayerVoicePanel {
 
     replyBtn.addEventListener('click', () => {
       replyBox.hidden = !replyBox.hidden;
-      if (!replyBox.hidden) replyInput.focus();
+      if (!replyBox.hidden) { replyInput.focus(); consumePrefetch(); }
     });
 
     this.listEl.appendChild(row);

@@ -1,5 +1,15 @@
 # Changelog
 
+## v2.16.7 — 2026-05-29
+
+### Player Voice — LLM suggestions pre-fetch on message arrival
+
+When the reply assistant is enabled and reachable, suggestions are now
+generated the moment a player message lands — by the time the GM opens
+the reply box, the chips are usually already sitting there. Silent if the
+endpoint is down; the manual "Suggest replies" button still surfaces
+explicit errors.
+
 ## v2.16.6 — 2026-05-29
 
 ### Player Voice — LLM connection test + model picker

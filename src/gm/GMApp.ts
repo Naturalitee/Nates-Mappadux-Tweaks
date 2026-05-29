@@ -3426,6 +3426,14 @@ export class GMApp {
       const fromName  = sender?.playerName || sender?.characterName || 'Player';
       const fromColor = sender?.color ?? '#3b82f6';
       const recipient = msg.toPlayerId ? this.playerRegistry.get(msg.toPlayerId) : undefined;
+      // v2.16.7 — pre-fetch reply suggestions the moment a message arrives so
+      // they're (usually) ready by the time the GM opens the reply box. Silent
+      // — the panel renders them on open if they resolved; the manual button
+      // still surfaces explicit errors.
+      const client = LLMClient.fromSettings();
+      const suggestionsPromise = client
+        ? client.suggest(msg.text).catch(() => [] as string[])
+        : undefined;
       const entry: PlayerVoiceMessage = {
         id: msg.messageId,
         fromPlayerId: sender?.id ?? msg.fromPlayerId,
@@ -3433,6 +3441,7 @@ export class GMApp {
         ...(msg.toPlayerId ? { toPlayerId: msg.toPlayerId, toName: recipient?.characterName || recipient?.playerName || 'player' } : {}),
         text: msg.text,
         at: Date.now(),
+        ...(suggestionsPromise ? { suggestionsPromise } : {}),
       };
       this.playerVoicePanel.addMessage(entry);
       // Player→player: relay to the addressed player (copy stays in the GM panel).
