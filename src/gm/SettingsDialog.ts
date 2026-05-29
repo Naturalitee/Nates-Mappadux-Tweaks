@@ -18,6 +18,8 @@ import {
   setPingsEnabled,
   isMessagingEnabled,
   setMessagingEnabled,
+  arePlayerMarkersMovable,
+  setPlayerMarkersMovable,
   getLLMSettings,
   setLLMSettings,
   getLLMApiKey,
@@ -475,6 +477,14 @@ export class SettingsDialog {
         'Lets players message you privately, or message each other (those are copied to you). Messages arrive in the Player Voice panel, which shows an unread count.',
       get: isMessagingEnabled,
       set: setMessagingEnabled,
+    }));
+
+    sec.appendChild(this._buildPerfToggle({
+      title: 'Let players move their own token',
+      help:
+        'When you’ve placed a player’s token on the map, this lets that player drag it from their own view — you see it move live and get a “send it back” button if you want to undo it. Turn off to keep token placement entirely in your hands.',
+      get: arePlayerMarkersMovable,
+      set: setPlayerMarkersMovable,
     }));
 
     sec.appendChild(this._buildLlmAssistantBlock());

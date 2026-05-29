@@ -103,8 +103,8 @@ export class PlayerRegistry {
     return player;
   }
 
-  /** GM edits an existing player's fields (name / character / colour / marker). */
-  async update(id: string, patch: Partial<Pick<PersistentPlayer, 'playerName' | 'characterName' | 'color' | 'markerId'>>): Promise<PersistentPlayer | undefined> {
+  /** GM edits an existing player's fields (name / character / colour). */
+  async update(id: string, patch: Partial<Pick<PersistentPlayer, 'playerName' | 'characterName' | 'color'>>): Promise<PersistentPlayer | undefined> {
     const existing = this.byId.get(id);
     if (!existing) return undefined;
     const next: PersistentPlayer = { ...existing, ...patch, updatedAt: Date.now() };
@@ -112,6 +112,49 @@ export class PlayerRegistry {
     this.byId.set(id, next);
     await savePlayer(next);
     return next;
+  }
+
+  // ── Player tokens (v2.16.4 player markers) ────────────────────────────────
+
+  /** Whether this player's token is placed on the given map. */
+  isPlacedOn(playerId: string, mapId: string): boolean {
+    return !!this.byId.get(playerId)?.placements?.[mapId];
+  }
+
+  /** Set/move this player's token position on a map (placing it if absent). */
+  async setPlacement(playerId: string, mapId: string, x: number, y: number): Promise<void> {
+    const p = this.byId.get(playerId);
+    if (!p) return;
+    const placements = { ...(p.placements ?? {}), [mapId]: { x, y } };
+    const next: PersistentPlayer = { ...p, placements, updatedAt: Date.now() };
+    this.byId.set(playerId, next);
+    await savePlayer(next);
+  }
+
+  /** Remove this player's token from a map. */
+  async removePlacement(playerId: string, mapId: string): Promise<void> {
+    const p = this.byId.get(playerId);
+    if (!p?.placements?.[mapId]) return;
+    const placements = { ...p.placements };
+    delete placements[mapId];
+    const next: PersistentPlayer = { ...p, placements, updatedAt: Date.now() };
+    this.byId.set(playerId, next);
+    await savePlayer(next);
+  }
+
+  /** Read a player's token position on a map, or undefined. */
+  placementOn(playerId: string, mapId: string): { x: number; y: number } | undefined {
+    return this.byId.get(playerId)?.placements?.[mapId];
+  }
+
+  /** Render set for a map: every player with a token placed on it. */
+  markersForMap(mapId: string): Array<{ playerId: string; name: string; color: string; x: number; y: number }> {
+    const out: Array<{ playerId: string; name: string; color: string; x: number; y: number }> = [];
+    for (const p of this.byId.values()) {
+      const pos = p.placements?.[mapId];
+      if (pos) out.push({ playerId: p.id, name: p.characterName || p.playerName || 'Player', color: p.color, x: pos.x, y: pos.y });
+    }
+    return out;
   }
 
   /** GM removes a player from the roster entirely. */

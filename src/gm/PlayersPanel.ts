@@ -1,10 +1,22 @@
 import type { PersistentPlayer } from '../types.ts';
 import { isReservedColor, pickDefaultPlayerColor } from '../players/playerColors.ts';
 
+export interface PlayerRowInfo {
+  connected:      boolean;
+  /** Token placed on the active map. */
+  placed:         boolean;
+  /** A player moved their token; the GM can cancel it. */
+  canCancelMove:  boolean;
+}
+
 export interface PlayersPanelCallbacks {
   onAddManaged: (playerName: string, characterName: string, color: string) => void | Promise<void>;
   onUpdate: (id: string, patch: Partial<Pick<PersistentPlayer, 'playerName' | 'characterName' | 'color'>>) => void | Promise<void>;
   onRemove: (id: string) => void | Promise<void>;
+  /** Place this player's token on the active map, or remove it if already placed. */
+  onToggleMarker: (id: string) => void | Promise<void>;
+  /** Send a player-moved token back to where it was. */
+  onCancelMove: (id: string) => void | Promise<void>;
 }
 
 /**
@@ -32,7 +44,7 @@ export class PlayersPanel {
     });
   }
 
-  update(players: PersistentPlayer[], isConnected: (id: string) => boolean): void {
+  update(players: PersistentPlayer[], info: (id: string) => PlayerRowInfo): void {
     this.lastPlayers = players;
     if (!this.listEl) return;
     this.listEl.replaceChildren();
@@ -46,11 +58,12 @@ export class PlayersPanel {
     }
 
     for (const p of players) {
-      this.listEl.appendChild(this._row(p, isConnected(p.id)));
+      this.listEl.appendChild(this._row(p, info(p.id)));
     }
   }
 
-  private _row(p: PersistentPlayer, connected: boolean): HTMLElement {
+  private _row(p: PersistentPlayer, info: PlayerRowInfo): HTMLElement {
+    const connected = info.connected;
     const row = document.createElement('div');
     row.className = 'player-row';
 
@@ -98,6 +111,28 @@ export class PlayersPanel {
     names.append(nameInput, charInput);
     row.appendChild(names);
 
+    // Cancel-move (shown only after a player moved their own token)
+    if (info.canCancelMove) {
+      const cancel = document.createElement('button');
+      cancel.type = 'button';
+      cancel.className = 'player-row-cancelmove';
+      cancel.title = 'Cancel the player’s move — send their token back';
+      cancel.setAttribute('aria-label', 'Cancel move');
+      cancel.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 14 4 9 9 4"/><path d="M20 20v-7a4 4 0 0 0-4-4H4"/></svg>';
+      cancel.addEventListener('click', () => void this.cb.onCancelMove(p.id));
+      row.appendChild(cancel);
+    }
+
+    // Token place / remove on the active map
+    const marker = document.createElement('button');
+    marker.type = 'button';
+    marker.className = 'player-row-marker' + (info.placed ? ' is-placed' : '');
+    marker.title = info.placed ? 'Remove this player’s token from the current map' : 'Place this player’s token on the current map';
+    marker.setAttribute('aria-label', info.placed ? 'Remove token' : 'Place token');
+    marker.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>';
+    marker.addEventListener('click', () => void this.cb.onToggleMarker(p.id));
+    row.appendChild(marker);
+
     // Delete
     const del = document.createElement('button');
     del.type = 'button';
@@ -107,7 +142,7 @@ export class PlayersPanel {
     del.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
     del.addEventListener('click', () => {
       const who = p.playerName || p.characterName || 'this player';
-      if (confirm(`Remove ${who} from the roster? Any marker assigned to them will be unassigned.`)) {
+      if (confirm(`Remove ${who} from the roster? Their token will be removed from every map.`)) {
         void this.cb.onRemove(p.id);
       }
     });

@@ -26,6 +26,7 @@ import { PlayersPanel } from './PlayersPanel.ts';
 import { PlayerVoicePanel, type PlayerVoiceMessage } from './PlayerVoicePanel.ts';
 import { PlayerRegistry } from '../players/PlayerRegistry.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
+import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
 import { LLMClient } from '../ai/LLMClient.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { Renderer } from '../rendering/Renderer.ts';
@@ -36,7 +37,7 @@ import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
 import { Host } from '../p2p/Host.ts';
 import { generateRoomCode, generateInstanceId } from '../p2p/roomCode.ts';
 import { saveSession, loadSession, getAllMaps, getMap, saveMap, deleteMap, clearAssetLibraries, clearEverything, getActiveInstanceId } from '../storage/db.ts';
-import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, arePingsEnabled, isMessagingEnabled } from '../storage/localSettings.ts';
+import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, arePingsEnabled, isMessagingEnabled, arePlayerMarkersMovable } from '../storage/localSettings.ts';
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { seedAudioAssets } from '../storage/seedAudioAssets.ts';
 import { migrateLegacyMaps } from '../storage/seedMapAssets.ts';
@@ -348,6 +349,13 @@ export class GMApp {
    *  deliver upstream over BOTH BroadcastChannel and PeerJS, so non-idempotent
    *  events must be deduped on a client-supplied id. */
   private _seenUpstreamIds = new Set<string>();
+  /** Player token layer (circular tokens edged in the player's colour). */
+  private playerMarkerLayer: PlayerMarkerLayer | null = null;
+  /** Transient token positions during an in-progress drag (not yet persisted). */
+  private _liveMarkerPos = new Map<string, { x: number; y: number }>();
+  /** Pre-move token positions, captured when a PLAYER starts moving their own
+   *  token, so the GM's "cancel move" can send it back. */
+  private _markerMoveOrigin = new Map<string, { x: number; y: number }>();
 
   private interactions   = new MarkerInteractionRegistry();
   private audio          = this.interactions.register(new PositionalAudioInteraction());
@@ -2940,6 +2948,12 @@ export class GMApp {
       transition: this.buildTransitionConfig(),
     });
 
+    // v2.17 Player Voice — refresh the active map's player tokens (maps aren't
+    // connected, so each map shows only the tokens placed on it).
+    this._liveMarkerPos.clear();
+    this._markerMoveOrigin.clear();
+    this._refreshPlayerMarkers();
+
     // v2.12.x — if this map is a video asset and we have its full
     // bytes queued, send the bundle as a separate follow-up so
     // receivers can swap their static snapshot for the animated
@@ -3029,6 +3043,20 @@ export class GMApp {
         (x, y) => this.renderer.mapNormToCanvasCss(x, y),
         { showLabel: true, persistent: true, onDismiss: () => { /* GM-local removal only */ } },
       );
+    }
+
+    // v2.17 Player Voice — player tokens. The GM can drag any token to place it.
+    const pmEl = document.getElementById('player-marker-layer');
+    if (pmEl) {
+      this.playerMarkerLayer = new PlayerMarkerLayer(pmEl, {
+        project:   (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        unproject: (cx, cy) => {
+          const r = canvas.getBoundingClientRect();
+          return this.renderer.canvasCssToMapNorm(cx - r.left, cy - r.top);
+        },
+        canDrag: () => true,
+        onDragEnd: (pid, x, y) => { void this._onGmMarkerDragEnd(pid, x, y); },
+      });
     }
   }
 
@@ -3368,6 +3396,7 @@ export class GMApp {
         this._refreshPlayersPanel();
         this._broadcastRoster();
         this._broadcastPlayerFeatures();
+        this._refreshPlayerMarkers(); // let the new joiner see existing tokens
         const who = msg.playerName || msg.characterName || 'A player';
         this.setStatus(`${who} joined`, 'ok');
       });
@@ -3416,6 +3445,30 @@ export class GMApp {
           toPlayerId: msg.toPlayerId,
           text: msg.text,
         });
+      }
+      return;
+    }
+    if (msg.type === 'player_marker_move') {
+      if (!arePlayerMarkersMovable()) return; // GM disabled player-movable tokens
+      const mapId = this._activeMapId();
+      if (!mapId) return;
+      const bound = this.playerRegistry.playerForClient(msg.clientId);
+      if (!bound || bound.id !== msg.playerId) return;          // only your own token
+      if (!this.playerRegistry.isPlacedOn(msg.playerId, mapId)) return;
+      // Capture the pre-move position once so the GM can cancel the move.
+      if (!this._markerMoveOrigin.has(msg.playerId)) {
+        const cur = this.playerRegistry.placementOn(msg.playerId, mapId);
+        if (cur) this._markerMoveOrigin.set(msg.playerId, { ...cur });
+      }
+      if (msg.done) {
+        void this.playerRegistry.setPlacement(msg.playerId, mapId, msg.x, msg.y).then(() => {
+          this._liveMarkerPos.delete(msg.playerId);
+          this._refreshPlayerMarkers();
+          this._refreshPlayersPanel(); // surfaces the cancel-move button
+        });
+      } else {
+        this._liveMarkerPos.set(msg.playerId, { x: msg.x, y: msg.y });
+        this._refreshPlayerMarkers();
       }
       return;
     }
@@ -5788,18 +5841,31 @@ export class GMApp {
       },
       onRemove: async (id) => {
         await this.playerRegistry.remove(id);
+        this._liveMarkerPos.delete(id);
+        this._markerMoveOrigin.delete(id);
         this._refreshPlayersPanel();
         this._broadcastRoster();
+        this._refreshPlayerMarkers();
       },
+      onToggleMarker: (id) => { void this._togglePlayerMarker(id); },
+      onCancelMove:   (id) => { void this._cancelPlayerMarkerMove(id); },
     });
-    // Load the persisted roster, then render.
-    void this.playerRegistry.load().then(() => this._refreshPlayersPanel());
+    // Load the persisted roster, then render the panel + any placed tokens.
+    void this.playerRegistry.load().then(() => {
+      this._refreshPlayersPanel();
+      this._refreshPlayerMarkers();
+    });
   }
 
   private _refreshPlayersPanel(): void {
+    const mapId = this._activeMapId();
     this.playersPanel?.update(
       this.playerRegistry.all(),
-      (id) => this.playerRegistry.isConnected(id),
+      (id) => ({
+        connected:     this.playerRegistry.isConnected(id),
+        placed:        !!mapId && this.playerRegistry.isPlacedOn(id, mapId),
+        canCancelMove: this._markerMoveOrigin.has(id),
+      }),
     );
   }
 
@@ -5823,7 +5889,68 @@ export class GMApp {
   /** Tell player views which Player-Voice interactions are currently allowed,
    *  so they can hide disabled affordances. */
   private _broadcastPlayerFeatures(): void {
-    this.host.broadcast({ type: 'player_features', pings: arePingsEnabled(), messaging: isMessagingEnabled() });
+    this.host.broadcast({
+      type: 'player_features',
+      pings: arePingsEnabled(),
+      messaging: isMessagingEnabled(),
+      movableMarkers: arePlayerMarkersMovable(),
+    });
+  }
+
+  // ── Player tokens (v2.16.4 player markers) ─────────────────────────────────
+
+  private _activeMapId(): string | undefined {
+    return this.state.snapshot().map?.id;
+  }
+
+  /** Render the active map's player tokens on the GM AND broadcast them to
+   *  players. Merges any in-progress (un-persisted) drag positions. */
+  private _refreshPlayerMarkers(): void {
+    const mapId = this._activeMapId();
+    const base = mapId ? this.playerRegistry.markersForMap(mapId) : [];
+    const merged = base.map((m) => {
+      const live = this._liveMarkerPos.get(m.playerId);
+      return live ? { ...m, x: live.x, y: live.y } : m;
+    });
+    this.playerMarkerLayer?.setMarkers(merged);
+    this.host.broadcast({ type: 'player_markers', markers: merged });
+  }
+
+  private async _onGmMarkerDragEnd(playerId: string, x: number, y: number): Promise<void> {
+    const mapId = this._activeMapId();
+    if (!mapId) return;
+    await this.playerRegistry.setPlacement(playerId, mapId, x, y);
+    this._liveMarkerPos.delete(playerId);
+    this._markerMoveOrigin.delete(playerId); // GM took control — clear pending cancel
+    this._refreshPlayerMarkers();
+    this._refreshPlayersPanel();
+  }
+
+  /** Players-panel toggle: place this player's token on the active map (centre)
+   *  if absent, or remove it if present. */
+  private async _togglePlayerMarker(playerId: string): Promise<void> {
+    const mapId = this._activeMapId();
+    if (!mapId) { this.setStatus('Load a map before placing player tokens.', 'warn'); return; }
+    if (this.playerRegistry.isPlacedOn(playerId, mapId)) {
+      await this.playerRegistry.removePlacement(playerId, mapId);
+    } else {
+      await this.playerRegistry.setPlacement(playerId, mapId, 0.5, 0.5);
+    }
+    this._markerMoveOrigin.delete(playerId);
+    this._refreshPlayerMarkers();
+    this._refreshPlayersPanel();
+  }
+
+  /** GM "cancel move" — send a player-moved token back to where it was. */
+  private async _cancelPlayerMarkerMove(playerId: string): Promise<void> {
+    const mapId = this._activeMapId();
+    const origin = this._markerMoveOrigin.get(playerId);
+    if (!mapId || !origin) return;
+    await this.playerRegistry.setPlacement(playerId, mapId, origin.x, origin.y);
+    this._liveMarkerPos.delete(playerId);
+    this._markerMoveOrigin.delete(playerId);
+    this._refreshPlayerMarkers();
+    this._refreshPlayersPanel();
   }
 
   private bindPlayerVoicePanel(): void {

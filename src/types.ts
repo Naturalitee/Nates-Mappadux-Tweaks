@@ -507,9 +507,12 @@ export interface PersistentPlayer {
   /** Hex identity colour. Never black / near-black — that range is reserved
    *  for the GM + initiative threats. */
   color: string;
-  /** Assigned map marker id (set by the GM in Player Markers, v2.16.4+).
-   *  Persists across maps so the same player keeps the same token. */
-  markerId?: string;
+  /** Per-map placements of this player's token, keyed by mapId. The token is a
+   *  circular marker edged in the player's colour. Browser-only — deliberately
+   *  NOT written to the .mappadux save file (maps aren't connected; the GM
+   *  places tokens per map but never has to recreate them). A map id present
+   *  here means the token is on that map at the given normalised position. */
+  placements?: Record<string, { x: number; y: number }>;
   /** True for GM-managed offline players (no device of their own). They never
    *  connect; the GM acts on their behalf. */
   managedByGm?: boolean;
@@ -1046,6 +1049,37 @@ export interface MsgMessageDeliver {
   text:        string;
 }
 
+/**
+ * GM → players: the player tokens on the CURRENTLY ACTIVE map. The GM sends
+ * only the active map's set (it owns per-map placement), so player views just
+ * render whatever arrives. Re-sent on placement change, drag, map change, and
+ * when a new player joins.
+ */
+export interface MsgPlayerMarkers {
+  type: 'player_markers';
+  markers: Array<{
+    playerId: string;
+    name:     string;
+    color:    string;
+    x:        number; // 0..1 normalised map coord
+    y:        number;
+  }>;
+}
+
+/**
+ * Player → GM: I dragged my own token. The GM validates it's my marker and
+ * that movable markers are enabled, updates the placement, and rebroadcasts.
+ * `done` marks the end of a drag so the GM can finalise (and offer cancel-move).
+ */
+export interface MsgPlayerMarkerMove {
+  type: 'player_marker_move';
+  playerId: string;
+  clientId: string;
+  x: number;
+  y: number;
+  done: boolean;
+}
+
 export type GMMessage =
   | MsgFullState
   | MsgViewUpdate
@@ -1082,7 +1116,9 @@ export type GMMessage =
   | MsgPingShow
   | MsgPlayerFeatures
   | MsgPlayerMessage
-  | MsgMessageDeliver;
+  | MsgMessageDeliver
+  | MsgPlayerMarkers
+  | MsgPlayerMarkerMove;
 
 // ─── Storage types ───────────────────────────────────────────────────────────
 

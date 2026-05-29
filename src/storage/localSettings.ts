@@ -114,6 +114,22 @@ export function setMessagingEnabled(enabled: boolean): void {
   } catch { /* private mode etc. — no-op */ }
 }
 
+/** v2.17 Player Voice — GM toggle for letting players drag their own token.
+ *  Enabled by default; '0' stored when disabled. */
+export const PLAYER_MOVABLE_MARKERS_DISABLED_KEY = 'mappadux:player_movable_markers_disabled';
+
+export function arePlayerMarkersMovable(): boolean {
+  try { return localStorage.getItem(PLAYER_MOVABLE_MARKERS_DISABLED_KEY) !== '1'; }
+  catch { return true; }
+}
+
+export function setPlayerMarkersMovable(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.removeItem(PLAYER_MOVABLE_MARKERS_DISABLED_KEY);
+    else         localStorage.setItem(PLAYER_MOVABLE_MARKERS_DISABLED_KEY, '1');
+  } catch { /* private mode etc. — no-op */ }
+}
+
 /** UI scale for the left sidebar. Stored as a number (1.0 = 100%);
  *  values outside MIN/MAX clamp on read. Applied via CSS `zoom` so the
  *  whole box model scales uniformly — fonts, padding, borders, icon

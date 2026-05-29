@@ -6414,6 +6414,74 @@ option.select-option--add {
   cursor: pointer;
 }
 .player-row-delete:hover { color: var(--danger); background: var(--bg-hover); }
+.player-row-marker,
+.player-row-cancelmove {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.player-row-marker:hover,
+.player-row-cancelmove:hover { color: var(--text-primary); background: var(--bg-hover); }
+.player-row-marker.is-placed { color: var(--accent); }
+.player-row-cancelmove { color: var(--warn); }
+
+/* ── Player tokens (on the map, GM + player views) ──────────────────────── */
+.player-marker-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  overflow: hidden;
+}
+.pm-token {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  --pm-color: #3b82f6;
+}
+.pm-token-disc {
+  width: 30px;
+  height: 30px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--pm-color), black 55%);
+  border: 3px solid var(--pm-color);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.25) inset;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  pointer-events: auto;
+}
+.pm-token--draggable .pm-token-disc { cursor: grab; }
+.pm-token.is-dragging .pm-token-disc { cursor: grabbing; box-shadow: 0 0 12px var(--pm-color); }
+.pm-token-label {
+  margin-top: 2px;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
 
 /* ── Player-side identity colour swatches (in the identify modal) ───────── */
 .player-colour-swatches {

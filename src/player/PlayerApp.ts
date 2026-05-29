@@ -5,6 +5,7 @@ import { PlayerActionMenu, type ActionMenuItem } from './PlayerActionMenu.ts';
 import { PlayerMessageComposer } from './PlayerMessageComposer.ts';
 import { PlayerMessageToasts } from './PlayerMessageToasts.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
+import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
 import { Viewer } from '../viewers/Viewer.ts';
 import { PROFILE_PLAYER } from '../viewers/profiles.ts';
 import { drawGrid } from '../viewers/strategies/drawGrid.ts';
@@ -166,6 +167,7 @@ export class PlayerApp {
   private _composer = new PlayerMessageComposer();
   private _msgToasts: PlayerMessageToasts | null = null;
   private pingLayer: PingLayer | null = null;
+  private playerMarkerLayer: PlayerMarkerLayer | null = null;
   /** Roster broadcast by the GM — used to list other players as message targets. */
   private roster: Array<{ id: string; playerName: string; characterName: string; color: string; connected: boolean }> = [];
   /** Player-Voice features the GM currently allows. Default-on until the GM
@@ -218,6 +220,24 @@ export class PlayerApp {
     // v2.17 Player Voice — incoming-message toasts (GM replies, other players).
     const toastsEl = document.getElementById('player-msg-toasts');
     if (toastsEl) this._msgToasts = new PlayerMessageToasts(toastsEl);
+
+    // v2.17 Player Voice — player tokens. Players can drag only their own, and
+    // only while the GM allows movable markers.
+    const pmEl = document.getElementById('player-marker-layer');
+    if (pmEl) {
+      this.playerMarkerLayer = new PlayerMarkerLayer(pmEl, {
+        project:   (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        unproject: (cx, cy) => {
+          const canvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
+          if (!canvas) return null;
+          const r = canvas.getBoundingClientRect();
+          return this.renderer.canvasCssToMapNorm(cx - r.left, cy - r.top);
+        },
+        canDrag: (playerId) => this.features.movableMarkers && playerId === this.playerId,
+        onDragMove: (_pid, x, y) => this.guest.send({ type: 'player_marker_move', playerId: this.playerId, clientId: this.clientId, x, y, done: false }),
+        onDragEnd:  (_pid, x, y) => this.guest.send({ type: 'player_marker_move', playerId: this.playerId, clientId: this.clientId, x, y, done: true }),
+      });
+    }
 
     // Post-map-load: marker re-render + overlay refresh. Viewer has
     // already pushed the new aspect ratio into MarkerTexture +
@@ -1243,6 +1263,12 @@ export class PlayerApp {
       case 'player_roster': {
         // v2.17 Player Voice — who else is in the session (message targets).
         this.roster = msg.players;
+        break;
+      }
+
+      case 'player_markers': {
+        // v2.17 Player Voice — player tokens placed on the active map.
+        this.playerMarkerLayer?.setMarkers(msg.markers);
         break;
       }
 

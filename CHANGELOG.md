@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.16.5 — 2026-05-29
+
+### Player Voice — player tokens
+
+Each player can have a token on the map — a circular marker edged in their
+identity colour, showing their initial and name.
+
+- **GM places them, per map.** A pin button on each row of the Players panel
+  drops that player's token on the current map; click again to remove it.
+  Drag it anywhere to position it. Maps aren't linked, so each map shows only
+  the tokens you placed on it.
+- **Browser-only, no setup churn.** Tokens and their positions live in your
+  browser, never in the Map Pack save file — so sharing or re-importing a
+  pack never carries your table's tokens, and you never have to rebuild a
+  player's token from scratch.
+- **Players can move their own.** When enabled (Settings → Player Voice), a
+  player can drag their own token from their view; you see it move live and
+  get a "send it back" button to undo the move. Turn the setting off to keep
+  placement entirely in your hands.
+
 ## v2.16.4 — 2026-05-29
 
 ### Player Voice — LLM reply assistant
