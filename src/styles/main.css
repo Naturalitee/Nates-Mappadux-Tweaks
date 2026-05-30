@@ -6778,6 +6778,7 @@ option.select-option--add {
   gap: var(--space-sm);
 }
 .player-colour-swatch {
+  position: relative;
   width: 26px;
   height: 26px;
   padding: 0;
@@ -6786,20 +6787,43 @@ option.select-option--add {
   cursor: pointer;
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
 }
+.player-colour-swatch-taken {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 13px;
+  height: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  font-family: var(--font-ui);
+  font-size: 0.55rem;
+  font-weight: 700;
+  pointer-events: none;
+  text-transform: uppercase;
+}
 .player-colour-swatch.is-selected {
   border-color: var(--text-primary);
   box-shadow: 0 0 6px rgba(255, 255, 255, 0.45);
 }
-/* Custom-colour swatch — rainbow + "+" icon, opens the native picker. */
-.player-colour-swatch--custom {
+/* Custom-colour swatch — the actual <input type="color"> styled to match the
+   palette tiles. Clicking it opens the OS standard colour picker directly. */
+input.player-colour-swatch--custom {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0;
   background: conic-gradient(from 0deg, #ef4444, #f59e0b, #eab308, #22c55e, #14b8a6, #3b82f6, #7c5cff, #c44dd6, #ef4444);
-  color: #fff;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+  cursor: pointer;
 }
-.player-colour-swatch--custom:hover {
+/* Hide the platform's inner colour swatch so our gradient shows through. */
+input.player-colour-swatch--custom::-webkit-color-swatch-wrapper { padding: 0; border: none; }
+input.player-colour-swatch--custom::-webkit-color-swatch { border: none; border-radius: 50%; background: transparent; }
+input.player-colour-swatch--custom::-moz-color-swatch { border: none; border-radius: 50%; background: transparent; }
+input.player-colour-swatch--custom:hover {
   box-shadow: 0 0 6px rgba(255, 255, 255, 0.35);
 }
 

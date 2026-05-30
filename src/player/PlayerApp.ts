@@ -307,11 +307,30 @@ export class PlayerApp {
     };
 
     // visibilitychange fires when the user returns to the tab/app on mobile.
-    // If the context was lost while the page was hidden and the browser didn't
-    // fire webglcontextrestored yet, this is a fallback trigger.
+    // - If the WebGL context was lost while hidden and webglcontextrestored
+    //   hasn't fired yet, this is a fallback trigger.
+    // - If the page has been hidden for a while, mobile battery saving / OS
+    //   sleep may have torn down the WebRTC data channel silently. PeerJS
+    //   doesn't always get a close event in that case, so we proactively
+    //   reconnect on resume rather than wait for the user to refresh the page.
+    let hiddenSince: number | null = null;
     document.addEventListener('visibilitychange', () => {
-      if (document.visibilityState === 'visible' && this._contextLost) {
-        this._recoverRenderer();
+      if (document.visibilityState === 'hidden') {
+        hiddenSince = performance.now();
+        return;
+      }
+      if (this._contextLost) this._recoverRenderer();
+      const wasHiddenFor = hiddenSince !== null ? performance.now() - hiddenSince : 0;
+      hiddenSince = null;
+      // Threshold of 10s: tab-switches under that don't trigger a reconnect.
+      // Above it we always tear down + reconnect — checking conn.open isn't
+      // reliable because mobile OS sleep often kills the WebRTC channel
+      // silently without firing close, leaving conn.open=true on a dead pipe.
+      // A few seconds of "Reconnecting…" on the rare survived-conn case is a
+      // small cost vs. needing the user to refresh the tab.
+      if (wasHiddenFor > 10_000 && this.roomCode) {
+        this.setStatus('Reconnecting…');
+        this.guest?.connect(this.roomCode);
       }
     });
 
@@ -799,7 +818,7 @@ export class PlayerApp {
     if (this.identity) { this._sendIdentify(); return; }
     if (this._identityPromptShown) return;
     this._identityPromptShown = true;
-    const chosen = await this._identityModal.open();
+    const chosen = await this._identityModal.open(undefined, { takenColours: this._takenColours() });
     if (chosen) { this._saveIdentity(chosen); this._sendIdentify(); }
   }
 
@@ -809,8 +828,17 @@ export class PlayerApp {
   async openIdentityModal(): Promise<void> {
     const chosen = await this._identityModal.open(this.identity ?? undefined, {
       onForget: () => this._forgetMe(),
+      takenColours: this._takenColours(),
     });
     if (chosen) { this._saveIdentity(chosen); this._sendIdentify(); }
+  }
+
+  /** Colours already claimed by other connected players — used by the identify
+   *  modal to badge palette tiles that are in use. */
+  private _takenColours(): Array<{ color: string; name: string }> {
+    return this.roster
+      .filter((p) => p.id !== this.playerId)
+      .map((p) => ({ color: p.color, name: p.characterName || p.playerName || 'Player' }));
   }
 
   /** Wipe local identity, ask the GM to drop the registry record, and reload

@@ -23,7 +23,16 @@ export class PlayerIdentifyModal {
     if (e.key === 'Escape') this._resolve(null);
   };
 
-  open(current?: Partial<PlayerIdentity>, opts?: { onForget?: () => void }): Promise<PlayerIdentity | null> {
+  open(
+    current?: Partial<PlayerIdentity>,
+    opts?: {
+      onForget?: () => void;
+      /** Colours already claimed by other players — render a small "in use"
+       *  badge on those palette swatches. Picking one is still allowed (clashing
+       *  doesn't break anything; the badge just warns). */
+      takenColours?: Array<{ color: string; name: string }>;
+    },
+  ): Promise<PlayerIdentity | null> {
     this.overlay = this._build(current ?? {}, opts);
     document.body.appendChild(this.overlay);
     document.addEventListener('keydown', this.onKey);
@@ -38,7 +47,10 @@ export class PlayerIdentifyModal {
     this.resolver = null;
   }
 
-  private _build(current: Partial<PlayerIdentity>, opts?: { onForget?: () => void }): HTMLElement {
+  private _build(
+    current: Partial<PlayerIdentity>,
+    opts?: { onForget?: () => void; takenColours?: Array<{ color: string; name: string }> },
+  ): HTMLElement {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
 
@@ -127,13 +139,15 @@ export class PlayerIdentifyModal {
     swatches.className = 'player-colour-swatches';
     body.appendChild(swatches);
 
-    // Hidden native colour input — clicked by the "+" swatch at the end of the grid.
+    // Custom-colour swatch — a styled <input type="color"> appended at the end
+    // of the grid below. Clicking it opens the system's standard colour picker
+    // directly, no hidden-input + .click() dance (which silently no-ops on
+    // desktop Chrome). The element IS the swatch.
     const customInput = document.createElement('input');
     customInput.type = 'color';
-    customInput.style.position = 'absolute';
-    customInput.style.left = '-9999px';
-    customInput.style.opacity = '0';
-    body.appendChild(customInput);
+    customInput.className = 'player-colour-swatch player-colour-swatch--custom';
+    customInput.title = 'Pick a custom colour';
+    customInput.setAttribute('aria-label', 'Pick a custom colour');
 
     const refreshPreview = () => {
       preview.style.background = selected;
@@ -150,27 +164,31 @@ export class PlayerIdentifyModal {
       refreshPreview();
     };
 
+    const takenByColour = new Map<string, string>();
+    for (const t of opts?.takenColours ?? []) {
+      takenByColour.set(normaliseHex(t.color), t.name);
+    }
+
     for (const colour of PLAYER_COLOR_PALETTE) {
       const sw = document.createElement('button');
       sw.type = 'button';
       sw.className = 'player-colour-swatch';
       sw.dataset['colour'] = colour;
       sw.style.background = colour;
-      sw.title = colour;
+      const takenBy = takenByColour.get(normaliseHex(colour));
+      sw.title = takenBy ? `${colour} — currently used by ${takenBy} (you can still pick it)` : colour;
       sw.addEventListener('click', () => { selected = normaliseHex(colour); refreshSelection(); err.textContent = ''; });
+      if (takenBy) {
+        const badge = document.createElement('span');
+        badge.className = 'player-colour-swatch-taken';
+        badge.textContent = (takenBy.trim()[0] ?? '?').toUpperCase();
+        badge.setAttribute('aria-hidden', 'true');
+        sw.appendChild(badge);
+      }
       swatches.appendChild(sw);
     }
 
-    // Custom swatch — "+" tile at the end of the grid opens the native picker.
-    const customSwatch = document.createElement('button');
-    customSwatch.type = 'button';
-    customSwatch.className = 'player-colour-swatch player-colour-swatch--custom';
-    customSwatch.title = 'Pick a custom colour';
-    customSwatch.setAttribute('aria-label', 'Pick a custom colour');
-    customSwatch.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
-    customSwatch.addEventListener('click', () => customInput.click());
-    swatches.appendChild(customSwatch);
-
+    // Custom swatch IS the colour input — clicking it opens the OS picker directly.
     customInput.addEventListener('input', () => {
       if (isReservedColor(customInput.value)) {
         err.textContent = 'That colour is too dark — it is reserved for the GM. Pick a brighter one.';
@@ -180,6 +198,7 @@ export class PlayerIdentifyModal {
       refreshSelection();
       err.textContent = '';
     });
+    swatches.appendChild(customInput);
 
     const err = document.createElement('p');
     err.style.color = '#ff8a8a';

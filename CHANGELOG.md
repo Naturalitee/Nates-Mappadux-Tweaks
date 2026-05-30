@@ -1,5 +1,31 @@
 # Changelog
 
+## v2.16.14 — 2026-05-30
+
+### Identity polish — custom colour, taken-colour badge, mobile resume
+
+Three fixes folded into a single beta push:
+
+- **Custom colour swatch now works on desktop too.** The previous version
+  used a hidden `<input type="color">` triggered by `.click()`, which is
+  reliably broken on desktop Chrome (it silently no-ops). The "+" swatch
+  is now the colour input itself, styled to match the palette tiles with
+  a rainbow gradient. Click it on any device and the system's standard
+  colour picker opens directly — no intermediate menu.
+- **Taken-colour badge.** A small dark dot with the other player's initial
+  appears on palette tiles whose colour is already in use. Picking a
+  taken colour is still allowed (clashing doesn't break anything); the
+  badge is just a friendly heads-up so you can pick a distinct identity
+  without having to memorise everyone else's choice.
+- **Mobile resume reconnects.** When a phone tab is hidden for more than
+  10 seconds (locked screen, background app, OS battery saver), the
+  WebRTC channel often dies silently — PeerJS doesn't always get a close
+  event, so the page silently loses its connection until the user
+  refreshes. The player view now watches `visibilitychange` and on resume
+  after a long hide, proactively tears down + reconnects via the saved
+  room code. A brief "Reconnecting…" status appears; everything's back
+  within a couple of seconds.
+
 ## v2.16.13 — 2026-05-30
 
 ### Fix — upstream PeerJS messages from remote players were silently dropped

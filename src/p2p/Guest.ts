@@ -47,6 +47,11 @@ export class Guest {
 
   isSameMachineSession(): boolean { return this._isSameMachineSession; }
 
+  /** True when the PeerJS DataConnection is currently up. False if it never
+   *  opened, was torn down, or hasn't been created yet. Used by PlayerApp's
+   *  visibility-resume watchdog to decide whether to force a reconnect. */
+  isConnectionOpen(): boolean { return !!this.conn?.open; }
+
   constructor(events: GuestEvents) {
     this.events = events;
     this.local = new LocalChannel();
