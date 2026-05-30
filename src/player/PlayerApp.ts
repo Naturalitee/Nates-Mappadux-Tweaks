@@ -344,7 +344,9 @@ export class PlayerApp {
     // tap-and-release was muting/unmuting the player.
     const firstClick = () => {
       if (!this.connectPanel.hidden) return; // not connected yet — wait
-      if (this._isPreviewMode()) return; // GM preview popup — no player interaction
+      // Don't gate on preview mode — click-to-unmute is the only way the audio
+      // pipeline ever starts (browser autoplay policy), and the GM previewing
+      // needs audio working so they can hear what players hear.
       this._toggleMute();
       this.viewer.markMuteInteractive();
       document.removeEventListener('click', firstClick);
@@ -794,10 +796,26 @@ export class PlayerApp {
     if (chosen) { this._saveIdentity(chosen); this._sendIdentify(); }
   }
 
-  /** Re-open the identify modal so the player can change their details. */
+  /** Re-open the identify modal so the player can change their details. The
+   *  modal also exposes a Forget-me button that wipes local state + asks the
+   *  GM to remove the persistent record so testing can restart cleanly. */
   async openIdentityModal(): Promise<void> {
-    const chosen = await this._identityModal.open(this.identity ?? undefined);
+    const chosen = await this._identityModal.open(this.identity ?? undefined, {
+      onForget: () => this._forgetMe(),
+    });
     if (chosen) { this._saveIdentity(chosen); this._sendIdentify(); }
+  }
+
+  /** Wipe local identity, ask the GM to drop the registry record, and reload
+   *  with a fresh playerId so the next connect starts from zero. */
+  private _forgetMe(): void {
+    try { this.guest?.send({ type: 'player_forget_me', playerId: this.playerId, clientId: this.clientId }); } catch { /* connection might be flaky — try anyway */ }
+    try {
+      localStorage.removeItem('mappadux:player_id');
+      localStorage.removeItem('mappadux:player_identity');
+    } catch { /* private mode */ }
+    // Brief delay so the message has a chance to flush before the reload.
+    setTimeout(() => location.reload(), 200);
   }
 
   // ── v2.17 Player Voice — pings ─────────────────────────────────────────────

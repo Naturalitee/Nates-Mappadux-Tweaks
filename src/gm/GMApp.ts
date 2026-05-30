@@ -3415,6 +3415,24 @@ export class GMApp {
       this._broadcastRoster();
       return;
     }
+    if (msg.type === 'player_forget_me') {
+      // Wipe the registry entry + their tokens. The player will reload with a
+      // fresh playerId so future testing starts from zero. Falls back to the
+      // playerId from the message when there's no live binding yet.
+      const bound = this.playerRegistry.playerForClient(msg.clientId);
+      const id = bound?.id ?? msg.playerId;
+      const who = bound?.playerName || bound?.characterName || 'A player';
+      void this.playerRegistry.remove(id).then(() => {
+        this._liveMarkerPos.delete(id);
+        this._markerMoveOrigin.delete(id);
+        this.playerRegistry.bye(msg.clientId); // clear any live binding too
+        this._refreshPlayersPanel();
+        this._broadcastRoster();
+        this._refreshPlayerMarkers();
+        this.setStatus(`${who} reset their identity`, 'warn');
+      });
+      return;
+    }
     if (msg.type === 'player_ping') {
       if (!arePingsEnabled()) return; // GM has pings switched off — ignore
       if (this._seenUpstream(msg.pingId)) return;

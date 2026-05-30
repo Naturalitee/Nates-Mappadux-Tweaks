@@ -1014,6 +1014,19 @@ export interface MsgPlayerBye {
 }
 
 /**
+ * Player → GM: "wipe my record". Used by the Forget-me button on the player
+ * identify modal — removes the PersistentPlayer entry from the GM's registry
+ * along with any placed tokens, so the player can re-introduce themselves
+ * from scratch. The player will follow up by clearing their own localStorage
+ * and reloading.
+ */
+export interface MsgPlayerForgetMe {
+  type: 'player_forget_me';
+  playerId: string;
+  clientId: string;
+}
+
+/**
  * GM → all players: current roster snapshot so player views know who else
  * is in the session (drives player→player messaging targets and the
  * initiative tracker). GM-only fields (markerId, managedByGm) are omitted.
@@ -1198,6 +1211,7 @@ export type GMMessage =
   | MsgMapMetaUpdate
   | MsgPlayerIdentify
   | MsgPlayerBye
+  | MsgPlayerForgetMe
   | MsgPlayerRoster
   | MsgPlayerPing
   | MsgPingShow

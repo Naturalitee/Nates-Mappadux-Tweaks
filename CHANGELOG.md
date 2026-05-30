@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.16.11 — 2026-05-30
+
+### Fixes — Forget-me button + click-to-unmute in preview
+
+- **"Forget me" button** in the player identify modal (footer, left side, red).
+  Confirms, sends a player_forget_me message asking the GM to drop the
+  registry record + any placed tokens, clears local identity + player id,
+  and reloads. Useful when testing flow gets stuck behind sticky state on
+  the player device, or when you want to swap who's playing on a shared
+  tablet.
+- **Click-to-unmute now works in the GM preview popup.** v2.16.9 gated the
+  first-click handler on preview mode, which also blocked the browser's
+  autoplay-policy unmute path — meaning the preview popup couldn't get its
+  audio pipeline started. Removed the gate; click-to-unmute always works.
+
 ## v2.16.10 — 2026-05-30
 
 ### Fix — real player tabs incorrectly treated as GM preview

@@ -23,8 +23,8 @@ export class PlayerIdentifyModal {
     if (e.key === 'Escape') this._resolve(null);
   };
 
-  open(current?: Partial<PlayerIdentity>): Promise<PlayerIdentity | null> {
-    this.overlay = this._build(current ?? {});
+  open(current?: Partial<PlayerIdentity>, opts?: { onForget?: () => void }): Promise<PlayerIdentity | null> {
+    this.overlay = this._build(current ?? {}, opts);
     document.body.appendChild(this.overlay);
     document.addEventListener('keydown', this.onKey);
     return new Promise((resolve) => { this.resolver = resolve; });
@@ -38,7 +38,7 @@ export class PlayerIdentifyModal {
     this.resolver = null;
   }
 
-  private _build(current: Partial<PlayerIdentity>): HTMLElement {
+  private _build(current: Partial<PlayerIdentity>, opts?: { onForget?: () => void }): HTMLElement {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
 
@@ -199,8 +199,29 @@ export class PlayerIdentifyModal {
     footer.style.padding = 'var(--space-md)';
     footer.style.borderTop = '1px solid var(--border)';
     footer.style.display = 'flex';
-    footer.style.justifyContent = 'flex-end';
+    footer.style.alignItems = 'center';
     footer.style.gap = 'var(--space-sm)';
+
+    // Forget-me — wipes local state + asks the GM to drop the registry record.
+    // Left-aligned + danger styling so it doesn't get confused with Save/Cancel.
+    if (opts?.onForget) {
+      const forgetBtn = document.createElement('button');
+      forgetBtn.type = 'button';
+      forgetBtn.className = 'btn btn--ghost';
+      forgetBtn.style.color = 'var(--danger)';
+      forgetBtn.textContent = 'Forget me';
+      forgetBtn.title = 'Clear your saved identity on this device AND ask the GM to remove your record. Useful for testing a clean connect.';
+      forgetBtn.addEventListener('click', () => {
+        if (!confirm('Wipe your identity here and ask the GM to remove your record? The page will reload.')) return;
+        opts.onForget?.();
+        this._resolve(null);
+      });
+      footer.appendChild(forgetBtn);
+    }
+    // Spacer pushes Save / Cancel to the right.
+    const spacer = document.createElement('div');
+    spacer.style.flex = '1';
+    footer.appendChild(spacer);
 
     const cancelBtn = document.createElement('button');
     cancelBtn.type = 'button';
@@ -233,6 +254,8 @@ export class PlayerIdentifyModal {
 
     footer.append(cancelBtn, saveBtn);
     dialog.appendChild(footer);
+    // (Footer DOM order is: forget (left) | spacer | cancel | save — handled
+    // by separate appends above so we don't disturb the keyboard handlers.)
 
     return overlay;
   }
