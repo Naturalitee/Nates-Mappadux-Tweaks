@@ -1136,11 +1136,28 @@ export interface MsgPlayerMarkers {
     color:    string;
     x:        number; // 0..1 normalised map coord
     y:        number;
-    /** Optional token icon — unicode glyph OR data URL. The renderer prefers
-     *  iconChar when both are absent the disc falls back to the player's initial. */
-    iconChar?:    string;
-    iconDataUrl?: string;
+    /** Optional inline glyph (unicode char). Always small. Image-form icons
+     *  ride a separate `player_icon_update` message keyed by playerId so they
+     *  don't bloat this message past the PeerJS DataChannel size limit. */
+    iconChar?: string;
   }>;
+}
+
+/**
+ * GM → players: the icon image (data URL) for a specific player's token.
+ * Sent separately from `player_markers` because raster / SVG data URLs can
+ * easily exceed the PeerJS DataChannel ~16KB message limit — bundling them
+ * inline with the marker list would silently break the whole channel.
+ * Players cache by playerId; absent `dataUrl` = clear (fall back to glyph
+ * or initial). The Host chunks `dataUrl` over the wire like soundboard assets.
+ */
+export interface MsgPlayerIconUpdate {
+  type: 'player_icon_update';
+  playerId: string;
+  /** Optional — omit to clear the cached icon. PNG / WebP data URLs are
+   *  routed through the chunked binary path; small unicode glyphs are
+   *  delivered inline via `player_markers` instead. */
+  dataUrl?: string;
 }
 
 /**
@@ -1231,6 +1248,7 @@ export type GMMessage =
   | MsgPlayerMessage
   | MsgMessageDeliver
   | MsgPlayerMarkers
+  | MsgPlayerIconUpdate
   | MsgPlayerMarkerMove
   | MsgInitiativeUpdate
   | MsgInitiativeCall

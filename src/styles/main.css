@@ -6438,14 +6438,19 @@ option.select-option--add {
 .player-row-marker.is-placed { color: var(--accent); }
 .player-row-cancelmove { color: var(--warn); }
 
-/* Icon-pick button — small square preview of the player's chosen token icon. */
+/* Combined icon + colour control. The icon button shows the picked token
+   image / glyph / initial, with a small colour-input badge attached to its
+   bottom-right edge for editing the player's identity colour. Hover reveals
+   a clear-icon × at the top-right when an icon is set. */
 .player-row-icon-wrap {
   position: relative;
   flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
 }
 .player-row-icon {
-  width: 26px;
-  height: 26px;
+  width: 34px;
+  height: 34px;
   padding: 0;
   display: inline-flex;
   align-items: center;
@@ -6456,7 +6461,7 @@ option.select-option--add {
   color: #fff;
   font-family: var(--font-ui);
   font-weight: 700;
-  font-size: 0.85rem;
+  font-size: 0.95rem;
   cursor: pointer;
   overflow: hidden;
 }
@@ -6464,10 +6469,33 @@ option.select-option--add {
   width: 100%;
   height: 100%;
   object-fit: contain;
+  pointer-events: none;
 }
 .player-row-icon--empty {
   border-style: dashed;
   opacity: 0.85;
+}
+/* Colour badge — small native colour input perched on the icon's bottom-right. */
+.player-row-colour-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1.5px solid var(--bg-panel);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+}
+.player-row-colour-badge::-webkit-color-swatch-wrapper { padding: 0; }
+.player-row-colour-badge::-webkit-color-swatch { border: none; border-radius: 50%; }
+.player-row-colour-badge::-moz-color-swatch { border: none; border-radius: 50%; }
+.player-row-colour-badge.flash-invalid {
+  outline: 2px solid var(--danger);
+  outline-offset: 1px;
 }
 .player-row-icon-clear {
   position: absolute;
@@ -6486,8 +6514,18 @@ option.select-option--add {
   border: 1px solid #fff;
   border-radius: 50%;
   cursor: pointer;
+  z-index: 1;
 }
 .player-row-icon-wrap:hover .player-row-icon-clear { display: inline-flex; }
+
+/* Modal preview disc — image variant when the GM has assigned an icon. */
+.modal-identity-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+  pointer-events: none;
+}
 
 /* Token disc — image and glyph rendering inside the disc. */
 .pm-token-disc--has-image,

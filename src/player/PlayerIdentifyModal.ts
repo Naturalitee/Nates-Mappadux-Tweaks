@@ -31,6 +31,10 @@ export class PlayerIdentifyModal {
        *  badge on those palette swatches. Picking one is still allowed (clashing
        *  doesn't break anything; the badge just warns). */
       takenColours?: Array<{ color: string; name: string }>;
+      /** The GM-allocated token icon for THIS player (data URL). When set, the
+       *  preview disc shows the picked icon instead of the player's initial so
+       *  they see the finished look of their token. */
+      previewIconDataUrl?: string;
     },
   ): Promise<PlayerIdentity | null> {
     this.overlay = this._build(current ?? {}, opts);
@@ -49,7 +53,11 @@ export class PlayerIdentifyModal {
 
   private _build(
     current: Partial<PlayerIdentity>,
-    opts?: { onForget?: () => void; takenColours?: Array<{ color: string; name: string }> },
+    opts?: {
+      onForget?: () => void;
+      takenColours?: Array<{ color: string; name: string }>;
+      previewIconDataUrl?: string;
+    },
   ): HTMLElement {
     const overlay = document.createElement('div');
     overlay.className = 'modal-overlay';
@@ -150,10 +158,19 @@ export class PlayerIdentifyModal {
     customInput.setAttribute('aria-label', 'Pick a custom colour');
 
     const refreshPreview = () => {
-      preview.style.background = selected;
+      preview.style.background = `color-mix(in srgb, ${selected}, black 55%)`;
       preview.style.borderColor = selected;
-      const initial = ((charInput.value.trim() || nameInput.value.trim() || '?')[0] ?? '?').toUpperCase();
-      preview.textContent = initial;
+      preview.replaceChildren();
+      if (opts?.previewIconDataUrl) {
+        const img = document.createElement('img');
+        img.src = opts.previewIconDataUrl;
+        img.alt = '';
+        img.className = 'modal-identity-preview-img';
+        preview.appendChild(img);
+      } else {
+        const initial = ((charInput.value.trim() || nameInput.value.trim() || '?')[0] ?? '?').toUpperCase();
+        preview.textContent = initial;
+      }
     };
     const refreshSelection = () => {
       for (const el of Array.from(swatches.children)) {

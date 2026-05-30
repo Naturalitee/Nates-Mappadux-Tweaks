@@ -498,6 +498,14 @@ export class Host {
       void _d;
       jsonMsg = noUrl as Record<string, unknown>;
     }
+    // v2.17 — player_icon_update routes through the same chunked-blob path so
+    // a single multi-KB icon doesn't blow past the DataChannel limit.
+    if (rest.type === 'player_icon_update' && rest.dataUrl) {
+      audioBuffer = this._dataUrlToBuffer(rest.dataUrl);
+      const { dataUrl: _d, ...noUrl } = rest;
+      void _d;
+      jsonMsg = noUrl as Record<string, unknown>;
+    }
 
     // For full_state / map_change: strip dataUrls from soundboardActive and soundboardAssets;
     // deliver them as binary chunks after the main JSON message.

@@ -77,27 +77,13 @@ export class PlayersPanel {
     dot.title = p.managedByGm ? 'GM-managed (offline player)' : (connected ? 'Connected' : 'Disconnected');
     row.appendChild(dot);
 
-    // Colour swatch (native colour input)
-    const colour = document.createElement('input');
-    colour.type = 'color';
-    colour.className = 'player-row-colour';
-    colour.value = p.color;
-    colour.title = 'Identity colour';
-    colour.addEventListener('change', () => {
-      if (isReservedColor(colour.value)) {
-        colour.value = p.color; // revert — near-black is GM-reserved
-        colour.classList.add('flash-invalid');
-        setTimeout(() => colour.classList.remove('flash-invalid'), 600);
-        return;
-      }
-      void this.cb.onUpdate(p.id, { color: colour.value });
-    });
-    row.appendChild(colour);
-
-    // Icon-pick button — opens the image asset library. Shows the current
-    // icon (image / glyph / initial-fallback) so the GM can see what's picked.
+    // Combined icon + colour control. The big icon button shows the picked
+    // token icon (image / glyph / initial fallback); a small colour-input
+    // badge attached to it edits the player's identity colour. Hover reveals
+    // a clear-icon × when an icon is set.
     const iconWrap = document.createElement('div');
     iconWrap.className = 'player-row-icon-wrap';
+
     const iconBtn = document.createElement('button');
     iconBtn.type = 'button';
     iconBtn.className = 'player-row-icon';
@@ -118,6 +104,25 @@ export class PlayersPanel {
       iconBtn.textContent = (p.characterName || p.playerName || '?').trim()[0]?.toUpperCase() ?? '?';
     }
     iconWrap.appendChild(iconBtn);
+
+    // Colour badge — small <input type="color"> attached to the icon button.
+    const colour = document.createElement('input');
+    colour.type = 'color';
+    colour.className = 'player-row-colour-badge';
+    colour.value = p.color;
+    colour.title = 'Identity colour';
+    colour.setAttribute('aria-label', 'Identity colour');
+    colour.addEventListener('change', () => {
+      if (isReservedColor(colour.value)) {
+        colour.value = p.color;
+        colour.classList.add('flash-invalid');
+        setTimeout(() => colour.classList.remove('flash-invalid'), 600);
+        return;
+      }
+      void this.cb.onUpdate(p.id, { color: colour.value });
+    });
+    iconWrap.appendChild(colour);
+
     if (p.iconAssetId || p.iconDataUrl || p.iconChar) {
       const clear = document.createElement('button');
       clear.type = 'button';

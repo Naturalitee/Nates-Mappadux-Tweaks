@@ -178,6 +178,13 @@ export class PlayerApp {
   private _msgToasts: PlayerMessageToasts | null = null;
   private pingLayer: PingLayer | null = null;
   private playerMarkerLayer: PlayerMarkerLayer | null = null;
+  /** Per-player icon data URLs received via player_icon_update (chunked over
+   *  the wire so multi-KB images don't blow past the DataChannel limit).
+   *  Merged into the marker view before handing to PlayerMarkerLayer. */
+  private _playerIcons = new Map<string, string>();
+  /** Last received player_markers payload — re-merged on any icon update so
+   *  an icon arriving after the markers triggers an immediate re-render. */
+  private _lastPlayerMarkers: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string }> = [];
   private initiativeRail: PlayerInitiativeRail | null = null;
   private _initiativeRollModal = new PlayerInitiativeRollModal();
   /** Roster broadcast by the GM — used to list other players as message targets. */
@@ -818,7 +825,11 @@ export class PlayerApp {
     if (this.identity) { this._sendIdentify(); return; }
     if (this._identityPromptShown) return;
     this._identityPromptShown = true;
-    const chosen = await this._identityModal.open(undefined, { takenColours: this._takenColours() });
+    const myIcon = this._playerIcons.get(this.playerId);
+    const chosen = await this._identityModal.open(undefined, {
+      takenColours: this._takenColours(),
+      ...(myIcon ? { previewIconDataUrl: myIcon } : {}),
+    });
     if (chosen) { this._saveIdentity(chosen); this._sendIdentify(); }
   }
 
@@ -826,9 +837,11 @@ export class PlayerApp {
    *  modal also exposes a Forget-me button that wipes local state + asks the
    *  GM to remove the persistent record so testing can restart cleanly. */
   async openIdentityModal(): Promise<void> {
+    const myIcon = this._playerIcons.get(this.playerId);
     const chosen = await this._identityModal.open(this.identity ?? undefined, {
       onForget: () => this._forgetMe(),
       takenColours: this._takenColours(),
+      ...(myIcon ? { previewIconDataUrl: myIcon } : {}),
     });
     if (chosen) { this._saveIdentity(chosen); this._sendIdentify(); }
   }
@@ -839,6 +852,16 @@ export class PlayerApp {
     return this.roster
       .filter((p) => p.id !== this.playerId)
       .map((p) => ({ color: p.color, name: p.characterName || p.playerName || 'Player' }));
+  }
+
+  /** Re-merge the last received markers with the current icon cache and push
+   *  to the layer. Called on both player_markers arrival and player_icon_update. */
+  private _reRenderPlayerMarkers(): void {
+    const merged = this._lastPlayerMarkers.map((m) => {
+      const cached = this._playerIcons.get(m.playerId);
+      return cached ? { ...m, iconDataUrl: cached } : m;
+    });
+    this.playerMarkerLayer?.setMarkers(merged);
   }
 
   /** Wipe local identity, ask the GM to drop the registry record, and reload
@@ -1411,8 +1434,22 @@ export class PlayerApp {
       }
 
       case 'player_markers': {
-        // v2.17 Player Voice — player tokens placed on the active map.
-        this.playerMarkerLayer?.setMarkers(msg.markers);
+        // v2.17 Player Voice — player tokens placed on the active map. Icon
+        // data URLs travel separately via player_icon_update (they'd otherwise
+        // blow past the DataChannel limit), so we merge the cache in here.
+        this._lastPlayerMarkers = msg.markers;
+        this._reRenderPlayerMarkers();
+        // Player's own icon may have changed (or just arrived) — refresh the
+        // identity pill if we're currently identified.
+        this._refreshIdentityButton();
+        break;
+      }
+
+      case 'player_icon_update': {
+        if (msg.dataUrl) this._playerIcons.set(msg.playerId, msg.dataUrl);
+        else             this._playerIcons.delete(msg.playerId);
+        this._reRenderPlayerMarkers();
+        if (msg.playerId === this.playerId) this._refreshIdentityButton();
         break;
       }
 

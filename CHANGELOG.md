@@ -1,5 +1,34 @@
 # Changelog
 
+## v2.16.16 — 2026-05-30
+
+### Fix + polish — token icons no longer break remote map loads
+
+The v2.16.15 icon picker shipped icons inline inside `player_markers`. With
+multiple raster icons the JSON payload could exceed the PeerJS DataChannel
+~16KB message limit, which silently broke the channel for remote players
+— maps stopped loading on the phone any time a custom icon was assigned.
+
+This patch:
+
+- **Splits icons off** into a dedicated `player_icon_update` message,
+  chunked over the wire the same way soundboard audio and map blobs are.
+  Individual icons can be any size; player views cache by playerId and
+  merge into the marker view as they arrive. Map loading is no longer
+  affected by icon size.
+- **Downscales picked icons to 64×64 PNG** at pick time so the chunked
+  payload stays small (and re-broadcasts on every new joiner stay
+  cheap). Quality is fine at the 30–60px display size of a token disc.
+- **Player identify modal now shows the GM-allocated icon** in the
+  preview disc when one is set, so the player sees the finished look of
+  their token while editing their name / character / colour.
+- **Combined colour + icon control on the Players panel.** The standalone
+  colour picker is gone; the icon button is the main control, with a
+  small colour-input badge attached to its bottom-right edge. Click the
+  icon body to open the asset library, click the badge to change the
+  identity colour. Hover reveals a clear-icon × at the top-right. Frees
+  up panel width and keeps related controls visually together.
+
 ## v2.16.15 — 2026-05-30
 
 ### Player Voice — token icon picker

@@ -3404,6 +3404,7 @@ export class GMApp {
         this._broadcastRoster();
         this._broadcastPlayerFeatures();
         this._refreshPlayerMarkers(); // let the new joiner see existing tokens
+        this._broadcastAllPlayerIcons(); // seed their per-player icon cache
         // Initiative tracker — fire current state to the new joiner.
         if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: this.initiativeTracker.getState() });
         const who = msg.playerName || msg.characterName || 'A player';
@@ -5903,6 +5904,7 @@ export class GMApp {
       onClearIcon:    async (id) => {
         await this.playerRegistry.clearIcon(id);
         this._refreshPlayersPanel();
+        this._broadcastPlayerIcon(id); // empty dataUrl ⇒ clear the player-side cache
         this._refreshPlayerMarkers();
       },
     });
@@ -5960,7 +5962,9 @@ export class GMApp {
   }
 
   /** Render the active map's player tokens on the GM AND broadcast them to
-   *  players. Merges any in-progress (un-persisted) drag positions. */
+   *  players. Merges any in-progress (un-persisted) drag positions. Icon
+   *  data URLs are stripped from the broadcast — they travel separately via
+   *  `player_icon_update` (chunked over the wire to avoid DataChannel limits). */
   private _refreshPlayerMarkers(): void {
     const mapId = this._activeMapId();
     const base = mapId ? this.playerRegistry.markersForMap(mapId) : [];
@@ -5969,7 +5973,27 @@ export class GMApp {
       return live ? { ...m, x: live.x, y: live.y } : m;
     });
     this.playerMarkerLayer?.setMarkers(merged);
-    this.host.broadcast({ type: 'player_markers', markers: merged });
+    const broadcastMarkers = merged.map(({ iconDataUrl, ...rest }) => { void iconDataUrl; return rest; });
+    this.host.broadcast({ type: 'player_markers', markers: broadcastMarkers });
+  }
+
+  /** Broadcast the current icon (or absence) for a specific player. Players
+   *  cache by playerId and re-render any active token for that player. */
+  private _broadcastPlayerIcon(playerId: string): void {
+    const p = this.playerRegistry.get(playerId);
+    this.host.broadcast({
+      type: 'player_icon_update',
+      playerId,
+      ...(p?.iconDataUrl ? { dataUrl: p.iconDataUrl } : {}),
+    });
+  }
+
+  /** Send every current player icon to fresh peers — called when a new player
+   *  identifies so they catch up on the existing roster's tokens. */
+  private _broadcastAllPlayerIcons(): void {
+    for (const p of this.playerRegistry.all()) {
+      if (p.iconDataUrl) this._broadcastPlayerIcon(p.id);
+    }
   }
 
   private async _onGmMarkerDragEnd(playerId: string, x: number, y: number): Promise<void> {
@@ -6005,6 +6029,7 @@ export class GMApp {
         const form = await assetToPlayerIcon(asset);
         await this.playerRegistry.setIcon(playerId, { assetId: asset.id, ...form });
         this._refreshPlayersPanel();
+        this._broadcastPlayerIcon(playerId); // ship the icon image to player views
         this._refreshPlayerMarkers();
       },
     });
