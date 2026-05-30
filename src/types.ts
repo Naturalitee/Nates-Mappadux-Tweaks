@@ -513,6 +513,14 @@ export interface PersistentPlayer {
    *  places tokens per map but never has to recreate them). A map id present
    *  here means the token is on that map at the given normalised position. */
   placements?: Record<string, { x: number; y: number }>;
+  /** Optional icon for the token. Reference to the picked image-library asset
+   *  (kept so the GM can re-tint / re-pick later); the rendered form is
+   *  cached alongside as iconChar (unicode glyph) or iconDataUrl (image).
+   *  Tintable SVGs are recoloured to white at pick-time so they contrast
+   *  with the disc's coloured background; raster assets are stored as-is. */
+  iconAssetId?: string;
+  iconChar?:    string;
+  iconDataUrl?: string;
   /** True for GM-managed offline players (no device of their own). They never
    *  connect; the GM acts on their behalf. */
   managedByGm?: boolean;
@@ -1128,6 +1136,10 @@ export interface MsgPlayerMarkers {
     color:    string;
     x:        number; // 0..1 normalised map coord
     y:        number;
+    /** Optional token icon — unicode glyph OR data URL. The renderer prefers
+     *  iconChar when both are absent the disc falls back to the player's initial. */
+    iconChar?:    string;
+    iconDataUrl?: string;
   }>;
 }
 

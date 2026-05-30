@@ -17,6 +17,10 @@ export interface PlayerMarkerView {
   color:    string;
   x:        number;
   y:        number;
+  /** Optional token icon — unicode glyph OR data URL. Falls back to the
+   *  player's initial when neither is set. */
+  iconChar?:    string;
+  iconDataUrl?: string;
 }
 
 export interface PlayerMarkerLayerOptions {
@@ -82,7 +86,7 @@ export class PlayerMarkerLayer {
 
     const disc = document.createElement('div');
     disc.className = 'pm-token-disc';
-    disc.textContent = (m.name.trim()[0] ?? '?').toUpperCase();
+    this._fillDisc(disc, m);
     el.appendChild(disc);
 
     const label = document.createElement('div');
@@ -92,6 +96,26 @@ export class PlayerMarkerLayer {
 
     el.addEventListener('pointerdown', (e) => this._onPointerDown(e, m.playerId));
     return el;
+  }
+
+  /** Populate the disc with image / glyph / initial-letter as appropriate. */
+  private _fillDisc(disc: HTMLElement, m: PlayerMarkerView): void {
+    disc.replaceChildren();
+    disc.classList.toggle('pm-token-disc--has-image', !!m.iconDataUrl);
+    disc.classList.toggle('pm-token-disc--has-glyph', !m.iconDataUrl && !!m.iconChar);
+    if (m.iconDataUrl) {
+      const img = document.createElement('img');
+      img.src = m.iconDataUrl;
+      img.alt = '';
+      img.draggable = false;
+      disc.appendChild(img);
+      return;
+    }
+    if (m.iconChar) {
+      disc.textContent = m.iconChar;
+      return;
+    }
+    disc.textContent = (m.name.trim()[0] ?? '?').toUpperCase();
   }
 
   private _onPointerDown(e: PointerEvent, playerId: string): void {
@@ -132,7 +156,7 @@ export class PlayerMarkerLayer {
   private _style(entry: TokenEntry): void {
     entry.el.style.setProperty('--pm-color', entry.view.color);
     const disc = entry.el.querySelector<HTMLElement>('.pm-token-disc');
-    if (disc) disc.textContent = (entry.view.name.trim()[0] ?? '?').toUpperCase();
+    if (disc) this._fillDisc(disc, entry.view);
     const label = entry.el.querySelector<HTMLElement>('.pm-token-label');
     if (label) label.textContent = entry.view.name;
     entry.el.classList.toggle('pm-token--draggable', this.opts.canDrag(entry.view.playerId));

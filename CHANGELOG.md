@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.16.15 — 2026-05-30
+
+### Player Voice — token icon picker
+
+Each player can now have an icon on their token instead of the initial
+letter fallback.
+
+- A new icon-pick button on every Players panel row opens the same image
+  asset library marker icons use. Pick a glyph (unicode), a tintable
+  game-icons-style SVG, a custom multi-colour SVG, or a full-colour
+  raster — all four render correctly. Tintable SVGs are baked white at
+  pick time so they contrast with the disc's dark coloured background;
+  raster and multi-colour SVGs render in their own colours.
+- Hover the icon preview to reveal a small × button that clears the
+  selection — the token falls back to the player's initial.
+- The icon travels with the player token (player views render the same
+  image on their atmospheric tokens) and is stored only in the browser
+  players store, never in the .mappadux save file — consistent with the
+  rest of the player marker system.
+
 ## v2.16.14 — 2026-05-30
 
 ### Identity polish — custom colour, taken-colour badge, mobile resume

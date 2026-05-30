@@ -25,6 +25,7 @@ import { SoundboardPanel, type SoundboardBroadcast } from './SoundboardPanel.ts'
 import { PlayersPanel } from './PlayersPanel.ts';
 import { PlayerVoicePanel, type PlayerVoiceMessage } from './PlayerVoicePanel.ts';
 import { PlayerRegistry } from '../players/PlayerRegistry.ts';
+import { assetToPlayerIcon } from '../players/playerIcon.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
 import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
 import { LLMClient } from '../ai/LLMClient.ts';
@@ -5898,6 +5899,12 @@ export class GMApp {
       },
       onToggleMarker: (id) => { void this._togglePlayerMarker(id); },
       onCancelMove:   (id) => { void this._cancelPlayerMarkerMove(id); },
+      onPickIcon:     (id) => { void this._pickPlayerIcon(id); },
+      onClearIcon:    async (id) => {
+        await this.playerRegistry.clearIcon(id);
+        this._refreshPlayersPanel();
+        this._refreshPlayerMarkers();
+      },
     });
     // Load the persisted roster, then render the panel + any placed tokens.
     void this.playerRegistry.load().then(() => {
@@ -5988,6 +5995,19 @@ export class GMApp {
     this._markerMoveOrigin.delete(playerId);
     this._refreshPlayerMarkers();
     this._refreshPlayersPanel();
+  }
+
+  /** Open the image-asset library in pick mode for this player's token icon. */
+  private _pickPlayerIcon(playerId: string): void {
+    void new ImageAssetModal().open({
+      pickMode: true,
+      onPick: async (asset) => {
+        const form = await assetToPlayerIcon(asset);
+        await this.playerRegistry.setIcon(playerId, { assetId: asset.id, ...form });
+        this._refreshPlayersPanel();
+        this._refreshPlayerMarkers();
+      },
+    });
   }
 
   /** GM "cancel move" — send a player-moved token back to where it was. */

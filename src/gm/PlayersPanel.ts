@@ -17,6 +17,10 @@ export interface PlayersPanelCallbacks {
   onToggleMarker: (id: string) => void | Promise<void>;
   /** Send a player-moved token back to where it was. */
   onCancelMove: (id: string) => void | Promise<void>;
+  /** Open the image-asset picker for this player's token icon. */
+  onPickIcon: (id: string) => void | Promise<void>;
+  /** Clear the picked icon — token falls back to the player's initial. */
+  onClearIcon: (id: string) => void | Promise<void>;
 }
 
 /**
@@ -89,6 +93,42 @@ export class PlayersPanel {
       void this.cb.onUpdate(p.id, { color: colour.value });
     });
     row.appendChild(colour);
+
+    // Icon-pick button — opens the image asset library. Shows the current
+    // icon (image / glyph / initial-fallback) so the GM can see what's picked.
+    const iconWrap = document.createElement('div');
+    iconWrap.className = 'player-row-icon-wrap';
+    const iconBtn = document.createElement('button');
+    iconBtn.type = 'button';
+    iconBtn.className = 'player-row-icon';
+    iconBtn.style.setProperty('--row-icon-color', p.color);
+    iconBtn.title = p.iconAssetId ? 'Change token icon' : 'Pick a token icon';
+    iconBtn.setAttribute('aria-label', 'Pick token icon');
+    iconBtn.addEventListener('click', () => void this.cb.onPickIcon(p.id));
+    if (p.iconDataUrl) {
+      const img = document.createElement('img');
+      img.src = p.iconDataUrl;
+      img.alt = '';
+      iconBtn.appendChild(img);
+    } else if (p.iconChar) {
+      iconBtn.textContent = p.iconChar;
+      iconBtn.classList.add('player-row-icon--char');
+    } else {
+      iconBtn.classList.add('player-row-icon--empty');
+      iconBtn.textContent = (p.characterName || p.playerName || '?').trim()[0]?.toUpperCase() ?? '?';
+    }
+    iconWrap.appendChild(iconBtn);
+    if (p.iconAssetId || p.iconDataUrl || p.iconChar) {
+      const clear = document.createElement('button');
+      clear.type = 'button';
+      clear.className = 'player-row-icon-clear';
+      clear.title = 'Remove icon (token falls back to the player initial)';
+      clear.setAttribute('aria-label', 'Remove icon');
+      clear.textContent = '×';
+      clear.addEventListener('click', () => void this.cb.onClearIcon(p.id));
+      iconWrap.appendChild(clear);
+    }
+    row.appendChild(iconWrap);
 
     // Names (player + character), inline-editable
     const names = document.createElement('div');

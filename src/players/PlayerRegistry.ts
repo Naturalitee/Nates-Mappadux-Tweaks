@@ -103,8 +103,11 @@ export class PlayerRegistry {
     return player;
   }
 
-  /** GM edits an existing player's fields (name / character / colour). */
-  async update(id: string, patch: Partial<Pick<PersistentPlayer, 'playerName' | 'characterName' | 'color'>>): Promise<PersistentPlayer | undefined> {
+  /** GM edits an existing player's fields (name / character / colour / icon). */
+  async update(
+    id: string,
+    patch: Partial<Pick<PersistentPlayer, 'playerName' | 'characterName' | 'color' | 'iconAssetId' | 'iconChar' | 'iconDataUrl'>>,
+  ): Promise<PersistentPlayer | undefined> {
     const existing = this.byId.get(id);
     if (!existing) return undefined;
     const next: PersistentPlayer = { ...existing, ...patch, updatedAt: Date.now() };
@@ -112,6 +115,31 @@ export class PlayerRegistry {
     this.byId.set(id, next);
     await savePlayer(next);
     return next;
+  }
+
+  /** Clear the picked icon — token falls back to the player's initial. */
+  async clearIcon(id: string): Promise<void> {
+    const existing = this.byId.get(id);
+    if (!existing) return;
+    const next: PersistentPlayer = { ...existing, updatedAt: Date.now() };
+    delete next.iconAssetId;
+    delete next.iconChar;
+    delete next.iconDataUrl;
+    this.byId.set(id, next);
+    await savePlayer(next);
+  }
+
+  /** Set the token icon — picks one of iconChar / iconDataUrl, clears the other. */
+  async setIcon(id: string, opts: { assetId: string; iconChar?: string; iconDataUrl?: string }): Promise<void> {
+    const existing = this.byId.get(id);
+    if (!existing) return;
+    const next: PersistentPlayer = { ...existing, iconAssetId: opts.assetId, updatedAt: Date.now() };
+    delete next.iconChar;
+    delete next.iconDataUrl;
+    if (opts.iconChar)    next.iconChar    = opts.iconChar;
+    if (opts.iconDataUrl) next.iconDataUrl = opts.iconDataUrl;
+    this.byId.set(id, next);
+    await savePlayer(next);
   }
 
   // ── Player tokens (v2.16.4 player markers) ────────────────────────────────
@@ -148,11 +176,19 @@ export class PlayerRegistry {
   }
 
   /** Render set for a map: every player with a token placed on it. */
-  markersForMap(mapId: string): Array<{ playerId: string; name: string; color: string; x: number; y: number }> {
-    const out: Array<{ playerId: string; name: string; color: string; x: number; y: number }> = [];
+  markersForMap(mapId: string): Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; iconDataUrl?: string }> {
+    const out: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; iconDataUrl?: string }> = [];
     for (const p of this.byId.values()) {
       const pos = p.placements?.[mapId];
-      if (pos) out.push({ playerId: p.id, name: p.characterName || p.playerName || 'Player', color: p.color, x: pos.x, y: pos.y });
+      if (!pos) continue;
+      out.push({
+        playerId: p.id,
+        name: p.characterName || p.playerName || 'Player',
+        color: p.color,
+        x: pos.x, y: pos.y,
+        ...(p.iconChar    ? { iconChar:    p.iconChar }    : {}),
+        ...(p.iconDataUrl ? { iconDataUrl: p.iconDataUrl } : {}),
+      });
     }
     return out;
   }
