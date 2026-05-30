@@ -46,12 +46,15 @@ export class PlayerIdentifyModal {
     dialog.className = 'modal-dialog modal-dialog--sm';
     overlay.appendChild(dialog);
 
+    // Adapt copy to whether this is a fresh introduction or an edit pass.
+    const isUpdating = !!(current.playerName || current.characterName || current.color);
+
     // Header
     const header = document.createElement('div');
     header.className = 'modal-header';
     const title = document.createElement('span');
     title.className = 'modal-title';
-    title.textContent = 'Introduce yourself';
+    title.textContent = isUpdating ? 'Update your details' : 'Introduce yourself';
     header.appendChild(title);
     const close = document.createElement('button');
     close.type = 'button';
@@ -104,25 +107,47 @@ export class PlayerIdentifyModal {
       ? normaliseHex(current.color)
       : PLAYER_COLOR_PALETTE[0]!;
 
+    // "Your colour" label row with the live preview disc to its right — shows
+    // exactly what your token / chat chip / initiative card will look like.
+    const colourRow = document.createElement('div');
+    colourRow.style.display = 'flex';
+    colourRow.style.alignItems = 'center';
+    colourRow.style.gap = 'var(--space-md)';
     const colourLabel = document.createElement('span');
     colourLabel.style.fontSize = 'var(--font-size-sm)';
     colourLabel.style.color = 'var(--text-secondary)';
     colourLabel.textContent = 'Your colour';
-    body.appendChild(colourLabel);
+    colourRow.appendChild(colourLabel);
+    const preview = document.createElement('div');
+    preview.className = 'modal-identity-preview';
+    colourRow.appendChild(preview);
+    body.appendChild(colourRow);
 
     const swatches = document.createElement('div');
     swatches.className = 'player-colour-swatches';
     body.appendChild(swatches);
 
+    // Hidden native colour input — clicked by the "+" swatch at the end of the grid.
     const customInput = document.createElement('input');
     customInput.type = 'color';
+    customInput.style.position = 'absolute';
+    customInput.style.left = '-9999px';
+    customInput.style.opacity = '0';
+    body.appendChild(customInput);
 
+    const refreshPreview = () => {
+      preview.style.background = selected;
+      preview.style.borderColor = selected;
+      const initial = ((charInput.value.trim() || nameInput.value.trim() || '?')[0] ?? '?').toUpperCase();
+      preview.textContent = initial;
+    };
     const refreshSelection = () => {
       for (const el of Array.from(swatches.children)) {
         const sw = el as HTMLElement;
         sw.classList.toggle('is-selected', normaliseHex(sw.dataset['colour'] ?? '') === selected);
       }
       customInput.value = selected;
+      refreshPreview();
     };
 
     for (const colour of PLAYER_COLOR_PALETTE) {
@@ -136,14 +161,16 @@ export class PlayerIdentifyModal {
       swatches.appendChild(sw);
     }
 
-    // Custom colour row
-    const customRow = document.createElement('label');
-    customRow.style.display = 'flex';
-    customRow.style.alignItems = 'center';
-    customRow.style.gap = 'var(--space-sm)';
-    customRow.style.fontSize = 'var(--font-size-sm)';
-    customRow.style.color = 'var(--text-secondary)';
-    customRow.append('Custom');
+    // Custom swatch — "+" tile at the end of the grid opens the native picker.
+    const customSwatch = document.createElement('button');
+    customSwatch.type = 'button';
+    customSwatch.className = 'player-colour-swatch player-colour-swatch--custom';
+    customSwatch.title = 'Pick a custom colour';
+    customSwatch.setAttribute('aria-label', 'Pick a custom colour');
+    customSwatch.innerHTML = '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>';
+    customSwatch.addEventListener('click', () => customInput.click());
+    swatches.appendChild(customSwatch);
+
     customInput.addEventListener('input', () => {
       if (isReservedColor(customInput.value)) {
         err.textContent = 'That colour is too dark — it is reserved for the GM. Pick a brighter one.';
@@ -153,8 +180,6 @@ export class PlayerIdentifyModal {
       refreshSelection();
       err.textContent = '';
     });
-    customRow.appendChild(customInput);
-    body.appendChild(customRow);
 
     const err = document.createElement('p');
     err.style.color = '#ff8a8a';
@@ -163,6 +188,10 @@ export class PlayerIdentifyModal {
     err.style.minHeight = '1.2em';
     body.appendChild(err);
 
+    // Live preview reflects the names too, so the player sees their initial
+    // appear as soon as they type.
+    nameInput.addEventListener('input', refreshPreview);
+    charInput.addEventListener('input', refreshPreview);
     refreshSelection();
 
     // Footer
@@ -182,7 +211,7 @@ export class PlayerIdentifyModal {
     const saveBtn = document.createElement('button');
     saveBtn.type = 'button';
     saveBtn.className = 'btn btn--primary';
-    saveBtn.textContent = 'Join';
+    saveBtn.textContent = isUpdating ? 'Save' : 'Join';
 
     const submit = () => {
       const playerName = nameInput.value.trim();

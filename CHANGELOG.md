@@ -1,5 +1,46 @@
 # Changelog
 
+## v2.16.9 — 2026-05-30
+
+### Player Voice — identity polish + GM preview mode
+
+A focused polish pass on the identity surface and a new "preview window"
+mode for the GM's own same-browser player popup.
+
+- **Identify modal: live preview disc.** A circular preview next to "Your
+  colour" shows exactly what your token / chat chip / initiative card will
+  look like, updating as you type and pick.
+- **Identify modal: adaptive copy.** First time you connect: "Introduce
+  yourself" + "Join". Re-opening to edit: "Update your details" + "Save".
+- **Identify modal: custom colour as the last swatch.** A rainbow "+" tile
+  at the end of the palette opens the system colour picker — the separate
+  "Custom" row is gone.
+- **Identity pill: pulse pre-identity, dim once set.** When you haven't
+  introduced yourself the pill pulses to draw the eye and stays bright.
+  Once you've set it, the pill matches the existing fullscreen-button
+  fade pattern: dim by default, bright on hover.
+- **Identity pill: character name first.** The pill shows your character
+  name (the in-fiction handle) with the player name as a fallback. The GM
+  Players panel keeps both fields visible — handy when you forget who's
+  playing whom.
+- **GM preview mode.** Your own "Open Player Window" popup is in the same
+  browser as you, so it isn't a real player. By default the popup hides
+  identity prompts, the pill, message toasts, the right-click action
+  menu, and the initiative roll prompt — and disables left-click and pan
+  on the map. Only the fullscreen + reset-view buttons stay live. You
+  still see the map, tokens, pings, and the atmospheric initiative rail
+  exactly as a player would. Real player tabs on phones / laptops /
+  remote browsers are unaffected (BroadcastChannel is the signal —
+  network-only players never trigger it). Settings → Player Voice →
+  "Show full player UI in same-browser preview windows" flips this off
+  when you want the preview to behave as a real player view for testing.
+- **Players panel: bigger pulsing online dot.** 8px → 10px with a soft
+  pulse on connected players so presence reads at a glance.
+- **Action menu: utility entries.** Right-click / long-press now also
+  surfaces "Introduce yourself / Change your name + colour", "Toggle
+  fullscreen", and "Reset view to GM's" (when applicable), so the corner
+  buttons and the menu are two routes to the same things.
+
 ## v2.16.8 — 2026-05-29
 
 ### Player Voice — fanned-deck initiative tracker

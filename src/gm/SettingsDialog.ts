@@ -20,6 +20,8 @@ import {
   setMessagingEnabled,
   arePlayerMarkersMovable,
   setPlayerMarkersMovable,
+  showFullPlayerUiInPreview,
+  setShowFullPlayerUiInPreview,
   getLLMSettings,
   setLLMSettings,
   getLLMApiKey,
@@ -486,6 +488,14 @@ export class SettingsDialog {
         'When you’ve placed a player’s token on the map, this lets that player drag it from their own view — you see it move live and get a “send it back” button if you want to undo it. Turn off to keep token placement entirely in your hands.',
       get: arePlayerMarkersMovable,
       set: setPlayerMarkersMovable,
+    }));
+
+    sec.appendChild(this._buildPerfToggle({
+      title: 'Show full player UI in same-browser preview windows',
+      help:
+        'Your "Open Player Window" popup is in the same browser as you, so by definition it isn’t a real player. With this OFF (default) the popup hides identity prompts, the floating identity pill, message toasts, the right-click action menu, and the initiative roll prompt — it still shows the map, tokens, and the atmospheric initiative rail so you can preview what players see. Flip this ON when you want the preview to behave exactly like a real player view for testing. Real player tabs (over the network) are unaffected.',
+      get: showFullPlayerUiInPreview,
+      set: setShowFullPlayerUiInPreview,
     }));
 
     sec.appendChild(this._buildLlmAssistantBlock());

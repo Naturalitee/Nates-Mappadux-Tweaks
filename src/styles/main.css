@@ -6342,15 +6342,19 @@ option.select-option--add {
 }
 .player-status-dot {
   flex: 0 0 auto;
-  width: 8px;
-  height: 8px;
+  width: 10px;
+  height: 10px;
   border-radius: 50%;
   background: var(--text-dim);
   box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4) inset;
 }
 .player-status-dot.is-online {
   background: var(--ok);
-  box-shadow: 0 0 5px var(--ok);
+  animation: player-status-pulse 2.2s ease-in-out infinite;
+}
+@keyframes player-status-pulse {
+  0%, 100% { box-shadow: 0 0 0 0  rgba(34, 197, 94, 0.55), 0 0 4px var(--ok); }
+  60%      { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0),    0 0 4px var(--ok); }
 }
 .player-row-colour {
   flex: 0 0 auto;
@@ -6786,6 +6790,45 @@ option.select-option--add {
   border-color: var(--text-primary);
   box-shadow: 0 0 6px rgba(255, 255, 255, 0.45);
 }
+/* Custom-colour swatch — rainbow + "+" icon, opens the native picker. */
+.player-colour-swatch--custom {
+  background: conic-gradient(from 0deg, #ef4444, #f59e0b, #eab308, #22c55e, #14b8a6, #3b82f6, #7c5cff, #c44dd6, #ef4444);
+  color: #fff;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7);
+}
+.player-colour-swatch--custom:hover {
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.35);
+}
+
+/* Live preview disc in the identify modal — shows what your token looks like. */
+.modal-identity-preview {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  border: 2px solid #fff;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 1.05rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  flex-shrink: 0;
+}
+
+/* GM same-browser preview mode — kill all player interaction, keep just the
+   window-size buttons (fullscreen, reset view). The pill + toasts are hidden
+   by JS via the `hidden` attribute; this CSS handles canvas + tokens + menu. */
+body.is-gm-preview #renderer-canvas,
+body.is-gm-preview .pm-token-disc { pointer-events: none !important; }
+body.is-gm-preview .player-action-menu { display: none !important; }
+body.is-gm-preview .player-init { pointer-events: none; }
 
 /* ── Player-side floating identity button ───────────────────────────────── */
 .player-identity-btn {
@@ -6805,9 +6848,20 @@ option.select-option--add {
   font-size: 0.85rem;
   cursor: pointer;
   backdrop-filter: blur(4px);
-  transition: opacity 0.4s ease;
+  opacity: 0.55;
+  transition: opacity 0.25s, background 0.25s;
 }
-.player-identity-btn:hover { background: rgba(10, 14, 26, 0.9); }
+.player-identity-btn:hover { background: rgba(10, 14, 26, 0.9); opacity: 1; }
+/* Pre-identity state — pulse to draw the eye, stay fully visible. */
+.player-identity-btn--prompting {
+  opacity: 1;
+  animation: pill-pulse 1.7s ease-in-out infinite;
+}
+.player-identity-btn--prompting:hover { opacity: 1; }
+@keyframes pill-pulse {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(13, 154, 219, 0.55); }
+  60%      { box-shadow: 0 0 0 10px rgba(13, 154, 219, 0);    }
+}
 .player-identity-dot {
   width: 12px;
   height: 12px;

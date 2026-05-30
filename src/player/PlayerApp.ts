@@ -8,6 +8,7 @@ import { PingLayer } from '../rendering/PingLayer.ts';
 import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
 import { PlayerInitiativeRail } from './PlayerInitiativeRail.ts';
 import { PlayerInitiativeRollModal } from './PlayerInitiativeRollModal.ts';
+import { showFullPlayerUiInPreview } from '../storage/localSettings.ts';
 import { Viewer } from '../viewers/Viewer.ts';
 import { PROFILE_PLAYER } from '../viewers/profiles.ts';
 import { drawGrid } from '../viewers/strategies/drawGrid.ts';
@@ -336,6 +337,7 @@ export class PlayerApp {
     // tap-and-release was muting/unmuting the player.
     const firstClick = () => {
       if (!this.connectPanel.hidden) return; // not connected yet — wait
+      if (this._isPreviewMode()) return; // GM preview popup — no player interaction
       this._toggleMute();
       this.viewer.markMuteInteractive();
       document.removeEventListener('click', firstClick);
@@ -349,10 +351,12 @@ export class PlayerApp {
     const mapCanvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
     mapCanvas?.addEventListener('contextmenu', (e) => {
       e.preventDefault();
+      if (this._isPreviewMode()) return;
       this._openPlayerMenu(e.clientX, e.clientY);
     });
     mapCanvas?.addEventListener('pointerdown', (e) => {
       if (e.pointerType !== 'touch') return;
+      if (this._isPreviewMode()) return;
       this._pressStart = { x: e.clientX, y: e.clientY };
       this._clearPressTimer();
       this._pressTimer = window.setTimeout(() => {
@@ -694,9 +698,32 @@ export class PlayerApp {
     // players ping too — Host swallows those (the conn lifecycle already
     // tracks them) so the bandwidth cost is a few bytes per 4s.
     if (this._heartbeatInterval !== null) clearInterval(this._heartbeatInterval);
-    const beat = () => this.guest.send({ type: 'player_heartbeat', clientId: this.clientId });
+    const beat = () => {
+      // Don't announce a same-browser preview popup as a real player.
+      if (this._isPreviewMode()) return;
+      this.guest.send({ type: 'player_heartbeat', clientId: this.clientId });
+    };
     beat();
     this._heartbeatInterval = window.setInterval(beat, 4000);
+  }
+
+  /** True when this view is the GM's own same-browser preview popup AND the
+   *  override setting hasn't been flipped on. BroadcastChannel is the signal:
+   *  same-browser is the only way isSameMachineSession() flips true; real
+   *  player tabs over the network never do. */
+  private _isPreviewMode(): boolean {
+    return !!this.guest?.isSameMachineSession() && !showFullPlayerUiInPreview();
+  }
+
+  /** Apply preview-mode visibility to the player chrome (identity pill, toasts
+   *  container). Cheap to call on every incoming message — flips state idempotently. */
+  private _refreshPreviewModeUi(): void {
+    const preview = this._isPreviewMode();
+    const pillEl = document.querySelector<HTMLElement>('#player-identity-btn');
+    if (pillEl) pillEl.hidden = preview;
+    const toastsEl = document.querySelector<HTMLElement>('#player-msg-toasts');
+    if (toastsEl) toastsEl.hidden = preview;
+    document.body.classList.toggle('is-gm-preview', preview);
   }
 
   // ── v2.17 Player Voice — identity ──────────────────────────────────────────
@@ -731,9 +758,10 @@ export class PlayerApp {
     this._refreshIdentityButton();
   }
 
-  /** Push our identity to the GM. No-op if we have none yet. */
+  /** Push our identity to the GM. No-op if we have none yet, or in preview mode. */
   private _sendIdentify(): void {
     if (!this.identity) return;
+    if (this._isPreviewMode()) return;
     this.guest.send({
       type: 'player_identify',
       playerId:      this.playerId,
@@ -744,8 +772,11 @@ export class PlayerApp {
     });
   }
 
-  /** On (re)connect: announce existing identity, or prompt once on first join. */
+  /** On (re)connect: announce existing identity, or prompt once on first join.
+   *  Suppressed entirely in GM preview mode — the popup isn't a real player. */
   private async _onConnectedIdentity(): Promise<void> {
+    this._refreshPreviewModeUi();
+    if (this._isPreviewMode()) return;
     if (this.identity) { this._sendIdentify(); return; }
     if (this._identityPromptShown) return;
     this._identityPromptShown = true;
@@ -786,6 +817,20 @@ export class PlayerApp {
         items.push({ label: `Message ${label}`, onSelect: () => void this._composeAndSend(p.id, label) });
       }
     }
+    // Utility entries — same actions as the floating corner buttons, surfaced
+    // here too so the menu and the buttons are the two routes to the same thing.
+    items.push({
+      label: this.identity ? 'Change your name / colour' : 'Introduce yourself',
+      onSelect: () => void this.openIdentityModal(),
+    });
+    items.push({
+      label: document.fullscreenElement ? 'Exit fullscreen' : 'Enter fullscreen',
+      onSelect: () => document.querySelector<HTMLButtonElement>('#player-fullscreen-btn')?.click(),
+    });
+    const resetBtn = document.querySelector<HTMLButtonElement>('#player-reset-view-btn');
+    if (resetBtn && !resetBtn.hidden) {
+      items.push({ label: 'Reset view to GM\'s', onSelect: () => resetBtn.click() });
+    }
     this._actionMenu.open(clientX, clientY, items);
   }
 
@@ -824,8 +869,10 @@ export class PlayerApp {
   }
 
   /** Pop the roll-for-initiative prompt; send the value back to the GM if the
-   *  player types one. Identity is required so the GM can colour + name the card. */
+   *  player types one. Identity is required so the GM can colour + name the card.
+   *  Suppressed in GM preview mode. */
   private async _handleInitiativeCall(message?: string): Promise<void> {
+    if (this._isPreviewMode()) return;
     if (!this.identity) {
       await this.openIdentityModal();
       if (!this.identity) return;
@@ -842,16 +889,25 @@ export class PlayerApp {
     const label = btn.querySelector<HTMLElement>('.player-identity-label');
     if (this.identity) {
       if (dot) dot.style.background = this.identity.color;
-      if (label) label.textContent = this.identity.playerName || this.identity.characterName || 'You';
+      // Character name first — the in-fiction handle. Fall back to the player's
+      // own name only when the character is blank. The GM Players panel shows
+      // both, which is the canonical place to look up either one.
+      if (label) label.textContent = this.identity.characterName || this.identity.playerName || 'You';
+      btn.classList.remove('player-identity-btn--prompting');
     } else {
       if (dot) dot.style.background = 'transparent';
-      if (label) label.textContent = 'Set name';
+      if (label) label.textContent = 'Who are you?';
+      btn.classList.add('player-identity-btn--prompting');
     }
   }
 
   // ─── Message handling ─────────────────────────────────────────────────────
 
   private handleMessage(msg: GMMessage, mapBlob?: ArrayBuffer): void {
+    // First message via BroadcastChannel proves we're a same-browser session;
+    // refresh preview-mode UI gating idempotently every time.
+    this._refreshPreviewModeUi();
+
     // ── Sequence-number deduplication ────────────────────────────────────────
     // Local player windows receive every broadcast twice: once via the fast
     // BroadcastChannel (sub-ms) and once via PeerJS (~50-200ms later).
@@ -1306,8 +1362,10 @@ export class PlayerApp {
 
       case 'message_deliver': {
         // v2.17 Player Voice — a message addressed to us (GM reply or another
-        // player). Broadcast reaches everyone; only show ours.
-        if (msg.toPlayerId === this.playerId) {
+        // player). Broadcast reaches everyone; only show ours, and never in
+        // preview mode (the GM popup isn't a real player so messages aren't
+        // for it).
+        if (msg.toPlayerId === this.playerId && !this._isPreviewMode()) {
           this._msgToasts?.show({ messageId: msg.messageId, fromName: msg.fromName, fromColor: msg.fromColor, text: msg.text });
         }
         break;
