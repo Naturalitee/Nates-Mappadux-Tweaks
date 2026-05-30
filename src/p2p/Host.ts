@@ -436,9 +436,20 @@ export class Host {
     });
 
     conn.on('data', (raw) => {
-      // Inbound peer message (e.g. projector_hello). Ignore if no listener.
-      const data = raw as { type?: string };
-      if (typeof data !== 'object' || !data || typeof data.type !== 'string') return;
+      // Inbound peer message (e.g. projector_hello, player_identify).
+      // Guests now JSON-stringify on send (PeerJS 'raw' serialization can't
+      // pack plain objects into RTCDataChannel), so we parse strings here.
+      // Plain objects still accepted for back-compat with anything older.
+      let data: { type?: string };
+      if (typeof raw === 'string') {
+        try { data = JSON.parse(raw) as { type?: string }; }
+        catch { return; }
+      } else if (typeof raw === 'object' && raw !== null) {
+        data = raw as { type?: string };
+      } else {
+        return;
+      }
+      if (typeof data.type !== 'string') return;
       // PeerJS players send heartbeats too (Guest.send fans out to both
       // transports). They don't change the count — PeerJS lifecycle
       // already tracks these peers — so swallow them here rather than

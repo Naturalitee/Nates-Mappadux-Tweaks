@@ -83,10 +83,22 @@ export class Guest {
    * (instant for same-browser windows) and the PeerJS connection (for
    * remote players). Cheap to double-send: GM dedups by message identity
    * via inbound type discrimination on its own state.
+   *
+   * Important: we JSON.stringify before conn.send. PeerJS is configured with
+   * serialization: 'raw' (so it doesn't second-guess our packing of map
+   * blobs), which means it passes whatever we give it straight to
+   * RTCDataChannel.send — and that only accepts strings / ArrayBuffer.
+   * Without stringifying, a plain JS object hits the data channel as an
+   * unsupported type and throws silently, so the GM never sees upstream
+   * messages from remote (network-only) players. Matches the Host's
+   * symmetric sendTo, which stringifies on the way out too.
    */
   send(msg: GMMessage): void {
     this.local.sendUpstream(msg);
-    if (this.conn?.open) this.conn.send(msg);
+    if (this.conn?.open) {
+      try { this.conn.send(JSON.stringify(msg)); }
+      catch (err) { console.warn('[guest] upstream send failed', err); }
+    }
   }
 
   destroy(): void {

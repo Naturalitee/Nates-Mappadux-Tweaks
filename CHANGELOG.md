@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.16.13 — 2026-05-30
+
+### Fix — upstream PeerJS messages from remote players were silently dropped
+
+The wire was asymmetric. The Host has always JSON-stringified outgoing
+messages before `conn.send`, but the Guest was sending raw objects.
+PeerJS is configured with `serialization: 'raw'` (so it doesn't repack
+our chunked binary blobs), which means upstream objects went straight
+into `RTCDataChannel.send(object)` — and Chromium throws on that, since
+the channel only accepts strings / ArrayBuffer. The throw was swallowed
+silently inside PeerJS, so `player_identify`, `player_ping`,
+`player_message`, `player_marker_move`, `initiative_roll`, and
+`projector_hello` from any remote (network-only) peer simply never
+arrived. BroadcastChannel (same-browser / localhost) was unaffected,
+which is why every test from the GM's own machine worked.
+
+Guests now JSON.stringify upstream payloads; the Host's `conn.on('data')`
+parses incoming strings and still accepts raw objects for back-compat.
+
+This explains the "phone connects, name shows in the modal, but never
+appears in the Players panel" symptom — identify reached the data
+channel and got rejected before it ever left the device.
+
 ## v2.16.12 — 2026-05-30
 
 ### Identify hardening + diagnostics
