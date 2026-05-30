@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.16.22 — 2026-05-30
+
+### Patch D — token facing pointer + rotation handle
+
+Each player token can now have a facing direction, set by dragging a
+small coloured dot at the disc edge.
+
+- **Facing pointer.** A small dot sits on the disc edge in the direction
+  the token is facing. Doubles as the rotation handle — drag it around
+  the disc centre to rotate. Snaps to 45° increments.
+- **Image rotates in 90° steps for non-square footprints.** A 1x2 token
+  facing east becomes 2x1 (image rotated 90°, footprint dims swap) so
+  the image stays upright relative to the rectangle's long axis. Square
+  footprints (1x1, 2x2, 3x3) only rotate the pointer; the image stays
+  put. Matches your earlier note: pointer snaps 45°, image snaps 90°.
+- **Player + GM both have the handle**, gated by the same "Let players
+  move their own token" setting as drag. Live updates flow from player
+  → GM the same way drag updates do, including the cancel-move button
+  on the Players panel row (which now restores both position AND
+  facing).
+
 ## v2.16.21 — 2026-05-30
 
 ### Fix — projector now receives token icons on connect

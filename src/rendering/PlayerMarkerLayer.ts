@@ -19,6 +19,11 @@ export interface PlayerMarkerView {
   color:    string;
   x:        number;
   y:        number;
+  /** Facing in degrees clockwise from north (0–359). 0 = north. Drives:
+   *  the edge-pointer position (snap-to-45° at the UI layer); and, for
+   *  non-square tokens (1x2 / 2x3), the image rotates in 90° steps to stay
+   *  upright relative to the footprint's long axis. Undefined ⇒ 0. */
+  facing?: number;
   /** Optional token icon — unicode glyph OR data URL. Falls back to the
    *  player's initial when neither is set. */
   iconChar?:    string;
@@ -34,12 +39,17 @@ export interface PlayerMarkerLayerOptions {
   project: (x: number, y: number) => { x: number; y: number } | null;
   /** viewport client px → normalised map coord (null = off-map). */
   unproject: (clientX: number, clientY: number) => { x: number; y: number } | null;
-  /** May this token be dragged here? */
+  /** May this token be dragged / rotated here? Same predicate for both. */
   canDrag: (playerId: string) => boolean;
   /** Live drag updates (throttled by the caller's consumer if needed). */
   onDragMove?: (playerId: string, x: number, y: number) => void;
   /** Drag finished at this position. */
   onDragEnd?: (playerId: string, x: number, y: number) => void;
+  /** Live rotation updates while the user drags the facing pointer.
+   *  `facing` is degrees clockwise from north, snap-to-45°. */
+  onRotateMove?: (playerId: string, facing: number) => void;
+  /** Rotation finished at this facing (snap-to-45°). */
+  onRotateEnd?: (playerId: string, facing: number) => void;
   /** Current screen-pixels-per-map-square on the active map, or null if the
    *  map is uncalibrated. Drives tokenSize → CSS-px on the active view; when
    *  null the layer falls back to constant CSS sizing from main.css. */
@@ -98,6 +108,15 @@ export class PlayerMarkerLayer {
     disc.className = 'pm-token-disc';
     this._fillDisc(disc, m);
     el.appendChild(disc);
+
+    // Facing pointer — small coloured dot at the disc edge in the facing
+    // direction. Doubles as the rotation handle: drag it around the disc
+    // centre to rotate (snap-to-45°). Pointer-events gated on canDrag via
+    // the .pm-token--draggable class.
+    const pointer = document.createElement('div');
+    pointer.className = 'pm-token-pointer';
+    pointer.addEventListener('pointerdown', (e) => this._onPointerDownRotate(e, m.playerId));
+    el.appendChild(pointer);
 
     const label = document.createElement('div');
     label.className = 'pm-token-label';
@@ -163,6 +182,58 @@ export class PlayerMarkerLayer {
     window.addEventListener('pointercancel', onUp);
   }
 
+  /** Pointerdown on the facing pointer → start a rotation drag. Computes the
+   *  angle from the disc centre to the cursor in screen px, snaps to 45°,
+   *  and emits onRotateMove (live) + onRotateEnd. */
+  private _onPointerDownRotate(e: PointerEvent, playerId: string): void {
+    if (!this.opts.canDrag(playerId)) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const entry = this.tokens.get(playerId);
+    if (!entry) return;
+    const disc = entry.el.querySelector<HTMLElement>('.pm-token-disc');
+    if (!disc) return;
+    this.draggingId = playerId; // suppresses setMarkers clobbers
+    entry.el.classList.add('is-rotating');
+    (e.target as Element).setPointerCapture?.(e.pointerId);
+
+    const computeFacing = (ev: PointerEvent): number => {
+      const r = disc.getBoundingClientRect();
+      const cx = r.left + r.width / 2;
+      const cy = r.top  + r.height / 2;
+      const dx = ev.clientX - cx;
+      const dy = ev.clientY - cy;
+      // Angle clockwise from north (-y). atan2(dx, -dy) gives that directly.
+      let deg = Math.atan2(dx, -dy) * 180 / Math.PI;
+      if (deg < 0) deg += 360;
+      return (Math.round(deg / 45) * 45) % 360;
+    };
+
+    const onMove = (ev: PointerEvent) => {
+      const facing = computeFacing(ev);
+      if (facing === entry.view.facing) return; // 45° steps — usually no change frame-to-frame
+      entry.view = { ...entry.view, facing };
+      const now = performance.now();
+      if (this.opts.onRotateMove && now - this._lastMoveSent > 60) {
+        this._lastMoveSent = now;
+        this.opts.onRotateMove(playerId, facing);
+      }
+    };
+    const onUp = (ev: PointerEvent) => {
+      const facing = computeFacing(ev);
+      entry.view = { ...entry.view, facing };
+      entry.el.classList.remove('is-rotating');
+      this.draggingId = null;
+      window.removeEventListener('pointermove', onMove);
+      window.removeEventListener('pointerup', onUp);
+      window.removeEventListener('pointercancel', onUp);
+      this.opts.onRotateEnd?.(playerId, facing);
+    };
+    window.addEventListener('pointermove', onMove);
+    window.addEventListener('pointerup', onUp);
+    window.addEventListener('pointercancel', onUp);
+  }
+
   private _style(entry: TokenEntry): void {
     entry.el.style.setProperty('--pm-color', entry.view.color);
     const disc = entry.el.querySelector<HTMLElement>('.pm-token-disc');
@@ -189,35 +260,56 @@ export class PlayerMarkerLayer {
     this.rafId = requestAnimationFrame(tick);
   }
 
-  /** Apply tokenSize-driven dimensions to the disc.
+  /** Apply tokenSize + facing-driven dimensions / rotation to the disc.
    *
-   *  - Calibrated map (pxPerSq > 0): disc is `dims.w × dims.h × pxPerSq × 0.75`,
-   *    so adjacent tokens don't visually butt up. Square footprints render as
-   *    circles; non-square footprints as rounded rectangles.
-   *  - Uncalibrated map (pxPerSq null/0): clear inline sizing so the base CSS
-   *    constant size from main.css applies — tokens stay readable at any zoom. */
+   *  - Calibrated map: disc is sized to the footprint (with the constant
+   *    inter-token gap shaved off). Non-square footprints (1x2, 2x3) swap
+   *    their W/H based on facing (90°-step rotation) so the long axis aligns
+   *    with the direction the token is facing. The icon image inside rotates
+   *    to the same 90° step so it stays upright relative to the footprint.
+   *  - Uncalibrated map: clear inline sizing so the base CSS constant size
+   *    applies. Image / footprint rotation logic still runs so the visual
+   *    indicator + image stay coherent. */
   private _sizeDisc(entry: TokenEntry, pxPerSq: number | null): void {
     const disc = entry.el.querySelector<HTMLElement>('.pm-token-disc');
     if (!disc) return;
     const tokenSize = entry.view.tokenSize ?? '1x1';
     const dims = parseTokenSize(tokenSize);
     const isSquare = dims.w === dims.h;
+    const facing = ((entry.view.facing ?? 0) % 360 + 360) % 360;
+
+    // Image rotation: 0 for square (only the pointer rotates); for non-square
+    // it snaps to the nearest 90° step so the long axis aligns with facing.
+    const imageRot = isSquare ? 0 : (Math.round(facing / 90) * 90) % 360;
+    const swap = !isSquare && (imageRot === 90 || imageRot === 270);
+    const effW = swap ? dims.h : dims.w;
+    const effH = swap ? dims.w : dims.h;
+
+    let halfLongPx: number; // distance from disc centre to where the pointer sits
     if (pxPerSq && pxPerSq > 0) {
-      // Constant gap (in squares) shaved off each axis so the visual gap
-      // between adjacent tokens stays the same at every size: 1x1 → 0.75
-      // squares, 2x2 → 1.75, 3x3 → 2.75. The min keeps unscaled-equivalent
-      // sizes legible even when the map is zoomed far out.
-      const w = Math.max(12, (dims.w - TOKEN_FOOTPRINT_GAP_SQUARES) * pxPerSq);
-      const h = Math.max(12, (dims.h - TOKEN_FOOTPRINT_GAP_SQUARES) * pxPerSq);
+      const w = Math.max(12, (effW - TOKEN_FOOTPRINT_GAP_SQUARES) * pxPerSq);
+      const h = Math.max(12, (effH - TOKEN_FOOTPRINT_GAP_SQUARES) * pxPerSq);
       disc.style.width  = `${w}px`;
       disc.style.height = `${h}px`;
       disc.classList.toggle('pm-token-disc--scaled', true);
       disc.classList.toggle('pm-token-disc--rect', !isSquare);
+      halfLongPx = Math.max(w, h) / 2;
     } else {
       disc.style.width  = '';
       disc.style.height = '';
       disc.classList.toggle('pm-token-disc--scaled', false);
-      disc.classList.toggle('pm-token-disc--rect', false);
+      disc.classList.toggle('pm-token-disc--rect', !isSquare);
+      halfLongPx = 15; // matches the default 30px disc
     }
+
+    // Rotate the icon image (NOT the disc/pointer) for non-square footprints.
+    const img = disc.querySelector<HTMLImageElement>('img');
+    if (img) img.style.transform = imageRot ? `rotate(${imageRot}deg)` : '';
+
+    // Pointer position — at distance `halfLongPx + 5` from disc centre in the
+    // facing direction. Outside the disc edge so it reads as a direction
+    // indicator rather than something inside the disc.
+    entry.el.style.setProperty('--pm-facing', `${facing}deg`);
+    entry.el.style.setProperty('--pm-pointer-offset', `${-(halfLongPx + 5)}px`);
   }
 }

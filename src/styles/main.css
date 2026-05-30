@@ -6605,6 +6605,7 @@ option.select-option--add {
      letterbox showing the disc background through the image. */
   object-fit: cover;
   pointer-events: none;
+  transition: transform 150ms ease;
 }
 /* Non-square footprints (1x2, 2x3) are ROUNDED RECTANGLES, not ovals. */
 .pm-token-disc--rect {
@@ -6614,6 +6615,30 @@ option.select-option--add {
 .pm-token-disc--scaled {
   font-size: clamp(0.85rem, 28%, 2rem);
 }
+
+/* Facing pointer — coloured dot at the disc edge in the token's facing
+   direction. Doubles as the rotation handle: drag it around the disc
+   centre to rotate (snap-to-45°). Sits OUTSIDE the disc (sibling of
+   pm-token-disc, child of pm-token) so it isn't clipped by overflow:hidden. */
+.pm-token-pointer {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 14px;
+  height: 14px;
+  margin: -7px;
+  background: var(--pm-color);
+  border: 2px solid #fff;
+  border-radius: 50%;
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7);
+  pointer-events: none;
+  /* Live-driven by JS via CSS custom properties on the token wrapper. */
+  transform: rotate(var(--pm-facing, 0deg)) translateY(var(--pm-pointer-offset, -20px));
+  transition: transform 150ms ease;
+}
+.pm-token--draggable .pm-token-pointer { pointer-events: auto; cursor: grab; }
+.pm-token.is-rotating .pm-token-pointer { cursor: grabbing; transition: none; }
+.pm-token.is-rotating .pm-token-disc img { transition: none; }
 .pm-token-label {
   margin-top: 2px;
   max-width: 96px;

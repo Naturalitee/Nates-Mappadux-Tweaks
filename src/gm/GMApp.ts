@@ -356,9 +356,11 @@ export class GMApp {
   private playerMarkerLayer: PlayerMarkerLayer | null = null;
   /** Transient token positions during an in-progress drag (not yet persisted). */
   private _liveMarkerPos = new Map<string, { x: number; y: number }>();
-  /** Pre-move token positions, captured when a PLAYER starts moving their own
-   *  token, so the GM's "cancel move" can send it back. */
-  private _markerMoveOrigin = new Map<string, { x: number; y: number }>();
+  /** Transient token facings during an in-progress rotation (not yet persisted). */
+  private _liveMarkerFacing = new Map<string, number>();
+  /** Pre-move token state, captured when a PLAYER starts changing their own
+   *  token's position OR facing, so the GM's "cancel move" can send it back. */
+  private _markerMoveOrigin = new Map<string, { x: number; y: number; facing?: number }>();
   /** Initiative tracker (fanned-deck rail, threat bench, unallocated tray). */
   private initiativeTracker: InitiativeTracker | null = null;
 
@@ -3065,6 +3067,7 @@ export class GMApp {
         },
         canDrag: () => true,
         onDragEnd: (pid, x, y) => { void this._onGmMarkerDragEnd(pid, x, y); },
+        onRotateEnd: (pid, facing) => { void this._onGmMarkerRotateEnd(pid, facing); },
         getPxPerSquare: () => this._tokenPxPerSquare(),
       });
     }
@@ -3515,19 +3518,26 @@ export class GMApp {
       const bound = this.playerRegistry.playerForClient(msg.clientId);
       if (!bound || bound.id !== msg.playerId) return;          // only your own token
       if (!this.playerRegistry.isPlacedOn(msg.playerId, mapId)) return;
-      // Capture the pre-move position once so the GM can cancel the move.
+      // Capture the pre-move state (position + facing) once so the GM can
+      // cancel the move and restore both.
       if (!this._markerMoveOrigin.has(msg.playerId)) {
         const cur = this.playerRegistry.placementOn(msg.playerId, mapId);
-        if (cur) this._markerMoveOrigin.set(msg.playerId, { ...cur });
+        if (cur) {
+          const origin: { x: number; y: number; facing?: number } = { x: cur.x, y: cur.y };
+          if (cur.facing !== undefined) origin.facing = cur.facing;
+          this._markerMoveOrigin.set(msg.playerId, origin);
+        }
       }
       if (msg.done) {
-        void this.playerRegistry.setPlacement(msg.playerId, mapId, msg.x, msg.y).then(() => {
+        void this.playerRegistry.setPlacement(msg.playerId, mapId, msg.x, msg.y, msg.facing).then(() => {
           this._liveMarkerPos.delete(msg.playerId);
+          this._liveMarkerFacing.delete(msg.playerId);
           this._refreshPlayerMarkers();
           this._refreshPlayersPanel(); // surfaces the cancel-move button
         });
       } else {
         this._liveMarkerPos.set(msg.playerId, { x: msg.x, y: msg.y });
+        if (msg.facing !== undefined) this._liveMarkerFacing.set(msg.playerId, msg.facing);
         this._refreshPlayerMarkers();
       }
       return;
@@ -5994,15 +6004,20 @@ export class GMApp {
   }
 
   /** Render the active map's player tokens on the GM AND broadcast them to
-   *  players. Merges any in-progress (un-persisted) drag positions. Icon
-   *  data URLs are stripped from the broadcast — they travel separately via
-   *  `player_icon_update` (chunked over the wire to avoid DataChannel limits). */
+   *  players. Merges any in-progress (un-persisted) drag positions / rotations.
+   *  Icon data URLs are stripped from the broadcast — they travel separately
+   *  via `player_icon_update` (chunked over the wire to avoid DataChannel limits). */
   private _refreshPlayerMarkers(): void {
     const mapId = this._activeMapId();
     const base = mapId ? this.playerRegistry.markersForMap(mapId) : [];
     const merged = base.map((m) => {
-      const live = this._liveMarkerPos.get(m.playerId);
-      return live ? { ...m, x: live.x, y: live.y } : m;
+      const livePos    = this._liveMarkerPos.get(m.playerId);
+      const liveFacing = this._liveMarkerFacing.get(m.playerId);
+      return {
+        ...m,
+        ...(livePos ? { x: livePos.x, y: livePos.y } : {}),
+        ...(liveFacing !== undefined ? { facing: liveFacing } : {}),
+      };
     });
     this.playerMarkerLayer?.setMarkers(merged);
     const broadcastMarkers = merged.map(({ iconDataUrl, ...rest }) => { void iconDataUrl; return rest; });
@@ -6038,6 +6053,20 @@ export class GMApp {
     this._refreshPlayersPanel();
   }
 
+  /** GM rotated a player's token via the facing-pointer handle. Persists the
+   *  new facing (position unchanged) and rebroadcasts. */
+  private async _onGmMarkerRotateEnd(playerId: string, facing: number): Promise<void> {
+    const mapId = this._activeMapId();
+    if (!mapId) return;
+    const cur = this.playerRegistry.placementOn(playerId, mapId);
+    if (!cur) return;
+    await this.playerRegistry.setPlacement(playerId, mapId, cur.x, cur.y, facing);
+    this._liveMarkerFacing.delete(playerId);
+    this._markerMoveOrigin.delete(playerId); // GM took control — clear pending cancel
+    this._refreshPlayerMarkers();
+    this._refreshPlayersPanel();
+  }
+
   /** Players-panel toggle: place this player's token on the active map (centre)
    *  if absent, or remove it if present. */
   private async _togglePlayerMarker(playerId: string): Promise<void> {
@@ -6067,13 +6096,14 @@ export class GMApp {
     });
   }
 
-  /** GM "cancel move" — send a player-moved token back to where it was. */
+  /** GM "cancel move" — send a player-moved/rotated token back to where it was. */
   private async _cancelPlayerMarkerMove(playerId: string): Promise<void> {
     const mapId = this._activeMapId();
     const origin = this._markerMoveOrigin.get(playerId);
     if (!mapId || !origin) return;
-    await this.playerRegistry.setPlacement(playerId, mapId, origin.x, origin.y);
+    await this.playerRegistry.setPlacement(playerId, mapId, origin.x, origin.y, origin.facing);
     this._liveMarkerPos.delete(playerId);
+    this._liveMarkerFacing.delete(playerId);
     this._markerMoveOrigin.delete(playerId);
     this._refreshPlayerMarkers();
     this._refreshPlayersPanel();

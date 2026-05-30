@@ -158,11 +158,17 @@ export class PlayerRegistry {
     return !!this.byId.get(playerId)?.placements?.[mapId];
   }
 
-  /** Set/move this player's token position on a map (placing it if absent). */
-  async setPlacement(playerId: string, mapId: string, x: number, y: number): Promise<void> {
+  /** Set/move this player's token position on a map (placing it if absent).
+   *  `facing` is optional — pass to update orientation alongside position.
+   *  When omitted, any previously stored facing is preserved. */
+  async setPlacement(playerId: string, mapId: string, x: number, y: number, facing?: number): Promise<void> {
     const p = this.byId.get(playerId);
     if (!p) return;
-    const placements = { ...(p.placements ?? {}), [mapId]: { x, y } };
+    const prev = p.placements?.[mapId];
+    const entry: { x: number; y: number; facing?: number } = { x, y };
+    if (facing !== undefined) entry.facing = facing;
+    else if (prev?.facing !== undefined) entry.facing = prev.facing;
+    const placements = { ...(p.placements ?? {}), [mapId]: entry };
     const next: PersistentPlayer = { ...p, placements, updatedAt: Date.now() };
     this.byId.set(playerId, next);
     await savePlayer(next);
@@ -179,14 +185,14 @@ export class PlayerRegistry {
     await savePlayer(next);
   }
 
-  /** Read a player's token position on a map, or undefined. */
-  placementOn(playerId: string, mapId: string): { x: number; y: number } | undefined {
+  /** Read a player's token position + facing on a map, or undefined. */
+  placementOn(playerId: string, mapId: string): { x: number; y: number; facing?: number } | undefined {
     return this.byId.get(playerId)?.placements?.[mapId];
   }
 
   /** Render set for a map: every player with a token placed on it. */
-  markersForMap(mapId: string): Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; iconDataUrl?: string; tokenSize?: import('../types.ts').TokenSize }> {
-    const out: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; iconDataUrl?: string; tokenSize?: import('../types.ts').TokenSize }> = [];
+  markersForMap(mapId: string): Array<{ playerId: string; name: string; color: string; x: number; y: number; facing?: number; iconChar?: string; iconDataUrl?: string; tokenSize?: import('../types.ts').TokenSize }> {
+    const out: Array<{ playerId: string; name: string; color: string; x: number; y: number; facing?: number; iconChar?: string; iconDataUrl?: string; tokenSize?: import('../types.ts').TokenSize }> = [];
     for (const p of this.byId.values()) {
       const pos = p.placements?.[mapId];
       if (!pos) continue;
@@ -195,6 +201,7 @@ export class PlayerRegistry {
         name: p.characterName || p.playerName || 'Player',
         color: p.color,
         x: pos.x, y: pos.y,
+        ...(pos.facing !== undefined ? { facing: pos.facing } : {}),
         ...(p.iconChar    ? { iconChar:    p.iconChar }    : {}),
         ...(p.iconDataUrl ? { iconDataUrl: p.iconDataUrl } : {}),
         ...(p.tokenSize   ? { tokenSize:   p.tokenSize }   : {}),

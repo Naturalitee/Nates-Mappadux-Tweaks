@@ -517,8 +517,10 @@ export interface PersistentPlayer {
    *  circular marker edged in the player's colour. Browser-only — deliberately
    *  NOT written to the .mappadux save file (maps aren't connected; the GM
    *  places tokens per map but never has to recreate them). A map id present
-   *  here means the token is on that map at the given normalised position. */
-  placements?: Record<string, { x: number; y: number }>;
+   *  here means the token is on that map at the given normalised position.
+   *  `facing` is degrees clockwise from north (0–359), snap-to-45° at the UI
+   *  layer; absent / undefined = facing north (0). */
+  placements?: Record<string, { x: number; y: number; facing?: number }>;
   /** Optional icon for the token. Reference to the picked image-library asset
    *  (kept so the GM can re-tint / re-pick later); the rendered form is
    *  cached alongside as iconChar (unicode glyph) or iconDataUrl (image).
@@ -1148,6 +1150,10 @@ export interface MsgPlayerMarkers {
     color:    string;
     x:        number; // 0..1 normalised map coord
     y:        number;
+    /** Facing in degrees clockwise from north (0–359), snap-to-45° at the UI
+     *  layer. Drives the edge pointer + 90°-step image rotation for non-square
+     *  tokens. Undefined = facing north. */
+    facing?:  number;
     /** Optional inline glyph (unicode char). Always small. Image-form icons
      *  ride a separate `player_icon_update` message keyed by playerId so they
      *  don't bloat this message past the PeerJS DataChannel size limit. */
@@ -1185,6 +1191,10 @@ export interface MsgPlayerMarkerMove {
   clientId: string;
   x: number;
   y: number;
+  /** Optional facing update — present when the player rotated their token.
+   *  Position can also be unchanged (only facing edited); the GM accepts
+   *  whichever fields are provided. */
+  facing?: number;
   done: boolean;
 }
 

@@ -259,6 +259,8 @@ export class PlayerApp {
         canDrag: (playerId) => this.features.movableMarkers && playerId === this.playerId,
         onDragMove: (_pid, x, y) => this.guest.send({ type: 'player_marker_move', playerId: this.playerId, clientId: this.clientId, x, y, done: false }),
         onDragEnd:  (_pid, x, y) => this.guest.send({ type: 'player_marker_move', playerId: this.playerId, clientId: this.clientId, x, y, done: true }),
+        onRotateMove: (_pid, facing) => this._sendOwnMarkerRotation(facing, false),
+        onRotateEnd:  (_pid, facing) => this._sendOwnMarkerRotation(facing, true),
         getPxPerSquare: () => this._tokenPxPerSquare(),
       });
     }
@@ -863,6 +865,23 @@ export class PlayerApp {
       return cached ? { ...m, iconDataUrl: cached } : m;
     });
     this.playerMarkerLayer?.setMarkers(merged);
+  }
+
+  /** Send a player_marker_move covering JUST a facing change on the player's
+   *  own token. Position is read from the last received marker view so the
+   *  GM accepts the move (it always expects x,y). */
+  private _sendOwnMarkerRotation(facing: number, done: boolean): void {
+    const mine = this._lastPlayerMarkers.find((m) => m.playerId === this.playerId);
+    if (!mine) return;
+    this.guest.send({
+      type: 'player_marker_move',
+      playerId: this.playerId,
+      clientId: this.clientId,
+      x: mine.x,
+      y: mine.y,
+      facing,
+      done,
+    });
   }
 
   /** Current screen-pixels-per-map-square at the active zoom, or null if the
