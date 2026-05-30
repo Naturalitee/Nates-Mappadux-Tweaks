@@ -741,8 +741,18 @@ export class ProjectorApp {
         break;
       }
       case 'player_icon_update': {
-        if (msg.dataUrl) this._playerIcons.set(msg.playerId, msg.dataUrl);
-        else             this._playerIcons.delete(msg.playerId);
+        // PeerJS path → blob arg has the assembled PNG bytes. BC path → dataUrl
+        // inline on the message. Either way, cache something an <img> can use.
+        let url: string | undefined;
+        if (blob) {
+          url = URL.createObjectURL(new Blob([blob], { type: 'image/png' }));
+        } else if (msg.dataUrl) {
+          url = msg.dataUrl;
+        }
+        const prev = this._playerIcons.get(msg.playerId);
+        if (url) this._playerIcons.set(msg.playerId, url);
+        else     this._playerIcons.delete(msg.playerId);
+        if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
         this._reRenderPlayerMarkers();
         break;
       }

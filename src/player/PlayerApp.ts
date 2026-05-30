@@ -1456,8 +1456,22 @@ export class PlayerApp {
       }
 
       case 'player_icon_update': {
-        if (msg.dataUrl) this._playerIcons.set(msg.playerId, msg.dataUrl);
-        else             this._playerIcons.delete(msg.playerId);
+        // PeerJS path → mapBlob carries the assembled PNG bytes (chunked over
+        // the wire like maps + soundboard). BroadcastChannel path → msg.dataUrl
+        // carries the inline data URL directly. Either way we cache something
+        // an <img src=…> can consume.
+        let url: string | undefined;
+        if (mapBlob) {
+          url = URL.createObjectURL(new Blob([mapBlob], { type: 'image/png' }));
+        } else if (msg.dataUrl) {
+          url = msg.dataUrl;
+        }
+        const prev = this._playerIcons.get(msg.playerId);
+        if (url) this._playerIcons.set(msg.playerId, url);
+        else     this._playerIcons.delete(msg.playerId);
+        // Revoke the previous object URL to release its bytes — but only if it
+        // was a blob:// URL we created (don't revoke an inline data: URL).
+        if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
         this._reRenderPlayerMarkers();
         if (msg.playerId === this.playerId) this._refreshIdentityButton();
         break;

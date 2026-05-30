@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.16.20 — 2026-05-30
+
+### Fix — remote players see icons; non-square tokens are rounded rectangles
+
+Two related fixes after live testing on a Pixel.
+
+- **Remote players were seeing the initial-letter fallback instead of the
+  picked icon.** Same root cause as the earlier wire-format bug: the icon
+  path I added re-encoded the assembled PNG bytes back into a base64 data
+  URL inside Guest, but maps and soundboard simply hand the assembled
+  bytes to the consumer as a Blob arg (faster, less code, proven). The
+  icon path now follows that pattern — Player / Projector wrap the
+  assembled bytes in `new Blob([…], { type: 'image/png' })` and stash a
+  `URL.createObjectURL` reference in the per-player icon cache.
+- **Removed the 64×64 downscale.** The chunked transport handles
+  arbitrary sizes (it carries map blobs), so artificial shrinking was
+  costing icon quality for no benefit. Icons now rasterise at native
+  resolution capped at 500px longest-side (sized for a 3×3 token at
+  HiDPI). SVGs always render at the cap regardless of intrinsic size.
+- **Non-square tokens are rounded rectangles**, not ovals. The CSS
+  override was being declared before the base `.pm-token-disc` rule and
+  losing the cascade. Moved to after the base + added `overflow: hidden`
+  so icon images are properly clipped to the disc shape rather than
+  bleeding past it.
+- **`object-fit: cover`** on the disc image, so the whole disc is filled
+  cleanly with the icon (was `contain`, which letterboxed non-square
+  footprints in their own background colour).
+
 ## v2.16.19 — 2026-05-30
 
 ### Player Voice on the Projector + size-badge + corrected sizing math

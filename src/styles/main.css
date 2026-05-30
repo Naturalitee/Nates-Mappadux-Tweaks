@@ -6550,32 +6550,8 @@ option.select-option--add {
   pointer-events: none;
 }
 
-/* Token disc — image and glyph rendering inside the disc. */
-.pm-token-disc--has-image,
-.pm-token-disc--has-glyph { padding: 0; font-size: 1.05rem; }
-.pm-token-disc img {
-  width: 100%;
-  height: 100%;
-  object-fit: contain;
-  border-radius: 50%;
-  pointer-events: none;
-}
-/* Scaled-to-footprint variants (calibrated maps): size is set inline by
-   PlayerMarkerLayer; here we adjust shape + image radius. Square footprints
-   keep the disc circular (default border-radius:50%); non-square footprints
-   become rounded rectangles so the image has more room to read. */
-.pm-token-disc--rect {
-  border-radius: 12%;
-}
-.pm-token-disc--rect img {
-  border-radius: 8%;
-}
-/* Scale font-size with disc size for the initial-letter fallback. The base
-   font is sized for a 30px disc; clamp lets it grow on large 2x2 / 3x3
-   footprints without becoming absurd. */
-.pm-token-disc--scaled {
-  font-size: clamp(0.85rem, 28%, 2rem);
-}
+/* (Token-disc image / glyph / rect / scaled variants are defined below,
+   AFTER the base .pm-token-disc rule, so they actually win the cascade.) */
 
 /* ── Player tokens (on the map, GM + player views) ──────────────────────── */
 .player-marker-layer {
@@ -6610,9 +6586,34 @@ option.select-option--add {
   font-size: 0.9rem;
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
   pointer-events: auto;
+  /* Crop icon images to the rounded disc shape so they don't bleed past the
+     coloured border on rect (1x2 / 2x3) footprints. */
+  overflow: hidden;
 }
 .pm-token--draggable .pm-token-disc { cursor: grab; }
 .pm-token.is-dragging .pm-token-disc { cursor: grabbing; box-shadow: 0 0 12px var(--pm-color); }
+
+/* Token disc — variants for image / glyph / rect / scaled. These come AFTER
+   the base .pm-token-disc rule so the rect override wins over border-radius:50%. */
+.pm-token-disc--has-image,
+.pm-token-disc--has-glyph { padding: 0; font-size: 1.05rem; }
+.pm-token-disc img {
+  width: 100%;
+  height: 100%;
+  /* cover, not contain — disc clips with overflow:hidden, so cover fills the
+     full footprint cleanly. Slight crop on non-square footprints, but no
+     letterbox showing the disc background through the image. */
+  object-fit: cover;
+  pointer-events: none;
+}
+/* Non-square footprints (1x2, 2x3) are ROUNDED RECTANGLES, not ovals. */
+.pm-token-disc--rect {
+  border-radius: 12%;
+}
+/* Scale the initial-letter fallback with disc size on calibrated maps. */
+.pm-token-disc--scaled {
+  font-size: clamp(0.85rem, 28%, 2rem);
+}
 .pm-token-label {
   margin-top: 2px;
   max-width: 96px;

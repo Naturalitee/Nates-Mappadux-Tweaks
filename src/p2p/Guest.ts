@@ -216,18 +216,12 @@ export class Guest {
         this.blobChunks = [];
         this.blobTotal = 0;
         this.pendingMsg = null;
-        if (msg) {
-          // player_icon_update arrives chunked because icon data URLs easily
-          // exceed the DataChannel max message size. Rehydrate the data URL
-          // from the assembled bytes (we always ship PNG from the GM side) and
-          // hand the fully-formed message to the application without a blob.
-          if (msg.type === 'player_icon_update') {
-            (msg as { dataUrl?: string }).dataUrl = bufferToPngDataUrl(assembled);
-            this.events.onMessage(msg);
-          } else {
-            this.events.onMessage(msg, assembled);
-          }
-        }
+        // Same pattern as full_state / map_change / soundboard_*: hand the
+        // assembled bytes to PlayerApp via the blob arg, which then wraps
+        // it (URL.createObjectURL etc.) in whatever form fits the consumer.
+        // Re-encoding to a base64 data URL here would mirror the GM's input
+        // but is needlessly slow on phone CPUs.
+        if (msg) this.events.onMessage(msg, assembled);
       }
       return;
     }
@@ -283,13 +277,3 @@ export class Guest {
   }
 }
 
-/** Convert PNG bytes to a base64 data URL. Used to rebuild a player icon
- *  data URL after chunked transfer. Icons are always small enough that the
- *  String.fromCharCode + btoa path is fine; for anything bigger we'd want
- *  a streaming FileReader. */
-function bufferToPngDataUrl(buf: ArrayBuffer): string {
-  const bytes = new Uint8Array(buf);
-  let bin = '';
-  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]!);
-  return `data:image/png;base64,${btoa(bin)}`;
-}

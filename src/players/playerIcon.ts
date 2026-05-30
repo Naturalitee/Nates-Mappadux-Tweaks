@@ -6,11 +6,13 @@ export interface PlayerIconForm {
   iconDataUrl?: string;
 }
 
-/** Downscale target — small enough that even a 5-player table sending icons
- *  separately keeps each message well under the PeerJS DataChannel limit, and
- *  big enough that the icon still reads at a typical 30–60px display size on
- *  a player token. PNG preserves transparency for SVG icons with alpha. */
-const ICON_PX = 64;
+/** Maximum longest-side resolution for the rasterised icon. Tuned for the
+ *  worst-case display: a 3×3 token at typical map scale + HiDPI supersampling
+ *  fits comfortably inside 500px (Alex 2026-05-30). Raster icons smaller than
+ *  this cap keep their native size; larger ones scale down. SVGs are vector
+ *  so we always render them AT this size — their intrinsic dimensions are
+ *  arbitrary and frequently tiny (32×32 etc.). */
+const ICON_MAX_PX = 500;
 
 /**
  * Turn a picked ImageAsset into the rendered form a player token can display.
@@ -21,8 +23,9 @@ const ICON_PX = 64;
  * own colours. Unicode glyphs are passed through as `iconChar` — cheaper
  * than encoding a one-character data URL and rasterising at every render.
  *
- * Raster + SVG paths are downscaled to a 64-px square PNG so individual icon
- * messages stay well under the PeerJS DataChannel size limit.
+ * Image paths are rasterised to PNG at the asset's native resolution so the
+ * delivered icon never looks worse than the source. The chunked binary
+ * transport handles arbitrary sizes (same path that ships map blobs).
  */
 export async function assetToPlayerIcon(asset: ImageAsset): Promise<PlayerIconForm> {
   if (asset.source === 'unicode' && asset.unicodeChar) {
@@ -30,29 +33,48 @@ export async function assetToPlayerIcon(asset: ImageAsset): Promise<PlayerIconFo
   }
   const rendered = await renderLibIconFromAsset(asset, '#ffffff');
   if (rendered) {
-    try { return { iconDataUrl: await downscalePngDataUrl(rendered.dataUrl, ICON_PX) }; }
-    catch { return { iconDataUrl: rendered.dataUrl }; } // fall back to source if canvas refuses
+    try {
+      return { iconDataUrl: await rasterizeToPng(rendered.dataUrl) };
+    } catch (err) {
+      // Falling back to the source data URL would break remote delivery
+      // (an SVG URL is URL-encoded UTF-8, not base64, so the wire chunker
+      // can't reproduce it). Drop the icon instead — player falls back to
+      // the initial-letter disc rather than getting a corrupt image.
+      console.warn('[player-icon] rasterise failed; dropping icon', err);
+    }
   }
   if (asset.unicodeChar) return { iconChar: asset.unicodeChar };
   return {};
 }
 
-/** Decode a data URL into an `<img>`, draw downscaled, re-encode as PNG. */
-function downscalePngDataUrl(srcDataUrl: string, maxPx: number): Promise<string> {
+/** Decode a data URL into an `<img>` and re-encode as PNG. SVGs always render
+ *  at ICON_MAX_PX (longest side) since they're vector and their intrinsic
+ *  size is often tiny. Raster icons use their native size up to the cap.
+ *  crossOrigin is deliberately not set — for data URLs that attribute can
+ *  prevent the image from loading at all on some browsers. */
+function rasterizeToPng(srcDataUrl: string): Promise<string> {
+  const isSvg = srcDataUrl.startsWith('data:image/svg+xml');
   return new Promise((resolve, reject) => {
     const img = new Image();
-    img.crossOrigin = 'anonymous';
     img.onload = () => {
-      const wh = Math.max(img.width || maxPx, img.height || maxPx);
-      const scale = wh > 0 ? Math.min(1, maxPx / wh) : 1;
-      const w = Math.max(1, Math.round((img.width || maxPx) * scale));
-      const h = Math.max(1, Math.round((img.height || maxPx) * scale));
+      const iw = img.naturalWidth  || img.width  || ICON_MAX_PX;
+      const ih = img.naturalHeight || img.height || ICON_MAX_PX;
+      const longest = Math.max(iw, ih);
+      const scale = isSvg
+        ? (longest > 0 ? ICON_MAX_PX / longest : 1) // SVG → always render at cap
+        : (longest > ICON_MAX_PX ? ICON_MAX_PX / longest : 1); // raster → cap, don't upscale
+      const w = Math.max(1, Math.round(iw * scale));
+      const h = Math.max(1, Math.round(ih * scale));
       const canvas = document.createElement('canvas');
       canvas.width = w; canvas.height = h;
       const ctx = canvas.getContext('2d');
       if (!ctx) { reject(new Error('no canvas 2D context')); return; }
-      ctx.drawImage(img, 0, 0, w, h);
-      resolve(canvas.toDataURL('image/png'));
+      try {
+        ctx.drawImage(img, 0, 0, w, h);
+        resolve(canvas.toDataURL('image/png'));
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error('canvas export failed'));
+      }
     };
     img.onerror = () => reject(new Error('image decode failed'));
     img.src = srcDataUrl;
