@@ -3065,8 +3065,19 @@ export class GMApp {
         },
         canDrag: () => true,
         onDragEnd: (pid, x, y) => { void this._onGmMarkerDragEnd(pid, x, y); },
+        getPxPerSquare: () => this._tokenPxPerSquare(),
       });
     }
+  }
+
+  /** Current screen-pixels-per-map-square on the active map at the active
+   *  zoom, or null when the map isn't calibrated. Drives token footprint
+   *  sizing on the GM's own PlayerMarkerLayer. */
+  private _tokenPxPerSquare(): number | null {
+    const meta = this._lastMapAssetMeta;
+    if (!meta?.pixelsPerSquare || !meta.imageHeight) return null;
+    const scale = this.renderer.worldToScreenScale();
+    return (meta.pixelsPerSquare / meta.imageHeight) * scale.pxPerWorldY;
   }
 
   private bindProjectorEditor(): void {
@@ -5912,6 +5923,11 @@ export class GMApp {
         await this.playerRegistry.clearIcon(id);
         this._refreshPlayersPanel();
         this._broadcastPlayerIcon(id); // empty dataUrl ⇒ clear the player-side cache
+        this._refreshPlayerMarkers();
+      },
+      onSetTokenSize: async (id, size) => {
+        await this.playerRegistry.update(id, { tokenSize: size });
+        this._refreshPlayersPanel();
         this._refreshPlayerMarkers();
       },
     });

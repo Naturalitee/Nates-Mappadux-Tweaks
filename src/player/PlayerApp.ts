@@ -259,6 +259,7 @@ export class PlayerApp {
         canDrag: (playerId) => this.features.movableMarkers && playerId === this.playerId,
         onDragMove: (_pid, x, y) => this.guest.send({ type: 'player_marker_move', playerId: this.playerId, clientId: this.clientId, x, y, done: false }),
         onDragEnd:  (_pid, x, y) => this.guest.send({ type: 'player_marker_move', playerId: this.playerId, clientId: this.clientId, x, y, done: true }),
+        getPxPerSquare: () => this._tokenPxPerSquare(),
       });
     }
 
@@ -862,6 +863,15 @@ export class PlayerApp {
       return cached ? { ...m, iconDataUrl: cached } : m;
     });
     this.playerMarkerLayer?.setMarkers(merged);
+  }
+
+  /** Current screen-pixels-per-map-square at the active zoom, or null if the
+   *  map isn't calibrated. Mirrors the GM-side helper so tokens scale to
+   *  their footprint on calibrated maps regardless of which view is rendering. */
+  private _tokenPxPerSquare(): number | null {
+    if (!this.mapPixelsPerSquare || !this.mapImageHeight) return null;
+    const scale = this.renderer.worldToScreenScale();
+    return (this.mapPixelsPerSquare / this.mapImageHeight) * scale.pxPerWorldY;
   }
 
   /** Wipe local identity, ask the GM to drop the registry record, and reload

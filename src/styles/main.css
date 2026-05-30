@@ -6437,6 +6437,19 @@ option.select-option--add {
 .player-row-cancelmove:hover { color: var(--text-primary); background: var(--bg-hover); }
 .player-row-marker.is-placed { color: var(--accent); }
 .player-row-cancelmove { color: var(--warn); }
+/* Token footprint dropdown — compact since each row has a lot going on. */
+.player-row-tokensize {
+  flex: 0 0 auto;
+  height: 22px;
+  padding: 0 3px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  cursor: pointer;
+}
 
 /* Combined icon + colour control. The icon button shows the picked token
    image / glyph / initial, with a small colour-input badge attached to its
@@ -6536,6 +6549,22 @@ option.select-option--add {
   object-fit: contain;
   border-radius: 50%;
   pointer-events: none;
+}
+/* Scaled-to-footprint variants (calibrated maps): size is set inline by
+   PlayerMarkerLayer; here we adjust shape + image radius. Square footprints
+   keep the disc circular (default border-radius:50%); non-square footprints
+   become rounded rectangles so the image has more room to read. */
+.pm-token-disc--rect {
+  border-radius: 12%;
+}
+.pm-token-disc--rect img {
+  border-radius: 8%;
+}
+/* Scale font-size with disc size for the initial-letter fallback. The base
+   font is sized for a 30px disc; clamp lets it grow on large 2x2 / 3x3
+   footprints without becoming absurd. */
+.pm-token-disc--scaled {
+  font-size: clamp(0.85rem, 28%, 2rem);
 }
 
 /* ── Player tokens (on the map, GM + player views) ──────────────────────── */

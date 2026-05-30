@@ -1,5 +1,30 @@
 # Changelog
 
+## v2.16.18 — 2026-05-30
+
+### Patch C — token footprint sizes on calibrated maps
+
+Each player can now have a token footprint set in map squares — 1x1
+(default), 1x2, 2x2, 2x3, or 3x3. A small dropdown on every Players panel
+row picks it.
+
+- **Only honoured on calibrated maps.** When the active map has a pixels-
+  per-square set, the token scales to fit its W×H footprint at 75% of the
+  square area (so adjacent tokens don't visually butt up). Scales live
+  with zoom — the RAF redraw already running for token positions reads
+  the current map-px-per-square each frame.
+- **On uncalibrated maps the token keeps its constant CSS size** so it
+  stays readable regardless of zoom. The size picker still shows the
+  chosen value; it's just dormant until you switch to a calibrated map.
+- **Square footprints render as circles** (1x1, 2x2, 3x3). **Non-square
+  footprints render as rounded rectangles** (1x2, 2x3) so icon images
+  have more room to read.
+- **The same scaling applies to player views**, so what the GM sees and
+  what each player sees match exactly on calibrated maps.
+
+Patch D will add facing / rotation, including the 90°-image rotation for
+non-square footprints so they sit upright relative to their long axis.
+
 ## v2.16.17 — 2026-05-30
 
 ### Polish — colour propagation + named disconnect status

@@ -111,10 +111,11 @@ export class PlayerRegistry {
     return player;
   }
 
-  /** GM edits an existing player's fields (name / character / colour / icon). */
+  /** GM edits an existing player's fields (name / character / colour / icon /
+   *  token size). */
   async update(
     id: string,
-    patch: Partial<Pick<PersistentPlayer, 'playerName' | 'characterName' | 'color' | 'iconAssetId' | 'iconChar' | 'iconDataUrl'>>,
+    patch: Partial<Pick<PersistentPlayer, 'playerName' | 'characterName' | 'color' | 'iconAssetId' | 'iconChar' | 'iconDataUrl' | 'tokenSize'>>,
   ): Promise<PersistentPlayer | undefined> {
     const existing = this.byId.get(id);
     if (!existing) return undefined;
@@ -184,8 +185,8 @@ export class PlayerRegistry {
   }
 
   /** Render set for a map: every player with a token placed on it. */
-  markersForMap(mapId: string): Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; iconDataUrl?: string }> {
-    const out: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; iconDataUrl?: string }> = [];
+  markersForMap(mapId: string): Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; iconDataUrl?: string; tokenSize?: import('../types.ts').TokenSize }> {
+    const out: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; iconDataUrl?: string; tokenSize?: import('../types.ts').TokenSize }> = [];
     for (const p of this.byId.values()) {
       const pos = p.placements?.[mapId];
       if (!pos) continue;
@@ -196,6 +197,7 @@ export class PlayerRegistry {
         x: pos.x, y: pos.y,
         ...(p.iconChar    ? { iconChar:    p.iconChar }    : {}),
         ...(p.iconDataUrl ? { iconDataUrl: p.iconDataUrl } : {}),
+        ...(p.tokenSize   ? { tokenSize:   p.tokenSize }   : {}),
       });
     }
     return out;

@@ -11,6 +11,8 @@
  * their own (and only when the GM allows movable markers).
  */
 
+import { parseTokenSize, TOKEN_FOOTPRINT_FILL } from '../players/playerToken.ts';
+
 export interface PlayerMarkerView {
   playerId: string;
   name:     string;
@@ -21,6 +23,10 @@ export interface PlayerMarkerView {
    *  player's initial when neither is set. */
   iconChar?:    string;
   iconDataUrl?: string;
+  /** Footprint W×H in map squares. Honoured only when getPxPerSquare returns
+   *  a positive number (calibrated map). Falls back to constant CSS size
+   *  on uncalibrated maps so the token stays readable at any zoom. */
+  tokenSize?: import('../types.ts').TokenSize;
 }
 
 export interface PlayerMarkerLayerOptions {
@@ -34,6 +40,10 @@ export interface PlayerMarkerLayerOptions {
   onDragMove?: (playerId: string, x: number, y: number) => void;
   /** Drag finished at this position. */
   onDragEnd?: (playerId: string, x: number, y: number) => void;
+  /** Current screen-pixels-per-map-square on the active map, or null if the
+   *  map is uncalibrated. Drives tokenSize → CSS-px on the active view; when
+   *  null the layer falls back to constant CSS sizing from main.css. */
+  getPxPerSquare?: () => number | null;
 }
 
 interface TokenEntry {
@@ -165,15 +175,45 @@ export class PlayerMarkerLayer {
   private _kick(): void {
     if (this.rafId !== null) return;
     const tick = () => {
+      const pxPerSq = this.opts.getPxPerSquare?.() ?? null;
       for (const entry of this.tokens.values()) {
         const p = this.opts.project(entry.view.x, entry.view.y);
         if (!p) { entry.el.style.display = 'none'; continue; }
         entry.el.style.display = '';
         entry.el.style.left = `${p.x}px`;
         entry.el.style.top  = `${p.y}px`;
+        this._sizeDisc(entry, pxPerSq);
       }
       this.rafId = this.tokens.size > 0 ? requestAnimationFrame(tick) : null;
     };
     this.rafId = requestAnimationFrame(tick);
+  }
+
+  /** Apply tokenSize-driven dimensions to the disc.
+   *
+   *  - Calibrated map (pxPerSq > 0): disc is `dims.w × dims.h × pxPerSq × 0.75`,
+   *    so adjacent tokens don't visually butt up. Square footprints render as
+   *    circles; non-square footprints as rounded rectangles.
+   *  - Uncalibrated map (pxPerSq null/0): clear inline sizing so the base CSS
+   *    constant size from main.css applies — tokens stay readable at any zoom. */
+  private _sizeDisc(entry: TokenEntry, pxPerSq: number | null): void {
+    const disc = entry.el.querySelector<HTMLElement>('.pm-token-disc');
+    if (!disc) return;
+    const tokenSize = entry.view.tokenSize ?? '1x1';
+    const dims = parseTokenSize(tokenSize);
+    const isSquare = dims.w === dims.h;
+    if (pxPerSq && pxPerSq > 0) {
+      const w = Math.max(12, dims.w * pxPerSq * TOKEN_FOOTPRINT_FILL);
+      const h = Math.max(12, dims.h * pxPerSq * TOKEN_FOOTPRINT_FILL);
+      disc.style.width  = `${w}px`;
+      disc.style.height = `${h}px`;
+      disc.classList.toggle('pm-token-disc--scaled', true);
+      disc.classList.toggle('pm-token-disc--rect', !isSquare);
+    } else {
+      disc.style.width  = '';
+      disc.style.height = '';
+      disc.classList.toggle('pm-token-disc--scaled', false);
+      disc.classList.toggle('pm-token-disc--rect', false);
+    }
   }
 }

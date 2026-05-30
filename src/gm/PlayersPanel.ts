@@ -1,5 +1,6 @@
-import type { PersistentPlayer } from '../types.ts';
+import type { PersistentPlayer, TokenSize } from '../types.ts';
 import { isReservedColor, pickDefaultPlayerColor } from '../players/playerColors.ts';
+import { TOKEN_SIZES, DEFAULT_TOKEN_SIZE } from '../players/playerToken.ts';
 
 export interface PlayerRowInfo {
   connected:      boolean;
@@ -21,6 +22,8 @@ export interface PlayersPanelCallbacks {
   onPickIcon: (id: string) => void | Promise<void>;
   /** Clear the picked icon — token falls back to the player's initial. */
   onClearIcon: (id: string) => void | Promise<void>;
+  /** Change the token's footprint size — only honoured on calibrated maps. */
+  onSetTokenSize: (id: string, size: TokenSize) => void | Promise<void>;
 }
 
 /**
@@ -155,6 +158,23 @@ export class PlayersPanel {
 
     names.append(nameInput, charInput);
     row.appendChild(names);
+
+    // Token footprint picker — only meaningful on calibrated maps. We always
+    // show it because the same player might appear on calibrated and
+    // uncalibrated maps in the same session.
+    const sizeSel = document.createElement('select');
+    sizeSel.className = 'player-row-tokensize';
+    sizeSel.title = 'Token footprint in map squares (only applied on scaled maps)';
+    sizeSel.setAttribute('aria-label', 'Token footprint size');
+    for (const size of TOKEN_SIZES) {
+      const opt = document.createElement('option');
+      opt.value = size;
+      opt.textContent = size;
+      if ((p.tokenSize ?? DEFAULT_TOKEN_SIZE) === size) opt.selected = true;
+      sizeSel.appendChild(opt);
+    }
+    sizeSel.addEventListener('change', () => void this.cb.onSetTokenSize(p.id, sizeSel.value as TokenSize));
+    row.appendChild(sizeSel);
 
     // Cancel-move (shown only after a player moved their own token)
     if (info.canCancelMove) {

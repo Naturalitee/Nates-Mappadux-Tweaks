@@ -498,6 +498,12 @@ export function defaultSessionState(): SessionState {
  * Security is intentionally absent (LAN trust model, same as the rest of
  * P2P): `id` is a device-persisted token the player hands over on connect.
  */
+/** Token footprint sizes (width × height in map squares). Square sizes render
+ *  as circles; non-square as rounded rectangles. Patch D adds rotation/facing,
+ *  which will rotate the image by 90° for non-square footprints to keep it
+ *  upright relative to the rectangle's long axis. */
+export type TokenSize = '1x1' | '1x2' | '2x2' | '2x3' | '3x3';
+
 export interface PersistentPlayer {
   /** Stable id. For device players this is persisted on their machine and
    *  re-sent on every reconnect; for GM-managed offline players the GM mints it. */
@@ -521,6 +527,12 @@ export interface PersistentPlayer {
   iconAssetId?: string;
   iconChar?:    string;
   iconDataUrl?: string;
+  /** Token footprint in map squares (W×H). Only applied on calibrated maps —
+   *  on uncalibrated maps the token stays at its constant CSS pixel size so
+   *  it remains readable independent of zoom. Square footprints render as
+   *  circles; non-square footprints render as rounded rectangles. Defaults
+   *  to '1x1' when absent. */
+  tokenSize?: TokenSize;
   /** True for GM-managed offline players (no device of their own). They never
    *  connect; the GM acts on their behalf. */
   managedByGm?: boolean;
@@ -1139,7 +1151,9 @@ export interface MsgPlayerMarkers {
     /** Optional inline glyph (unicode char). Always small. Image-form icons
      *  ride a separate `player_icon_update` message keyed by playerId so they
      *  don't bloat this message past the PeerJS DataChannel size limit. */
-    iconChar?: string;
+    iconChar?:  string;
+    /** Token footprint W×H in map squares. Only honoured on calibrated maps. */
+    tokenSize?: TokenSize;
   }>;
 }
 
