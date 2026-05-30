@@ -167,6 +167,13 @@ export class PlayerApp {
   private _identityPromptShown = false;
   private _identityModal = new PlayerIdentifyModal();
   private _actionMenu = new PlayerActionMenu();
+  /** True iff this page was launched from the GM's "Open Player Window" button.
+   *  Detected via the ?gmPreview=1 URL flag — explicit, foolproof, and never
+   *  triggered by real player tabs (the QR URL doesn't carry it). */
+  private _gmPreviewFlag = (() => {
+    try { return new URLSearchParams(location.search).has('gmPreview'); }
+    catch { return false; }
+  })();
   private _composer = new PlayerMessageComposer();
   private _msgToasts: PlayerMessageToasts | null = null;
   private pingLayer: PingLayer | null = null;
@@ -378,6 +385,9 @@ export class PlayerApp {
       void this.openIdentityModal();
     });
     this._refreshIdentityButton();
+    // Apply GM-preview gating at page load so it takes effect before the first
+    // network message arrives, rather than briefly flashing player chrome.
+    this._refreshPreviewModeUi();
 
     // Clean disconnect so the GM drops our binding immediately — BroadcastChannel
     // never signals close, so this mirrors the projector_bye pattern.
@@ -707,12 +717,12 @@ export class PlayerApp {
     this._heartbeatInterval = window.setInterval(beat, 4000);
   }
 
-  /** True when this view is the GM's own same-browser preview popup AND the
-   *  override setting hasn't been flipped on. BroadcastChannel is the signal:
-   *  same-browser is the only way isSameMachineSession() flips true; real
-   *  player tabs over the network never do. */
+  /** True when this view was launched from the GM's "Open Player Window" button
+   *  AND the override setting hasn't been flipped on. Detection is the
+   *  ?gmPreview=1 URL flag — phones / laptops connecting via QR never have it,
+   *  so they're never preview mode regardless of any local state. */
   private _isPreviewMode(): boolean {
-    return !!this.guest?.isSameMachineSession() && !showFullPlayerUiInPreview();
+    return this._gmPreviewFlag && !showFullPlayerUiInPreview();
   }
 
   /** Apply preview-mode visibility to the player chrome (identity pill, toasts

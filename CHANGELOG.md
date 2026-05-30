@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.16.10 — 2026-05-30
+
+### Fix — real player tabs incorrectly treated as GM preview
+
+The same-browser BroadcastChannel signal used in v2.16.9 to detect the GM
+preview popup was firing on real phone players in the wild, suppressing
+their UI and (silently) short-circuiting their `player_identify` send so
+they never appeared in the GM Players panel.
+
+Switched to an explicit `?gmPreview=1` URL flag the "Open Player Window"
+launcher appends. Phones / laptops connecting via the QR never carry it,
+so they're always treated as real players regardless of any local state.
+The override setting under Settings → Player Voice still flips preview
+behaviour off when you want the popup to act like a real player view.
+
 ## v2.16.9 — 2026-05-30
 
 ### Player Voice — identity polish + GM preview mode

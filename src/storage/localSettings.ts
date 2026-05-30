@@ -114,14 +114,14 @@ export function setMessagingEnabled(enabled: boolean): void {
   } catch { /* private mode etc. — no-op */ }
 }
 
-/** v2.17 Player Voice — show the full player chrome in a same-browser preview
- *  window (the GM's own "Open Player Window" popup, or a manually-opened tab
- *  pointed at /player.html). Default off: same-browser preview windows hide
- *  identity pill, message toasts, action menu, identity prompts, and the
- *  initiative roll prompt because the GM isn't a player. Useful to flip on
- *  during testing when you want the preview to behave exactly like a real
- *  player view. Real player tabs (over PeerJS, never via BroadcastChannel)
- *  always show the full UI regardless of this setting. */
+/** v2.17 Player Voice — show the full player chrome in the GM's "Open Player
+ *  Window" preview popup. Default off: the preview popup hides identity pill,
+ *  message toasts, action menu, identity prompts, and the initiative roll
+ *  prompt because the GM isn't a player. Useful to flip on during testing
+ *  when you want the preview to behave exactly like a real player view.
+ *  Detection is the ?gmPreview=1 URL flag the launcher appends — phones /
+ *  laptops connecting via QR never carry it, so real players always show the
+ *  full UI regardless of this setting. */
 export const SHOW_FULL_PLAYER_UI_IN_PREVIEW_KEY = 'mappadux:show_full_player_ui_in_preview';
 
 export function showFullPlayerUiInPreview(): boolean {

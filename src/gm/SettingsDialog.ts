@@ -491,9 +491,9 @@ export class SettingsDialog {
     }));
 
     sec.appendChild(this._buildPerfToggle({
-      title: 'Show full player UI in same-browser preview windows',
+      title: 'Show full player UI in the GM preview window',
       help:
-        'Your "Open Player Window" popup is in the same browser as you, so by definition it isn’t a real player. With this OFF (default) the popup hides identity prompts, the floating identity pill, message toasts, the right-click action menu, and the initiative roll prompt — it still shows the map, tokens, and the atmospheric initiative rail so you can preview what players see. Flip this ON when you want the preview to behave exactly like a real player view for testing. Real player tabs (over the network) are unaffected.',
+        'Your "Open Player Window" popup isn’t a real player. With this OFF (default) the popup hides identity prompts, the floating identity pill, message toasts, the right-click action menu, and the initiative roll prompt — it still shows the map, tokens, and the atmospheric initiative rail so you can preview what players see. Flip this ON when you want the preview to behave exactly like a real player view for testing. Detection is the ?gmPreview=1 URL flag the launcher adds, so real player tabs connecting via the QR are never affected by this setting.',
       get: showFullPlayerUiInPreview,
       set: setShowFullPlayerUiInPreview,
     }));

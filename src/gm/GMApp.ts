@@ -4941,15 +4941,20 @@ export class GMApp {
       else this._openMapFxPopover();
     });
 
-    // Open local player window as a real popup
+    // Open local player window as a real popup. We tag the URL with
+    // ?gmPreview=1 so the popup recognises itself as the GM's preview view and
+    // (by default) suppresses player-only chrome + interaction. Real player
+    // tabs connecting via the QR never carry the flag.
     document.querySelector('#open-player-btn')?.addEventListener('click', () => {
       const code = this.roomCodeEl.textContent?.trim() ?? '';
       const w = Math.min(1600, screen.width  - 80);
       const h = Math.min(1000, screen.height - 80);
       const l = Math.round((screen.width  - w) / 2);
       const t = Math.round((screen.height - h) / 2);
+      const url = new URL(this._buildPlayerUrl(code));
+      url.searchParams.set('gmPreview', '1');
       window.open(
-        this._buildPlayerUrl(code),
+        url.toString(),
         'dmr-player',
         `noopener,width=${w},height=${h},left=${l},top=${t}`
       );
