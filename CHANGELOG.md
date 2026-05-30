@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.16.17 — 2026-05-30
+
+### Polish — colour propagation + named disconnect status
+
+- **Colour / name changes from the Players panel now refresh tokens
+  immediately.** The previous version only re-broadcast the roster, so the
+  player marker layer (GM AND remote views) kept the old colour until the
+  next event that triggered a marker refresh (a map switch, a token drag,
+  etc.). The same on-the-fly refresh remote players already got when they
+  re-identified is now applied to GM-side edits.
+- **Disconnect status uses the player's real name.** Was "Player
+  disconnected (3572b4e9…)"; now reads "Thorin disconnected" if they've
+  introduced themselves, falling back to the peer hash for connections
+  that never identified (a stale tab, a connection that errored mid-handshake).
+
 ## v2.16.16 — 2026-05-30
 
 ### Fix + polish — token icons no longer break remote map loads

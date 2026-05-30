@@ -54,6 +54,14 @@ export class PlayerRegistry {
     return id ? this.byId.get(id) : undefined;
   }
 
+  /** Resolve the persistent player bound to a given PeerJS peer id, if any.
+   *  Used by the GM to label disconnect status messages with the player's
+   *  real name rather than a truncated peer hash. */
+  playerForPeer(peerId: string): PersistentPlayer | undefined {
+    const clientId = this.clientByPeer.get(peerId);
+    return clientId ? this.playerForClient(clientId) : undefined;
+  }
+
   /**
    * Handle an inbound `player_identify`. Upserts the persistent player record
    * (keyed by playerId) and binds the live connection to it. Returns the

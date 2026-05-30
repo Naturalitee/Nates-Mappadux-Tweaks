@@ -1812,12 +1812,15 @@ export class GMApp {
     this.projectorEditor?.setConnection(this._primaryProjector() ?? null);
     this.refreshProjectorStatus();
     this._refreshProjectionPanelMode();
-    // v2.17 Player Voice — clear any persistent-player binding this peer held.
+    // v2.17 Player Voice — look up the player BEFORE clearing the binding so
+    // we can use their real name in the status rather than the peer hash.
+    const bound = this.playerRegistry.playerForPeer(id);
     this.playerRegistry.disconnectPeer(id);
     this._refreshPlayersPanel();
     this._broadcastRoster();
     this._updatePlayerCount();
-    this.setStatus(`Player disconnected (${id.slice(0, 8)}…)`, 'warn');
+    const who = bound ? (bound.characterName || bound.playerName || 'Player') : `Player (${id.slice(0, 8)}…)`;
+    this.setStatus(`${who} disconnected`, 'warn');
   }
 
   private _updatePlayerCount(): void {
@@ -5889,6 +5892,10 @@ export class GMApp {
         await this.playerRegistry.update(id, patch);
         this._refreshPlayersPanel();
         this._broadcastRoster();
+        // Colour / name changes affect how tokens render on the map — refresh
+        // the marker layer + rebroadcast player_markers immediately rather
+        // than waiting on the next event (placement change, map switch, etc.).
+        this._refreshPlayerMarkers();
       },
       onRemove: async (id) => {
         await this.playerRegistry.remove(id);
