@@ -6589,6 +6589,11 @@ option.select-option--add {
   /* Crop icon images to the rounded disc shape so they don't bleed past the
      coloured border on rect (1x2 / 2x3) footprints. */
   overflow: hidden;
+  /* Mobile: prevent the browser from claiming a finger that lands on the
+     disc for native pan / pinch. Without this an in-flight two-finger
+     pinch whose first touch grazes a token disc could fall back to
+     native page-zoom on some Android Chrome versions. */
+  touch-action: none;
 }
 .pm-token--draggable .pm-token-disc { cursor: grab; }
 .pm-token.is-dragging .pm-token-disc { cursor: grabbing; box-shadow: 0 0 12px var(--pm-color); }
@@ -6616,25 +6621,32 @@ option.select-option--add {
   font-size: clamp(0.85rem, 28%, 2rem);
 }
 
-/* Facing pointer — coloured dot at the disc edge in the token's facing
-   direction. Doubles as the rotation handle: drag it around the disc
-   centre to rotate (snap-to-45°). Sits OUTSIDE the disc (sibling of
-   pm-token-disc, child of pm-token) so it isn't clipped by overflow:hidden. */
+/* Facing pointer — clip-path triangle that straddles the disc edge so it
+   feels like an integrated feature of the token rather than a floating
+   button. Doubles as the rotation handle: drag it around the disc centre
+   to rotate (snap-to-45°). Sits OUTSIDE the disc (sibling of pm-token-disc)
+   so it isn't clipped by the disc's overflow:hidden. Anchored to the disc's
+   vertical centre via --pm-disc-half-h rather than the .pm-token midpoint —
+   the .pm-token also contains the name label below the disc, so a 50%
+   anchor would drift the pointer down into the label space. */
 .pm-token-pointer {
   position: absolute;
-  top: 50%;
+  top: var(--pm-disc-half-h, 15px);
   left: 50%;
   width: 14px;
   height: 14px;
   margin: -7px;
   background: var(--pm-color);
-  border: 2px solid #fff;
-  border-radius: 50%;
-  box-shadow: 0 0 4px rgba(0, 0, 0, 0.7);
+  /* Triangle pointing UP (apex top, base bottom). After rotate(facing) the
+     apex points in the facing direction. */
+  clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
   pointer-events: none;
-  /* Live-driven by JS via CSS custom properties on the token wrapper. */
-  transform: rotate(var(--pm-facing, 0deg)) translateY(var(--pm-pointer-offset, -20px));
+  /* Live-driven by JS via CSS custom properties on the token wrapper.
+     Default offset matches a 30 px disc — pointer straddles the disc edge. */
+  transform: rotate(var(--pm-facing, 0deg)) translateY(var(--pm-pointer-offset, -15px));
   transition: transform 150ms ease;
+  touch-action: none;
 }
 .pm-token--draggable .pm-token-pointer { pointer-events: auto; cursor: grab; }
 .pm-token.is-rotating .pm-token-pointer { cursor: grabbing; transition: none; }

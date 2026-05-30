@@ -14,6 +14,12 @@ export interface HostEvents {
   /** Inbound message from a peer (e.g. projector_hello). Optional — only
    *  bidirectional callers need to wire this. */
   onPeerMessage?: (peerId: string, msg: GMMessage) => void;
+  /** Fired when a new same-browser subscriber asks for state via BroadcastChannel
+   *  (typically a freshly-opened player / preview / projector window in the same
+   *  browser). Host already responds with full_state; callers can use this hook
+   *  to seed additional Player Voice state (player_markers, per-player icons,
+   *  initiative) the subscriber wouldn't otherwise get if it never identifies. */
+  onLocalRequestState?: () => void;
 }
 
 /**
@@ -169,6 +175,14 @@ export class Host {
         for (const p of this.lastPositionalActive.values()) {
           this.local.send({ type: 'positional_play', markerId: p.markerId, assetId: p.assetId, loop: p.loop, volume: p.volume, dataUrl: p.dataUrl });
         }
+      }
+      // v2.17 — let GMApp seed Player Voice state (player_markers,
+      // per-player icons, initiative). lastState doesn't carry these, so
+      // without this hook a freshly-opened local preview / projector
+      // would render initial-letter tokens until the next live update.
+      if (this.events.onLocalRequestState) {
+        try { this.events.onLocalRequestState(); }
+        catch (err) { this.events.onError(err as Error); }
       }
     });
   }

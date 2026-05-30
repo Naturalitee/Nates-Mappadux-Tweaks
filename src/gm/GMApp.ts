@@ -497,6 +497,16 @@ export class GMApp {
       onPeerDisconnected: (id) => this.onPeerDisconnected(id),
       onError: (err) => this.onP2PError(err),
       onPeerMessage: (peerId, msg) => this.onPeerMessage(peerId, msg),
+      // Same-browser preview / projector windows ask for state via
+      // BroadcastChannel before they're known to the network side. The
+      // cached full_state covers map + soundboard, but Player Voice
+      // markers + per-player icons live in PlayerRegistry — re-broadcast
+      // them here so a fresh local window sees identified tokens
+      // (custom icons + facing) without waiting for the next live edit.
+      onLocalRequestState: () => {
+        this._refreshPlayerMarkers();
+        this._broadcastAllPlayerIcons();
+      },
     });
     // v2.12 — wire the dev-only FX dump helper. Exposes
     // `window.mappaduxDumpFx()` so the GM can capture their tuned

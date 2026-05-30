@@ -306,10 +306,21 @@ export class PlayerMarkerLayer {
     const img = disc.querySelector<HTMLImageElement>('img');
     if (img) img.style.transform = imageRot ? `rotate(${imageRot}deg)` : '';
 
-    // Pointer position — at distance `halfLongPx + 5` from disc centre in the
-    // facing direction. Outside the disc edge so it reads as a direction
-    // indicator rather than something inside the disc.
+    // Pointer placement — the triangle (14×14 box) is centred at
+    // distance `halfLongPx` from the disc centre in the facing direction.
+    // That puts the visible apex `7 px` outside the disc edge and the base
+    // `7 px` inside, so the arrow reads as an integrated feature of the
+    // token rather than a floating handle. Anchored to the disc's vertical
+    // centre (not the .pm-token midpoint — the wrapper also contains the
+    // name label below, which would drift a 50% anchor downward).
+    let halfHForAnchor: number;
+    if (pxPerSq && pxPerSq > 0) {
+      halfHForAnchor = Math.max(12, (effH - TOKEN_FOOTPRINT_GAP_SQUARES) * pxPerSq) / 2;
+    } else {
+      halfHForAnchor = 15;
+    }
     entry.el.style.setProperty('--pm-facing', `${facing}deg`);
-    entry.el.style.setProperty('--pm-pointer-offset', `${-(halfLongPx + 5)}px`);
+    entry.el.style.setProperty('--pm-pointer-offset', `${-halfLongPx}px`);
+    entry.el.style.setProperty('--pm-disc-half-h', `${halfHForAnchor}px`);
   }
 }

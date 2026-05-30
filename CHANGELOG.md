@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.16.23 — 2026-05-30
+
+### Polish — pointer feels attached, local previews receive icons
+
+- **Facing pointer is now an integrated triangle.** Replaces the floating
+  coloured dot with a clip-path triangle that straddles the disc edge —
+  base inside the disc, tip just outside — so it reads as a feature of
+  the token rather than a separate UI element. Same drag-to-rotate
+  handle, same 45° snap.
+- **Same-browser preview / projector windows seed Player Voice state
+  on connect.** A freshly-opened GM-side preview or projector pop-up
+  was rendering identified players as initial-letter fallbacks until
+  the next live update, because state-of-record (markers + icons)
+  lived in PlayerRegistry, not in the cached `full_state`. Added a
+  `Host.onLocalRequestState` hook fired alongside the BC `full_state`
+  response; GMApp consumes it by re-broadcasting markers + all per-
+  player icons so the local view catches up on join.
+- **Defensive `touch-action: none` on token disc + pointer.** Prevents
+  the browser from claiming a finger that grazes a token disc for
+  native pinch-zoom during a multi-touch gesture on phones.
+
 ## v2.16.22 — 2026-05-30
 
 ### Patch D — token facing pointer + rotation handle
