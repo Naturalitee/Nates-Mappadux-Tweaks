@@ -299,28 +299,34 @@ export class PlayerMarkerLayer {
       disc.style.height = '';
       disc.classList.toggle('pm-token-disc--scaled', false);
       disc.classList.toggle('pm-token-disc--rect', !isSquare);
-      halfLongPx = 15; // matches the default 30px disc
+      halfLongPx = 13; // matches the default 26 px disc
     }
 
     // Rotate the icon image (NOT the disc/pointer) for non-square footprints.
     const img = disc.querySelector<HTMLImageElement>('img');
     if (img) img.style.transform = imageRot ? `rotate(${imageRot}deg)` : '';
 
-    // Pointer placement — the triangle (14×14 box) is centred at
-    // distance `halfLongPx` from the disc centre in the facing direction.
-    // That puts the visible apex `7 px` outside the disc edge and the base
-    // `7 px` inside, so the arrow reads as an integrated feature of the
-    // token rather than a floating handle. Anchored to the disc's vertical
-    // centre (not the .pm-token midpoint — the wrapper also contains the
-    // name label below, which would drift a 50% anchor downward).
+    // Pointer placement — the handle is a tick-and-arrowhead clip-path
+    // box (16×20 px) that sits fully outside the disc, with the stalk's
+    // bottom edge 2 px INSIDE the disc edge so the join looks attached.
+    //
+    // Box geometry: height 20, half = 10. We want the bottom of the box
+    // at distance (halfLongPx - 2) from the disc centre in the facing
+    // direction (2-px inset). After `rotate(facing) translateY(-D)` the
+    // box centre is at D outward; the bottom is at D - 10 outward; so
+    // D = halfLongPx - 2 + 10 = halfLongPx + 8.
+    //
+    // Anchored to the disc's vertical centre (not the .pm-token
+    // midpoint — the wrapper also contains the name label below, which
+    // would drift a 50 % anchor downward).
     let halfHForAnchor: number;
     if (pxPerSq && pxPerSq > 0) {
       halfHForAnchor = Math.max(12, (effH - TOKEN_FOOTPRINT_GAP_SQUARES) * pxPerSq) / 2;
     } else {
-      halfHForAnchor = 15;
+      halfHForAnchor = 13; // matches the default 26 px disc
     }
     entry.el.style.setProperty('--pm-facing', `${facing}deg`);
-    entry.el.style.setProperty('--pm-pointer-offset', `${-halfLongPx}px`);
+    entry.el.style.setProperty('--pm-pointer-offset', `${-(halfLongPx + 8)}px`);
     entry.el.style.setProperty('--pm-disc-half-h', `${halfHForAnchor}px`);
   }
 }

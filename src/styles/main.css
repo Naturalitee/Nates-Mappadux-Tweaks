@@ -6571,8 +6571,8 @@ option.select-option--add {
   --pm-color: #3b82f6;
 }
 .pm-token-disc {
-  width: 30px;
-  height: 30px;
+  width: 26px;
+  height: 26px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -6621,30 +6621,45 @@ option.select-option--add {
   font-size: clamp(0.85rem, 28%, 2rem);
 }
 
-/* Facing pointer — clip-path triangle that straddles the disc edge so it
-   feels like an integrated feature of the token rather than a floating
-   button. Doubles as the rotation handle: drag it around the disc centre
-   to rotate (snap-to-45°). Sits OUTSIDE the disc (sibling of pm-token-disc)
-   so it isn't clipped by the disc's overflow:hidden. Anchored to the disc's
-   vertical centre via --pm-disc-half-h rather than the .pm-token midpoint —
-   the .pm-token also contains the name label below the disc, so a 50%
-   anchor would drift the pointer down into the label space. */
+/* Facing pointer — a clip-path "tick + arrowhead" handle that sits FULLY
+   outside the disc, attached to it by a short stalk so it reads as an
+   integrated feature of the token rather than a floating button. The
+   stalk overlaps the disc edge by a couple of pixels so the join is
+   seamless. Doubles as the rotation handle: drag the visible shape
+   around the disc centre to rotate (snap-to-45°). Sits OUTSIDE the
+   disc (sibling of pm-token-disc) so it isn't clipped by the disc's
+   overflow:hidden. Anchored to the disc's vertical centre via
+   --pm-disc-half-h rather than the .pm-token midpoint — the .pm-token
+   also contains the name label below the disc, so a 50% anchor would
+   drift the pointer down into the label space. */
 .pm-token-pointer {
   position: absolute;
-  top: var(--pm-disc-half-h, 15px);
+  top: var(--pm-disc-half-h, 13px);
   left: 50%;
-  width: 14px;
-  height: 14px;
-  margin: -7px;
+  width: 16px;
+  height: 20px;
+  margin-left: -8px;
+  margin-top:  -10px;
   background: var(--pm-color);
-  /* Triangle pointing UP (apex top, base bottom). After rotate(facing) the
-     apex points in the facing direction. */
-  clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
-  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.5));
+  /* Box 16×20 — arrowhead occupies the top 60 %, stalk the bottom 40 %.
+     Stalk is ~5 px wide (31 % of 16) and centred. Wide arrowhead gives a
+     comfortable hit-target; the stalk extends into the disc by 2 px (set
+     in JS via --pm-pointer-offset) so the join looks attached. */
+  clip-path: polygon(
+    50% 0%,
+    100% 60%,
+    66% 60%,
+    66% 100%,
+    34% 100%,
+    34% 60%,
+    0%   60%
+  );
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
   pointer-events: none;
   /* Live-driven by JS via CSS custom properties on the token wrapper.
-     Default offset matches a 30 px disc — pointer straddles the disc edge. */
-  transform: rotate(var(--pm-facing, 0deg)) translateY(var(--pm-pointer-offset, -15px));
+     Default offset matches the default 26 px disc — bottom of the stalk
+     sits 2 px inside the disc edge for a clean attached look. */
+  transform: rotate(var(--pm-facing, 0deg)) translateY(var(--pm-pointer-offset, -21px));
   transition: transform 150ms ease;
   touch-action: none;
 }

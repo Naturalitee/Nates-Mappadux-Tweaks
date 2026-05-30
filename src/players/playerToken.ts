@@ -18,9 +18,10 @@ export function isSquareSize(s: TokenSize | undefined): boolean {
 }
 
 /** Constant gap (in map squares) shaved off each axis of the footprint so
- *  adjacent tokens never visually touch. Same absolute breathing room at
- *  every size — Alex 2026-05-30: a 1x1 ends up at 75% of one square (0.25
- *  total gap, 12.5% each side); a 2x2 ends up at 1.75 squares (175%); a 3x3
- *  at 2.75 (275%). Replaces the old "scale to 75%" rule which would have
- *  given 3x3 a 25%-each-side border that read as wasted space. */
-export const TOKEN_FOOTPRINT_GAP_SQUARES = 0.25;
+ *  adjacent tokens never visually touch AND the facing-pointer tick has
+ *  room to protrude past the disc edge. 2026-05-30: bumped from 0.25 →
+ *  0.35 (1x1 = 65 % fill, 2x2 = 165 %, 3x3 = 265 %) when the pointer was
+ *  reshaped from a straddling triangle to a tick-and-arrow handle that
+ *  sits FULLY outside the disc — the extra ~5 px of breathing room makes
+ *  the handle easier to grab without overlapping adjacent tokens. */
+export const TOKEN_FOOTPRINT_GAP_SQUARES = 0.35;

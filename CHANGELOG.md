@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.16.24 — 2026-05-31
+
+### Pointer feels grippier; projector icon diagnostics
+
+- **Rotation handle is now a tick + arrowhead** sitting fully outside
+  the disc, attached by a short stalk that overlaps the disc edge by
+  2 px so the join reads as integrated. Bigger hit-target (16×20 box,
+  clip-path includes the stalk), so the handle is much easier to grab
+  on touch — both on the GM and on the player.
+- **Discs shrunk to make room.** Default uncalibrated disc 30 px →
+  26 px. Calibrated tokens: footprint gap widened from 0.25 → 0.35
+  squares (1x1 now fills 65 % of a square, 2x2 = 165 %, 3x3 = 265 %).
+  Same constant-gap rule as before, just a little more breathing room
+  for the protruding pointer.
+- **Projector bitmap icons — diagnostic log added.** A `console.info`
+  on every `player_icon_update` arrival reports which transport
+  delivered (peerjs blob vs BC dataUrl vs clear), and whether the
+  layer + markers are ready to consume it. If the projector is still
+  missing bitmap icons after this drop, the projector console will
+  tell us where the chain breaks.
+
 ## v2.16.23 — 2026-05-30
 
 ### Polish — pointer feels attached, local previews receive icons

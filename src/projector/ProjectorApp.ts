@@ -753,6 +753,17 @@ export class ProjectorApp {
         if (url) this._playerIcons.set(msg.playerId, url);
         else     this._playerIcons.delete(msg.playerId);
         if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+        // v2.16.24 diagnostic — Alex reports the projector still misses
+        // bitmap icons. Log on every arrival so we can see in the projector
+        // console which path delivered (or didn't).
+        console.info(
+          '[projector] player_icon_update',
+          msg.playerId,
+          'via',
+          blob ? `peerjs-blob(${blob.byteLength}B)` : msg.dataUrl ? `bc-dataurl(${msg.dataUrl.length}ch)` : 'CLEAR',
+          'layer?', !!this.playerMarkerLayer,
+          'markersKnown?', this._lastPlayerMarkers.length,
+        );
         this._reRenderPlayerMarkers();
         break;
       }
