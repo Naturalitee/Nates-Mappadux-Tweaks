@@ -1,5 +1,17 @@
 # Changelog
 
+## v2.16.21 — 2026-05-30
+
+### Fix — projector now receives token icons on connect
+
+`projector_hello` wasn't firing the equivalent of the player-identify
+state-seeding (markers, icons, initiative). A projector window opened
+after the GM had set icons would never receive them and tokens
+displayed the initial-letter fallback. Now mirrors the identify dispatch:
+on `projector_hello`, the GM rebroadcasts current player markers, all
+player icons, and the current initiative state, so a fresh projector
+catches up on the full Player Voice picture.
+
 ## v2.16.20 — 2026-05-30
 
 ### Fix — remote players see icons; non-square tokens are rounded rectangles

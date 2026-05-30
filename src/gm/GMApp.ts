@@ -3600,6 +3600,15 @@ export class GMApp {
       // A projector just appeared — its green rect now has bounds, so push
       // the overlay handles in.
       this._refreshRectOverlays();
+
+      // v2.17 Player Voice — seed the new projector with current Player Voice
+      // state (tokens, icons, initiative rail). Players get this on identify;
+      // projectors send projector_hello instead so we mirror the same dispatch
+      // here. Broadcasts to all peers but existing receivers idempotently
+      // re-apply, so it's cheap.
+      this._refreshPlayerMarkers();
+      this._broadcastAllPlayerIcons();
+      if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: this.initiativeTracker.getState() });
     }
   }
 
