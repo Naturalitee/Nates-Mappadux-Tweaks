@@ -3397,6 +3397,7 @@ export class GMApp {
     if (msg.type === 'player_identify') {
       // v2.17 Player Voice — a device player introduced themselves. Upsert
       // the persistent record, bind the live connection, refresh + rebroadcast.
+      console.info('[gm] player_identify received', { from: _peerId, playerId: msg.playerId, name: msg.characterName || msg.playerName });
       void this.playerRegistry.identify(_peerId, msg).then(() => {
         this._refreshPlayersPanel();
         this._broadcastRoster();

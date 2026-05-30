@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.16.12 — 2026-05-30
+
+### Identify hardening + diagnostics
+
+Player identify is now resent on every `full_state` arrival — which fires
+on initial connect, every reconnect, and every map change — so a remote
+player whose on-connect send is lost (flaky network, GM not ready yet)
+gets picked up on the next state push. Cheap; registry.identify is an
+upsert so re-sends are idempotent.
+
+Both sides log to DevTools when identify goes out / comes in
+(`[player] identify sent` / `[gm] player_identify received`) so we can
+tell from the console which leg of the trip is failing if the player
+still doesn't land in the Players panel. The player view also briefly
+shows "Connected as <character>" so it's visible without DevTools.
+
 ## v2.16.11 — 2026-05-30
 
 ### Fixes — Forget-me button + click-to-unmute in preview

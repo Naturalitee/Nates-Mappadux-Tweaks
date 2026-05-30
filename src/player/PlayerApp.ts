@@ -782,6 +782,13 @@ export class PlayerApp {
       characterName: this.identity.characterName,
       color:         this.identity.color,
     });
+    // Diagnostic — visible in DevTools so we can confirm an identify went out
+    // when something looks wrong on the GM side.
+    console.info('[player] identify sent', { playerId: this.playerId, name: this.identity.characterName || this.identity.playerName });
+    // Brief on-screen confirmation so the player can see the GM was told.
+    const who = this.identity.characterName || this.identity.playerName || 'Player';
+    this.setStatus(`Connected as ${who}`);
+    setTimeout(() => { if (this.statusEl.textContent === `Connected as ${who}`) this.setStatus(''); }, 2500);
   }
 
   /** On (re)connect: announce existing identity, or prompt once on first join.
@@ -954,6 +961,11 @@ export class PlayerApp {
 
     switch (msg.type) {
       case 'full_state': {
+        // Resend identify on every full_state so the GM gets us even if the
+        // on-connect send was lost or arrived before the GM was ready. Cheap
+        // and idempotent — registry.identify is an upsert. Doesn't fire if
+        // we have no identity yet (modal is then handling first introduction).
+        if (this.identity) this._sendIdentify();
         this.currentMapId   = msg.payload.map?.id ?? null;
         this.currentMarkers = msg.payload.markers ?? [];
         this.sbSlots        = msg.payload.audio?.slots ?? [];
