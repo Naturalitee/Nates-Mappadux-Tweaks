@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.16.19 — 2026-05-30
+
+### Player Voice on the Projector + size-badge + corrected sizing math
+
+- **Projector view now renders Player Voice content.** It was missing the
+  v2.17 rendering layers entirely. The Scaled / Projector view now shows
+  player tokens (with their icons), ping pulses, and the atmospheric
+  initiative rail — same set the player view shows. Messaging /
+  identification / roll prompts stay out of the projector by design
+  (it's a read-only table screen, not a participant).
+- **Size dropdown becomes a small badge** at the bottom-left of the icon
+  button, mirroring the colour badge at the bottom-right. The current
+  footprint label (e.g. "1x1") is the only thing visible day-to-day; the
+  native select dropdown opens on click. Frees more space on each row.
+- **Corrected sizing math.** Was a uniform 75% of footprint, which gave
+  a 25%-each-side border at 3x3 that read as wasted space. Now a
+  *constant* 0.25-square gap is shaved off each axis regardless of size:
+  1x1 = 0.75 squares (75%), 2x2 = 1.75 squares (175%), 3x3 = 2.75 squares
+  (275%). Adjacent tokens have the same breathing room at every size.
+
 ## v2.16.18 — 2026-05-30
 
 ### Patch C — token footprint sizes on calibrated maps

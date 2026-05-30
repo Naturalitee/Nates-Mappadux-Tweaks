@@ -6437,19 +6437,29 @@ option.select-option--add {
 .player-row-cancelmove:hover { color: var(--text-primary); background: var(--bg-hover); }
 .player-row-marker.is-placed { color: var(--accent); }
 .player-row-cancelmove { color: var(--warn); }
-/* Token footprint dropdown — compact since each row has a lot going on. */
+/* Token footprint badge — small <select> docked to the icon button's
+   bottom-left, mirroring the colour badge at bottom-right. Native select
+   dropdown surfaces on click; the badge shows just the current footprint. */
 .player-row-tokensize {
-  flex: 0 0 auto;
-  height: 22px;
+  appearance: none;
+  -webkit-appearance: none;
+  position: absolute;
+  bottom: -3px;
+  left: -3px;
+  height: 14px;
   padding: 0 3px;
-  background: var(--bg-input);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
+  background: var(--bg-base);
+  border: 1.5px solid var(--bg-panel);
+  border-radius: 7px;
   color: var(--text-primary);
   font-family: var(--font-ui);
-  font-size: 0.7rem;
+  font-size: 0.55rem;
+  font-weight: 700;
+  line-height: 12px;
   cursor: pointer;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
 }
+.player-row-tokensize:hover { border-color: var(--accent); }
 
 /* Combined icon + colour control. The icon button shows the picked token
    image / glyph / initial, with a small colour-input badge attached to its

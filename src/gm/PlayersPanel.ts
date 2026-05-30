@@ -136,6 +136,24 @@ export class PlayersPanel {
       clear.addEventListener('click', () => void this.cb.onClearIcon(p.id));
       iconWrap.appendChild(clear);
     }
+
+    // Token-size badge — small <select> at the bottom-left of the icon,
+    // mirroring the colour badge at bottom-right. Native select dropdown
+    // surfaces on click; the badge shows the current footprint compactly.
+    const sizeSel = document.createElement('select');
+    sizeSel.className = 'player-row-tokensize';
+    sizeSel.title = 'Token footprint in map squares (applied on scaled maps only)';
+    sizeSel.setAttribute('aria-label', 'Token footprint size');
+    for (const size of TOKEN_SIZES) {
+      const opt = document.createElement('option');
+      opt.value = size;
+      opt.textContent = size;
+      if ((p.tokenSize ?? DEFAULT_TOKEN_SIZE) === size) opt.selected = true;
+      sizeSel.appendChild(opt);
+    }
+    sizeSel.addEventListener('change', () => void this.cb.onSetTokenSize(p.id, sizeSel.value as TokenSize));
+    iconWrap.appendChild(sizeSel);
+
     row.appendChild(iconWrap);
 
     // Names (player + character), inline-editable
@@ -158,23 +176,6 @@ export class PlayersPanel {
 
     names.append(nameInput, charInput);
     row.appendChild(names);
-
-    // Token footprint picker — only meaningful on calibrated maps. We always
-    // show it because the same player might appear on calibrated and
-    // uncalibrated maps in the same session.
-    const sizeSel = document.createElement('select');
-    sizeSel.className = 'player-row-tokensize';
-    sizeSel.title = 'Token footprint in map squares (only applied on scaled maps)';
-    sizeSel.setAttribute('aria-label', 'Token footprint size');
-    for (const size of TOKEN_SIZES) {
-      const opt = document.createElement('option');
-      opt.value = size;
-      opt.textContent = size;
-      if ((p.tokenSize ?? DEFAULT_TOKEN_SIZE) === size) opt.selected = true;
-      sizeSel.appendChild(opt);
-    }
-    sizeSel.addEventListener('change', () => void this.cb.onSetTokenSize(p.id, sizeSel.value as TokenSize));
-    row.appendChild(sizeSel);
 
     // Cancel-move (shown only after a player moved their own token)
     if (info.canCancelMove) {

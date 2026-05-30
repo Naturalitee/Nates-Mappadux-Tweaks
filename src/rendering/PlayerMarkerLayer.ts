@@ -11,7 +11,7 @@
  * their own (and only when the GM allows movable markers).
  */
 
-import { parseTokenSize, TOKEN_FOOTPRINT_FILL } from '../players/playerToken.ts';
+import { parseTokenSize, TOKEN_FOOTPRINT_GAP_SQUARES } from '../players/playerToken.ts';
 
 export interface PlayerMarkerView {
   playerId: string;
@@ -203,8 +203,12 @@ export class PlayerMarkerLayer {
     const dims = parseTokenSize(tokenSize);
     const isSquare = dims.w === dims.h;
     if (pxPerSq && pxPerSq > 0) {
-      const w = Math.max(12, dims.w * pxPerSq * TOKEN_FOOTPRINT_FILL);
-      const h = Math.max(12, dims.h * pxPerSq * TOKEN_FOOTPRINT_FILL);
+      // Constant gap (in squares) shaved off each axis so the visual gap
+      // between adjacent tokens stays the same at every size: 1x1 → 0.75
+      // squares, 2x2 → 1.75, 3x3 → 2.75. The min keeps unscaled-equivalent
+      // sizes legible even when the map is zoomed far out.
+      const w = Math.max(12, (dims.w - TOKEN_FOOTPRINT_GAP_SQUARES) * pxPerSq);
+      const h = Math.max(12, (dims.h - TOKEN_FOOTPRINT_GAP_SQUARES) * pxPerSq);
       disc.style.width  = `${w}px`;
       disc.style.height = `${h}px`;
       disc.classList.toggle('pm-token-disc--scaled', true);

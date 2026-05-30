@@ -3,6 +3,9 @@ import { Renderer } from '../rendering/Renderer.ts';
 import { MarkerSprites } from '../rendering/MarkerSprites.ts';
 import { MarkerOverlay, type OverlayItem } from '../rendering/MarkerOverlay.ts';
 import { getMarkerAspect } from '../rendering/MarkerLayer.ts';
+import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
+import { PingLayer } from '../rendering/PingLayer.ts';
+import { PlayerInitiativeRail } from '../player/PlayerInitiativeRail.ts';
 import {
   type ProjectorSetup,
   getActiveSetup,
@@ -108,6 +111,12 @@ export class ProjectorApp {
   private mapPixelsPerSquare: number | null     = null;
   private mapImageWidth:     number             = 0;
   private mapImageHeight:    number             = 0;
+  // v2.17 Player Voice — token / ping / initiative rendering, mirroring PlayerApp.
+  private playerMarkerLayer: PlayerMarkerLayer | null = null;
+  private pingLayer:         PingLayer         | null = null;
+  private initiativeRail:    PlayerInitiativeRail | null = null;
+  private _playerIcons   = new Map<string, string>();
+  private _lastPlayerMarkers: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; tokenSize?: import('../types.ts').TokenSize }> = [];
   /** v2.14.18 — grid offset for the active map (border-nudge alignment). */
   private gridOffsetX:       number             = 0;
   private gridOffsetY:       number             = 0;
@@ -236,6 +245,27 @@ export class ProjectorApp {
     this.renderer       = this.viewer.renderer;
     this.markerSprites  = this.viewer.markerSprites;
     this.markerOverlay  = this.viewer.markerOverlay;
+
+    // v2.17 Player Voice — token / ping / initiative layers (mirroring PlayerApp).
+    const pmEl = document.getElementById('player-marker-layer');
+    if (pmEl) {
+      this.playerMarkerLayer = new PlayerMarkerLayer(pmEl, {
+        project:   (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        unproject: () => null,           // projector is read-only; no drag
+        canDrag:   () => false,
+        getPxPerSquare: () => this._tokenPxPerSquare(),
+      });
+    }
+    const pingEl = document.getElementById('ping-layer');
+    if (pingEl) {
+      this.pingLayer = new PingLayer(
+        pingEl,
+        (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        { showLabel: false, persistent: false, ttlMs: 10000 },
+      );
+    }
+    const initEl = document.getElementById('player-initiative');
+    if (initEl) this.initiativeRail = new PlayerInitiativeRail(initEl);
 
     // Post-map-load: render markers + re-apply calibrated view now
     // that the renderer knows the new map's aspect ratio. _applyView
@@ -431,6 +461,24 @@ export class ProjectorApp {
   }
 
   // ─── Message handling ────────────────────────────────────────────────────
+
+  /** Current screen-pixels-per-map-square at the active zoom, or null when
+   *  uncalibrated. Mirrors PlayerApp / GMApp so player-token footprints scale
+   *  identically across all viewer surfaces. */
+  private _tokenPxPerSquare(): number | null {
+    if (!this.mapPixelsPerSquare || !this.mapImageHeight) return null;
+    const scale = this.renderer.worldToScreenScale();
+    return (this.mapPixelsPerSquare / this.mapImageHeight) * scale.pxPerWorldY;
+  }
+
+  /** Re-merge cached icons into the last received markers and push to the layer. */
+  private _reRenderPlayerMarkers(): void {
+    const merged = this._lastPlayerMarkers.map((m) => {
+      const cached = this._playerIcons.get(m.playerId);
+      return cached ? { ...m, iconDataUrl: cached } : m;
+    });
+    this.playerMarkerLayer?.setMarkers(merged);
+  }
 
   private _onMessage(msg: GMMessage, blob?: ArrayBuffer): void {
     switch (msg.type) {
@@ -684,6 +732,34 @@ export class ProjectorApp {
         break;
       }
       // audio messages: intentionally ignored — audio plays on player / GM only.
+
+      case 'player_markers': {
+        // v2.17 Player Voice — tokens placed on the active map. Icon images
+        // arrive separately via player_icon_update; merge cache in.
+        this._lastPlayerMarkers = msg.markers;
+        this._reRenderPlayerMarkers();
+        break;
+      }
+      case 'player_icon_update': {
+        if (msg.dataUrl) this._playerIcons.set(msg.playerId, msg.dataUrl);
+        else             this._playerIcons.delete(msg.playerId);
+        this._reRenderPlayerMarkers();
+        break;
+      }
+      case 'ping_show': {
+        // v2.17 Player Voice — show ping pulses on the table screen too.
+        this.pingLayer?.add({ id: msg.pingId, x: msg.x, y: msg.y, color: msg.color, name: msg.name });
+        break;
+      }
+      case 'initiative_update': {
+        // v2.17 Player Voice — atmospheric initiative rail. Same face the
+        // players see (giant numbers / threat letters stay GM-only).
+        this.initiativeRail?.setState(msg.state);
+        break;
+      }
+      // player_features, player_roster, player_marker_move, message_deliver,
+      // initiative_call, initiative_roll, player_identify, player_bye,
+      // player_forget_me — projector is read-only / not a participant, ignore.
     }
   }
 

@@ -17,7 +17,10 @@ export function isSquareSize(s: TokenSize | undefined): boolean {
   return w === h;
 }
 
-/** Fraction of the WxH-square footprint a token actually fills — never the
- *  whole footprint so adjacent tokens don't visually touch / overlap.
- *  Alex 2026-05-30: 75%. */
-export const TOKEN_FOOTPRINT_FILL = 0.75;
+/** Constant gap (in map squares) shaved off each axis of the footprint so
+ *  adjacent tokens never visually touch. Same absolute breathing room at
+ *  every size — Alex 2026-05-30: a 1x1 ends up at 75% of one square (0.25
+ *  total gap, 12.5% each side); a 2x2 ends up at 1.75 squares (175%); a 3x3
+ *  at 2.75 (275%). Replaces the old "scale to 75%" rule which would have
+ *  given 3x3 a 25%-each-side border that read as wasted space. */
+export const TOKEN_FOOTPRINT_GAP_SQUARES = 0.25;
