@@ -56,31 +56,29 @@ export class PlayerInitiativeRail {
     }
 
     if (card.type === 'enemy') {
-      // Information blackout: uniform charcoal tab, "???" edge text, "Opposition" face.
+      // Information blackout: uniform charcoal tabs on every edge with "!",
+      // body shows a dark Mappadux duck silhouette — atmospheric, on-brand,
+      // and dryly funny. Replaces the spec's "???" edge label and "abstract
+      // backdrop" asset slot (we already have the gfx — 2026-05-31).
       el.style.setProperty('--init-color', '#1f2937');
-      const tab = document.createElement('div');
-      tab.className = 'init-card-tab';
-      const tabText = document.createElement('span');
-      tabText.className = 'init-card-tab-text';
-      tabText.textContent = '???';
-      tab.appendChild(tabText);
-      el.appendChild(tab);
+      _appendEdgeTabs(el, '!');
       const body = document.createElement('div');
       body.className = 'init-card-body init-card-body--enemy';
-      body.textContent = 'Opposition';
+      const duck = document.createElement('img');
+      duck.className = 'init-card-duck';
+      duck.src = '/icons/icon-512.png';
+      duck.alt = '';
+      duck.draggable = false;
+      body.appendChild(duck);
       el.appendChild(body);
       return el;
     }
 
-    // Player card — colour tab + name on the edge + initial disc on the face.
+    // Player card — colour tabs on every edge so the name reads from
+    // whichever slice is exposed by the fan; initial disc on the face for
+    // the centred identity cue.
     el.style.setProperty('--init-color', card.color);
-    const tab = document.createElement('div');
-    tab.className = 'init-card-tab';
-    const tabText = document.createElement('span');
-    tabText.className = 'init-card-tab-text';
-    tabText.textContent = card.name;
-    tab.appendChild(tabText);
-    el.appendChild(tab);
+    _appendEdgeTabs(el, card.name);
 
     const body = document.createElement('div');
     body.className = 'init-card-body';
@@ -96,4 +94,21 @@ export class PlayerInitiativeRail {
 
 function isHorizontal(edge: InitiativeEdge): boolean {
   return edge === 'top' || edge === 'bottom';
+}
+
+/** v2.16.53 — paint the card's identity label on all four edges. CSS hides
+ *  the two that don't apply to the current rail orientation (horizontal
+ *  shows left+right; vertical shows top+bottom). The exposed slice when a
+ *  card is mid-fan is always an edge; this guarantees the name is readable
+ *  whichever way the deck is stacked. Long names truncate via overflow. */
+function _appendEdgeTabs(host: HTMLElement, text: string): void {
+  for (const side of ['left', 'right', 'top', 'bottom'] as const) {
+    const tab = document.createElement('div');
+    tab.className = `init-card-tab init-card-tab--${side}`;
+    const t = document.createElement('span');
+    t.className = 'init-card-tab-text';
+    t.textContent = text;
+    tab.appendChild(t);
+    host.appendChild(tab);
+  }
 }

@@ -324,14 +324,20 @@ export class InitiativeTracker {
       return el;
     }
 
-    // Tab edge (colour bar + identifier strip)
-    const tab = document.createElement('div');
-    tab.className = 'init-card-tab';
-    const tabText = document.createElement('span');
-    tabText.className = 'init-card-tab-text';
-    tabText.textContent = card.type === 'enemy' ? (card.threatLetter ?? '?') : card.name;
-    tab.appendChild(tabText);
-    el.appendChild(tab);
+    // v2.16.53 — paint the identity strip on every edge of the card. The
+    // fanned deck only ever exposes ONE edge of a mid-deck card, so a
+    // single-edge label was unreadable for stacked cards. CSS hides the
+    // edges that don't apply to the current rail orientation.
+    const edgeText = card.type === 'enemy' ? (card.threatLetter ?? '?') : card.name;
+    for (const side of ['left', 'right', 'top', 'bottom'] as const) {
+      const tab = document.createElement('div');
+      tab.className = `init-card-tab init-card-tab--${side}`;
+      const tabText = document.createElement('span');
+      tabText.className = 'init-card-tab-text';
+      tabText.textContent = edgeText;
+      tab.appendChild(tabText);
+      el.appendChild(tab);
+    }
 
     // Main body — GM-facing mechanical face: giant value (player) or threat letter (enemy)
     const body = document.createElement('div');

@@ -7328,31 +7328,52 @@ option.select-option--add {
 }
 .init-rail.is-vertical .init-card--round-marker { width: 76px; height: 50px; }
 
+/* v2.16.53 — bidirectional name tabs. A card in a fanned deck only exposes
+   ONE edge of its body to the eye (the previous card sits on top, hiding
+   the rest), so a single-edge label was unreadable for stacked cards. We
+   render all four edges and let the rail orientation decide which two are
+   visible — horizontal shows left+right, vertical shows top+bottom. Long
+   names truncate via overflow on the inner span. */
 .init-card-tab {
   position: absolute;
-  left: 0; top: 0; bottom: 0;
-  width: 14px;
   background: var(--init-color);
-  border-radius: 6px 0 0 6px;
   display: flex;
   align-items: center;
   justify-content: center;
   overflow: hidden;
+  pointer-events: none;
 }
+.init-card-tab--left   { left: 0;  top: 0; bottom: 0; width: 14px; border-radius: 6px 0 0 6px; }
+.init-card-tab--right  { right: 0; top: 0; bottom: 0; width: 14px; border-radius: 0 6px 6px 0; }
+.init-card-tab--top    { left: 0; right: 0; top: 0;    height: 14px; border-radius: 6px 6px 0 0; }
+.init-card-tab--bottom { left: 0; right: 0; bottom: 0; height: 14px; border-radius: 0 0 6px 6px; }
+/* Hide the irrelevant pair per orientation. */
+.init-rail.is-horizontal .init-card-tab--top,
+.init-rail.is-horizontal .init-card-tab--bottom { display: none; }
+.init-rail.is-vertical   .init-card-tab--left,
+.init-rail.is-vertical   .init-card-tab--right  { display: none; }
+
 .init-card-tab-text {
-  writing-mode: vertical-rl;
-  text-orientation: mixed;
-  transform: rotate(180deg);
   font-size: 0.65rem;
   font-weight: 700;
   color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
   white-space: nowrap;
-  max-height: 88px;
   overflow: hidden;
+  text-overflow: clip;
+  letter-spacing: 0.02em;
 }
+/* Vertical strips read along the strip; rotation depends on side so each
+   reads outward (left strip reads bottom-up, right strip reads top-down). */
+.init-card-tab--left  .init-card-tab-text { writing-mode: vertical-rl; transform: rotate(180deg); max-height: 88px; }
+.init-card-tab--right .init-card-tab-text { writing-mode: vertical-rl;                            max-height: 88px; }
+/* Horizontal strips read left-to-right, truncated by card width. */
+.init-card-tab--top    .init-card-tab-text,
+.init-card-tab--bottom .init-card-tab-text { max-width: calc(100% - 8px); }
+
 .init-card-body {
-  margin-left: 14px;
+  /* Margins clear whichever pair of tabs is showing. */
+  margin: 0 14px;
   height: 100%;
   display: flex;
   align-items: center;
@@ -7363,8 +7384,9 @@ option.select-option--add {
   padding: 4px;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
 }
+.init-rail.is-vertical .init-card-body { margin: 14px 0; }
 .init-card-body--marker {
-  margin-left: 0;
+  margin: 0;
   font-size: 0.6rem;
   letter-spacing: 0.1em;
   color: var(--text-secondary);
@@ -7372,7 +7394,7 @@ option.select-option--add {
   transform: rotate(180deg);
   white-space: nowrap;
 }
-.init-rail.is-vertical .init-card-body--marker { writing-mode: horizontal-tb; transform: none; }
+.init-rail.is-vertical .init-card-body--marker { writing-mode: horizontal-tb; transform: none; margin: 0; }
 .init-card-body--enemy { font-size: 0.75rem; letter-spacing: 0.04em; }
 .init-card-big { font-size: 1.6rem; font-weight: 800; }
 .init-card-disc {
@@ -7385,6 +7407,16 @@ option.select-option--add {
   align-items: center;
   justify-content: center;
   font-size: 0.9rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.25);
+}
+/* Dark duck silhouette on player-view enemy cards. */
+.init-card-duck {
+  width: 60%;
+  max-width: 48px;
+  height: auto;
+  filter: brightness(0) opacity(0.35);
+  pointer-events: none;
+  user-select: none;
 }
 .init-card-chrome {
   position: absolute;
@@ -7427,21 +7459,60 @@ option.select-option--add {
 }
 .init-card-delete:hover { background: var(--danger); color: #fff; }
 
-/* Player-side container — same fan, atmospheric face */
+/* Player-side container — atmospheric "cards on the table" framing rather
+   than a chrome strip. Translucent dark wash, soft shadow underneath the
+   deck so the cards feel like they're sitting on something, no border
+   line. v2.16.53 — tightened toward Alex's "just one fan beautifully
+   rendered" brief; controls live exclusively on the GM side. */
 .player-init {
   position: fixed;
   z-index: 8;
   pointer-events: auto;
-  padding: var(--space-sm);
-  background: rgba(10, 14, 26, 0.85);
-  backdrop-filter: blur(6px);
-  border: 1px solid var(--border);
+  padding: var(--space-sm) var(--space-md);
+  background:
+    radial-gradient(ellipse at center, rgba(20, 26, 42, 0.55) 0%, rgba(10, 14, 26, 0.78) 75%);
+  backdrop-filter: blur(8px);
 }
-.player-init.is-edge-bottom { left: 50%; transform: translateX(-50%); bottom: 0; max-width: 100%; border-radius: 8px 8px 0 0; }
-.player-init.is-edge-top    { left: 50%; transform: translateX(-50%); top: 0;    max-width: 100%; border-radius: 0 0 8px 8px; }
-.player-init.is-edge-left   { top: 50%; transform: translateY(-50%); left: 0;   max-height: 100%; border-radius: 0 8px 8px 0; }
-.player-init.is-edge-right  { top: 50%; transform: translateY(-50%); right: 0;  max-height: 100%; border-radius: 8px 0 0 8px; }
-.player-init .init-rail { padding: var(--space-sm) 50px var(--space-sm) var(--space-sm); min-height: 90px; }
+.player-init.is-edge-bottom { left: 50%; transform: translateX(-50%); bottom: 0; max-width: 100%; border-radius: 14px 14px 0 0; box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.45); }
+.player-init.is-edge-top    { left: 50%; transform: translateX(-50%); top: 0;    max-width: 100%; border-radius: 0 0 14px 14px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
+.player-init.is-edge-left   { top: 50%; transform: translateY(-50%); left: 0;   max-height: 100%; border-radius: 0 14px 14px 0; box-shadow: 8px 0 28px rgba(0, 0, 0, 0.45); }
+.player-init.is-edge-right  { top: 50%; transform: translateY(-50%); right: 0;  max-height: 100%; border-radius: 14px 0 0 14px; box-shadow: -8px 0 28px rgba(0, 0, 0, 0.45); }
+.player-init .init-rail { padding: var(--space-sm) 50px var(--space-sm) var(--space-sm); min-height: 96px; }
+/* Player cards on the player view get a slightly richer felt — deeper
+   shadow and a subtle inner highlight to read as physical cards, not chrome. */
+.player-init .init-card {
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border-color: color-mix(in srgb, var(--init-color), black 40%);
+}
+.player-init .init-card.is-active {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6), 0 0 18px color-mix(in srgb, var(--init-color), transparent 35%);
+}
+
+/* v2.16.53 — Call for Initiative is the headline action in the Players
+   panel. Warm orange so the GM can find it without thinking; it's the
+   moment that kicks combat off and breaks narrative momentum if buried.
+   Sits above "+ Add offline player". */
+.call-initiative-btn {
+  margin: var(--space-sm) 0 var(--space-xs) 0;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border: 1px solid #b45309;
+  color: #1c1208;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+}
+.call-initiative-btn:hover {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  box-shadow: 0 3px 10px rgba(217, 119, 6, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.call-initiative-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 3px rgba(217, 119, 6, 0.3);
+}
 
 /* ── Player-side identity colour swatches (in the identify modal) ───────── */
 .player-colour-swatches {

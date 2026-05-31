@@ -1,5 +1,42 @@
 # Changelog
 
+## v2.16.53 — 2026-05-31
+
+### Initiative tracker polish (round 1) — bidirectional tabs, dark duck, prominent Call
+
+Following the audit of the implementation against the fanned-deck spec.
+
+- **Bidirectional identity tabs on every card.** A fanned card only ever
+  exposes ONE edge to the eye; the spec's "name down the exposed slice"
+  was a single left strip — fine for the leftmost active card, unreadable
+  for stacked interior cards. We now paint the identity strip on all four
+  edges and let CSS hide the pair that doesn't apply to the current
+  orientation (horizontal rail shows left+right tabs; vertical rail
+  shows top+bottom). Long names truncate via `overflow: hidden` on the
+  inner span.
+- **Dark Mappadux duck silhouette on player-view enemy cards.**
+  Replaces the spec's "abstract backdrop" asset slot and the placeholder
+  "Opposition" text. Uses the existing `/icons/icon-512.png` brand mark
+  filtered to a 35%-opacity black silhouette. On-brand, atmospheric,
+  dryly funny — and zero new assets. Edge tabs say "!" to match.
+- **"Call for Initiative" surfaced as a prominent orange button in the
+  Players panel**, above "+ Add offline player". Was buried inside the
+  initiative tracker's control bar (i.e. behind the hamburger →
+  Initiative path); now one click from the GM's resting view, and it
+  also auto-opens the tracker overlay so the rail renders for both
+  sides. Warm-orange gradient so it reads as the headline action.
+- **Player rail atmospherics — "cards on the table" framing.** Translucent
+  radial-gradient wash instead of a flat panel, soft drop-shadow under the
+  deck, no chrome border line. Per-card deeper shadow + identity-coloured
+  glow on the active card so it reads as physical cards sitting on a
+  surface, not as UI chrome.
+
+Banked from the audit, not yet implemented: bench/tray click-and-type-value
+flow (Q5/Q6), drag-from-bench-to-rail (Q7), double-click value edit (Q8),
+right-click context menu (Q9), delete-X to upper corner (Q10), card
+movement animations (Q11/Q12 — Alex flagged as critical for selling the
+card vision).
+
 ## v2.16.52 — 2026-05-31
 
 ### Reply assistant — gated pre-fetch + button rename

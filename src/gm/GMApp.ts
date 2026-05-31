@@ -6282,6 +6282,15 @@ export class GMApp {
       // v2.16.47 — click a per-row unread badge → open this player's
       // message thread in a right-edge SidePanel.
       onOpenThread: (id) => this._openMessageThread(id),
+      // v2.16.53 — surface Call for Initiative right next to the player
+      // roster so the GM doesn't have to dig into the tracker overlay
+      // first. Opens the tracker (if hidden) + broadcasts the prompt.
+      onCallForInitiative: () => {
+        this.initiativeTracker?.open();
+        this.initiativeTracker?.seedUnallocatedFromPlayers();
+        this.host.broadcast({ type: 'initiative_call' });
+        this.setStatus('Call for Initiative broadcast', 'ok');
+      },
     });
     // Load the persisted roster, then render the panel + any placed tokens.
     void this.playerRegistry.load().then(() => {

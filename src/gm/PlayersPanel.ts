@@ -31,6 +31,10 @@ export interface PlayersPanelCallbacks {
   /** v2.16.47 — open the message thread for this player (clicking the
    *  unread badge). The host opens a SidePanel with the thread + composer. */
   onOpenThread:   (id: string) => void;
+  /** v2.16.53 — fire Call for Initiative directly from the Players panel
+   *  instead of requiring the GM to open the initiative tracker first.
+   *  The host opens the tracker (if hidden) AND broadcasts the prompt. */
+  onCallForInitiative: () => void;
 }
 
 /**
@@ -45,6 +49,7 @@ export interface PlayersPanelCallbacks {
 export class PlayersPanel {
   private listEl: HTMLElement | null;
   private addBtn: HTMLButtonElement | null;
+  private callInitBtn: HTMLButtonElement | null;
   private cb: PlayersPanelCallbacks;
   private lastPlayers: PersistentPlayer[] = [];
 
@@ -52,10 +57,12 @@ export class PlayersPanel {
     this.cb = cb;
     this.listEl = document.querySelector<HTMLElement>('#players-list');
     this.addBtn = document.querySelector<HTMLButtonElement>('#add-player-btn');
+    this.callInitBtn = document.querySelector<HTMLButtonElement>('#call-initiative-btn');
     this.addBtn?.addEventListener('click', () => {
       const used = this.lastPlayers.map((p) => p.color);
       void this.cb.onAddManaged('', '', pickDefaultPlayerColor(used));
     });
+    this.callInitBtn?.addEventListener('click', () => this.cb.onCallForInitiative());
   }
 
   update(players: PersistentPlayer[], info: (id: string) => PlayerRowInfo): void {
