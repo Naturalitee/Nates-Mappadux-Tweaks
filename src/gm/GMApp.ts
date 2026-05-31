@@ -190,21 +190,11 @@ function _sniffIsVideo(buffer: ArrayBuffer): boolean {
   return false;
 }
 
-/** Map ASCII letters to their Mathematical Sans-Serif Bold Unicode
- *  equivalents. Used for the dropdown's "Fog of War" entry so it
- *  visually stands out from the MapFX kinds without needing CSS
- *  styling on <option> (which browsers largely ignore). */
-function _toUnicodeBold(s: string): string {
-  let out = '';
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (c >= 0x41 && c <= 0x5A)       out += String.fromCodePoint(0x1D5D4 + (c - 0x41)); // A-Z
-    else if (c >= 0x61 && c <= 0x7A)  out += String.fromCodePoint(0x1D5EE + (c - 0x61)); // a-z
-    else if (c >= 0x30 && c <= 0x39)  out += String.fromCodePoint(0x1D7EC + (c - 0x30)); // 0-9
-    else                              out += s[i];
-  }
-  return out;
-}
+// v2.16.35 — _toUnicodeBold (Mathematical Sans-Serif Bold via Unicode)
+// previously highlighted the "Fog of War" entry inside the popover's
+// kind picker. With the kind picker promoted to a real <select> on the
+// row, we can leave that style decision to CSS / option-default styling
+// instead of leaning on Unicode tricks. Helper retired.
 
 export class GMApp {
   private state   = new StateManager();
@@ -426,10 +416,10 @@ export class GMApp {
   private mapFxBtn!:               HTMLButtonElement;
   /** Live popover handle (open state) — null when nothing is shown.
    *  See src/gm/FxPopover.ts for the shared component shape. */
-  private _bgFxPopover:    import('./FxPopover.ts').FxPopoverHandle | null = null;
+  private _bgFxPopover:    import('./SidePanel.ts').SidePanelHandle | null = null;
   /** MapFX sparkle popover handle — opened from the FoW panel's
    *  sparkle button. Shares the same FxPopover plumbing. */
-  private _mapfxFxPopover: import('./FxPopover.ts').FxPopoverHandle | null = null;
+  private _mapfxFxPopover: import('./SidePanel.ts').SidePanelHandle | null = null;
   /** Set true by the popover's own onChange handlers while a slider /
    *  swatch / toggle is dispatching state updates. Refresh hooks
    *  consult this and skip the rebuild — otherwise each slider tick
@@ -1139,29 +1129,23 @@ export class GMApp {
    *  shows which kind is currently active. Called whenever the kind
    *  changes (popover dropdown, polygon selection sync, etc.). */
   private _updateActiveKindDisplay(): void {
-    const el = document.getElementById('mapfx-kind-display');
+    // v2.16.35 — element is now an inline <select> (was a static label
+    // before the kind-picker was promoted out of the popover). Set
+    // .value so the dropdown shows the active kind.
+    const el = document.getElementById('mapfx-kind-display') as HTMLSelectElement | null;
     if (!el) return;
-    el.textContent = overlayKind(this.activeOverlayKind).label;
+    el.value = this.activeOverlayKind;
   }
 
   /** v2.12 — sibling to _updateActiveKindDisplay for the Backdrop
-   *  side. Shows the active backdrop's label on the Map panel so the
-   *  GM can see at a glance whether anything is filling the bars
-   *  without opening the popover. */
+   *  side. Shows the active backdrop in the inline <select> on the Map
+   *  panel so the GM can see + change kind at a glance without opening
+   *  the side panel. v2.16.35 — element is now a <select>. */
   private _updateActiveBgDisplay(): void {
-    const el = document.getElementById('view-bg-display');
+    const el = document.getElementById('view-bg-display') as HTMLSelectElement | null;
     if (!el) return;
     const kind = this.state.getState().view.backdrop?.kind ?? 'none';
-    if (kind === 'none') {
-      el.textContent = 'None';
-      return;
-    }
-    // Lazy-resolve label from the backdrop registry (already loaded
-    // if a backdrop has ever been picked; the import is cached).
-    void import('../rendering/backdrops/backdropRegistry.ts').then(({ BACKDROPS }) => {
-      const entry = BACKDROPS.find((b) => b.id === kind);
-      el.textContent = entry?.label ?? kind;
-    });
+    el.value = kind;
   }
 
   /** v2.14.77 — Map panel upper-layer-opacity row. Shows the GM-only
@@ -4057,17 +4041,17 @@ export class GMApp {
     this._mapfxFxPopover?.refresh();
   }
 
-  /** Open the MapFX sparkle popover. Content: Edge Fade slider at the
-   *  top + the active kind's shader-param rows below. The kind itself
-   *  is still picked from the inline dropdown in the panel; this
-   *  popover is the focused "tune what's selected" surface. */
+  /** Open the MapFX side panel. Content: Edge Fade slider + the active
+   *  kind's shader-param rows. Kind itself is picked from the inline
+   *  <select> on the FoW row (v2.16.35); this panel is the focused
+   *  "tune what's selected" surface. */
   private _openMapFxPopover(): void {
     if (this._mapfxFxPopover) return;
-    void import('./FxPopover.ts').then(({ openFxPopover }) => {
+    void import('./SidePanel.ts').then(({ openSidePanel }) => {
       if (this._mapfxFxPopover) return;
-      this._mapfxFxPopover = openFxPopover({
-        anchor: this.mapFxBtn,
-        populate: (root) => { this._populateMapFxPopover(root); },
+      this._mapfxFxPopover = openSidePanel({
+        title: `MapFX — ${overlayKind(this.activeOverlayKind).label}`,
+        populate: (body) => { this._populateMapFxPopover(body); },
         onClose: () => { this._mapfxFxPopover = null; },
       });
     });
@@ -4091,44 +4075,9 @@ export class GMApp {
     const editingPoly = selectedPoly && selectedPoly.kind === this.activeOverlayKind ? selectedPoly : null;
     const inherit = !editingPoly ? this._pendingPaintInherit : null;
 
-    // ─── Kind picker (compact <select>) ──────────────────────────────
-    // 13 kinds is a lot vertically; a single dropdown reads much
-    // smaller in the popover. Same green '●' prefix for in-use kinds
-    // + bold Unicode for Fog of War (works in <option> text content
-    // even though CSS doesn't reliably style options).
-    const kindSelect = document.createElement('select');
-    kindSelect.className = 'fx-popover-kind-select';
-    const inUse = new Set<string>();
-    for (const p of fog.polygons) inUse.add(p.kind);
-    for (const id of OVERLAY_KIND_ORDER) {
-      const entry = OVERLAY_KIND_REGISTRY[id];
-      const opt = document.createElement('option');
-      opt.value = id;
-      let rendered = id === 'fog' ? _toUnicodeBold(entry.label) : entry.label;
-      if (inUse.has(id)) {
-        rendered = `● ${rendered}`;
-        opt.style.color = '#4ade80';
-      }
-      opt.textContent = rendered;
-      if (id === this.activeOverlayKind) opt.selected = true;
-      kindSelect.appendChild(opt);
-    }
-    kindSelect.addEventListener('change', () => {
-      const newKind = kindSelect.value as OverlayKind;
-      if (this.activeOverlayKind === newKind) return;
-      this.activeOverlayKind = newKind;
-      // Morph any selected polygon to the new kind.
-      const selId = this.fogEditor.getSelectedId();
-      if (selId) this.state.setPolygonKind(selId, newKind);
-      this._applyActiveKindToBrush();
-      this._applyKindToColourSwatch();
-      this._updateActiveKindDisplay();
-      this.fogEditor.setActiveKind(newKind);
-      this.fogEditor.setColor(overlayKind(newKind).defaultColor);
-      // Rebuild the popover so the param section reflects the new kind.
-      this._mapfxFxPopover?.refresh();
-    });
-    root.appendChild(kindSelect);
+    // v2.16.35 — kind picker promoted to the inline row's <select>
+    // (#mapfx-kind-display, wired in _bindMapFxKindSelect). Side panel
+    // body now starts with the contextual header below.
 
     // Small header so the GM knows what they're editing.
     const hdr = document.createElement('div');
@@ -5050,21 +4999,22 @@ export class GMApp {
     // here next to the colour picker because backdrop is the same kind of
     // decision ("what do my dead bars look like?") but for the animated
     // case rather than the solid one.
+    // v2.16.35 — sliders button opens the right-edge side panel that
+    // holds the active backdrop's params. Kind picker lives inline on
+    // the row now (was inside the popover before).
     this.viewBgFxBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (this._bgFxPopover) this._bgFxPopover.close();
       else this._openBgFxPopover();
     });
-
-    // MapFX FX button — opens the same sparkle popover style, but for
-    // the active overlay kind's Edge Fade + shader params. The kind
-    // dropdown itself stays inline so the GM can switch what's being
-    // tuned without diving through a menu.
     this.mapFxBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (this._mapfxFxPopover) this._mapfxFxPopover.close();
       else this._openMapFxPopover();
     });
+    // Populate the inline kind selects + wire change handlers.
+    this._bindBackdropKindSelect();
+    this._bindMapFxKindSelect();
 
     // Open local player window as a real popup. We tag the URL with
     // ?gmPreview=1 so the popup recognises itself as the GM's preview view and
@@ -5274,12 +5224,77 @@ export class GMApp {
   private _openBgFxPopover(): void {
     void import('../rendering/backdrops/backdropRegistry.ts').then(async ({ BACKDROPS }) => {
       if (this._bgFxPopover) return;
-      const { openFxPopover } = await import('./FxPopover.ts');
-      this._bgFxPopover = openFxPopover({
-        anchor: this.viewBgFxBtn,
-        populate: (root) => { this._populateBgFxPopover(root, BACKDROPS); },
+      // v2.16.35 — was an anchored fx-popover; now a right-edge SidePanel.
+      const { openSidePanel } = await import('./SidePanel.ts');
+      const view  = this.state.getState().view;
+      const kind  = view.backdrop?.kind ?? 'none';
+      const entry = BACKDROPS.find((b) => b.id === kind);
+      this._bgFxPopover = openSidePanel({
+        title: `Backdrop — ${entry?.label ?? 'None'}`,
+        populate: (body) => { this._populateBgFxPopover(body, BACKDROPS); },
         onClose: () => { this._bgFxPopover = null; },
       });
+    });
+  }
+
+  /** v2.16.35 — populate the inline Backdrop kind <select> + wire its
+   *  change handler. Was a kind picker inside the popover; promoted to
+   *  the row so the GM can see + change the active kind at a glance. */
+  private _bindBackdropKindSelect(): void {
+    const sel = document.getElementById('view-bg-display') as HTMLSelectElement | null;
+    if (!sel) return;
+    void import('../rendering/backdrops/backdropRegistry.ts').then(({ BACKDROPS }) => {
+      sel.innerHTML = '';
+      for (const b of BACKDROPS) {
+        const opt = document.createElement('option');
+        opt.value = b.id;
+        opt.textContent = b.label;
+        sel.appendChild(opt);
+      }
+      this._updateActiveBgDisplay();
+    });
+    sel.addEventListener('change', () => {
+      this._applyBackdrop(sel.value);
+      // If the side panel is open, refresh its body so the params
+      // section reflects the newly-active kind + sync the header title.
+      void import('../rendering/backdrops/backdropRegistry.ts').then(({ BACKDROPS }) => {
+        const entry = BACKDROPS.find((b) => b.id === sel.value);
+        this._bgFxPopover?.setTitle(`Backdrop — ${entry?.label ?? 'None'}`);
+      });
+      this._bgFxPopover?.refresh();
+    });
+  }
+
+  /** v2.16.35 — populate the inline MapFX kind <select> + wire its
+   *  change handler. Mirror of _bindBackdropKindSelect — same idea, kind
+   *  dropdown promoted from inside the popover to the row. */
+  private _bindMapFxKindSelect(): void {
+    const sel = document.getElementById('mapfx-kind-display') as HTMLSelectElement | null;
+    if (!sel) return;
+    sel.innerHTML = '';
+    for (const id of OVERLAY_KIND_ORDER) {
+      const entry = OVERLAY_KIND_REGISTRY[id];
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = entry.label;
+      sel.appendChild(opt);
+    }
+    sel.value = this.activeOverlayKind;
+    sel.addEventListener('change', () => {
+      const newKind = sel.value as OverlayKind;
+      if (this.activeOverlayKind === newKind) return;
+      this.activeOverlayKind = newKind;
+      // Morph any selected polygon to the new kind.
+      const selId = this.fogEditor.getSelectedId();
+      if (selId) this.state.setPolygonKind(selId, newKind);
+      this._applyActiveKindToBrush();
+      this._applyKindToColourSwatch();
+      this.fogEditor.setActiveKind(newKind);
+      this.fogEditor.setColor(overlayKind(newKind).defaultColor);
+      // Refresh the side panel's body so the per-kind params reflect
+      // the new active kind. setTitle keeps the header in sync.
+      this._mapfxFxPopover?.refresh();
+      this._mapfxFxPopover?.setTitle(`MapFX — ${overlayKind(newKind).label}`);
     });
   }
 
@@ -5294,21 +5309,9 @@ export class GMApp {
     const currentKind = view.backdrop?.kind ?? 'none';
     const entry = BACKDROPS.find((b) => b.id === currentKind);
 
-    // ─── Kind dropdown ───────────────────────────────────────────────
-    const kindSelect = document.createElement('select');
-    kindSelect.className = 'fx-popover-kind-select';
-    for (const b of BACKDROPS) {
-      const opt = document.createElement('option');
-      opt.value = b.id;
-      opt.textContent = b.label;
-      if (b.id === currentKind) opt.selected = true;
-      kindSelect.appendChild(opt);
-    }
-    kindSelect.addEventListener('change', () => {
-      this._applyBackdrop(kindSelect.value);
-      this._bgFxPopover?.refresh();
-    });
-    root.appendChild(kindSelect);
+    // v2.16.35 — kind picker promoted to the inline row's <select>
+    // (#view-bg-display, wired in _bindBackdropKindSelect). The side
+    // panel body starts with the Background Colour row below.
 
     // ─── Background Colour (always available) ────────────────────────
     // The pack-level bg colour fills the bars when no backdrop is

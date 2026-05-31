@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.16.35 — 2026-05-31
+
+### Side-panel framework + Backdrop / MapFX first users
+
+- **New right-edge side-panel framework** (`src/gm/SidePanel.ts`,
+  `.side-panel` CSS). Slides in from the right, single panel at a
+  time, header + scrollable body, outside-click / Escape / X button
+  to close. Re-usable foundation that the Visual Filter, Player Voice
+  threads, and any future "configure this thing" surface will hang
+  off.
+- **Backdrop kind picker promoted from popover to inline `<select>`**
+  on the Map panel row. The tune button (sliders) opens the side
+  panel with Background colour + the kind's params; switching the
+  kind from the dropdown auto-refreshes the panel body + title.
+- **MapFX kind picker promoted from popover to inline `<select>`** on
+  the FoW panel row, with the same side-panel treatment. The kind
+  picker no longer needs to live inside the popover — it lives
+  exactly where the GM looks for it.
+- **`FxPopover` kept around as dead code** so anything still depending
+  on the old call shape doesn't break; will be removed in a follow-up
+  once the rest of the sweep (Visual Filter, etc.) settles.
+
 ## v2.16.34 — 2026-05-31
 
 ### Design language sweep — adjacent "+" + sliders for tune
