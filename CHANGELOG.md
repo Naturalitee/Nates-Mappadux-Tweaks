@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.16.33 — 2026-05-31
+
+### Sidebar simplify — reorg + Player Connection retired
+
+- **Map Selection promoted to the top of the sidebar.**
+- **Player Connection panel deleted.** The QR + URL display, the
+  player-count line, the broker-error notice, and the Open Player
+  Window button all lived there. The hold screen players see when
+  they can't reach the GM picks up the URL responsibility; the
+  per-row green pulse indicators on the Players panel already give
+  the count feedback at a glance; Open Player Window relocated.
+- **Scaled View renamed to Player Views.** The single panel now houses
+  everything broadcast-to-audience: Open Player Window (relocated),
+  Display picker, rotation, Disable Filters, etc.
+- **Two broadcast-bypass switches collapsed into one.** The Player
+  Views header toggle now hides BOTH player and projector audiences
+  simultaneously when off. Was prone to leaving half the audience
+  in the hold screen and the other half live.
+- **Player Voice panel deleted.** Messaging surface returns as a
+  right-edge slide-out triggered by per-row unread badges on the
+  Players panel when we revisit messaging functionality. Until then
+  the existing panel's empty list adds nothing.
+
 ## v2.16.32 — 2026-05-31
 
 ### Visual Filter — honest label, gated visibility

@@ -27,70 +27,11 @@
       <div class="gm-menu" id="gm-menu" role="menu" hidden></div>
     </div>
 
-    <section class="panel" id="session-panel">
-      <div class="panel-header">
-        <button type="button" class="panel-title" aria-expanded="true">Player Connection</button>
-        <span class="panel-toggle-icon" aria-hidden="true" title="Visual bypass"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
-        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Broadcast to players. Off = show placeholder (the GM is faffing)">
-          <input type="checkbox" id="player-broadcast-toggle" checked />
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-      <div class="panel-body">
-        <!-- Hidden source-of-truth for the room code; rendered as a tooltip on the QR. -->
-        <span id="room-code" hidden>…</span>
-
-        <div id="qr-container" role="button" tabindex="0" title="QR code for the player URL. Players scan this with a phone camera to join your session via their browser — no app install needed. Click anywhere on the QR to copy the URL to your clipboard so you can text / DM it to someone instead.">
-          <button id="copy-url-btn" class="qr-copy-btn" type="button"
-                  title="Copy the player URL to your clipboard. Same as clicking the QR itself; here for muscle memory if you'd rather aim at a button than the code." aria-label="Copy player URL">
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-              <rect x="4.25" y="4.25" width="8.5" height="9.5" rx="1.5"
-                    fill="none" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M2.75 11V3.75A1.5 1.5 0 0 1 4.25 2.25H10"
-                    fill="none" stroke="currentColor" stroke-width="1.5"/>
-            </svg>
-          </button>
-          <canvas></canvas>
-        </div>
-
-        <!-- Shown in place of the QR when the PeerJS broker is unreachable.
-             Same-machine (BroadcastChannel) players keep working; remote
-             players can't join until the broker recovers. -->
-        <div id="broker-error" class="broker-error" hidden>
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
-          <strong>Network broker unreachable</strong>
-          <p>The public PeerJS signaling server isn't responding. Remote players (phones, other devices) can't join right now &mdash; but same-machine browser windows still work fine. Auto-retrying every minute; will restore the QR as soon as the broker comes back.</p>
-        </div>
-
-        <div class="session-meta" id="session-meta" title="The leading number is players reaching you over the network. The bracketed number (when shown) adds same-machine browser windows so you see the full audience. '+ Projector' means the primary projector window is live; its bracketed count is additional monitor projectors (Projector #1 is always the primary; #2+ are monitors and close automatically if the primary closes).">
-          <strong id="player-count">0</strong> player<span id="player-count-plural">s</span> connected<span id="player-total-suffix"></span><span id="projector-count-suffix"></span>
-        </div>
-
-        <div class="session-actions">
-          <button id="open-player-btn" class="btn btn--primary" title="Open a player view as a popup window on this machine. Useful for previewing what players see, or as a secondary screen on the same PC. Note: same-machine player windows can struggle with animated map playback because of browser-level per-window decode throttling — use the projector window or a separate device for table-side animation.">Open Player Window</button>
-        </div>
-      </div>
-    </section>
-
-    <section class="panel" id="players-panel">
-      <button type="button" class="panel-title" aria-expanded="true">Players</button>
-      <div class="panel-body">
-        <div id="players-list" class="players-list"></div>
-        <button id="add-player-btn" class="btn btn--ghost btn--sm btn--full" title="Add someone at the table who doesn't have their own device. You set their name + colour and act on their behalf; connected players appear here automatically when they introduce themselves.">+ Add offline player</button>
-      </div>
-    </section>
-
-    <section class="panel" id="player-voice-panel">
-      <button type="button" class="panel-title" aria-expanded="false">Player Voice <span id="player-voice-badge" class="pv-badge" hidden>0</span></button>
-      <div class="panel-body" hidden>
-        <div id="player-voice-list" class="pv-list"></div>
-      </div>
-    </section>
+    <!-- v2.16.33 — Player Connection panel removed (QR moved to the hold
+         screen players see when they can't connect; Open Player Window
+         relocated under Player Views below). Hidden room-code holder
+         kept so existing GMApp wiring that reads it can keep working. -->
+    <span id="room-code" hidden>…</span>
 
     <section class="panel" id="map-panel">
       <button type="button" class="panel-title" aria-expanded="true">Map Selection</button>
@@ -146,6 +87,19 @@
 
       </div>
     </section>
+
+    <section class="panel" id="players-panel">
+      <button type="button" class="panel-title" aria-expanded="true">Players</button>
+      <div class="panel-body">
+        <div id="players-list" class="players-list"></div>
+        <button id="add-player-btn" class="btn btn--ghost btn--sm btn--full" title="Add someone at the table who doesn't have their own device. You set their name + colour and act on their behalf; connected players appear here automatically when they introduce themselves.">+ Add offline player</button>
+      </div>
+    </section>
+
+    <!-- v2.16.33 — Player Voice panel removed. Per-player messaging
+         threads will return as a slide-out right-edge panel triggered
+         by unread badges on each Players row (red = GM-bound, orange
+         = player↔player). Wire-up comes with the messaging revisit. -->
 
     <section class="panel" id="transition-panel">
       <div class="panel-header">
@@ -447,14 +401,20 @@
 
     <section class="panel" id="projection-panel">
       <div class="panel-header">
-        <button type="button" class="panel-title" aria-expanded="false">Scaled View</button>
+        <button type="button" class="panel-title" aria-expanded="false">Player Views</button>
         <span class="panel-toggle-icon" aria-hidden="true" title="Visual bypass"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
-        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Broadcast to projector. Off = show placeholder (the GM is faffing)">
+        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Broadcast to player + projector views. Off = both audiences see the hold screen (the GM is faffing)">
           <input type="checkbox" id="projection-broadcast-toggle" checked />
           <span class="toggle-slider"></span>
         </label>
       </div>
       <div class="panel-body" hidden>
+
+        <!-- v2.16.33 — Open a same-machine player window. Relocated from
+             the deleted Player Connection panel; lives here because
+             "Player Views" is now the umbrella for everything broadcast-
+             to-audience. PiP / inline-preview work will join this row. -->
+        <button id="open-player-btn" class="btn btn--primary btn--full view-hint--gap" title="Open a player view as a popup window on this machine. Useful for previewing what players see, or as a secondary screen on the same PC. Note: same-machine player windows can struggle with animated map playback because of browser-level per-window decode throttling — use the projector window or a separate device for table-side animation.">Open Player Window</button>
 
         <!-- Always-visible projector picker. Off / setup / + add new. -->
         <div class="param-row">

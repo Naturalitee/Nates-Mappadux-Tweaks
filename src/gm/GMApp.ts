@@ -79,7 +79,11 @@ import { CanvasTransform } from '../utils/CanvasTransform.ts';
 import { attachGestures } from '../utils/Gestures.ts';
 import type { SessionState, StoredMap, TransitionConfig, FilterState, Marker, MarkerIconData, AudioAsset, AudioRole, MotionRole, ProjectorConnection, ProjectorViewport, ViewState, GMMessage } from '../types.ts';
 import { defaultProjectorViewport } from '../types.ts';
-import QRCode from 'qrcode';
+// v2.16.33 — QRCode import retired alongside the deleted Player
+// Connection panel. The hold screen + player connect UI handle their
+// own QR rendering. Re-add this import if a top-of-sidebar copy / QR
+// entry returns.
+// import QRCode from 'qrcode';
 
 const REMOTE_AUDIO_KEY = 'dmr_remote_audio';
 
@@ -440,8 +444,8 @@ export class GMApp {
    *  cleared once the bundle has been sent or the GM swaps away. */
   private _pendingVideoBundle: { mapId: string; buffer: ArrayBuffer; mimeType: string } | null = null;
   private roomCodeEl!:             HTMLElement;
-  private qrContainer!:            HTMLElement;
-  private playerCountEl!:          HTMLElement;
+  // v2.16.33 — qrContainer + playerCountEl fields retired alongside the
+  // deleted Player Connection panel.
   private statusEl!:               HTMLElement;
   private markerSelect!:           HTMLSelectElement;
   private markerEditableSelect!:   EditableSelect;
@@ -1006,7 +1010,10 @@ export class GMApp {
     // Player rect — always shown when a map is loaded. Selection-gated
     // chrome (resize / aspect / maximise) shows only while selected.
     const playerBounds = this.viewportEditor?.getRectBounds() ?? null;
-    const playerBroadcastEl = document.querySelector<HTMLInputElement>('#player-broadcast-toggle');
+    // v2.16.33 — single broadcast-bypass toggle (on the Player Views
+    // panel) drives both player AND projector eye icons. Was two toggles
+    // before; collapsed because the panels were really one audience.
+    const sharedBroadcastEl = document.querySelector<HTMLInputElement>('#projection-broadcast-toggle');
     // v2.14.5 — the eye reflects three states: 'on' (broadcasting and
     // someone is connected), 'off' (broadcasting bypassed), 'no-target'
     // (no client connected, so broadcast state is moot — eye dims).
@@ -1017,7 +1024,7 @@ export class GMApp {
     const totalPlayers     = remotePlayers + this.host.localPlayerCount;
     const playerBroadcast: 'on' | 'off' | 'no-target' = totalPlayers === 0
       ? 'no-target'
-      : (playerBroadcastEl?.checked === false ? 'off' : 'on');
+      : (sharedBroadcastEl?.checked === false ? 'off' : 'on');
     // v2.14.4 — does the player rect's current W:H match 16:9 in physical
     // (map-aspect-corrected) space? Drives the 16:9 button's colour state.
     // Use a forgiving tolerance because viewNW / viewNH are floats and a
@@ -1069,13 +1076,13 @@ export class GMApp {
     // otherwise per A8.3).
     const projBounds = this.projectorEditor?.getRectBounds() ?? null;
     const projMaxAvailable = projSelected && this._isActiveMapCalibrated();
-    const projBroadcastEl = document.querySelector<HTMLInputElement>('#projection-broadcast-toggle');
     // v2.14.5 — same three-state eye logic; 'no-target' when no
-    // projector window is connected.
+    // projector window is connected. Uses the same shared bypass
+    // toggle as the player rect (v2.16.33).
     const projConnected = this.projectorConnections.size > 0;
     const projBroadcast: 'on' | 'off' | 'no-target' = !projConnected
       ? 'no-target'
-      : (projBroadcastEl?.checked === false ? 'off' : 'on');
+      : (sharedBroadcastEl?.checked === false ? 'off' : 'on');
     // v2.14.3 — Show Grid icon on the Scaled View rect, only on calibrated
     // maps (a 1" grid is meaningless without a known pixels-per-square).
     // v2.14.23 — same selection gate as the player rect: chrome
@@ -1480,15 +1487,16 @@ export class GMApp {
   }
 
   /**
-   * v2.14.3 — eye icon click on a viewport rect. Toggles the same
-   * broadcast bypass that the panel-header switch controls; firing
-   * the checkbox's 'change' event keeps the existing wiring (faff
-   * placeholder broadcast) intact and ensures the panel UI updates
-   * to match.
+   * v2.14.3 — eye icon click on either viewport rect. Toggles the same
+   * (single, post v2.16.33) broadcast bypass that the Player Views
+   * panel-header switch controls; firing the checkbox's 'change' event
+   * keeps the existing wiring (faff placeholder broadcast for both
+   * audiences) intact and ensures the panel UI updates to match.
+   * The `kind` arg is kept for call-site readability but both kinds
+   * resolve to the same single toggle now.
    */
-  private _handleRectViewBroadcast(kind: 'player' | 'projector'): void {
-    const id = kind === 'player' ? '#player-broadcast-toggle' : '#projection-broadcast-toggle';
-    const cb = document.querySelector<HTMLInputElement>(id);
+  private _handleRectViewBroadcast(_kind: 'player' | 'projector'): void {
+    const cb = document.querySelector<HTMLInputElement>('#projection-broadcast-toggle');
     if (!cb) return;
     cb.checked = !cb.checked;
     cb.dispatchEvent(new Event('change'));
@@ -1617,11 +1625,12 @@ export class GMApp {
     this._refreshRectOverlays();
   }
 
-  private _setBrokerErrorVisible(visible: boolean): void {
-    const errBox = document.getElementById('broker-error');
-    const qr     = document.getElementById('qr-container');
-    if (errBox) errBox.hidden = !visible;
-    if (qr)     qr.hidden     =  visible;
+  private _setBrokerErrorVisible(_visible: boolean): void {
+    // v2.16.33 — the broker error notice + QR both lived in the (now
+    // deleted) Player Connection panel. The setStatus call upstream of
+    // every caller already surfaces the failure to the GM via the
+    // status overlay; no panel-specific UI to flip here. Kept as a
+    // no-op stub so callers don't need to know the panel is gone.
   }
 
   async init(): Promise<void> {
@@ -1793,14 +1802,13 @@ export class GMApp {
     }
 
     const playerUrl = this._buildPlayerUrl(roomCode);
-    this.qrContainer.title = `Click to copy player URL — Room code: ${roomCode}`;
-    try {
-      await QRCode.toCanvas(
-        this.qrContainer.querySelector('canvas') as HTMLCanvasElement,
-        playerUrl,
-        { width: 120, color: { dark: '#c8d8e8', light: '#0a0e1a' } }
-      );
-    } catch { /* QR non-critical */ }
+    // v2.16.33 — QR + player-URL display moved out of the sidebar (the
+    // Player Connection panel is gone). The hold-screen players see
+    // when they can't reach the GM is now where they pick the URL up,
+    // and Open Player Window relocated to the Player Views panel. The
+    // _buildPlayerUrl call is preserved so other consumers (clipboard
+    // copy, status messages) still resolve the right URL.
+    void playerUrl;
 
     const existing = await loadSession();
     // Pack name precedence: existing session > bundle-seeded default > none.
@@ -1876,65 +1884,29 @@ export class GMApp {
     const localPlayers     = this.host.localPlayerCount;
     const totalPlayers     = remotePlayers + localPlayers;
 
-    this.playerCountEl.textContent = String(remotePlayers);
-    const plural = document.querySelector('#player-count-plural');
-    if (plural) plural.textContent = remotePlayers === 1 ? '' : 's';
-
-    // "(N)" — full audience including same-machine players. Shown only when
-    // there's at least one local player so the line stays clean for the
-    // common pure-remote case.
-    const totalSuffix = document.querySelector<HTMLElement>('#player-total-suffix');
-    if (totalSuffix) {
-      totalSuffix.textContent = localPlayers > 0 ? ` (${totalPlayers})` : '';
-    }
-
-    // Projector segment: "+ Projector" once any projector connects, with a
-    // bracketed count of ADDITIONAL monitors (projector #1 is always
-    // primary; closing the primary auto-closes all monitors).
+    // v2.16.33 — the player-count / plural / suffix / projector-suffix
+    // strings + the session-meta tooltip all lived in the deleted
+    // Player Connection panel. The per-row green pulsing indicators on
+    // the Players panel give the same feedback at a glance; no separate
+    // count line needed anymore. Kept the local references commented
+    // so future maintainers can find what was here.
+    //   - this.playerCountEl, #player-count-plural, #player-total-suffix
+    //   - #projector-count-suffix, .session-meta tooltip
+    // Variables stay scoped so the no-connection greying below still
+    // computes the right totals.
     const projTotal = this.projectorConnections.size;
-    const monitors  = Math.max(0, projTotal - 1);
-    const projSuffix = document.querySelector<HTMLElement>('#projector-count-suffix');
-    if (projSuffix) {
-      if (projTotal === 0)      projSuffix.textContent = '';
-      else if (monitors === 0)  projSuffix.textContent = ' + Projector';
-      else                      projSuffix.textContent = ` + Projector (${monitors})`;
-    }
+    void localPlayers; void totalPlayers;
 
-    // Grey out the broadcast toggles on the side-panel headers when nothing
-    // of that type is currently receiving. CSS handles the visual fade; the
-    // toggle stays clickable so the GM can pre-set state before joining
-    // players / projectors arrive. Player toggle (now in the Session
-    // header) uses TOTAL players (a single local player is enough to
-    // undgrey it).
-    document.querySelector('#session-panel .panel-header')
-      ?.classList.toggle('panel-header--no-connection', totalPlayers === 0);
+    // Grey out the broadcast toggle on the Player Views panel header
+    // when neither players NOR projectors are connected — the bypass is
+    // moot in that state. CSS handles the visual fade; the toggle stays
+    // clickable so the GM can pre-set state before joining audience arrives.
     document.querySelector('#projection-panel .panel-header')
-      ?.classList.toggle('panel-header--no-connection', projTotal === 0);
+      ?.classList.toggle('panel-header--no-connection', totalPlayers === 0 && projTotal === 0);
 
     // v2.14.5 — refresh the rect chrome so the eye-icon "no-target"
     // greying updates in lock-step with the panel-header fade.
     this._refreshRectOverlays();
-
-    // Hover tooltip on the session-meta line listing what we know about each
-    // connected peer. Players are anonymous PeerJS peers today (real names
-    // arrive in v2.13 with User ID); projectors carry their setup name from
-    // projector_hello, which is more identifiable.
-    const meta = document.querySelector<HTMLElement>('.session-meta');
-    if (meta) {
-      const playerLines: string[] = [];
-      for (const peerId of this.host.connectedPeerIds) {
-        if (projectorPeerIds.has(peerId)) continue;
-        playerLines.push(`• Player ${peerId.slice(0, 8)}…`);
-      }
-      const projLines: string[] = [];
-      for (const conn of this.projectorConnections.values()) {
-        projLines.push(`• ${conn.setupName || '(uncalibrated projector)'}`);
-      }
-      const sections: string[] = [];
-      if (playerLines.length > 0) sections.push('Players:\n' + playerLines.join('\n'));
-      if (projLines.length > 0)   sections.push('Projectors:\n' + projLines.join('\n'));
-      meta.title = sections.length > 0 ? sections.join('\n\n') : 'No peers connected';
-    }
   }
 
   // ─── State change → propagate to renderer + P2P ───────────────────────────
@@ -3070,8 +3042,6 @@ export class GMApp {
     this.viewBgFxBtn           = q<HTMLButtonElement>('#view-bg-fx-btn');
     this.mapFxBtn              = q<HTMLButtonElement>('#mapfx-fx-btn');
     this.roomCodeEl            = q('#room-code');
-    this.qrContainer           = q('#qr-container');
-    this.playerCountEl         = q('#player-count');
     this.statusEl              = q('#status');
     this.markerSelect          = q<HTMLSelectElement>('#marker-select');
     this.markerEditableSelect  = new EditableSelect(this.markerSelect, {
@@ -5093,25 +5063,12 @@ export class GMApp {
       );
     });
 
-    // Copy player URL — both the icon button (top-left of QR) and clicking
-    // the QR itself trigger the copy.
-    const copyPlayerUrl = () => {
-      const code = this.roomCodeEl.textContent?.trim() ?? '';
-      if (!code) return;
-      void navigator.clipboard.writeText(this._buildPlayerUrl(code));
-      this.setStatus('Player URL copied!', 'ok');
-    };
-    document.querySelector('#copy-url-btn')?.addEventListener('click', (e) => {
-      e.stopPropagation(); // prevent the QR container click from also firing
-      copyPlayerUrl();
-    });
-    this.qrContainer.addEventListener('click', copyPlayerUrl);
-    this.qrContainer.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        copyPlayerUrl();
-      }
-    });
+    // v2.16.33 — Copy-player-URL handlers used to live on the QR + a
+    // dedicated copy button in the Player Connection panel. Both are
+    // gone; players pick up the URL from the hold screen they see when
+    // they aren't connected. If we add a top-of-sidebar / menu-level
+    // "Copy player URL" entry later, the body of the old handler is
+    // straightforward to revive.
 
     // Collapsible panel sections. Use the parent panel's .panel-body
     // child rather than nextElementSibling so panels with a header
@@ -5163,12 +5120,16 @@ export class GMApp {
         this.host.broadcast({ type: 'positional_mute_all', muted });
       });
     }
-    // Player View + Projection View bypass switches. Off broadcasts a
-    // full-screen "GM is faffing" placeholder to the downstream view;
+    // v2.16.33 — single broadcast-bypass switch lives on the Player Views
+    // panel header. Off broadcasts a "GM is faffing" placeholder to BOTH
+    // the player views AND the projector / scaled views simultaneously;
     // the underlying map state keeps streaming so flipping back is
-    // instant. A fresh funny message is picked on every off-flip.
-    this._wireBroadcastBypass('#player-broadcast-toggle', 'player');
-    this._wireBroadcastBypass('#projection-broadcast-toggle', 'projector');
+    // instant. A fresh faff message is picked on every off-flip.
+    // (The old per-audience pair (Player Connection panel + Scaled View
+    // panel) collapsed into this one — players + projectors are always
+    // both "audience", and the two-toggle UI was prone to leaving one
+    // half visible while the other was held.)
+    this._wireBroadcastBypass('#projection-broadcast-toggle', ['player', 'projector']);
 
     // Paint initial "no connection" greying so the toggles are correctly
     // faded before any first connect/disconnect event fires.
@@ -5181,17 +5142,21 @@ export class GMApp {
     window.setInterval(() => this._updatePlayerCount(), 5000);
   }
 
-  private _wireBroadcastBypass(selector: string, target: 'player' | 'projector'): void {
+  private _wireBroadcastBypass(selector: string, targets: ('player' | 'projector')[]): void {
     const toggle = document.querySelector<HTMLInputElement>(selector);
     if (!toggle) return;
     toggle.addEventListener('click', (e) => e.stopPropagation());
     toggle.addEventListener('change', () => {
       const show = !toggle.checked;
+      // Share the same faff message across both target audiences for
+      // this flip — feels like one decision, not two.
       const message = show ? randomFaffMessage() : '';
-      this.host.broadcast({ type: 'view_placeholder', target, show, message });
-      // v2.14.3 — refresh the rect overlay so the eye icon mirrors
-      // the new broadcast state (panel-header toggle ↔ rect eye stay
-      // in sync in both directions).
+      for (const target of targets) {
+        this.host.broadcast({ type: 'view_placeholder', target, show, message });
+      }
+      // v2.14.3 — refresh the rect overlay so the eye icons on both
+      // viewport rects mirror the new broadcast state (panel-header
+      // toggle ↔ rect eyes stay in sync in both directions).
       this._refreshRectOverlays();
     });
   }
