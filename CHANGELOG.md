@@ -1,5 +1,32 @@
 # Changelog
 
+## v2.16.46 — 2026-05-31
+
+### Sidebar panel order reshuffled for play-frequency
+
+New order (top = highest-frequency during play):
+
+1. Map Selection
+2. Players
+3. Markers ── per-map content, frequent during play
+4. Fog of War & MapFX
+5. Visual Filter
+6. Soundboard ── audio, frequent during play
+7. Soundtracks
+8. Scaled View ── per-map setup
+9. Map Transition
+10. Stagecraft
+
+Key changes vs. before:
+- **Markers up 3 places** (was #6 between Stagecraft and Scaled View).
+  Touched almost as often as fog during play.
+- **Map Transition down to #9** (was #3). Picked once per map, plays
+  automatically on swap — low play-time frequency.
+- **Visual Filter and Soundboard up** so the per-map atmosphere
+  controls cluster together where the GM looks for them.
+- **Stagecraft at the bottom** — config-heavy, rarely touched during
+  play.
+
 ## v2.16.45 — 2026-05-31
 
 ### Minor polish
