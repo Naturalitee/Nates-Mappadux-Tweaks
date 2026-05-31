@@ -12,6 +12,10 @@ export interface PlayerRowInfo {
    *  gm-bound, orange badge for peer-bound. Zero = no badge. */
   unreadGm:       number;
   unreadPeer:     number;
+  /** v2.16.48 — true when this player has any history at all (even if
+   *  all read). Drives the faint "review previous conversations" icon
+   *  the GM clicks to re-open the thread when no badge is active. */
+  hasHistory:     boolean;
 }
 
 export interface PlayersPanelCallbacks {
@@ -206,23 +210,6 @@ export class PlayersPanel {
     marker.addEventListener('click', () => void this.cb.onToggleMarker(p.id));
     row.appendChild(marker);
 
-    // v2.16.47 — unread message badge. Red beats orange when both
-    // have unread, since gm-bound demands more attention. Click
-    // opens this player's thread in a SidePanel.
-    const totalUnread = info.unreadGm + info.unreadPeer;
-    if (totalUnread > 0) {
-      const badge = document.createElement('button');
-      badge.type = 'button';
-      const isGm = info.unreadGm > 0;
-      badge.className = 'player-row-unread' + (isGm ? '' : ' player-row-unread--peer');
-      badge.textContent = String(totalUnread);
-      badge.title = isGm
-        ? `${info.unreadGm} unread message${info.unreadGm === 1 ? '' : 's'} to you`
-        : `${info.unreadPeer} unread player-to-player message${info.unreadPeer === 1 ? '' : 's'} you're monitoring`;
-      badge.addEventListener('click', (e) => { e.stopPropagation(); this.cb.onOpenThread(p.id); });
-      row.appendChild(badge);
-    }
-
     // Delete
     const del = document.createElement('button');
     del.type = 'button';
@@ -237,6 +224,41 @@ export class PlayersPanel {
       }
     });
     row.appendChild(del);
+
+    // v2.16.48 — thread affordance at the FAR RIGHT of the row. Three states:
+    //   • unread > 0 → coloured badge (red for gm-bound, orange for peer-bound)
+    //     with the count
+    //   • unread = 0 AND has history → faint chat-lines icon to review the
+    //     existing thread
+    //   • no history at all → no element (a fresh player has nothing to read;
+    //     the GM can still open a thread later when they want to message)
+    const totalUnread = info.unreadGm + info.unreadPeer;
+    if (totalUnread > 0) {
+      const badge = document.createElement('button');
+      badge.type = 'button';
+      const isGm = info.unreadGm > 0;
+      badge.className = 'player-row-unread' + (isGm ? '' : ' player-row-unread--peer');
+      badge.textContent = String(totalUnread);
+      badge.title = isGm
+        ? `${info.unreadGm} unread message${info.unreadGm === 1 ? '' : 's'} to you`
+        : `${info.unreadPeer} unread player-to-player message${info.unreadPeer === 1 ? '' : 's'} you're monitoring`;
+      badge.addEventListener('click', (e) => { e.stopPropagation(); this.cb.onOpenThread(p.id); });
+      row.appendChild(badge);
+    } else if (info.hasHistory) {
+      const idle = document.createElement('button');
+      idle.type = 'button';
+      idle.className = 'player-row-thread-idle';
+      idle.title = 'Review previous conversation';
+      idle.setAttribute('aria-label', 'Open message thread');
+      idle.innerHTML =
+        '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+          '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' +
+          '<line x1="8"  y1="9"  x2="16" y2="9"/>' +
+          '<line x1="8"  y1="13" x2="13" y2="13"/>' +
+        '</svg>';
+      idle.addEventListener('click', (e) => { e.stopPropagation(); this.cb.onOpenThread(p.id); });
+      row.appendChild(idle);
+    }
 
     return row;
   }

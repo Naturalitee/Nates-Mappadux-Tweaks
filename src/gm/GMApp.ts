@@ -6252,6 +6252,7 @@ export class GMApp {
           canCancelMove: this._markerMoveOrigin.has(id),
           unreadGm:      unread.gm,
           unreadPeer:    unread.peer,
+          hasHistory:    this._messageThreads.messagesFor(id).length > 0,
         };
       },
     );

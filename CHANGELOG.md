@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.16.48 — 2026-05-31
+
+### Player row polish + sidebar above PiP
+
+- **Unread badge moves to the far right** of each Players row
+  (after the delete button). Notification badges read more clearly
+  at the row's terminal edge.
+- **Idle "review thread" icon** appears in the same slot when a
+  player has thread history but no unread messages. Faint chat-
+  bubble glyph, brightens on hover, click opens the same SidePanel
+  so the GM can reread previous conversations at any time.
+- **Sidebar now layers above the PlayerPip overlay.** Stacking
+  rebuilt: sidebar (z-index 100) > side-panel (90) > PiP (50). The
+  side panel stays hidden behind the sidebar in its closed state
+  and slides out above the PiP when opened.
+
 ## v2.16.47 — 2026-05-31
 
 ### Player Voice messaging restored on the new framework
