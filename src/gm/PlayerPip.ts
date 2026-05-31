@@ -92,7 +92,11 @@ export class PlayerPip {
     if (!this.pipFrame) return;
     const iframe = this.pipFrame.querySelector<HTMLIFrameElement>('iframe.player-pip-iframe');
     const url = this.getPlayerUrl();
-    if (iframe && url) iframe.src = url;
+    if (iframe && url) {
+      const u = new URL(url);
+      u.searchParams.set('pip', '1');
+      iframe.src = u.toString();
+    }
   }
 
   // ─── Build / teardown ────────────────────────────────────────────────────
@@ -155,10 +159,19 @@ export class PlayerPip {
     header.appendChild(popBtn);
     frame.appendChild(header);
 
-    // Iframe body.
+    // Iframe body. v2.16.42 — append `pip=1` to the URL so the inner
+    // PlayerApp skips the mute indicator and stays silently muted (no
+    // audio needed for an inline preview; the giant "tap to start
+    // audio" prompt would dwarf the small frame anyway). Pop-out
+    // windows use the raw URL (no pip flag) so they get sound.
     const iframe = document.createElement('iframe');
     iframe.className = 'player-pip-iframe';
-    iframe.src = this.getPlayerUrl();
+    const rawUrl = this.getPlayerUrl();
+    if (rawUrl) {
+      const u = new URL(rawUrl);
+      u.searchParams.set('pip', '1');
+      iframe.src = u.toString();
+    }
     iframe.title = 'Player view preview';
     iframe.setAttribute('allow', 'autoplay; fullscreen');
     frame.appendChild(iframe);

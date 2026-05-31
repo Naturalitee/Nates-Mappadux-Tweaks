@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.16.42 — 2026-05-31
+
+### Retired the giant "Tap to start audio" prompt
+
+The pre-interaction full-bleed "🔇 Muted — tap anywhere to start
+audio" overlay is gone. It was a workaround for older browser
+autoplay policies — modern browsers accept the connect-button click
+(and pop-out via window.open) as user activation. The small mute
+icon at the top-right is now the single affordance: transparent
+until clicked, click to toggle. Same icon, same place, just no
+giant prompt taking over the screen first.
+
+PiP iframes (`?pip=1`) skip the mute indicator entirely and stay
+silently muted — audio in a 33 %-canvas preview is pointless and
+the indicator was dominating the small frame. Pop-out windows from
+the PiP carry no flag, so they get sound + the small toggle.
+
 ## v2.16.41 — 2026-05-31
 
 ### GM canvas drops the animated backdrop layer

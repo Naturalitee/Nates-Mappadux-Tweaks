@@ -183,6 +183,16 @@ export class PlayerApp {
     try { return new URLSearchParams(location.search).has('gmPreview'); }
     catch { return false; }
   })();
+  /** v2.16.42 — true iff this page is the inline PiP iframe spawned by
+   *  the GM's PlayerPip overlay. Detected via `?pip=1`. Used to:
+   *    - skip the mute indicator entirely (it's a silent preview)
+   *    - force-mute audio playback (PiP never makes sound)
+   *  Pop-out windows that come from the PiP's pop-out button DON'T
+   *  carry the flag, so they get sound + the small mute toggle. */
+  private _isPip = (() => {
+    try { return new URLSearchParams(location.search).get('pip') === '1'; }
+    catch { return false; }
+  })();
   private _composer = new PlayerMessageComposer();
   private _msgToasts: PlayerMessageToasts | null = null;
   private pingLayer: PingLayer | null = null;
@@ -377,23 +387,14 @@ export class PlayerApp {
       }
     });
 
-    // v2.14.20 — The document-wide click handler only services the
-    // VERY FIRST interaction: it unmutes (satisfying the browser's
-    // autoplay policy) and hands the toggle role over to the
-    // mute-indicator button. After that, clicks on the canvas no
-    // longer toggle mute — the icon-only button top-right is the
-    // single source of truth. Without this gate, every pan/zoom
-    // tap-and-release was muting/unmuting the player.
-    const firstClick = () => {
-      if (!this.connectPanel.hidden) return; // not connected yet — wait
-      // Don't gate on preview mode — click-to-unmute is the only way the audio
-      // pipeline ever starts (browser autoplay policy), and the GM previewing
-      // needs audio working so they can hear what players hear.
-      this._toggleMute();
-      this.viewer.markMuteInteractive();
-      document.removeEventListener('click', firstClick);
-    };
-    document.addEventListener('click', firstClick);
+    // v2.16.42 — canvas-tap-to-unmute retired. The browser's autoplay
+    // policy was the original reason for it (any user click anywhere
+    // satisfied the gesture requirement, the giant "tap anywhere to
+    // start audio" prompt taught users to do so); in practice modern
+    // browsers accept the user's connect-button click + the page load
+    // itself as user activation. The small mute icon top-right is now
+    // the single affordance — transparent until clicked, the user
+    // taps it once to unmute and again to mute. No giant prompt.
 
     // Prevent the browser context menu on right-click (keep canvas clean)
     document.addEventListener('contextmenu', (e) => e.preventDefault());
@@ -439,8 +440,10 @@ export class PlayerApp {
       try { this.guest?.send({ type: 'player_bye', clientId: this.clientId }); } catch { /* unloading */ }
     });
 
-    // Show "Muted" indicator immediately — player starts muted
-    this.viewer.showMuteIndicator(this.sbMuted);
+    // v2.16.42 — show the mute icon top-right immediately so the user
+    // can toggle audio with a single click. PiP iframes (`?pip=1`)
+    // skip this entirely — they're silent previews.
+    if (!this._isPip) this.viewer.showMuteIndicator(this.sbMuted);
   }
 
   /** v2.14.17 — Refresh the player-side 1″ grid overlay. Drawn via
@@ -1746,6 +1749,10 @@ export class PlayerApp {
   }
 
   private _toggleMute(): void {
+    // v2.16.42 — PiP iframes can't be unmuted (audio is by-design
+    // silent in the preview; the GM uses the popped-out window when
+    // they actually need sound).
+    if (this._isPip) return;
     this._applyMute(!this.sbMuted);
     this.viewer.showMuteIndicator(this.sbMuted);
   }
