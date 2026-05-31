@@ -260,17 +260,18 @@ export class PlayerMarkerLayer {
     this.rafId = requestAnimationFrame(tick);
   }
 
-  /** Apply tokenSize + facing-driven dimensions / rotation to the disc.
+  /** Apply tokenSize + facing-driven dimensions to the disc. Non-square
+   *  footprints have their BOUNDING RECTANGLE rotate with facing (1×2 east
+   *  → 2×1 wide rectangle), but the IMAGE inside stays upright at all
+   *  times — Alex 2026-05-31: image rotation was distracting on redraws,
+   *  so we only spin the rect + the pointer to indicate direction. On
+   *  uncalibrated maps the disc keeps its base CSS size; only image-rot
+   *  is suppressed.
    *
-   *  - Calibrated map: disc is sized to the footprint (with the constant
-   *    inter-token gap shaved off). Footprint dimensions are FIXED — they
-   *    don't swap with facing. The image inside stays upright at all times,
-   *    matching the square-token behaviour (Alex 2026-05-31: previous 90 °
-   *    image rotation was distracting on redraws and not worth the
-   *    "long axis follows facing" affordance). Only the pointer rotates to
-   *    indicate facing direction.
-   *  - Uncalibrated map: clear inline sizing so the base CSS constant size
-   *    applies. */
+   *  The pointer's CSS size scales with the disc's shortest edge (50 %,
+   *  clamped to [10, 40] px). That keeps the handle in proportion at
+   *  every zoom — it shrinks with the disc on zoom-out and grows on
+   *  zoom-in instead of staying fixed-size and dwarfing the icon. */
   private _sizeDisc(entry: TokenEntry, pxPerSq: number | null): void {
     const disc = entry.el.querySelector<HTMLElement>('.pm-token-disc');
     if (!disc) return;
@@ -279,12 +280,16 @@ export class PlayerMarkerLayer {
     const isSquare = dims.w === dims.h;
     const facing = ((entry.view.facing ?? 0) % 360 + 360) % 360;
 
-    // Footprint dimensions are fixed; image stays upright regardless of
-    // facing. Only the pointer rotates (see --pm-facing below).
-    const effW = dims.w;
-    const effH = dims.h;
+    // Non-square footprints (1×2 / 2×3) swap their W/H when facing is closer
+    // to horizontal (45–134° or 225–314°) so the long axis aligns with the
+    // facing direction. The image inside does NOT rotate — only the rect.
+    const facingMod180 = facing % 180;
+    const swap = !isSquare && facingMod180 >= 45 && facingMod180 < 135;
+    const effW = swap ? dims.h : dims.w;
+    const effH = swap ? dims.w : dims.h;
 
-    let halfLongPx: number; // distance from disc centre to where the pointer sits
+    let halfLongPx: number;   // distance from disc centre to the long-axis edge
+    let shortestPx: number;   // disc's shortest edge — drives pointer size
     if (pxPerSq && pxPerSq > 0) {
       const w = Math.max(12, (effW - TOKEN_FOOTPRINT_GAP_SQUARES) * pxPerSq);
       const h = Math.max(12, (effH - TOKEN_FOOTPRINT_GAP_SQUARES) * pxPerSq);
@@ -293,39 +298,41 @@ export class PlayerMarkerLayer {
       disc.classList.toggle('pm-token-disc--scaled', true);
       disc.classList.toggle('pm-token-disc--rect', !isSquare);
       halfLongPx = Math.max(w, h) / 2;
+      shortestPx = Math.min(w, h);
     } else {
       disc.style.width  = '';
       disc.style.height = '';
       disc.classList.toggle('pm-token-disc--scaled', false);
       disc.classList.toggle('pm-token-disc--rect', !isSquare);
-      halfLongPx = 13; // matches the default 26 px disc
+      halfLongPx = 13;   // matches the default 26 px disc
+      shortestPx = 26;
     }
 
     // Image stays upright — clear any lingering rotation from earlier versions.
     const img = disc.querySelector<HTMLImageElement>('img');
     if (img) img.style.transform = '';
 
-    // Pointer placement — the handle is a tick-and-arrowhead clip-path
-    // box (16×20 px) that sits fully outside the disc, with the stalk's
-    // bottom edge 2 px INSIDE the disc edge so the join looks attached.
-    //
-    // Box geometry: height 20, half = 10. We want the bottom of the box
-    // at distance (halfLongPx - 2) from the disc centre in the facing
-    // direction (2-px inset). After `rotate(facing) translateY(-D)` the
-    // box centre is at D outward; the bottom is at D - 10 outward; so
-    // D = halfLongPx - 2 + 10 = halfLongPx + 8.
-    //
-    // Anchored to the disc's vertical centre (not the .pm-token
-    // midpoint — the wrapper also contains the name label below, which
-    // would drift a 50 % anchor downward).
+    // Pointer size: 50 % of the disc's shortest edge, clamped to a sane
+    // range so the handle stays grabbable at very small zooms without
+    // dwarfing the disc at very large ones. Square box; the arrowhead +
+    // stalk live inside via clip-path.
+    const arrowSize = Math.max(10, Math.min(40, shortestPx * 0.5));
+    const halfArrow = arrowSize / 2;
+
+    // Pointer placement — the box's bottom edge sits 2 px INSIDE the
+    // disc edge along the facing direction. After
+    // `rotate(facing) translateY(-D)`, the box centre is at D outward,
+    // the bottom at D − halfArrow; for bottom = halfLongPx − 2:
+    // D = halfLongPx − 2 + halfArrow.
     let halfHForAnchor: number;
     if (pxPerSq && pxPerSq > 0) {
       halfHForAnchor = Math.max(12, (effH - TOKEN_FOOTPRINT_GAP_SQUARES) * pxPerSq) / 2;
     } else {
-      halfHForAnchor = 13; // matches the default 26 px disc
+      halfHForAnchor = 13;
     }
     entry.el.style.setProperty('--pm-facing', `${facing}deg`);
-    entry.el.style.setProperty('--pm-pointer-offset', `${-(halfLongPx + 8)}px`);
+    entry.el.style.setProperty('--pm-arrow-size', `${arrowSize}px`);
+    entry.el.style.setProperty('--pm-pointer-offset', `${-(halfLongPx - 2 + halfArrow)}px`);
     entry.el.style.setProperty('--pm-disc-half-h', `${halfHForAnchor}px`);
   }
 }

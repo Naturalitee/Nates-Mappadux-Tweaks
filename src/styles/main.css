@@ -6636,24 +6636,26 @@ option.select-option--add {
   position: absolute;
   top: var(--pm-disc-half-h, 13px);
   left: 50%;
-  width: 32px;
-  height: 20px;
-  margin-left: -16px;
-  margin-top:  -10px;
+  /* Box scales with the disc's shortest edge — JS sets --pm-arrow-size to
+     50 % of that, clamped to [10, 40] px (Alex 2026-05-31). Keeps the
+     pointer in proportion at every zoom: shrinks with the disc on
+     zoom-out, grows on zoom-in, never dwarfs the icon. */
+  width:  var(--pm-arrow-size, 14px);
+  height: var(--pm-arrow-size, 14px);
+  margin-left: calc(var(--pm-arrow-size, 14px) / -2);
+  margin-top:  calc(var(--pm-arrow-size, 14px) / -2);
   background: var(--pm-color);
-  /* Box 32×20 — wider arrowhead for a much easier touch target (Alex
-     2026-05-31: doubled the width from 16 px). Arrowhead occupies the
-     top 60 %, stalk the bottom 40 %. Stalk is ~5 px wide (~16 % of 32)
-     and centred. Stalk overlaps the disc edge by 2 px (set in JS via
-     --pm-pointer-offset) so the join looks attached. */
+  /* Square box — arrowhead in the top 70 %, stalk in the bottom 30 %.
+     Stalk is 30 % wide and centred. Stalk overlaps the disc edge by
+     2 px (set in JS via --pm-pointer-offset) so the join looks attached. */
   clip-path: polygon(
-    50%   0%,
-    100% 60%,
-    58%  60%,
-    58% 100%,
-    42% 100%,
-    42%  60%,
-    0%   60%
+    50% 0%,
+    100% 70%,
+    65% 70%,
+    65% 100%,
+    35% 100%,
+    35% 70%,
+    0% 70%
   );
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
   pointer-events: none;

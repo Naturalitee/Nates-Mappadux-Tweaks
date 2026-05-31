@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.16.26 — 2026-05-31
+
+### Pointer scales with disc; bounding rect rotates again
+
+- **Pointer size is now relative to disc size.** Square box scaled to
+  50 % of the disc's shortest edge, clamped to [10, 40] px. Keeps the
+  handle in proportion at every zoom — tiny on zoomed-out unscaled
+  maps, generous on big calibrated tokens. No more "arrow larger than
+  the icon" at low zoom.
+- **Non-square bounding rectangle rotates with facing again** (1×2 east
+  → 2×1 wide rect, 2×3 east → 3×2). Only the image inside stays
+  upright — Alex's earlier ask preserved. Disc-dim swap snaps at the
+  closer-to-horizontal vs closer-to-vertical boundary so the
+  orientation matches the facing direction.
+
 ## v2.16.25 — 2026-05-31
 
 ### Fat arrow, upright images, icon self-heal
