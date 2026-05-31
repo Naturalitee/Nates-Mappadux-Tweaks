@@ -1499,21 +1499,24 @@ option.select-option--add {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  background: transparent;
-  border: 1px solid var(--border);
+  /* v2.16.45 — tinted green so the "+ create new" affordance pops
+     against the neutral row. Matches the established "green = add /
+     positive action" semantic the eye-icon pulse already uses. */
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.45);
   border-radius: var(--radius-sm);
-  color: var(--text-secondary);
+  color: #4ade80;
   cursor: pointer;
   padding: 0 var(--space-sm);
   transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
 }
 .picker-row__add:hover {
-  color: var(--text);
-  border-color: var(--border-focus);
-  background: rgba(255, 255, 255, 0.04);
+  color: #86efac;
+  border-color: rgba(74, 222, 128, 0.85);
+  background: rgba(34, 197, 94, 0.16);
 }
 .picker-row__add:active {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(34, 197, 94, 0.25);
 }
 
 /* Patch E — per-map "Affect Player Markers" toggle row. Compact strip

@@ -1,5 +1,18 @@
 # Changelog
 
+## v2.16.45 — 2026-05-31
+
+### Minor polish
+
+- **"+" add-new buttons tinted green** so the create-new affordance
+  pops against the neutral row. Same green family as the eye-icon
+  pulse — consistent "positive action" semantic.
+- **Reveal Layer in MapFX dropdown is greyed + unselectable on
+  single-layer maps.** Kind only makes sense for multilayered
+  composites (the same `revealBackingBlob` flag the Map panel's
+  upper-layer-opacity row uses). Tooltip explains how to unlock
+  it (add layers in the Composite Map editor).
+
 ## v2.16.44 — 2026-05-31
 
 ### Same-browser audio mutual exclusion

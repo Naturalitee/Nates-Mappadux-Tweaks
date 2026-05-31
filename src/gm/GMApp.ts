@@ -335,6 +335,12 @@ export class GMApp {
   /** v2.16.40 — inline Player View PiP overlay (constructed lazily after
    *  the canvas-wrapper is in the DOM). */
   private _playerPip: import('./PlayerPip.ts').PlayerPip | null = null;
+  /** v2.16.45 — true iff the active map is a multilayered composite
+   *  (asset.revealBackingBlob present). Drives whether the MapFX kind
+   *  dropdown enables / disables the "Reveal Layer" option — the kind
+   *  has nothing to reveal under a single-layer map. Updated by
+   *  _updateUpperLayerPanel on every map load. */
+  private _activeMapIsLayered = false;
   /** v2.16.44 — cross-window audio mutual exclusion (BroadcastChannel
    *  based). When the GM page has audio enabled (default at startup
    *  until the user mutes everything), this window claims audio and
@@ -1196,6 +1202,26 @@ export class GMApp {
       slider.value = '100';
       this.renderer.setMainMapOpacity(1);
     }
+    // v2.16.45 — same flag also gates the Reveal Layer MapFX kind.
+    this._activeMapIsLayered = hasBacking;
+    this._refreshMapFxKindOptionState();
+  }
+
+  /** v2.16.45 — disable / re-enable the Reveal Layer kind in the MapFX
+   *  dropdown based on whether the active map is a multilayered
+   *  composite. The kind has nothing to reveal under a single-layer
+   *  map, so the option is greyed and unselectable until a layered
+   *  map loads. Called from `_updateUpperLayerPanel` (per map load)
+   *  and `_bindMapFxKindSelect` (initial population). */
+  private _refreshMapFxKindOptionState(): void {
+    const sel = document.getElementById('mapfx-kind-display') as HTMLSelectElement | null;
+    if (!sel) return;
+    const opt = sel.querySelector<HTMLOptionElement>('option[value="reveal_layer"]');
+    if (!opt) return;
+    opt.disabled = !this._activeMapIsLayered;
+    opt.title = this._activeMapIsLayered
+      ? ''
+      : 'Reveal Layer only applies to multilayered composite maps. Add layers in the Composite Map editor to enable.';
   }
 
   /** v2.14.31 — Map panel grid-colour row. Shows a colour swatch when
@@ -5437,6 +5463,9 @@ export class GMApp {
       sel.appendChild(opt);
     }
     sel.value = this.activeOverlayKind;
+    // v2.16.45 — Reveal Layer is map-state-dependent; ghost it when
+    // the active map isn't multilayered.
+    this._refreshMapFxKindOptionState();
     sel.addEventListener('change', () => {
       const newKind = sel.value as OverlayKind;
       if (this.activeOverlayKind === newKind) return;
