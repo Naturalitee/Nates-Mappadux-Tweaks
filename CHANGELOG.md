@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.16.37 — 2026-05-31
+
+### Visual Filter joins the new design language
+
+- **Visual Filter promoted to the kind-row pattern.** Inline `<select>`
+  for the filter picker on the Visual Filter panel; sliders icon next
+  to it opens the side panel with the "Tint Player Markers" toggle
+  (gated by markers-on-this-map) + all the filter's parameter controls.
+  Matches Backdrop and MapFX exactly.
+- **FilterPanel rebuilds inside the side panel** on each open, so the
+  inline `#filter-params` container is gone. State stays in
+  `state.filter.params` as before — every change writes through live;
+  closing the side panel is the implicit save.
+- **Click-to-close on the canvas now reliably dismisses the side panel.**
+  The outside-click listener switched from bubbling `mousedown` to
+  capture-phase `pointerdown`, matching the rest of the GM's input
+  pipeline. The bubbling path was occasionally getting consumed by
+  the gesture handlers downstream.
+
 ## v2.16.36 — 2026-05-31
 
 ### Side panel slides from the sidebar; width follows UI scale

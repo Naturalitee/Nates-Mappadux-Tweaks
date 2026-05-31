@@ -321,7 +321,12 @@ export class GMApp {
   /** Active map's asset metadata, mirrored for projector-role math. Null when no map / no calibration. */
   private _lastMapAssetMeta: { pixelsPerSquare: number; imageWidth: number; imageHeight: number } | null = null;
   private markerEditor!:   MarkerEditor;
-  private filterPanel!:     FilterPanel;
+  /** v2.16.37 — FilterPanel instance is now constructed inside the side
+   *  panel each open. Kept as nullable so callers (state sync) can probe
+   *  for "is the side panel currently rendering controls?". */
+  private _filterPanelInstance: FilterPanel | null = null;
+  /** v2.16.37 — handle to the open Visual Filter side panel, or null. */
+  private _filterSidePanel: import('./SidePanel.ts').SidePanelHandle | null = null;
   private transitionPanel!: TransitionPanel;
 
   /** Pre-rendered bitmaps for marker icons. Keys follow the marker.icon
@@ -405,8 +410,8 @@ export class GMApp {
   private transitionSelect!:        HTMLSelectElement;
   private transitionParamsContainer!: HTMLElement;
   private filterSelect!:            HTMLSelectElement;
-  private filterParamsContainer!:   HTMLElement;
-  private filterAffectMarkersToggle!: HTMLInputElement;
+  // v2.16.37 — filterParamsContainer + filterAffectMarkersToggle moved
+  // into the side panel; both fields retired.
   // viewBgColour swatch removed in v2.12 — bg colour lives in the
   // backdrop popover's Background row now.
   private viewBgFxBtn!:            HTMLButtonElement;
@@ -2204,21 +2209,23 @@ export class GMApp {
       // gets 'none' regardless of what's in state.filter.
       this.renderer.setFilter(this._effectiveFilter());
       const filterId = state.filter.filterId;
+      const def = filterRegistry.getOrFallback(filterId);
+      // v2.16.37 — sync the inline dropdown to match state.
+      if (this.filterSelect.value !== filterId) this.filterSelect.value = filterId;
       if (filterId !== this.activeFilterId) {
-        // Filter switched — rebuild the panel for the new filter
         this.activeFilterId = filterId;
-        this.filterPanel.render(
-          filterRegistry.getOrFallback(filterId),
-          state.filter.params[filterId] ?? {}
-        );
-      } else {
-        // Same filter, params changed — update values in-place (no DOM rebuild)
-        this.filterPanel.setValues(state.filter.params[filterId] ?? {});
+        // Filter switched. If the side panel is open, refresh its body
+        // so the params section reflects the new filter + update title.
+        this._filterSidePanel?.refresh();
+        this._filterSidePanel?.setTitle(`Visual Filter — ${def.name}`);
+      } else if (this._filterPanelInstance) {
+        // Same filter, params changed — update values in-place on the
+        // side-panel-hosted FilterPanel (no DOM rebuild).
+        this._filterPanelInstance.setValues(state.filter.params[filterId] ?? {});
       }
       // Patch E — re-apply the marker-layer CSS filter on every filter
       // change (filter switch, params, toggle). Keeps the GM preview in
       // sync with what the player + projector will render.
-      this.filterAffectMarkersToggle.checked = !!state.filter.affectPlayerMarkers;
       this._applyMarkerLayerFilter();
       // During a map switch, filter travels atomically inside map_change (below)
       // so a separate filter_update would arrive before the transition starts and
@@ -2839,7 +2846,8 @@ export class GMApp {
     this.fogEditor.loadState(this.state.getState().fog);
     this.syncView(this.state.getState());
     this.filterSelect.value = this.state.getState().filter.filterId;
-    this.filterAffectMarkersToggle.checked = !!this.state.getState().filter.affectPlayerMarkers;
+    // v2.16.37 — affect-markers toggle moved to the side panel; nothing
+    // to sync inline. Side panel rebuilds its body each open from state.
     this._applyMarkerLayerFilter();
     // Transition UI is restored in onStateChange (changed.includes('map')) — synchronous
     // within loadForMap's _notify call, so activeTransitionId is already correct here.
@@ -3027,8 +3035,8 @@ export class GMApp {
     this.transitionSelect           = q<HTMLSelectElement>('#transition-select');
     this.transitionParamsContainer  = q('#transition-params');
     this.filterSelect               = q<HTMLSelectElement>('#filter-select');
-    this.filterParamsContainer = q('#filter-params');
-    this.filterAffectMarkersToggle  = q<HTMLInputElement>('#filter-affect-markers-toggle');
+    // v2.16.37 — #filter-params + #filter-affect-markers-toggle moved
+    // to the side panel. Fields retained for compile compat below.
     this.viewBgFxBtn           = q<HTMLButtonElement>('#view-bg-fx-btn');
     this.mapFxBtn              = q<HTMLButtonElement>('#mapfx-fx-btn');
     this.roomCodeEl            = q('#room-code');
@@ -4649,13 +4657,11 @@ export class GMApp {
   }
 
   private bindFilterPanel(): void {
-    this.filterPanel = new FilterPanel(this.filterParamsContainer, (values) => {
-      const filterId = this.state.getState().filter.filterId;
-      this.state.setFilterParams(filterId, values);
-      this.renderer.updateFilterParams(filterId, values);
-    });
-
-    // Populate filter dropdown
+    // v2.16.37 — params + "Tint Player Markers" toggle moved into the
+    // side panel (the sliders icon next to the picker opens it). The
+    // inline FilterPanel that used to render into #filter-params is
+    // gone; a fresh one is constructed inside the side panel each open.
+    // Populate the inline dropdown + wire its change handler here.
     const filters = filterRegistry.getAll();
     this.filterSelect.innerHTML = '';
     for (const f of filters) {
@@ -4664,15 +4670,81 @@ export class GMApp {
       opt.textContent = f.name;
       this.filterSelect.appendChild(opt);
     }
-
     this.filterSelect.addEventListener('change', () => {
       this.state.setFilter(this.filterSelect.value);
     });
-
-    // Patch E — "Affect Player Markers" toggle. Per-map, default off.
-    this.filterAffectMarkersToggle.addEventListener('change', () => {
-      this.state.setFilterAffectPlayerMarkers(this.filterAffectMarkersToggle.checked);
+    // Sliders button → open the side panel.
+    document.querySelector('#filter-fx-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this._filterSidePanel) this._filterSidePanel.close();
+      else this._openFilterSidePanel();
     });
+  }
+
+  /** v2.16.37 — open the Visual Filter side panel: per-map "Tint Player
+   *  Markers" toggle + the active filter's parameter controls. Same
+   *  framework as the Backdrop / MapFX panels. */
+  private _openFilterSidePanel(): void {
+    if (this._filterSidePanel) return;
+    void import('./SidePanel.ts').then(({ openSidePanel }) => {
+      if (this._filterSidePanel) return;
+      const def = filterRegistry.getOrFallback(this.state.getState().filter.filterId);
+      this._filterSidePanel = openSidePanel({
+        title: `Visual Filter — ${def.name}`,
+        populate: (body) => { this._populateFilterSidePanel(body); },
+        onClose: () => {
+          this._filterSidePanel = null;
+          this._filterPanelInstance = null;
+        },
+      });
+    });
+  }
+
+  /** Build the side panel body: tint toggle (gated by "any player marker
+   *  on the active map") + FilterPanel-rendered controls for the active
+   *  filter's params. */
+  private _populateFilterSidePanel(body: HTMLElement): void {
+    const state = this.state.getState();
+    const filter = state.filter;
+    const def = filterRegistry.getOrFallback(filter.filterId);
+
+    // Tint Player Markers row — only show when this map has at least
+    // one player marker placed (matches the prior inline gate).
+    const mapId = this._activeMapId();
+    const hasMarkers = mapId
+      ? this.playerRegistry.all().some((p) => p.placements?.[mapId])
+      : false;
+    if (hasMarkers) {
+      const row = document.createElement('label');
+      row.className = 'filter-affect-markers';
+      row.title = 'Tint player tokens on the player + projector views to match this filter\'s palette (colour shift only — not the procedural scanlines / grain / animation)';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!filter.affectPlayerMarkers;
+      cb.addEventListener('change', () => {
+        this.state.setFilterAffectPlayerMarkers(cb.checked);
+      });
+      const lbl = document.createElement('span');
+      lbl.textContent = 'Tint Player Markers';
+      row.appendChild(cb);
+      row.appendChild(lbl);
+      body.appendChild(row);
+    }
+
+    // Params via FilterPanel rendered into a body-local container.
+    const paramsWrap = document.createElement('div');
+    paramsWrap.className = 'filter-params-container';
+    body.appendChild(paramsWrap);
+    const fp = new FilterPanel(paramsWrap, (values) => {
+      const fid = this.state.getState().filter.filterId;
+      this.state.setFilterParams(fid, values);
+      this.renderer.updateFilterParams(fid, values);
+    });
+    fp.render(def, filter.params[filter.filterId] ?? {});
+    // Keep a handle so external state changes (filter switched via the
+    // inline dropdown while the panel is open) can update values without
+    // tearing the whole body down.
+    this._filterPanelInstance = fp;
   }
 
   /** Patch E — apply the CSS approximation of the active filter to the
@@ -6109,12 +6181,12 @@ export class GMApp {
     this._refreshFilterAffectMarkersVisibility(merged.length > 0);
   }
 
-  /** Show the per-map "Tint Player Markers" toggle row only when there's
-   *  at least one player token placed on the active map. Hidden by
-   *  default in the HTML; this is the only place that flips it. */
-  private _refreshFilterAffectMarkersVisibility(hasMarkers: boolean): void {
-    const row = document.getElementById('filter-affect-markers-row');
-    if (row) row.hidden = !hasMarkers;
+  /** Refresh the Visual Filter side panel (if open) so the Tint Player
+   *  Markers row appears / disappears with placement changes. v2.16.37 —
+   *  the row used to live inline and just toggled a `hidden` attribute;
+   *  now it's a side-panel element and a refresh() rebuilds the body. */
+  private _refreshFilterAffectMarkersVisibility(_hasMarkers: boolean): void {
+    this._filterSidePanel?.refresh();
   }
 
   /** Broadcast the current icon (or absence) for a specific player. Players

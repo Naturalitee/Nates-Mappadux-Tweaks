@@ -108,7 +108,7 @@ export function openSidePanel(opts: SidePanelOptions): SidePanelHandle {
   const close = () => {
     if (closed) return;
     closed = true;
-    document.removeEventListener('mousedown', onDocClick);
+    document.removeEventListener('pointerdown', onDocClick, true);
     document.removeEventListener('keydown', onKey);
     window.removeEventListener('resize', applyResponsive);
     root.classList.remove('is-open');
@@ -118,7 +118,13 @@ export function openSidePanel(opts: SidePanelOptions): SidePanelHandle {
     if (activeHandle === handle) activeHandle = null;
     opts.onClose?.();
   };
-  const onDocClick = (ev: MouseEvent) => {
+  // Capture-phase pointerdown so we see EVERY click before any
+  // descendant (the canvas-wrapper's attachGestures, marker editor,
+  // fog editor, etc.) gets a chance to stopPropagation. Matches what
+  // the rest of the GM's input pipeline uses — bubbling `mousedown`
+  // missed clicks on the canvas occasionally because the gesture
+  // handlers downstream sometimes consume the event flow.
+  const onDocClick = (ev: PointerEvent) => {
     if (root.contains(ev.target as Node)) return;
     // Sidebar-content clicks shouldn't dismiss — the GM is steering
     // the panel from there (e.g. picked a different filter id). Keep
@@ -132,11 +138,11 @@ export function openSidePanel(opts: SidePanelOptions): SidePanelHandle {
   };
   closeBtn.addEventListener('click', close);
 
-  // Defer one tick so the same click that opened the panel doesn't
+  // Defer one tick so the pointerdown that opened the panel doesn't
   // immediately close it via the off-click handler.
   setTimeout(() => {
     if (closed) return;
-    document.addEventListener('mousedown', onDocClick);
+    document.addEventListener('pointerdown', onDocClick, true);
     document.addEventListener('keydown', onKey);
   }, 0);
 
