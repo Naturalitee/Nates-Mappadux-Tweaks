@@ -35,6 +35,7 @@ import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { FilterPanel } from '../filters/FilterPanel.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
+import { cssApproxForFilter } from '../filters/cssApproximations.ts';
 import { TransitionPanel } from '../transitions/TransitionPanel.ts';
 import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
 import { Host } from '../p2p/Host.ts';
@@ -401,6 +402,7 @@ export class GMApp {
   private transitionParamsContainer!: HTMLElement;
   private filterSelect!:            HTMLSelectElement;
   private filterParamsContainer!:   HTMLElement;
+  private filterAffectMarkersToggle!: HTMLInputElement;
   // viewBgColour swatch removed in v2.12 — bg colour lives in the
   // backdrop popover's Background row now.
   private viewBgFxBtn!:            HTMLButtonElement;
@@ -2225,6 +2227,11 @@ export class GMApp {
         // Same filter, params changed — update values in-place (no DOM rebuild)
         this.filterPanel.setValues(state.filter.params[filterId] ?? {});
       }
+      // Patch E — re-apply the marker-layer CSS filter on every filter
+      // change (filter switch, params, toggle). Keeps the GM preview in
+      // sync with what the player + projector will render.
+      this.filterAffectMarkersToggle.checked = !!state.filter.affectPlayerMarkers;
+      this._applyMarkerLayerFilter();
       // During a map switch, filter travels atomically inside map_change (below)
       // so a separate filter_update would arrive before the transition starts and
       // corrupt the snapshot.  Only broadcast standalone filter changes.
@@ -2842,6 +2849,8 @@ export class GMApp {
     this.fogEditor.loadState(this.state.getState().fog);
     this.syncView(this.state.getState());
     this.filterSelect.value = this.state.getState().filter.filterId;
+    this.filterAffectMarkersToggle.checked = !!this.state.getState().filter.affectPlayerMarkers;
+    this._applyMarkerLayerFilter();
     // Transition UI is restored in onStateChange (changed.includes('map')) — synchronous
     // within loadForMap's _notify call, so activeTransitionId is already correct here.
 
@@ -3029,6 +3038,7 @@ export class GMApp {
     this.transitionParamsContainer  = q('#transition-params');
     this.filterSelect               = q<HTMLSelectElement>('#filter-select');
     this.filterParamsContainer = q('#filter-params');
+    this.filterAffectMarkersToggle  = q<HTMLInputElement>('#filter-affect-markers-toggle');
     this.viewBgFxBtn           = q<HTMLButtonElement>('#view-bg-fx-btn');
     this.mapFxBtn              = q<HTMLButtonElement>('#mapfx-fx-btn');
     this.roomCodeEl            = q('#room-code');
@@ -4703,6 +4713,27 @@ export class GMApp {
     this.filterSelect.addEventListener('change', () => {
       this.state.setFilter(this.filterSelect.value);
     });
+
+    // Patch E — "Affect Player Markers" toggle. Per-map, default off.
+    this.filterAffectMarkersToggle.addEventListener('change', () => {
+      this.state.setFilterAffectPlayerMarkers(this.filterAffectMarkersToggle.checked);
+    });
+  }
+
+  /** Patch E — apply the CSS approximation of the active filter to the
+   *  GM-side player-marker DOM overlay when the "Affect Player Markers"
+   *  toggle is on. Mirrors what the player + projector views do, so the
+   *  GM previews the same look. Clears the filter when the toggle is off. */
+  private _applyMarkerLayerFilter(): void {
+    const f = this.state.getState().filter;
+    const layer = document.getElementById('player-marker-layer');
+    if (!layer) return;
+    if (f.affectPlayerMarkers) {
+      const css = cssApproxForFilter(f.filterId);
+      layer.style.filter = css || '';
+    } else {
+      layer.style.filter = '';
+    }
   }
 
   private bindTransitionPanel(): void {

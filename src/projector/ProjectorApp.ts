@@ -1,4 +1,5 @@
 import { Guest } from '../p2p/Guest.ts';
+import { cssApproxForFilter } from '../filters/cssApproximations.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { MarkerSprites } from '../rendering/MarkerSprites.ts';
 import { MarkerOverlay, type OverlayItem } from '../rendering/MarkerOverlay.ts';
@@ -824,10 +825,27 @@ export class ProjectorApp {
   private _applyFilter(): void {
     if (!this.projectorViewport.filterEnabled) {
       this.renderer.setFilterEnabled(false);
+      this._applyMarkerLayerFilter(true);
       return;
     }
     this.renderer.setFilterEnabled(true);
     if (this.currentFilter) this.renderer.setFilter(this.currentFilter);
+    this._applyMarkerLayerFilter(false);
+  }
+
+  /** Patch E v2.16.30 — apply the active filter's CSS approximation to the
+   *  player-marker-layer DOM overlay when the GM has enabled the per-map
+   *  "Affect Player Markers" toggle AND the projector's own filter gate
+   *  is on. Clears the filter otherwise. */
+  private _applyMarkerLayerFilter(forceOff: boolean): void {
+    const layer = document.getElementById('player-marker-layer');
+    if (!layer) return;
+    if (!forceOff && this.currentFilter?.affectPlayerMarkers) {
+      const css = cssApproxForFilter(this.currentFilter.filterId);
+      layer.style.filter = css || '';
+    } else {
+      layer.style.filter = '';
+    }
   }
 
   private _renderMarkers(): void {

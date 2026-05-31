@@ -1,5 +1,31 @@
 # Changelog
 
+## v2.16.30 — 2026-05-31
+
+### Patch E — optional filter pass over player tokens
+
+Per-map toggle in the Visual Filter panel: **Affect Player Markers**.
+When on, the player + projector views apply a CSS approximation of the
+active filter to the player-marker-layer DOM overlay so tokens visually
+participate in night-vision green, candlelight warmth, thermal, horror,
+mist, etc. — without the GM having to rebuild them as WebGL sprites.
+
+- **Default off.** Remembered per map (stored on `FilterState`).
+- **Mapping table** in `src/filters/cssApproximations.ts` covers the
+  filters where CSS `filter` primitives translate well (tints, blurs,
+  contrast / brightness shifts). Stylisation filters (watercolour, oil,
+  parchment, hand-drawing) have no faithful CSS analogue and return
+  empty — the toggle still flips but produces no visible change for
+  those. Tune individual approximations in that one file as the look
+  evolves.
+- **GM preview included.** The toggle applies the same CSS to the GM's
+  own player-marker layer, so the GM sees the same look the player +
+  projector will render.
+- **Bypass-aware on the projector.** When the projector's per-viewport
+  filter gate is off, the marker-layer filter is cleared too — keeps
+  the table-screen tokens clean if the projector's been put into
+  no-filter mode.
+
 ## v2.16.29 — 2026-05-31
 
 ### Fix — zoom anchor stays glued off-centre

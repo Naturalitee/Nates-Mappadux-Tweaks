@@ -20,6 +20,7 @@ import { MarkerSprites } from '../rendering/MarkerSprites.ts';
 import { MarkerOverlay, type OverlayItem } from '../rendering/MarkerOverlay.ts';
 import { getMarkerAspect } from '../rendering/MarkerLayer.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
+import { cssApproxForFilter } from '../filters/cssApproximations.ts';
 import { TransitionEngine } from '../transitions/TransitionEngine.ts';
 import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
 import type { GMMessage, TransitionConfig, Marker, MarkerIconData, SoundboardAudioData, SoundboardSlot, FogState, FilterState, ViewState, CompositeWirePayload } from '../types.ts';
@@ -930,6 +931,22 @@ export class PlayerApp {
     this.playerMarkerLayer?.setMarkers(merged);
   }
 
+  /** Patch E v2.16.30 — apply the active filter's CSS approximation to the
+   *  player-marker-layer DOM overlay when the GM has enabled the per-map
+   *  "Affect Player Markers" toggle. Clears the filter otherwise. The map
+   *  itself is filtered by the GLSL shader pipeline; this only touches the
+   *  screen-space token layer so it visually participates in the look. */
+  private _applyMarkerLayerFilter(): void {
+    const layer = document.getElementById('player-marker-layer');
+    if (!layer) return;
+    if (this.lastFilter?.affectPlayerMarkers) {
+      const css = cssApproxForFilter(this.lastFilter.filterId);
+      layer.style.filter = css || '';
+    } else {
+      layer.style.filter = '';
+    }
+  }
+
   /** Ask the GM to resend a specific player's icon. Debounced per playerId so
    *  the same missing icon can't spawn a request per render frame. Cleared on
    *  the icon's arrival or after 5 s. */
@@ -1152,6 +1169,7 @@ export class PlayerApp {
           this.lastView = msg.payload.view;
         }
         this.renderer.setFilter(msg.payload.filter);
+        this._applyMarkerLayerFilter();
         this._applyEffectiveView();
         void (async () => {
           if (msg.iconData?.length)         await this._decodeIconData(msg.iconData);
@@ -1216,6 +1234,7 @@ export class PlayerApp {
             await this.runTransition(msg.transition, async () => {
               await this.renderer.loadMap(renderable, fog, backing);
               if (filter) this.renderer.setFilter(filter);
+              this._applyMarkerLayerFilter();
               if (view) {
                 // v2.14.18 — fresh map = fresh broadcast bounds.
                 // Drop any zoom override so the player starts on the
@@ -1320,6 +1339,7 @@ export class PlayerApp {
       case 'filter_update': {
         this.lastFilter = msg.payload;
         this.renderer.setFilter(msg.payload);
+        this._applyMarkerLayerFilter();
         break;
       }
 

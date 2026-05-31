@@ -522,6 +522,12 @@
       </div>
       <div class="panel-body" hidden>
         <select id="filter-select" class="select-full"></select>
+        <!-- Per-map "apply this look to player tokens too" — default off.
+             Patch E v2.16.30. -->
+        <label class="filter-affect-markers" title="Apply a CSS approximation of this filter to player tokens on the player + projector views">
+          <input type="checkbox" id="filter-affect-markers-toggle" />
+          <span>Affect Player Markers</span>
+        </label>
         <div id="filter-params" class="filter-params-container"></div>
       </div>
     </section>

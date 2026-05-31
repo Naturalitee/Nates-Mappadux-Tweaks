@@ -173,6 +173,13 @@ export interface FilterState {
   filterId: string;
   /** Current param values keyed by param id, per filter */
   params: Record<string, FilterParamValues>;
+  /** Per-map opt-in: when true, the player + projector views also apply a
+   *  CSS-filter approximation of the active filter to the player-marker
+   *  DOM overlay, so tokens visually participate in the scene's look
+   *  (night-vision green, candlelight warmth, etc.). Default off — the
+   *  GLSL filter never touches the screen-space DOM layer otherwise.
+   *  v2.16.30 Patch E. */
+  affectPlayerMarkers?: boolean;
 }
 
 // ─── Markers ──────────────────────────────────────────────────────────────────

@@ -1380,6 +1380,20 @@ option.select-option--add {
   padding: var(--space-sm);
 }
 
+/* Patch E — per-map "Affect Player Markers" toggle row. Compact strip
+   between the filter picker and the param controls. */
+.filter-affect-markers {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.filter-affect-markers input[type="checkbox"] { margin: 0; cursor: pointer; }
+
 /* Group sections */
 .filter-group {
   border-top: 1px solid var(--border);

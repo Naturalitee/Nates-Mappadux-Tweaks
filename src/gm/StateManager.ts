@@ -111,6 +111,19 @@ export class StateManager {
     this._notify(['filter']);
   }
 
+  /** Patch E v2.16.30 — per-map opt-in for applying a CSS approximation of
+   *  the active filter to the player-marker DOM overlay on the player +
+   *  projector views. The map's GLSL filter is unaffected. */
+  setFilterAffectPlayerMarkers(enabled: boolean): void {
+    const current = this.state.filter;
+    if (!!current.affectPlayerMarkers === enabled) return;
+    this.state = {
+      ...this.state,
+      filter: { ...current, affectPlayerMarkers: enabled },
+    };
+    this._notify(['filter']);
+  }
+
   setFog(fog: FogState): void {
     this.undoHook?.('fog');
     this.state = { ...this.state, fog };
