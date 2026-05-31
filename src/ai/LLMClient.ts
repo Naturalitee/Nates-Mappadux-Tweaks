@@ -101,9 +101,14 @@ export function parseOptions(text: string): string[] {
 }
 
 /** Strip leading numbering + markdown emphasis / quote markers, keeping the
- *  human-usable reply text (title line + quoted whisper joined). */
+ *  human-usable reply text (narrative beat + skill ask joined). v2.16.51 —
+ *  also strips legacy "The Title (Tag)" prefixes the old default prompt
+ *  produced as bold category headings, and unwraps the straight / curly
+ *  quotation marks that the legacy template put around the skill ask.
+ *  Existing GMs with custom prompts inherit the cleanup without having
+ *  to edit their settings. */
 function cleanOption(block: string): string {
-  return block
+  const joined = block
     .split('\n')
     .map((line) =>
       line
@@ -114,5 +119,16 @@ function cleanOption(block: string): string {
     )
     .filter((line) => line.length > 0)
     .join(' ')
+    .trim();
+  return joined
+    // Legacy heading prefix: "The Green Light (Positive)", "The
+    // Complication (Yes, but...)", "The GM's Choice" — short
+    // Title-Case phrase optionally followed by a parenthetical, then
+    // the actual prose starting with a capital letter.
+    .replace(/^The\s+[A-Z][A-Za-z'’\s-]{0,40}(?:\s*\([^)]+\))?\s+(?=[A-Z"“])/u, '')
+    // Strip enclosing straight and curly quotation marks anywhere in
+    // the option. The legacy template wrapped the skill ask in quotes
+    // ("Give me a [Skill] roll."); we want the bare prose.
+    .replace(/[""'']/g, '')
     .trim();
 }

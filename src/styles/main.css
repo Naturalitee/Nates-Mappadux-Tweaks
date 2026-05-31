@@ -6771,7 +6771,11 @@ option.select-option--add {
   font-size: 0.72rem;
 }
 .mt-msg-from { font-weight: 600; }
-.mt-msg-to   { color: var(--text-dim); }
+/* v2.16.51 — peer-bound arrow + recipient. Arrow is bright white so the
+   direction reads at a glance; name is bold + inline-styled to the
+   recipient's identity colour so it stands out as "not for me". */
+.mt-msg-arrow { color: #fff; padding: 0 2px; font-weight: 700; }
+.mt-msg-to    { font-weight: 700; }
 .mt-msg-time { margin-left: auto; color: var(--text-dim); }
 .mt-msg-text {
   font-size: var(--font-size-sm);

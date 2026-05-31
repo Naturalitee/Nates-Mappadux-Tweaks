@@ -29,6 +29,11 @@ export interface ThreadMessage {
    *  For peer-bound: the other player's id. */
   toPlayerId: string | null;
   toName?:   string;
+  /** v2.16.51 — peer-bound messages carry the recipient's identity
+   *  colour so the thread renders "→ <Other Player Name>" with the
+   *  arrow in white and the name bold in their colour. Lets the GM
+   *  spot at-a-glance that a message was sent to a different player. */
+  toColor?:  string;
   text:      string;
   at:        number;
   /** Pre-fetched LLM reply suggestions for GM-bound messages, if the

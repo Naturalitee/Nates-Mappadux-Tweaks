@@ -3695,7 +3695,7 @@ export class GMApp {
         fromPlayerId: senderPlayerId,
         fromName, fromColor,
         toPlayerId: msg.toPlayerId ?? null,
-        ...(msg.toPlayerId && recipient ? { toName: recipient.characterName || recipient.playerName || 'player' } : {}),
+        ...(msg.toPlayerId && recipient ? { toName: recipient.characterName || recipient.playerName || 'player', toColor: recipient.color } : {}),
         text: msg.text,
         at: Date.now(),
         origin: msg.toPlayerId ? 'peer-bound' : 'gm-bound',

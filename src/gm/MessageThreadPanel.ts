@@ -146,9 +146,18 @@ function _buildBubble(m: ThreadMessage, isNew: boolean): HTMLElement {
   from.textContent = m.fromName;
   head.appendChild(from);
   if (m.toName && m.fromKind === 'player' && m.origin === 'peer-bound') {
+    // v2.16.51 — arrow stays white + bright so the "→" reads as a clear
+    // direction marker even at a glance; the recipient name renders bold
+    // in their own identity colour so the GM spots "this wasn't for me"
+    // immediately.
+    const arrow = document.createElement('span');
+    arrow.className = 'mt-msg-arrow';
+    arrow.textContent = '→';
+    head.appendChild(arrow);
     const to = document.createElement('span');
     to.className = 'mt-msg-to';
-    to.textContent = `→ ${m.toName}`;
+    if (m.toColor) to.style.color = m.toColor;
+    to.textContent = m.toName;
     head.appendChild(to);
   }
   const time = document.createElement('span');

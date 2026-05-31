@@ -1,5 +1,23 @@
 # Changelog
 
+## v2.16.51 — 2026-05-31
+
+### Messaging arrow polish + LLM cleanup
+
+- **Peer-bound "→ ToName" tag** in the message thread now renders the
+  arrow in bright white and the recipient's name bold in their own
+  identity colour. Makes it obvious at a glance that the message
+  wasn't addressed to the GM. `ThreadMessage` gains an optional
+  `toColor`; GMApp's `player_message` handler sets it from the
+  recipient's PlayerRegistry entry.
+- **LLM assistant produces clean prose by default.** The default
+  system prompt is rewritten to ask for plain narrative + skill ask,
+  one option per numbered line — no bold category labels
+  ("The Green Light (Positive)"), no quotation marks around the
+  skill ask. GMs on the old prompt still benefit thanks to
+  `cleanOption` now stripping legacy `The Title (Tag)` heading
+  prefixes and unwrapping straight + curly quote marks.
+
 ## v2.16.50 — 2026-05-31
 
 ### Gapless looping for Soundboard (MP3 + everything else)
