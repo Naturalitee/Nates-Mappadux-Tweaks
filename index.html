@@ -522,11 +522,14 @@
       </div>
       <div class="panel-body" hidden>
         <select id="filter-select" class="select-full"></select>
-        <!-- Per-map "apply this look to player tokens too" — default off.
-             Patch E v2.16.30. -->
-        <label class="filter-affect-markers" title="Apply a CSS approximation of this filter to player tokens on the player + projector views">
+        <!-- Per-map "tint the tokens to match the scene". Only the colour
+             half of the filter is reproducible on the DOM marker layer,
+             so the label says "Tint" rather than implying the full
+             effect. Default off, shown only when this map has at least
+             one player marker placed. Patch E v2.16.30, renamed v2.16.32. -->
+        <label class="filter-affect-markers" id="filter-affect-markers-row" hidden title="Tint player tokens on the player + projector views to match this filter's palette (colour shift only — not the procedural scanlines / grain / animation)">
           <input type="checkbox" id="filter-affect-markers-toggle" />
-          <span>Affect Player Markers</span>
+          <span>Tint Player Markers</span>
         </label>
         <div id="filter-params" class="filter-params-container"></div>
       </div>

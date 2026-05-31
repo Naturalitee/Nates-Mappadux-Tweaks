@@ -6106,6 +6106,19 @@ export class GMApp {
     // mounted its layer.
     const broadcastMarkers = merged.map(({ iconDataUrl, ...rest }) => { void iconDataUrl; return rest; });
     this.host.broadcast({ type: 'player_markers', markers: broadcastMarkers });
+    // v2.16.32 — the "Tint Player Markers" toggle is only meaningful when
+    // there ARE markers on this map, so show / hide it alongside the
+    // marker list. Cheap; fires on every placement / drag / identify /
+    // map switch.
+    this._refreshFilterAffectMarkersVisibility(merged.length > 0);
+  }
+
+  /** Show the per-map "Tint Player Markers" toggle row only when there's
+   *  at least one player token placed on the active map. Hidden by
+   *  default in the HTML; this is the only place that flips it. */
+  private _refreshFilterAffectMarkersVisibility(hasMarkers: boolean): void {
+    const row = document.getElementById('filter-affect-markers-row');
+    if (row) row.hidden = !hasMarkers;
   }
 
   /** Broadcast the current icon (or absence) for a specific player. Players

@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.16.32 — 2026-05-31
+
+### Visual Filter — honest label, gated visibility
+
+- **"Affect Player Markers" renamed to "Tint Player Markers".** The CSS
+  approximation only reproduces the colour half of a filter (palette
+  shift / brightness / contrast / blur) — none of the procedural
+  scanlines / grain / animation can be expressed in DOM `filter:` land.
+  The new label says what the toggle actually does so it doesn't
+  oversell.
+- **Toggle only appears when this map has at least one player marker.**
+  Hidden by default in HTML; flipped on alongside marker placement so
+  it doesn't clutter the panel on maps where the option would be a no-op.
+
 ## v2.16.31 — 2026-05-31
 
 ### Small icons go inline; GM reset leaves a breathing margin
