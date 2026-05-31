@@ -1,5 +1,28 @@
 # Changelog
 
+## v2.16.28 — 2026-05-31
+
+### Zoom fixes — projector locked; player zoom-in fills the canvas
+
+- **Projector is now scale-locked on touchscreens too.** The projector
+  view is calibrated to the physical table; mouse-wheel zoom was
+  already disabled, but native pinch-zoom + double-tap-zoom +
+  pull-to-refresh were still active on touchscreen-mounted browsers
+  (TV / tablet projectors). Added `touch-action: none` +
+  `overscroll-behavior: none` on `body.projector-view` to lock the
+  scale.
+- **Player zoom-in no longer bars the view to the GM aspect.** The
+  renderer's clip pass blacks out canvas pixels outside the GM-defined
+  viewport's aspect so the player sees the GM's framing at the
+  broadcast view. That's the right behaviour when fully zoomed out —
+  but when the player zooms in, those bars were still cropping the
+  image even though the player had explicitly asked for a closer
+  look. The clip pass is now suppressed whenever the player has a
+  local override active: the camera already draws the full canvas
+  area, so disabling the clip simply exposes the extra map content
+  filling the canvas edge-to-edge. Bars come back when the player
+  hits Reset View.
+
 ## v2.16.27 — 2026-05-31
 
 ### Fix — pinch-zoom no longer snaps back on release

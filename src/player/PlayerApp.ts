@@ -479,7 +479,15 @@ export class PlayerApp {
     }
 
     this.lastView = effective;
-    this.renderer.setView(effective);
+    // 2026-05-31 — suppress the renderer's clip pass when the player
+    // has zoomed in / panned. The renderer's camera already draws the
+    // full canvas area (letterbox bars are produced by clipPass blacking
+    // out pixels outside the GM-defined viewport aspect). Disabling the
+    // clip means those extra pixels become visible — the player sees
+    // more of the map filling the canvas. The GM-defined aspect ratio
+    // only constrains the view when the player is at the broadcast
+    // view (no override active).
+    this.renderer.setView(effective, { clip: !this._localOverride });
     this.renderer.setBackdrop(effective.backdrop ?? null);
     this.markerSprites.render(this.currentMarkers, this.playerIconCache);
     this._updateMarkerOverlay();

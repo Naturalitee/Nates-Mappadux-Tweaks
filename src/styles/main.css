@@ -5650,7 +5650,18 @@ option.select-option--add {
 .player-reset-view-btn:hover { opacity: 1; }
 
 /* Projector view standalone styles */
-.projector-view { background: #000; color: var(--text); margin: 0; overflow: hidden; }
+.projector-view {
+  background: #000;
+  color: var(--text);
+  margin: 0;
+  overflow: hidden;
+  /* The projector is scale-locked to the physical table calibration.
+     Disable native pinch-zoom + double-tap-zoom + pull-to-refresh on
+     touchscreen-mounted projector/TV browsers so the user can't
+     accidentally rescale the table image. */
+  touch-action: none;
+  overscroll-behavior: none;
+}
 .projector-view #renderer-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
 
 /* Rotation — primary projector only. The canvas (and grid overlay) are sized
