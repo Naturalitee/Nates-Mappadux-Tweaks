@@ -335,6 +335,19 @@ export class GMApp {
   /** v2.16.40 — inline Player View PiP overlay (constructed lazily after
    *  the canvas-wrapper is in the DOM). */
   private _playerPip: import('./PlayerPip.ts').PlayerPip | null = null;
+  /** v2.16.44 — cross-window audio mutual exclusion (BroadcastChannel
+   *  based). When the GM page has audio enabled (default at startup
+   *  until the user mutes everything), this window claims audio and
+   *  any other Mappadux tab on this machine hears that and silences
+   *  itself. When another window claims audio (e.g. a popped-out
+   *  player), the coordinator force-mutes the GM's local engines so
+   *  we don't get dual sound. Does NOT broadcast positional_mute_all
+   *  to remote players — purely a same-browser concern. */
+  private _audioCoord: import('../utils/AudioCoordinator.ts').AudioCoordinator | null = null;
+  /** Fresh per-window id for the audio coordinator. The GM's existing
+   *  identifiers (host.roomCode etc.) shift over the session; a stable
+   *  per-window value keeps the dedupe simple. */
+  private _audioCoordClientId = generateId();
 
   /** Pre-rendered bitmaps for marker icons. Keys follow the marker.icon
    *  string — bare 'libAsset:<id>' for raster, '<libAsset:id>#<color>'
@@ -1666,6 +1679,18 @@ export class GMApp {
     this._resetGmTransform();
     this._applyWorkspaceTransform();
 
+    // v2.16.44 — Audio mutual exclusion across Mappadux windows on
+    // this machine. GM starts with audio enabled (the user mutes via
+    // the marker-mute toggle if they want silence); claim immediately
+    // so any open player tabs / pop-outs hear that and mute themselves.
+    void import('../utils/AudioCoordinator.ts').then(({ AudioCoordinator }) => {
+      this._audioCoord = new AudioCoordinator({
+        clientId: this._audioCoordClientId,
+        onForceMute: () => this._forceLocalAudioMuted(true),
+      });
+      this._audioCoord.claim();
+    });
+
     // v2.16.40 — Inline PiP preview of the player view. Lives on the
     // canvas-wrapper; defaults to open on first session so a new GM
     // immediately sees what their players see. Pop-out replicates the
@@ -1814,6 +1839,18 @@ export class GMApp {
    *  pop-out window). Identified via `gm_preview_hello`; consulted by
    *  the disconnect handler to swap the status message. */
   private _gmPreviewPeers = new Set<string>();
+
+  /** v2.16.44 — silence ALL local audio outputs without touching the
+   *  marker-mute toggle UI or broadcasting positional_mute_all to
+   *  players. Triggered by the AudioCoordinator when another window
+   *  claims audio. Engines stay muted until the user explicitly
+   *  re-enables via the marker-mute toggle (which calls claim() and
+   *  un-mutes them all). */
+  private _forceLocalAudioMuted(muted: boolean): void {
+    this.audio.setMuteAll(muted);
+    this.trackerAudio.setMuteAll(muted);
+    this.soundboardEngine?.setMuteAll(muted);
+  }
 
   private async onHostReady(roomCode: string): Promise<void> {
     // Broker just confirmed our peer id — any prior broker-down notice
@@ -5205,6 +5242,11 @@ export class GMApp {
         this.audio.setMuteAll(muted);
         this.trackerAudio.setMuteAll(muted);
         this.host.broadcast({ type: 'positional_mute_all', muted });
+        // v2.16.44 — let the audio coordinator know our local audio
+        // state changed so other Mappadux windows can mute / claim
+        // accordingly. Claim wins; release stops heartbeating.
+        if (muted) this._audioCoord?.release();
+        else       this._audioCoord?.claim();
       });
     }
     // v2.16.33 — single broadcast-bypass switch lives on the Player Views

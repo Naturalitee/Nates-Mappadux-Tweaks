@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.16.44 — 2026-05-31
+
+### Same-browser audio mutual exclusion
+
+No more dual sound when the GM page, a popped-out player window, and
+maybe a projector are all open on the same machine. New
+`AudioCoordinator` (BroadcastChannel-based) elects a single audio
+holder at a time across every Mappadux tab in the browser:
+
+- When a window unmutes, it broadcasts a claim and starts a 3-second
+  heartbeat.
+- Every other Mappadux window hears the claim and silences itself
+  locally (last-claim-wins). The GM's positional / soundboard /
+  tracker engines all mute; players' `sbMuted` flips on.
+- A force-muted window does NOT auto-unmute when the holder
+  eventually goes quiet — the user re-enables explicitly. Auto-
+  unmute would bring audio back unexpectedly later.
+- PiP iframes don't participate (they're silently muted by design;
+  the iframe never carries audio).
+- It's a same-browser concern only — no `positional_mute_all`
+  broadcasts go to remote players. They're on different machines
+  and don't suffer the dual-sound problem.
+
+Net effect: open the GM, pop a player window out, the GM silences
+itself for you. Click the mute icon on the player window to mute,
+the GM stays silent (sticky). Click the GM's mute-all toggle to
+re-enable audio there, the player window mutes.
+
 ## v2.16.43 — 2026-05-31
 
 ### PiP polish

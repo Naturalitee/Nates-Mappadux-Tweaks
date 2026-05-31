@@ -165,6 +165,11 @@ export class PlayerApp {
    * fresh player and the prior id naturally expires from the GM's map.
    */
   private clientId = generateId();
+  /** v2.16.44 — cross-window audio mutual exclusion. When this window
+   *  is unmuted, claim audio so other local Mappadux tabs / windows
+   *  hear our claim and silence themselves. When forced to mute by
+   *  another window's claim, drops local audio. */
+  private _audioCoord: import('../utils/AudioCoordinator.ts').AudioCoordinator | null = null;
   /** Interval id for the BC liveness ping. Cleared on disconnect. */
   private _heartbeatInterval: number | null = null;
 
@@ -458,6 +463,25 @@ export class PlayerApp {
     // can toggle audio with a single click. PiP iframes (`?pip=1`)
     // skip this entirely — they're silent previews.
     if (!this._isPip) this.viewer.showMuteIndicator(this.sbMuted);
+
+    // v2.16.44 — same-browser audio mutual exclusion. PiP iframes don't
+    // participate (they're silently muted by construction); every other
+    // player view does. If this window started unmuted (pop-out from
+    // PiP, etc.) we immediately claim audio so any other live Mappadux
+    // tab silences itself.
+    if (!this._isPip) {
+      void import('../utils/AudioCoordinator.ts').then(({ AudioCoordinator }) => {
+        this._audioCoord = new AudioCoordinator({
+          clientId: this.clientId,
+          onForceMute: () => {
+            if (this.sbMuted) return;
+            this._applyMute(true);
+            this.viewer.showMuteIndicator(this.sbMuted);
+          },
+        });
+        if (!this.sbMuted) this._audioCoord.claim();
+      });
+    }
   }
 
   /** v2.14.17 — Refresh the player-side 1″ grid overlay. Drawn via
@@ -1779,6 +1803,11 @@ export class PlayerApp {
     if (this._isPip) return;
     this._applyMute(!this.sbMuted);
     this.viewer.showMuteIndicator(this.sbMuted);
+    // v2.16.44 — let other Mappadux tabs / windows on this machine
+    // know our audio state changed. Claim wins; release just stops
+    // heartbeating.
+    if (this.sbMuted) this._audioCoord?.release();
+    else              this._audioCoord?.claim();
   }
 
   /**
