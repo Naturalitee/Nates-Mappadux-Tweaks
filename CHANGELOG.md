@@ -1,5 +1,19 @@
 # Changelog
 
+## v2.16.41 — 2026-05-31
+
+### GM canvas drops the animated backdrop layer
+
+Backdrop shader (Starfield / Aurora / Embers / etc.) no longer
+renders on the GM canvas. The basic background colour still
+applies. Saves CPU + GPU on the GM workspace and cleans up the
+view — the PiP preview shows what the player + projector
+audiences see, so the GM no longer needs to run the shader twice.
+
+The backdrop config still travels through `state.view.backdrop` so
+the `view_update` broadcast carries it to the audience views
+unchanged.
+
 ## v2.16.40 — 2026-05-31
 
 ### Inline Player View preview (PiP) on the GM canvas

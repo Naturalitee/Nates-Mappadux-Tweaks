@@ -2271,7 +2271,16 @@ export class GMApp {
 
     if (changed.includes('view')) {
       this.renderer.setBackgroundColour(state.view.backgroundColor);
-      this.renderer.setBackdrop(state.view.backdrop ?? null);
+      // v2.16.41 — animated backdrop shader suppressed on the GM
+      // canvas. It now renders only on the player + projector views
+      // (where it matters) and inside the PiP preview (so the GM
+      // sees what players see without running a second shader pass
+      // for nothing on the main canvas). The basic background colour
+      // above still applies. Drops CPU / GPU + cleans up the GM
+      // workspace; the backdrop config still travels through
+      // state.view.backdrop so the view_update broadcast below
+      // carries it to the audience views unchanged.
+      this.renderer.setBackdrop(null);
       this._refreshBgFxButtonState();
       this._updateActiveBgDisplay();
       // During a map switch, view travels inside map_change — same reasoning as
