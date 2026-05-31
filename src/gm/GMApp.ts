@@ -9,6 +9,7 @@ import { offsetPolyline } from '../mapfx/polylineOffset.ts';
 import { subtractFromAll, cleanRibbonToBlobs } from '../mapfx/polygonOps.ts';
 import { floodFillToPolygon } from '../mapfx/floodFill.ts';
 import { wireSliderTooltip } from '../utils/sliderReadout.ts';
+import { buildColorRow, buildSliderRow, buildToggleRow } from './sideParamRows.ts';
 import { ViewportEditor } from './ViewportEditor.ts';
 import { MarkerEditor } from './MarkerEditor.ts';
 import { MapAssetModal } from './MapAssetModal.ts';
@@ -4211,87 +4212,45 @@ export class GMApp {
   /** Helper: build one labelled toggle row for a binary shader param.
    *  Matches the FilterPanel's `.toggle-switch` styling. onChange
    *  fires with 1 (on) or 0 (off). */
+  /** v2.16.39 — shader param row helpers now delegate to the shared
+   *  sideParamRows builders so Backdrop / MapFX / Visual Filter /
+   *  Map Transition all render identical markup. The wrappers stay
+   *  here so existing call sites (kindLabel suffix, 0/1 ⇄ boolean for
+   *  shader toggles) need no churn. */
   private _buildShaderToggleRow(
     p: import('../mapfx/overlayKindRegistry.ts').ToggleParamDef,
     kindLabel: string,
     initial: number,
     onChange: (v: number) => void,
   ): HTMLElement {
-    const row = document.createElement('div');
-    row.className = 'fog-brush-row fog-brush-row--toggle';
-    const labelEl = document.createElement('span');
-    labelEl.textContent = p.label;
-    const switchLabel = document.createElement('label');
-    switchLabel.className = 'toggle-switch';
-    switchLabel.title = `${p.label} — ${kindLabel}`;
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.checked = initial > 0.5;
-    const knob = document.createElement('span');
-    knob.className = 'toggle-slider';
-    switchLabel.appendChild(input);
-    switchLabel.appendChild(knob);
-    input.addEventListener('change', () => {
-      onChange(input.checked ? 1 : 0);
-    });
-    row.appendChild(labelEl);
-    row.appendChild(switchLabel);
-    return row;
+    return buildToggleRow(
+      { label: p.label, checked: initial > 0.5, title: `${p.label} — ${kindLabel}` },
+      (checked) => onChange(checked ? 1 : 0),
+    );
   }
 
-  /** Helper: build one labelled slider row for a shader param. The
-   *  onChange handler is fired on every input event with the parsed
-   *  numeric value. */
   private _buildShaderSliderRow(
     p: import('../mapfx/overlayKindRegistry.ts').SliderParamDef,
     kindLabel: string,
     initial: number,
     onChange: (v: number) => void,
   ): HTMLElement {
-    const row = document.createElement('label');
-    row.className = 'fog-brush-row';
-    const labelEl = document.createElement('span');
-    labelEl.textContent = p.label;
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = String(p.min);
-    slider.max = String(p.max);
-    slider.step = String(p.step);
-    slider.value = String(initial);
-    slider.addEventListener('input', () => {
-      const v = parseFloat(slider.value);
-      if (!Number.isFinite(v)) return;
-      onChange(v);
-    });
-    // Live tooltip (title) so the current value is hover-revealable
-    // for shareable setups; no permanent UI footprint for it.
-    wireSliderTooltip(slider, `${p.label} — ${kindLabel}`);
-    row.appendChild(labelEl);
-    row.appendChild(slider);
-    return row;
+    return buildSliderRow(
+      { label: p.label, min: p.min, max: p.max, step: p.step, value: initial, title: `${p.label} — ${kindLabel}` },
+      onChange,
+    );
   }
 
-  /** Helper: build one labelled colour-swatch row for a shader param of
-   *  `type: 'color'`. Native `<input type="color">` so the OS picker
-   *  handles the colour wheel; we just relay the hex string upward. */
   private _buildShaderColorRow(
     p: import('../mapfx/overlayKindRegistry.ts').ColorParamDef,
     kindLabel: string,
     initial: string,
     onChange: (v: string) => void,
   ): HTMLElement {
-    const row = document.createElement('label');
-    row.className = 'fog-brush-row fog-brush-row--color';
-    const labelEl = document.createElement('span');
-    labelEl.textContent = p.label;
-    const input = document.createElement('input');
-    input.type = 'color';
-    input.value = initial;
-    input.title = `${p.label} — ${kindLabel}`;
-    input.addEventListener('input', () => onChange(input.value));
-    row.appendChild(labelEl);
-    row.appendChild(input);
-    return row;
+    return buildColorRow(
+      { label: p.label, value: initial, title: `${p.label} — ${kindLabel}` },
+      onChange,
+    );
   }
 
   /** v2.12 — Edge Fade UI moved into the MapFX FX popover. Legacy

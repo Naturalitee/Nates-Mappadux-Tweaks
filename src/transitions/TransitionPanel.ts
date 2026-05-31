@@ -1,11 +1,17 @@
 import type { TransitionDefinition, TransitionParam } from './schema.ts';
-import { wireSliderTooltip } from '../utils/sliderReadout.ts';
+import {
+  buildColorRow,
+  buildSliderRow,
+  buildSelectRow,
+} from '../gm/sideParamRows.ts';
 
 /**
  * TransitionPanel
  *
- * Renders parameter controls (sliders + selects) for the currently selected
- * transition definition.  Similar to FilterPanel but simpler — no param groups.
+ * Renders parameter controls (sliders + selects + colour swatches) for the
+ * currently selected transition definition. v2.16.39 — rebuilt on top of
+ * the shared sideParamRows builders so the look matches Backdrop / MapFX /
+ * Visual Filter exactly. No more bespoke `param-row--stacked` markup.
  */
 export class TransitionPanel {
   private container: HTMLElement;
@@ -32,7 +38,7 @@ export class TransitionPanel {
 
     this.container.hidden = false;
     for (const param of def.params) {
-      this.container.appendChild(this.buildControl(param));
+      this.container.appendChild(this.buildControl(param, def.label));
     }
   }
 
@@ -42,95 +48,39 @@ export class TransitionPanel {
 
   // ─── Private ───────────────────────────────────────────────────────────────
 
-  private buildControl(param: TransitionParam): HTMLElement {
+  private buildControl(param: TransitionParam, kindLabel: string): HTMLElement {
     switch (param.type) {
-      case 'slider': return this.buildSlider(param);
-      case 'select': return this.buildSelect(param);
-      case 'color':  return this.buildColor(param);
+      case 'slider': {
+        const label = param.unit ? `${param.label} (${param.unit})` : param.label;
+        const value = (this.currentParams[param.id] as number) ?? param.default;
+        return buildSliderRow(
+          { label, min: param.min, max: param.max, step: param.step, value, title: `${label} — ${kindLabel}` },
+          (v) => {
+            this.currentParams[param.id] = v;
+            this.onChangeFn({ ...this.currentParams });
+          },
+        );
+      }
+      case 'select': {
+        const value = (this.currentParams[param.id] as string) ?? param.default;
+        return buildSelectRow(
+          { label: param.label, options: param.options, value, title: `${param.label} — ${kindLabel}` },
+          (v) => {
+            this.currentParams[param.id] = String(v);
+            this.onChangeFn({ ...this.currentParams });
+          },
+        );
+      }
+      case 'color': {
+        const value = (this.currentParams[param.id] as string) ?? param.default;
+        return buildColorRow(
+          { label: param.label, value, title: `${param.label} — ${kindLabel}` },
+          (hex) => {
+            this.currentParams[param.id] = hex;
+            this.onChangeFn({ ...this.currentParams });
+          },
+        );
+      }
     }
-  }
-
-  private buildSlider(param: Extract<TransitionParam, { type: 'slider' }>): HTMLElement {
-    const row = this.createRow(param.id, `${param.label}${param.unit ? ` (${param.unit})` : ''}`);
-    const value = (this.currentParams[param.id] as number) ?? param.default;
-
-    const input = document.createElement('input');
-    input.type  = 'range';
-    input.min   = String(param.min);
-    input.max   = String(param.max);
-    input.step  = String(param.step);
-    input.value = String(value);
-    input.className = 'transition-slider';
-
-    input.addEventListener('input', () => {
-      const v = parseFloat(input.value);
-      this.currentParams[param.id] = v;
-      this.onChangeFn({ ...this.currentParams });
-    });
-
-    // v2.12 design call: sliders are "feel" controls. Strip the
-    // paired number input; expose value on hover for screenshot /
-    // share use only.
-    const tipLabel = param.unit ? `${param.label} (${param.unit})` : param.label;
-    wireSliderTooltip(input, tipLabel);
-
-    const controls = document.createElement('div');
-    controls.className = 'param-controls';
-    controls.appendChild(input);
-    row.appendChild(controls);
-    return row;
-  }
-
-  private buildSelect(param: Extract<TransitionParam, { type: 'select' }>): HTMLElement {
-    const row = this.createRow(param.id, param.label);
-    const value = (this.currentParams[param.id] as string) ?? param.default;
-
-    const select = document.createElement('select');
-    select.className = 'select-full';
-    for (const opt of param.options) {
-      const option = document.createElement('option');
-      option.value = opt.value;
-      option.textContent = opt.label;
-      if (opt.value === value) option.selected = true;
-      select.appendChild(option);
-    }
-
-    select.addEventListener('change', () => {
-      this.currentParams[param.id] = select.value;
-      this.onChangeFn({ ...this.currentParams });
-    });
-
-    row.appendChild(select);
-    return row;
-  }
-
-  private buildColor(param: Extract<TransitionParam, { type: 'color' }>): HTMLElement {
-    const row = this.createRow(param.id, param.label);
-    const value = (this.currentParams[param.id] as string) ?? param.default;
-
-    const input = document.createElement('input');
-    input.type = 'color';
-    input.value = value;
-    input.className = 'transition-color';
-
-    input.addEventListener('input', () => {
-      this.currentParams[param.id] = input.value;
-      this.onChangeFn({ ...this.currentParams });
-    });
-
-    row.appendChild(input);
-    return row;
-  }
-
-  private createRow(id: string, label: string): HTMLElement {
-    const row = document.createElement('div');
-    row.className = 'param-row param-row--stacked';
-
-    const lbl = document.createElement('label');
-    lbl.htmlFor   = `transition-param-${id}`;
-    lbl.textContent = label + ':';
-
-    row.appendChild(lbl);
-    return row;
   }
 }

@@ -1,5 +1,29 @@
 # Changelog
 
+## v2.16.39 — 2026-05-31
+
+### Unified side-panel control builders
+
+- **New `src/gm/sideParamRows.ts`** — single canonical implementation
+  of `buildColorRow`, `buildSliderRow`, `buildToggleRow`, and
+  `buildSelectRow`. Lifts the shape, classes, label-column width, and
+  tooltip behaviour from Backdrop / MapFX (where the look was already
+  the way we wanted) so every side panel renders identical markup.
+- **`FilterPanel` + `TransitionPanel` rebuilt on top of it.** The
+  colour pickers, sliders, and toggles in Visual Filter and Map
+  Transition now match Backdrop and MapFX exactly — same row layout,
+  same hover tooltip, same alignment. Filter's collapsible param
+  groups stay (only filters need them); everything inside is uniform.
+- **`GMApp._buildShader*` wrappers now delegate to the shared
+  builders** so the canonical version is the only place the markup
+  lives. Wrappers stay around for the kind-label suffix + the
+  0/1↔boolean conversion for shader toggles — small adapters over
+  the shared core.
+
+Going forward, any new tunable surface uses these builders by
+default. Drift across panels can't accumulate any more — there's
+literally only one row implementation now.
+
 ## v2.16.38 — 2026-05-31
 
 ### Map Transition joins the kind-row + side-panel pattern
