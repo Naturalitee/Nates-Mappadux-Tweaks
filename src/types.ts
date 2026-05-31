@@ -1158,6 +1158,14 @@ export interface MsgPlayerMarkers {
      *  ride a separate `player_icon_update` message keyed by playerId so they
      *  don't bloat this message past the PeerJS DataChannel size limit. */
     iconChar?:  string;
+    /** True when the GM has a stored image-form icon for this player. The
+     *  bytes don't ride on player_markers — they come via player_icon_update.
+     *  Receivers use this as a self-heal signal: if hasIcon is set but the
+     *  local cache lacks an entry for this playerId, they send an upstream
+     *  `player_icon_request` so the GM resends the icon. Covers the case
+     *  where a chunked binary icon broadcast was dropped or arrived before
+     *  the receiver was ready. */
+    hasIcon?:   boolean;
     /** Token footprint W×H in map squares. Only honoured on calibrated maps. */
     tokenSize?: TokenSize;
   }>;
@@ -1178,6 +1186,19 @@ export interface MsgPlayerIconUpdate {
    *  routed through the chunked binary path; small unicode glyphs are
    *  delivered inline via `player_markers` instead. */
   dataUrl?: string;
+}
+
+/**
+ * Player / projector → GM: I'm rendering a token whose markers payload says
+ * `hasIcon: true` but I have nothing in my icon cache for this playerId — the
+ * chunked binary delivery for this icon must have been dropped or arrived
+ * before I was ready. Please send it again. Cheap to over-fire; the GM just
+ * re-emits a `player_icon_update` for the requested playerId. v2.16.25.
+ */
+export interface MsgPlayerIconRequest {
+  type: 'player_icon_request';
+  /** The player whose icon we're missing. */
+  playerId: string;
 }
 
 /**
@@ -1273,6 +1294,7 @@ export type GMMessage =
   | MsgMessageDeliver
   | MsgPlayerMarkers
   | MsgPlayerIconUpdate
+  | MsgPlayerIconRequest
   | MsgPlayerMarkerMove
   | MsgInitiativeUpdate
   | MsgInitiativeCall

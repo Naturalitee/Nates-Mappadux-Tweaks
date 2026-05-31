@@ -191,8 +191,8 @@ export class PlayerRegistry {
   }
 
   /** Render set for a map: every player with a token placed on it. */
-  markersForMap(mapId: string): Array<{ playerId: string; name: string; color: string; x: number; y: number; facing?: number; iconChar?: string; iconDataUrl?: string; tokenSize?: import('../types.ts').TokenSize }> {
-    const out: Array<{ playerId: string; name: string; color: string; x: number; y: number; facing?: number; iconChar?: string; iconDataUrl?: string; tokenSize?: import('../types.ts').TokenSize }> = [];
+  markersForMap(mapId: string): Array<{ playerId: string; name: string; color: string; x: number; y: number; facing?: number; iconChar?: string; iconDataUrl?: string; hasIcon?: boolean; tokenSize?: import('../types.ts').TokenSize }> {
+    const out: Array<{ playerId: string; name: string; color: string; x: number; y: number; facing?: number; iconChar?: string; iconDataUrl?: string; hasIcon?: boolean; tokenSize?: import('../types.ts').TokenSize }> = [];
     for (const p of this.byId.values()) {
       const pos = p.placements?.[mapId];
       if (!pos) continue;
@@ -203,11 +203,17 @@ export class PlayerRegistry {
         x: pos.x, y: pos.y,
         ...(pos.facing !== undefined ? { facing: pos.facing } : {}),
         ...(p.iconChar    ? { iconChar:    p.iconChar }    : {}),
-        ...(p.iconDataUrl ? { iconDataUrl: p.iconDataUrl } : {}),
+        ...(p.iconDataUrl ? { iconDataUrl: p.iconDataUrl, hasIcon: true } : {}),
         ...(p.tokenSize   ? { tokenSize:   p.tokenSize }   : {}),
       });
     }
     return out;
+  }
+
+  /** Lookup the data URL for a player's image icon, if any. Used by the GM's
+   *  icon-request handler to resend a single icon on demand. */
+  iconDataUrlFor(playerId: string): string | undefined {
+    return this.byId.get(playerId)?.iconDataUrl;
   }
 
   /** GM removes a player from the roster entirely. */

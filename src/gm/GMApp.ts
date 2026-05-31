@@ -3463,6 +3463,16 @@ export class GMApp {
       });
       return;
     }
+    if (msg.type === 'player_icon_request') {
+      // A receiver (player or projector) is rendering a token whose hasIcon
+      // flag is set but their local icon cache is empty — a chunked-binary
+      // delivery must have been dropped or arrived before they mounted.
+      // Resend just that icon. Cheap to over-fire; the receivers idempotently
+      // re-cache. (We re-broadcast rather than targeting a single conn so
+      // other receivers that were also missing the icon can catch up.)
+      this._broadcastPlayerIcon(msg.playerId);
+      return;
+    }
     if (msg.type === 'player_ping') {
       if (!arePingsEnabled()) return; // GM has pings switched off — ignore
       if (this._seenUpstream(msg.pingId)) return;
@@ -6030,6 +6040,11 @@ export class GMApp {
       };
     });
     this.playerMarkerLayer?.setMarkers(merged);
+    // Strip iconDataUrl from the wire payload (rides player_icon_update
+    // separately, chunked). KEEP `hasIcon` so receivers can self-heal a
+    // missing icon via player_icon_request — covers the case where a
+    // chunked-binary delivery was dropped or arrived before the receiver
+    // mounted its layer.
     const broadcastMarkers = merged.map(({ iconDataUrl, ...rest }) => { void iconDataUrl; return rest; });
     this.host.broadcast({ type: 'player_markers', markers: broadcastMarkers });
   }

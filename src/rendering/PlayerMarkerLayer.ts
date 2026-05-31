@@ -263,13 +263,14 @@ export class PlayerMarkerLayer {
   /** Apply tokenSize + facing-driven dimensions / rotation to the disc.
    *
    *  - Calibrated map: disc is sized to the footprint (with the constant
-   *    inter-token gap shaved off). Non-square footprints (1x2, 2x3) swap
-   *    their W/H based on facing (90°-step rotation) so the long axis aligns
-   *    with the direction the token is facing. The icon image inside rotates
-   *    to the same 90° step so it stays upright relative to the footprint.
+   *    inter-token gap shaved off). Footprint dimensions are FIXED — they
+   *    don't swap with facing. The image inside stays upright at all times,
+   *    matching the square-token behaviour (Alex 2026-05-31: previous 90 °
+   *    image rotation was distracting on redraws and not worth the
+   *    "long axis follows facing" affordance). Only the pointer rotates to
+   *    indicate facing direction.
    *  - Uncalibrated map: clear inline sizing so the base CSS constant size
-   *    applies. Image / footprint rotation logic still runs so the visual
-   *    indicator + image stay coherent. */
+   *    applies. */
   private _sizeDisc(entry: TokenEntry, pxPerSq: number | null): void {
     const disc = entry.el.querySelector<HTMLElement>('.pm-token-disc');
     if (!disc) return;
@@ -278,12 +279,10 @@ export class PlayerMarkerLayer {
     const isSquare = dims.w === dims.h;
     const facing = ((entry.view.facing ?? 0) % 360 + 360) % 360;
 
-    // Image rotation: 0 for square (only the pointer rotates); for non-square
-    // it snaps to the nearest 90° step so the long axis aligns with facing.
-    const imageRot = isSquare ? 0 : (Math.round(facing / 90) * 90) % 360;
-    const swap = !isSquare && (imageRot === 90 || imageRot === 270);
-    const effW = swap ? dims.h : dims.w;
-    const effH = swap ? dims.w : dims.h;
+    // Footprint dimensions are fixed; image stays upright regardless of
+    // facing. Only the pointer rotates (see --pm-facing below).
+    const effW = dims.w;
+    const effH = dims.h;
 
     let halfLongPx: number; // distance from disc centre to where the pointer sits
     if (pxPerSq && pxPerSq > 0) {
@@ -302,9 +301,9 @@ export class PlayerMarkerLayer {
       halfLongPx = 13; // matches the default 26 px disc
     }
 
-    // Rotate the icon image (NOT the disc/pointer) for non-square footprints.
+    // Image stays upright — clear any lingering rotation from earlier versions.
     const img = disc.querySelector<HTMLImageElement>('img');
-    if (img) img.style.transform = imageRot ? `rotate(${imageRot}deg)` : '';
+    if (img) img.style.transform = '';
 
     // Pointer placement — the handle is a tick-and-arrowhead clip-path
     // box (16×20 px) that sits fully outside the disc, with the stalk's

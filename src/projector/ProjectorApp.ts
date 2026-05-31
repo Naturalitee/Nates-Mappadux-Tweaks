@@ -116,7 +116,11 @@ export class ProjectorApp {
   private pingLayer:         PingLayer         | null = null;
   private initiativeRail:    PlayerInitiativeRail | null = null;
   private _playerIcons   = new Map<string, string>();
-  private _lastPlayerMarkers: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; tokenSize?: import('../types.ts').TokenSize }> = [];
+  private _lastPlayerMarkers: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; hasIcon?: boolean; tokenSize?: import('../types.ts').TokenSize }> = [];
+  /** Icons currently being requested via `player_icon_request` — debounce so a
+   *  single missing icon doesn't spawn a request per render frame. Cleared on
+   *  the icon's arrival or after 5 s. v2.16.25. */
+  private _pendingIconRequests = new Map<string, ReturnType<typeof setTimeout>>();
   /** v2.14.18 — grid offset for the active map (border-nudge alignment). */
   private gridOffsetX:       number             = 0;
   private gridOffsetY:       number             = 0;
@@ -480,6 +484,18 @@ export class ProjectorApp {
     this.playerMarkerLayer?.setMarkers(merged);
   }
 
+  /** Ask the GM to resend a specific player's icon — fired when a player_markers
+   *  entry says `hasIcon: true` but the local cache is empty. Debounced per
+   *  playerId so the same missing icon can't spawn a request per render frame.
+   *  Cleared on the icon's arrival or after 5 s. v2.16.25 self-heal. */
+  private _requestMissingIcon(playerId: string): void {
+    if (this._pendingIconRequests.has(playerId)) return;
+    if (!this.guest) return;
+    this.guest.send({ type: 'player_icon_request', playerId });
+    const timer = setTimeout(() => this._pendingIconRequests.delete(playerId), 5000);
+    this._pendingIconRequests.set(playerId, timer);
+  }
+
   private _onMessage(msg: GMMessage, blob?: ArrayBuffer): void {
     switch (msg.type) {
       case 'full_state': {
@@ -738,6 +754,15 @@ export class ProjectorApp {
         // arrive separately via player_icon_update; merge cache in.
         this._lastPlayerMarkers = msg.markers;
         this._reRenderPlayerMarkers();
+        // v2.16.25 self-heal — any marker the GM flagged hasIcon but we
+        // have nothing cached for → ask the GM to resend it. Covers the
+        // case where the chunked binary delivery was dropped or arrived
+        // before the layer was mounted.
+        for (const m of msg.markers) {
+          if (m.hasIcon && !this._playerIcons.has(m.playerId)) {
+            this._requestMissingIcon(m.playerId);
+          }
+        }
         break;
       }
       case 'player_icon_update': {
@@ -753,9 +778,11 @@ export class ProjectorApp {
         if (url) this._playerIcons.set(msg.playerId, url);
         else     this._playerIcons.delete(msg.playerId);
         if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
-        // v2.16.24 diagnostic — Alex reports the projector still misses
-        // bitmap icons. Log on every arrival so we can see in the projector
-        // console which path delivered (or didn't).
+        // Clear any pending self-heal request — the icon just arrived.
+        const pending = this._pendingIconRequests.get(msg.playerId);
+        if (pending) { clearTimeout(pending); this._pendingIconRequests.delete(msg.playerId); }
+        // v2.16.24 diagnostic — log on every arrival so the projector
+        // console reports which transport delivered (or didn't).
         console.info(
           '[projector] player_icon_update',
           msg.playerId,

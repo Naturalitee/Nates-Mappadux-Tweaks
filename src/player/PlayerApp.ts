@@ -184,7 +184,11 @@ export class PlayerApp {
   private _playerIcons = new Map<string, string>();
   /** Last received player_markers payload — re-merged on any icon update so
    *  an icon arriving after the markers triggers an immediate re-render. */
-  private _lastPlayerMarkers: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string }> = [];
+  private _lastPlayerMarkers: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; hasIcon?: boolean }> = [];
+  /** Icons currently being requested via `player_icon_request` — debounce so
+   *  a single missing-icon doesn't spawn a request per render frame. Entries
+   *  clear on a successful player_icon_update or after 5 s. */
+  private _pendingIconRequests = new Map<string, ReturnType<typeof setTimeout>>();
   private initiativeRail: PlayerInitiativeRail | null = null;
   private _initiativeRollModal = new PlayerInitiativeRollModal();
   /** Roster broadcast by the GM — used to list other players as message targets. */
@@ -867,6 +871,16 @@ export class PlayerApp {
     this.playerMarkerLayer?.setMarkers(merged);
   }
 
+  /** Ask the GM to resend a specific player's icon. Debounced per playerId so
+   *  the same missing icon can't spawn a request per render frame. Cleared on
+   *  the icon's arrival or after 5 s. */
+  private _requestMissingIcon(playerId: string): void {
+    if (this._pendingIconRequests.has(playerId)) return;
+    this.guest.send({ type: 'player_icon_request', playerId });
+    const timer = setTimeout(() => this._pendingIconRequests.delete(playerId), 5000);
+    this._pendingIconRequests.set(playerId, timer);
+  }
+
   /** Send a player_marker_move covering JUST a facing change on the player's
    *  own token. Position is read from the last received marker view so the
    *  GM accepts the move (it always expects x,y). */
@@ -1468,6 +1482,14 @@ export class PlayerApp {
         // blow past the DataChannel limit), so we merge the cache in here.
         this._lastPlayerMarkers = msg.markers;
         this._reRenderPlayerMarkers();
+        // v2.16.25 self-heal — any marker the GM says has an icon but we
+        // don't have cached locally → request it. Covers dropped chunked
+        // deliveries + tokens that arrived before the layer was ready.
+        for (const m of msg.markers) {
+          if (m.hasIcon && !this._playerIcons.has(m.playerId)) {
+            this._requestMissingIcon(m.playerId);
+          }
+        }
         // Player's own icon may have changed (or just arrived) — refresh the
         // identity pill if we're currently identified.
         this._refreshIdentityButton();
@@ -1491,6 +1513,9 @@ export class PlayerApp {
         // Revoke the previous object URL to release its bytes — but only if it
         // was a blob:// URL we created (don't revoke an inline data: URL).
         if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+        // Clear any pending self-heal request for this player.
+        const pending = this._pendingIconRequests.get(msg.playerId);
+        if (pending) { clearTimeout(pending); this._pendingIconRequests.delete(msg.playerId); }
         this._reRenderPlayerMarkers();
         if (msg.playerId === this.playerId) this._refreshIdentityButton();
         break;

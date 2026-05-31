@@ -6636,22 +6636,23 @@ option.select-option--add {
   position: absolute;
   top: var(--pm-disc-half-h, 13px);
   left: 50%;
-  width: 16px;
+  width: 32px;
   height: 20px;
-  margin-left: -8px;
+  margin-left: -16px;
   margin-top:  -10px;
   background: var(--pm-color);
-  /* Box 16×20 — arrowhead occupies the top 60 %, stalk the bottom 40 %.
-     Stalk is ~5 px wide (31 % of 16) and centred. Wide arrowhead gives a
-     comfortable hit-target; the stalk extends into the disc by 2 px (set
-     in JS via --pm-pointer-offset) so the join looks attached. */
+  /* Box 32×20 — wider arrowhead for a much easier touch target (Alex
+     2026-05-31: doubled the width from 16 px). Arrowhead occupies the
+     top 60 %, stalk the bottom 40 %. Stalk is ~5 px wide (~16 % of 32)
+     and centred. Stalk overlaps the disc edge by 2 px (set in JS via
+     --pm-pointer-offset) so the join looks attached. */
   clip-path: polygon(
-    50% 0%,
+    50%   0%,
     100% 60%,
-    66% 60%,
-    66% 100%,
-    34% 100%,
-    34% 60%,
+    58%  60%,
+    58% 100%,
+    42% 100%,
+    42%  60%,
     0%   60%
   );
   filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));

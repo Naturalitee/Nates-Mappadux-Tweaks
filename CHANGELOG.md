@@ -1,5 +1,26 @@
 # Changelog
 
+## v2.16.25 — 2026-05-31
+
+### Fat arrow, upright images, icon self-heal
+
+- **Rotation pointer doubled in width** (16 → 32 px) — much easier to
+  grab on touch. Height unchanged so it doesn't intrude further past
+  the disc edge.
+- **Non-square images stay upright now.** 1×2 / 2×3 tokens no longer
+  flip the image (or swap disc dimensions) when facing changes — only
+  the pointer rotates to indicate facing direction. The "long axis
+  follows facing" affordance was distracting on redraws; matches the
+  square-token behaviour.
+- **Icon self-heal.** Player markers now carry a `hasIcon: true` flag
+  when the GM has an image-form icon stored. Receivers (players and
+  projector) check on every `player_markers` arrival: if the GM says
+  there's an icon but the local cache is empty, they send a
+  `player_icon_request` upstream and the GM resends just that icon.
+  Recovers from dropped chunked-binary deliveries and tokens that
+  arrived before the layer was mounted. Debounced per playerId (5 s
+  cooldown).
+
 ## v2.16.24 — 2026-05-31
 
 ### Pointer feels grippier; projector icon diagnostics
