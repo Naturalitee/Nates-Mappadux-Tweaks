@@ -1,5 +1,37 @@
 # Changelog
 
+## v2.16.50 — 2026-05-31
+
+### Gapless looping for Soundboard (MP3 + everything else)
+
+The Soundboard engine is now **hybrid**: one-shots stay on the
+existing `HTMLAudioElement` path (lightweight retrigger story);
+looping slots flow through a new shared `WebAudioLoopPlayer` that
+uses `AudioBufferSourceNode` with `loop = true`. That's the only
+HTML5 path that loops MP3s gaplessly (the codec pads silence at
+each end; HTMLAudio always plays the padding before restarting).
+
+- **`src/audio/WebAudioLoopPlayer.ts`** — shared loop engine. Lazy
+  AudioContext + decoded-buffer cache + per-slot GainNode. Mute
+  silences via gain (preserves loop phase) instead of pausing.
+- **GM `SoundboardEngine`** routes `play(loop=true)` through it.
+  `stop` / `stopAll` / `setVolume` / `setMuteAll` / `isPlaying` /
+  `getProgress` / `unloadAsset` all bridge both engines based on
+  which one owns each slot.
+- **Player-side `_sbPlay`** in `PlayerApp` does the same. Lazy-
+  imports the loop player so a player who never hears a loop pays
+  zero AudioContext cost. `soundboard_stop` / `_volume` / mute /
+  `_stopAllSoundboard` all route through both engines.
+- **Decoded buffers cached** per asset (keyed by `assetId` on the
+  GM, `dataUrl` on the player). One decode per asset; re-plays of
+  the same loop are instant.
+- **Future-proof**: every container that decodes through Web Audio
+  (Opus, Vorbis, WAV, FLAC, AAC, MP3) loops gaplessly, so the
+  format choice for future loop assets no longer matters.
+
+Fixes the `Deep Space Ship Effect.mp3` audible loop gap Alex
+spotted in v2.16.49.
+
 ## v2.16.49 — 2026-05-31
 
 ### Player Voice patch 2 + Players row pass

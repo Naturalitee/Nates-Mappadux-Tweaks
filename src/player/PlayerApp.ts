@@ -51,10 +51,16 @@ export class PlayerApp {
   private currentMapId: string | null = null;
   private currentMarkers: Marker[]    = [];
   private playerIconCache = new Map<string, ImageBitmap>();
-  /** slotId → <audio> element for active soundboard slots */
+  /** slotId → <audio> element for active soundboard slots (one-shots) */
   private sbAudioEls  = new Map<string, HTMLAudioElement>();
   /** assetId → data URL so re-plays don't need the URL resent */
   private sbAssetUrls = new Map<string, string>();
+  /** v2.16.50 — gapless looping for looping soundboard slots. Lazy-
+   *  loaded so a player who never hears a loop pays zero AudioContext
+   *  cost. Loop slots tracked in `_sbLoopSlots` so stop / volume /
+   *  mute route to the right engine. */
+  private _sbLoopPlayer: import('../audio/WebAudioLoopPlayer.ts').WebAudioLoopPlayer | null = null;
+  private _sbLoopSlots = new Set<string>();
   /** Current slot configurations (for restoring on reconnect) */
   private sbSlots: SoundboardSlot[] = [];
   /** Master mute flag. Defaults to muted; pop-out windows from the GM's
@@ -1524,6 +1530,11 @@ export class PlayerApp {
       }
 
       case 'soundboard_stop': {
+        // v2.16.50 — slot may be on either engine; stop both paths.
+        if (this._sbLoopSlots.has(msg.slotId)) {
+          this._sbLoopPlayer?.stop(msg.slotId);
+          this._sbLoopSlots.delete(msg.slotId);
+        }
         const el = this.sbAudioEls.get(msg.slotId);
         if (el) { el.pause(); el.currentTime = 0; }
         break;
@@ -1540,8 +1551,13 @@ export class PlayerApp {
       }
 
       case 'soundboard_volume': {
-        const el = this.sbAudioEls.get(msg.slotId);
-        if (el) el.volume = Math.max(0, Math.min(1, msg.volume));
+        // v2.16.50 — route to whichever engine owns the slot.
+        if (this._sbLoopSlots.has(msg.slotId)) {
+          this._sbLoopPlayer?.setVolume(msg.slotId, msg.volume);
+        } else {
+          const el = this.sbAudioEls.get(msg.slotId);
+          if (el) el.volume = Math.max(0, Math.min(1, msg.volume));
+        }
         break;
       }
 
@@ -1724,6 +1740,20 @@ export class PlayerApp {
   // ─── Soundboard ───────────────────────────────────────────────────────────
 
   private _sbPlay(slotId: string, dataUrl: string, loop: boolean, volume: number): void {
+    // v2.16.50 — hybrid playback: loops go through Web Audio for
+    // gapless MP3 looping; one-shots stay on HTMLAudioElement.
+    if (loop) {
+      // Sweep up any HTMLAudio that was hosting this slot before.
+      const html = this.sbAudioEls.get(slotId);
+      if (html) { html.pause(); html.currentTime = 0; }
+      void this._sbPlayLoop(slotId, dataUrl, volume);
+      return;
+    }
+    // Non-loop / one-shot — clear any prior loop on this slot first.
+    if (this._sbLoopSlots.has(slotId)) {
+      this._sbLoopPlayer?.stop(slotId);
+      this._sbLoopSlots.delete(slotId);
+    }
     let el = this.sbAudioEls.get(slotId);
     if (!el) {
       el = new Audio();
@@ -1734,12 +1764,36 @@ export class PlayerApp {
       el.src = dataUrl;
     }
     el.currentTime = 0;
-    el.loop   = loop;
+    el.loop   = false;
     el.volume = Math.max(0, Math.min(1, volume));
     el.muted  = this.sbMuted;
     void el.play().catch(() => {
       this._scheduleAudioResume();
     });
+  }
+
+  /** v2.16.50 — Web Audio path for looping soundboard slots. Decodes
+   *  the source once (cached by assetId-equivalent dataUrl key) and
+   *  loops gaplessly. */
+  private async _sbPlayLoop(slotId: string, dataUrl: string, volume: number): Promise<void> {
+    if (!this._sbLoopPlayer) {
+      const { WebAudioLoopPlayer } = await import('../audio/WebAudioLoopPlayer.ts');
+      if (!this._sbLoopPlayer) this._sbLoopPlayer = new WebAudioLoopPlayer();
+    }
+    this._sbLoopSlots.add(slotId);
+    await this._sbLoopPlayer.play(
+      slotId,
+      // dataUrl is unique per asset (blob: or data:) so it works as a
+      // cache key without us threading the assetId through the soundboard
+      // wire protocol.
+      dataUrl,
+      async () => {
+        const resp = await fetch(dataUrl);
+        return resp.arrayBuffer();
+      },
+      volume,
+    );
+    this._sbLoopPlayer.setMuted(this.sbMuted);
   }
 
   private _stopAllSoundboard(): void {
@@ -1759,6 +1813,10 @@ export class PlayerApp {
     }
     this.sbAudioEls.clear();
     this._sbPausedByMute.clear();
+    // v2.16.50 — also tear down any loop-engine slots so a map switch
+    // starts from silence on both engines.
+    this._sbLoopPlayer?.stopAll();
+    this._sbLoopSlots.clear();
   }
 
   private _cacheSoundboardAssets(assets: { assetId: string; dataUrl?: string }[]): void {
@@ -1821,6 +1879,9 @@ export class PlayerApp {
   private _applyMute(muted: boolean): void {
     const wasMuted = this.sbMuted;
     this.sbMuted = muted;
+    // v2.16.50 — loop-engine slots silence via GainNode (keeps phase),
+    // independent of the pause/resume dance the HTMLAudio path needs.
+    this._sbLoopPlayer?.setMuted(muted);
     if (muted && !wasMuted) {
       this._sbPausedByMute.clear();
       for (const [slotId, el] of this.sbAudioEls.entries()) {
