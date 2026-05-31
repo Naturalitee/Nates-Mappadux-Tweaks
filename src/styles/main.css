@@ -6637,7 +6637,7 @@ option.select-option--add {
   top: var(--pm-disc-half-h, 13px);
   left: 50%;
   /* Box scales with the disc's shortest edge — JS sets --pm-arrow-size to
-     50 % of that, clamped to [10, 40] px (Alex 2026-05-31). Keeps the
+     50 % of that, clamped to [10, 40] px (2026-05-31). Keeps the
      pointer in proportion at every zoom: shrinks with the disc on
      zoom-out, grows on zoom-in, never dwarfs the icon. */
   width:  var(--pm-arrow-size, 14px);

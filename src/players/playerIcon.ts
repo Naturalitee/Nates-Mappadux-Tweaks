@@ -8,7 +8,7 @@ export interface PlayerIconForm {
 
 /** Maximum longest-side resolution for the rasterised icon. Tuned for the
  *  worst-case display: a 3×3 token at typical map scale + HiDPI supersampling
- *  fits comfortably inside 500px (Alex 2026-05-30). Raster icons smaller than
+ *  fits comfortably inside 500px (2026-05-30). Raster icons smaller than
  *  this cap keep their native size; larger ones scale down. SVGs are vector
  *  so we always render them AT this size — their intrinsic dimensions are
  *  arbitrary and frequently tiny (32×32 etc.). */

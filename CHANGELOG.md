@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.16.27 — 2026-05-31
+
+### Fix — pinch-zoom no longer snaps back on release
+
+Touch pinch-zoom on the player view was being silently undone the
+moment a finger lifted. The Gestures helper dispatched
+`onTwoFinger({phase:'end', scale:1, panDx:0, panDy:0})` — a synthetic
+"reset" — which the player handler applied verbatim, restoring the
+override to the gesture-start state. Wheel-zoom and mouse-pan were
+unaffected because they don't go through the two-finger path.
+
+Now the helper remembers the LAST observed scale + pan during move
+and replays them on end, so consumers see the final pinch state and
+the zoom persists. Mouse-wheel + drag-pan behaviour unchanged.
+
 ## v2.16.26 — 2026-05-31
 
 ### Pointer scales with disc; bounding rect rotates again
@@ -11,7 +26,7 @@
   the icon" at low zoom.
 - **Non-square bounding rectangle rotates with facing again** (1×2 east
   → 2×1 wide rect, 2×3 east → 3×2). Only the image inside stays
-  upright — Alex's earlier ask preserved. Disc-dim swap snaps at the
+  upright — earlier ask preserved. Disc-dim swap snaps at the
   closer-to-horizontal vs closer-to-vertical boundary so the
   orientation matches the facing direction.
 

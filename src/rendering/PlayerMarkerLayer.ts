@@ -263,8 +263,8 @@ export class PlayerMarkerLayer {
   /** Apply tokenSize + facing-driven dimensions to the disc. Non-square
    *  footprints have their BOUNDING RECTANGLE rotate with facing (1×2 east
    *  → 2×1 wide rectangle), but the IMAGE inside stays upright at all
-   *  times — Alex 2026-05-31: image rotation was distracting on redraws,
-   *  so we only spin the rect + the pointer to indicate direction. On
+   *  times — image rotation was distracting on redraws, so we only
+   *  spin the rect + the pointer to indicate direction. On
    *  uncalibrated maps the disc keeps its base CSS size; only image-rot
    *  is suppressed.
    *
