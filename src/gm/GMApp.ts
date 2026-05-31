@@ -327,7 +327,10 @@ export class GMApp {
   private _filterPanelInstance: FilterPanel | null = null;
   /** v2.16.37 — handle to the open Visual Filter side panel, or null. */
   private _filterSidePanel: import('./SidePanel.ts').SidePanelHandle | null = null;
-  private transitionPanel!: TransitionPanel;
+  /** v2.16.38 — handle to the open Map Transition side panel, or null.
+   *  TransitionPanel itself is constructed inside the body each open;
+   *  refresh() rebuilds from scratch which is cheap for this surface. */
+  private _transitionSidePanel: import('./SidePanel.ts').SidePanelHandle | null = null;
 
   /** Pre-rendered bitmaps for marker icons. Keys follow the marker.icon
    *  string — bare 'libAsset:<id>' for raster, '<libAsset:id>#<color>'
@@ -408,7 +411,8 @@ export class GMApp {
   /** Debounce timer for the in-panel pack-name input. */
   private _packNameSaveTimer: number | null = null;
   private transitionSelect!:        HTMLSelectElement;
-  private transitionParamsContainer!: HTMLElement;
+  // v2.16.38 — transitionParamsContainer retired alongside the inline
+  // #transition-params div.
   private filterSelect!:            HTMLSelectElement;
   // v2.16.37 — filterParamsContainer + filterAffectMarkersToggle moved
   // into the side panel; both fields retired.
@@ -2258,10 +2262,11 @@ export class GMApp {
         this.allTransitionParams[savedTransition.transitionId] = savedTransition.params;
       }
       this.transitionSelect.value = newId;
-      this.transitionPanel.render(
-        transitionRegistry.getOrFallback(newId),
-        this.allTransitionParams[newId] ?? transitionRegistry.defaultParams(newId),
-      );
+      // v2.16.38 — if the side panel is open, refresh its body so the
+      // params section reflects the newly-loaded map's saved transition.
+      const def = transitionRegistry.getOrFallback(newId);
+      this._transitionSidePanel?.setTitle(`Map Transition — ${def.label}`);
+      this._transitionSidePanel?.refresh();
 
       // Map loads bring their markers along, but loadForMap only emits a
       // ['map', 'view', 'filter', 'fog'] notify — no 'markers' — so the
@@ -3033,7 +3038,8 @@ export class GMApp {
     this.revealProgressBarEl        = q<HTMLElement>('#reveal-progress-bar');
     this.packNameInput              = q<HTMLInputElement>('#pack-name-input');
     this.transitionSelect           = q<HTMLSelectElement>('#transition-select');
-    this.transitionParamsContainer  = q('#transition-params');
+    // v2.16.38 — #transition-params moved into the side panel; nothing
+    // to bind here. Side panel rebuilds its body each open from state.
     this.filterSelect               = q<HTMLSelectElement>('#filter-select');
     // v2.16.37 — #filter-params + #filter-affect-markers-toggle moved
     // to the side panel. Fields retained for compile compat below.
@@ -4764,15 +4770,9 @@ export class GMApp {
   }
 
   private bindTransitionPanel(): void {
-    this.transitionPanel = new TransitionPanel(
-      this.transitionParamsContainer,
-      (params) => {
-        this.allTransitionParams[this.activeTransitionId] = params;
-        this.state.setTransition(this.buildTransitionConfig());
-      },
-    );
-
-    // Seed default params for all transitions
+    // v2.16.38 — TransitionPanel rebuilds inside the side panel each
+    // open. Inline #transition-params is gone. Match the Backdrop /
+    // MapFX / Visual Filter shape.
     for (const def of transitionRegistry.getAll()) {
       this.allTransitionParams[def.id] = transitionRegistry.defaultParams(def.id);
     }
@@ -4788,17 +4788,49 @@ export class GMApp {
 
     this.transitionSelect.addEventListener('change', () => {
       this.activeTransitionId = this.transitionSelect.value;
-      const def    = transitionRegistry.getOrFallback(this.activeTransitionId);
-      const saved  = this.allTransitionParams[this.activeTransitionId] ?? transitionRegistry.defaultParams(this.activeTransitionId);
-      this.transitionPanel.render(def, saved);
       this.state.setTransition(this.buildTransitionConfig());
+      // Side panel (if open) reflects the new kind + its params.
+      const def = transitionRegistry.getOrFallback(this.activeTransitionId);
+      this._transitionSidePanel?.setTitle(`Map Transition — ${def.label}`);
+      this._transitionSidePanel?.refresh();
     });
 
-    // Render initial panel (none — no params)
-    this.transitionPanel.render(
-      transitionRegistry.getOrFallback('none'),
-      this.allTransitionParams['none'] ?? {},
-    );
+    document.querySelector('#transition-fx-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this._transitionSidePanel) this._transitionSidePanel.close();
+      else this._openTransitionSidePanel();
+    });
+  }
+
+  /** v2.16.38 — open the Map Transition side panel: per-kind params via
+   *  TransitionPanel rendered into the body. Same framework as
+   *  Backdrop / MapFX / Visual Filter. */
+  private _openTransitionSidePanel(): void {
+    if (this._transitionSidePanel) return;
+    void import('./SidePanel.ts').then(({ openSidePanel }) => {
+      if (this._transitionSidePanel) return;
+      const def = transitionRegistry.getOrFallback(this.activeTransitionId);
+      this._transitionSidePanel = openSidePanel({
+        title: `Map Transition — ${def.label}`,
+        populate: (body) => { this._populateTransitionSidePanel(body); },
+        onClose: () => { this._transitionSidePanel = null; },
+      });
+    });
+  }
+
+  /** Build the side panel body: TransitionPanel-rendered params for the
+   *  active transition. */
+  private _populateTransitionSidePanel(body: HTMLElement): void {
+    const def    = transitionRegistry.getOrFallback(this.activeTransitionId);
+    const saved  = this.allTransitionParams[this.activeTransitionId] ?? transitionRegistry.defaultParams(this.activeTransitionId);
+    const wrap = document.createElement('div');
+    wrap.className = 'transition-params-container';
+    body.appendChild(wrap);
+    const tp = new TransitionPanel(wrap, (params) => {
+      this.allTransitionParams[this.activeTransitionId] = params;
+      this.state.setTransition(this.buildTransitionConfig());
+    });
+    tp.render(def, saved);
   }
 
   /** Returns the current transition config to include in a map_change

@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.16.38 — 2026-05-31
+
+### Map Transition joins the kind-row + side-panel pattern
+
+Inline `<select>` for the transition kind picker; sliders icon opens
+the side panel with the transition's params. Matches Backdrop, MapFX
+and Visual Filter — every panel with the "pick a kind + tune its
+params" shape now lives on the same framework.
+
 ## v2.16.37 — 2026-05-31
 
 ### Visual Filter joins the new design language
