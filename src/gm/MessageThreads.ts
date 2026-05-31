@@ -42,6 +42,10 @@ interface Thread {
   messages: ThreadMessage[];
   unreadGm:   number;
   unreadPeer: number;
+  /** Timestamp when the GM last CLOSED the thread side panel for this
+   *  player. Messages with at > lastSeenAt render BOLD ("new since you
+   *  last looked"). 0 = never opened. v2.16.49. */
+  lastSeenAt: number;
 }
 
 export class MessageThreads {
@@ -94,6 +98,28 @@ export class MessageThreads {
     return [...(this.byPlayer.get(playerId)?.messages ?? [])];
   }
 
+  /** Snapshot of the thread for rendering — messages + the lastSeenAt
+   *  timestamp so the consumer can mark fresh-since-last-open messages
+   *  visually (bold). v2.16.49. */
+  snapshotFor(playerId: string): { messages: ThreadMessage[]; lastSeenAt: number } {
+    const t = this.byPlayer.get(playerId);
+    return {
+      messages: [...(t?.messages ?? [])],
+      lastSeenAt: t?.lastSeenAt ?? 0,
+    };
+  }
+
+  /** Mark the thread as "seen up to NOW" — call when the GM closes the
+   *  side panel. Subsequent messages with at > now will render as new
+   *  on the next open. Independent of `markRead` (which only clears
+   *  unread counters; the visual freshness state is separate). */
+  markSeen(playerId: string): void {
+    const t = this.byPlayer.get(playerId);
+    if (!t) return;
+    t.lastSeenAt = Date.now();
+    // No _fire — closing the panel doesn't need anyone re-rendered.
+  }
+
   /** Unread counts — red (gm-bound) and orange (peer-bound). */
   unreadFor(playerId: string): { gm: number; peer: number } {
     const t = this.byPlayer.get(playerId);
@@ -108,7 +134,7 @@ export class MessageThreads {
   private _ensure(playerId: string): Thread {
     let t = this.byPlayer.get(playerId);
     if (!t) {
-      t = { messages: [], unreadGm: 0, unreadPeer: 0 };
+      t = { messages: [], unreadGm: 0, unreadPeer: 0, lastSeenAt: 0 };
       this.byPlayer.set(playerId, t);
     }
     return t;

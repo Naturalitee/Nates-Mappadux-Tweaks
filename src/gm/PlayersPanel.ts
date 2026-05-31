@@ -12,10 +12,6 @@ export interface PlayerRowInfo {
    *  gm-bound, orange badge for peer-bound. Zero = no badge. */
   unreadGm:       number;
   unreadPeer:     number;
-  /** v2.16.48 — true when this player has any history at all (even if
-   *  all read). Drives the faint "review previous conversations" icon
-   *  the GM clicks to re-open the thread when no badge is active. */
-  hasHistory:     boolean;
 }
 
 export interface PlayersPanelCallbacks {
@@ -105,6 +101,15 @@ export class PlayersPanel {
     iconBtn.title = p.iconAssetId ? 'Change token icon' : 'Pick a token icon';
     iconBtn.setAttribute('aria-label', 'Pick token icon');
     iconBtn.addEventListener('click', () => void this.cb.onPickIcon(p.id));
+    // v2.16.49 — make the icon a drag source for placing the player's
+    // token directly on the map. The canvas-wrapper accepts the drop
+    // and converts the cursor's CSS px → normalised map coords.
+    iconBtn.draggable = true;
+    iconBtn.addEventListener('dragstart', (e) => {
+      if (!e.dataTransfer) return;
+      e.dataTransfer.setData('application/x-mappadux-player', p.id);
+      e.dataTransfer.effectAllowed = 'copy';
+    });
     if (p.iconDataUrl) {
       const img = document.createElement('img');
       img.src = p.iconDataUrl;
@@ -210,14 +215,22 @@ export class PlayersPanel {
     marker.addEventListener('click', () => void this.cb.onToggleMarker(p.id));
     row.appendChild(marker);
 
-    // Delete
+    // v2.16.49 — delete moved off the action row entirely. A small red
+    // × now sits at the row's top-right corner, only visible on hover
+    // (or focus). Frees a slot in the action area while keeping the
+    // destructive action discoverable + safely tucked away from
+    // accidental clicks during play.
     const del = document.createElement('button');
     del.type = 'button';
-    del.className = 'player-row-delete';
+    del.className = 'player-row-delete-corner';
     del.title = 'Remove this player';
     del.setAttribute('aria-label', 'Remove player');
-    del.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a1 1 0 0 1 1-1h4a1 1 0 0 1 1 1v2"/></svg>';
-    del.addEventListener('click', () => {
+    del.innerHTML =
+      '<svg viewBox="0 0 24 24" width="11" height="11" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+        '<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>' +
+      '</svg>';
+    del.addEventListener('click', (e) => {
+      e.stopPropagation();
       const who = p.playerName || p.characterName || 'this player';
       if (confirm(`Remove ${who} from the roster? Their token will be removed from every map.`)) {
         void this.cb.onRemove(p.id);
@@ -225,13 +238,29 @@ export class PlayersPanel {
     });
     row.appendChild(del);
 
-    // v2.16.48 — thread affordance at the FAR RIGHT of the row. Three states:
-    //   • unread > 0 → coloured badge (red for gm-bound, orange for peer-bound)
-    //     with the count
-    //   • unread = 0 AND has history → faint chat-lines icon to review the
-    //     existing thread
-    //   • no history at all → no element (a fresh player has nothing to read;
-    //     the GM can still open a thread later when they want to message)
+    // v2.16.49 — thread affordance at the FAR RIGHT of the row. Four
+    // states, all sharing the same slot so the row stays aligned across
+    // every player:
+    //   • managedByGm (no device)     → red chat-bubble with a slash,
+    //                                    not clickable; says "offline"
+    //   • unread > 0 (gm-bound)       → red badge with count
+    //   • unread > 0 (peer-bound)     → orange badge with count
+    //   • idle (no unread, has device)→ faint chat-bubble; click opens
+    //                                    the thread for review or to
+    //                                    compose a fresh message
+    if (p.managedByGm) {
+      const offline = document.createElement('span');
+      offline.className = 'player-row-thread-offline';
+      offline.title = 'Offline player — no device to receive messages';
+      offline.setAttribute('aria-label', 'Offline (no messaging)');
+      offline.innerHTML =
+        '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
+          '<path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"/>' +
+          '<line x1="3" y1="3" x2="21" y2="21"/>' +
+        '</svg>';
+      row.appendChild(offline);
+      return row;
+    }
     const totalUnread = info.unreadGm + info.unreadPeer;
     if (totalUnread > 0) {
       const badge = document.createElement('button');
@@ -244,11 +273,11 @@ export class PlayersPanel {
         : `${info.unreadPeer} unread player-to-player message${info.unreadPeer === 1 ? '' : 's'} you're monitoring`;
       badge.addEventListener('click', (e) => { e.stopPropagation(); this.cb.onOpenThread(p.id); });
       row.appendChild(badge);
-    } else if (info.hasHistory) {
+    } else {
       const idle = document.createElement('button');
       idle.type = 'button';
       idle.className = 'player-row-thread-idle';
-      idle.title = 'Review previous conversation';
+      idle.title = 'Open message thread (review or send a new message)';
       idle.setAttribute('aria-label', 'Open message thread');
       idle.innerHTML =
         '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +

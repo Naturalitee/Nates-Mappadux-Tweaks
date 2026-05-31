@@ -13,6 +13,10 @@ export interface MessageThreadPanelOptions {
   /** Messages to render (chronological — caller passes them already
    *  ordered from oldest to newest). */
   messages: ThreadMessage[];
+  /** Timestamp the GM last marked the thread as "seen" (panel close).
+   *  Messages with `at > lastSeenAt` render BOLD to mark them as new
+   *  since the GM last looked. 0 = never opened. v2.16.49. */
+  lastSeenAt: number;
   /** The player this thread belongs to — used in the empty-state hint
    *  and the composer placeholder. */
   toName: string;
@@ -41,7 +45,7 @@ export function buildMessageThreadPanel(body: HTMLElement, opts: MessageThreadPa
     empty.textContent = 'No messages yet. Type below to start.';
     thread.appendChild(empty);
   } else {
-    for (const m of opts.messages) thread.appendChild(_buildBubble(m));
+    for (const m of opts.messages) thread.appendChild(_buildBubble(m, m.at > opts.lastSeenAt));
   }
   body.appendChild(thread);
 
@@ -106,11 +110,20 @@ export function buildMessageThreadPanel(body: HTMLElement, opts: MessageThreadPa
   composer.appendChild(actions);
   body.appendChild(composer);
 
-  // Resolve pre-fetched suggestions silently — chips appear if/when ready.
+  // Resolve pre-fetched suggestions. v2.16.49 — show an animated "…"
+  // placeholder while the LLM is still thinking so the GM knows
+  // chips are on the way. Replaced by real chips when the promise
+  // resolves; cleared if the request errors / returns nothing.
   if (opts.prefetchedSuggestions) {
+    const waiting = document.createElement('span');
+    waiting.className = 'mt-chips-waiting';
+    waiting.title = 'LLM is thinking…';
+    waiting.textContent = '…';
+    chips.appendChild(waiting);
     void opts.prefetchedSuggestions.then((arr) => {
       if (arr.length > 0) _renderChips(chips, arr, input);
-    }).catch(() => { /* silent — the manual button surfaces errors */ });
+      else chips.replaceChildren();
+    }).catch(() => chips.replaceChildren());
   }
 
   // Autoscroll thread to bottom on render.
@@ -119,9 +132,11 @@ export function buildMessageThreadPanel(body: HTMLElement, opts: MessageThreadPa
   requestAnimationFrame(() => input.focus());
 }
 
-function _buildBubble(m: ThreadMessage): HTMLElement {
+function _buildBubble(m: ThreadMessage, isNew: boolean): HTMLElement {
   const row = document.createElement('div');
-  row.className = 'mt-msg ' + (m.fromKind === 'gm' ? 'mt-msg--gm' : 'mt-msg--player');
+  row.className = 'mt-msg '
+    + (m.fromKind === 'gm' ? 'mt-msg--gm' : 'mt-msg--player')
+    + (isNew ? ' mt-msg--new' : '');
 
   const head = document.createElement('div');
   head.className = 'mt-msg-head';

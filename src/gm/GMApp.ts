@@ -1726,6 +1726,38 @@ export class GMApp {
       this._audioCoord.claim();
     });
 
+    // v2.16.49 — Drag-a-player-from-the-Players-row onto the map as an
+    // alternative to clicking the marker pin in the row. PlayersPanel
+    // marks its icon-button draggable + sets a custom MIME type; we
+    // accept the drop here and convert the cursor's canvas-CSS coord
+    // into a normalised map coord for the placement.
+    const wrapper = document.getElementById('canvas-wrapper');
+    if (wrapper) {
+      const MIME = 'application/x-mappadux-player';
+      wrapper.addEventListener('dragover', (e) => {
+        if (!e.dataTransfer?.types.includes(MIME)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        wrapper.classList.add('player-drop-active');
+      });
+      wrapper.addEventListener('dragleave', (e) => {
+        // Leaving the wrapper itself (not just moving over a child)
+        if (e.target === wrapper) wrapper.classList.remove('player-drop-active');
+      });
+      wrapper.addEventListener('drop', (e) => {
+        wrapper.classList.remove('player-drop-active');
+        const id = e.dataTransfer?.getData(MIME);
+        if (!id) return;
+        e.preventDefault();
+        const canvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
+        if (!canvas) return;
+        const r = canvas.getBoundingClientRect();
+        const norm = this.renderer.canvasCssToMapNorm(e.clientX - r.left, e.clientY - r.top);
+        if (!norm) return;
+        void this._placePlayerAtNorm(id, norm.x, norm.y);
+      });
+    }
+
     // v2.16.40 — Inline PiP preview of the player view. Lives on the
     // canvas-wrapper; defaults to open on first session so a new GM
     // immediately sees what their players see. Pop-out replicates the
@@ -2412,6 +2444,11 @@ export class GMApp {
       // kind-dropdown in-use markers won't refresh from there —
       // refresh them here instead.
       this._refreshKindSelectorUsage();
+      // v2.16.49 — Players panel rows show per-player "placed-on-this-map"
+      // state via info.placed. Re-render so the marker pin glyph reflects
+      // the NEW map's placements; otherwise the icon read stale across
+      // map switches.
+      this._refreshPlayersPanel();
     }
 
     if (changed.includes('markers')) {
@@ -3665,8 +3702,16 @@ export class GMApp {
         ...(suggestionsPromise ? { suggestionsPromise } : {}),
       };
       this._messageThreads.addIncoming(senderPlayerId, entry, this._openThreadPlayerId);
-      // Player→player: relay to the addressed player (copy stays in the GM panel).
+      // v2.16.49 — peer-bound messages also land in the RECIPIENT's
+      // thread so the GM can monitor both sides from either badge.
+      // Orange unread bumps on the recipient row; the message reads
+      // identically in both threads (same id, same content). When the
+      // recipient is the player whose thread is currently open, the
+      // bump is skipped and the body refresh handles the live update.
       if (msg.toPlayerId) {
+        this._messageThreads.addIncoming(msg.toPlayerId, entry, this._openThreadPlayerId);
+        // Player→player: relay to the addressed player so their PlayerApp
+        // shows the toast.
         this.host.broadcast({
           type: 'message_deliver',
           messageId: msg.messageId,
@@ -6252,7 +6297,6 @@ export class GMApp {
           canCancelMove: this._markerMoveOrigin.has(id),
           unreadGm:      unread.gm,
           unreadPeer:    unread.peer,
-          hasHistory:    this._messageThreads.messagesFor(id).length > 0,
         };
       },
     );
@@ -6374,6 +6418,21 @@ export class GMApp {
     this._refreshPlayersPanel();
   }
 
+  /** v2.16.49 — place a player's token at a specific normalised map
+   *  coord. Used by the drag-from-Players-row-icon → drop-on-map flow.
+   *  Mirrors _togglePlayerMarker's PLACE branch but lands at the
+   *  drop point rather than the map centre. */
+  private async _placePlayerAtNorm(playerId: string, x: number, y: number): Promise<void> {
+    const mapId = this._activeMapId();
+    if (!mapId) { this.setStatus('Load a map before placing player tokens.', 'warn'); return; }
+    const clampedX = Math.max(0, Math.min(1, x));
+    const clampedY = Math.max(0, Math.min(1, y));
+    await this.playerRegistry.setPlacement(playerId, mapId, clampedX, clampedY);
+    this._markerMoveOrigin.delete(playerId);
+    this._refreshPlayerMarkers();
+    this._refreshPlayersPanel();
+  }
+
   /** Players-panel toggle: place this player's token on the active map (centre)
    *  if absent, or remove it if present. */
   private async _togglePlayerMarker(playerId: string): Promise<void> {
@@ -6470,13 +6529,14 @@ export class GMApp {
       this._threadSidePanel = openSidePanel({
         title: `Messages — ${displayName}`,
         populate: (body) => {
-          const messages = this._messageThreads.messagesFor(playerId);
-          // Pre-fetched suggestions for the most recent inbound message
-          // (the player_message handler pre-fetches when LLM is configured).
+          // v2.16.49 — snapshot includes lastSeenAt so newly-arrived
+          // messages render BOLD until the panel is closed.
+          const { messages, lastSeenAt } = this._messageThreads.snapshotFor(playerId);
           const lastInbound = [...messages].reverse().find((m) => m.fromKind === 'player');
           const prefetched  = lastInbound?.suggestionsPromise;
           buildMessageThreadPanel(body, {
             messages,
+            lastSeenAt,
             toName: displayName,
             ...(prefetched ? { prefetchedSuggestions: prefetched } : {}),
             onSend: (text) => this._sendGmMessage(playerId, displayName, text),
@@ -6489,6 +6549,9 @@ export class GMApp {
           });
         },
         onClose: () => {
+          // Snapshot the "seen up to now" timestamp so the next open
+          // only bolds messages that arrive after this close.
+          this._messageThreads.markSeen(playerId);
           this._threadSidePanel = null;
           this._openThreadPlayerId = null;
         },

@@ -6669,6 +6669,61 @@ option.select-option--add {
   background: rgba(255, 255, 255, 0.05);
   border-color: rgba(255, 255, 255, 0.12);
 }
+/* Offline (GM-managed) — same slot as the chat affordance, red
+   chat-bubble with a slash, NOT interactive. Title explains. */
+.player-row-thread-offline {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 20px;
+  color: rgba(220, 38, 38, 0.7);
+  cursor: default;
+}
+
+/* v2.16.49 — hover-revealed delete X at the row's top-right corner.
+   Replaces the old always-visible delete button to free up slot
+   space. Hidden by default; appears on row hover or button focus. */
+.player-row { position: relative; }
+.player-row-delete-corner {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: rgba(220, 38, 38, 0.9);
+  border: 1px solid var(--bg-panel, #11151f);
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 2;
+}
+.player-row:hover .player-row-delete-corner,
+.player-row-delete-corner:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.player-row-delete-corner:hover { transform: scale(1.1); background: rgba(220, 38, 38, 1); }
+
+/* v2.16.49 — drop-target highlight on the canvas-wrapper while a
+   player row icon is being dragged over it. Subtle blue glow so the
+   GM knows the drop will land. */
+#canvas-wrapper.is-pip-drop-target { /* reserved for future */ }
+#canvas-wrapper.player-drop-active::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 3px rgba(99, 102, 241, 0.55);
+  z-index: 40;
+}
 
 /* v2.16.47 — message thread side panel. Body is a vertical stack:
    thread above (scrollable, fills available height), composer below
@@ -6704,6 +6759,11 @@ option.select-option--add {
 }
 .mt-msg--player { background: rgba(255, 255, 255, 0.04); align-self: flex-start; }
 .mt-msg--gm     { background: rgba(99,  102, 241, 0.18); align-self: flex-end; }
+/* v2.16.49 — bold treatment for messages that arrived since the GM
+   last closed this thread. Drops back to normal weight on next open
+   (via lastSeenAt timestamp update in MessageThreads.markSeen). */
+.mt-msg--new .mt-msg-from { font-weight: 800; }
+.mt-msg--new .mt-msg-text { font-weight: 600; color: #fff; }
 .mt-msg-head {
   display: flex;
   align-items: center;
@@ -6741,6 +6801,21 @@ option.select-option--add {
   transition: background 120ms ease, color 120ms ease;
 }
 .mt-chip:hover { background: rgba(255, 255, 255, 0.12); color: var(--text-primary); }
+/* v2.16.49 — "..." placeholder shown while pre-fetched LLM
+   suggestions are still in flight. Pulses subtly so the GM knows
+   chips are on the way. */
+.mt-chips-waiting {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  padding: 0 6px;
+  animation: mt-chips-waiting-pulse 1.2s ease-in-out infinite;
+}
+@keyframes mt-chips-waiting-pulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.95; }
+}
 .mt-input {
   width: 100%;
   resize: vertical;

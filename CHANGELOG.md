@@ -1,5 +1,41 @@
 # Changelog
 
+## v2.16.49 — 2026-05-31
+
+### Player Voice patch 2 + Players row pass
+
+- **Player ↔ player messages populate BOTH threads** on the GM side.
+  When Player A messages Player B the same entry lands in A's thread
+  AND B's, both `origin: 'peer-bound'`. The orange (peer-bound) badge
+  on either row now has a real population path.
+- **Always-visible chat bubble** at the far right of every Players row
+  (was gated on history). GM can start a new conversation with any
+  player even when there's no prior thread. Click opens an empty
+  thread + composer ready to send.
+- **Offline (GM-managed) players** show a red chat-bubble-with-slash
+  icon in the same slot so the row stays aligned. Not interactive —
+  no device, no messaging.
+- **Bold = "new since last open"**. Messages whose `at` is newer than
+  the per-thread `lastSeenAt` (snapshotted on panel close) render
+  with weight 600 + white text so the GM spots fresh arrivals at a
+  glance. Drops to normal on next open.
+- **Pre-fetched LLM suggestions are kept** — when a player message
+  arrives, GMApp fires `client.suggest()` in the background; chips
+  appear instantly the moment the panel opens. **"…" placeholder
+  pulses while the LLM is still thinking** so the GM knows chips
+  are on the way.
+- **Players row tidy-up**: delete moved off the action area to a
+  hover-revealed red × at the row's top-right corner. Frees a slot
+  while keeping the destructive action discoverable + harder to
+  click accidentally during play.
+- **Drag a player icon onto the map** as an alternative to clicking
+  the marker pin — the canvas-wrapper accepts the drop, converts CSS
+  px → normalised coords, and lands the token at the cursor. Indigo
+  outline highlights the drop zone while a drag is in flight.
+- **Players panel refreshes on map change** so the placement-pin
+  glyph reflects the new map's placements (was reading stale across
+  map switches).
+
 ## v2.16.48 — 2026-05-31
 
 ### Player row polish + sidebar above PiP
