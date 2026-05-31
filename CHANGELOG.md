@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.16.36 — 2026-05-31
+
+### Side panel slides from the sidebar; width follows UI scale
+
+- **Reanchored.** The side panel now slides out from BEHIND the
+  sidebar (anchored to its right edge, hidden behind it when closed)
+  rather than appearing from the far-right edge of the screen. Feels
+  like a continuation of the sidebar instead of a disconnected overlay
+  on the other side of the canvas.
+- **UI-scale-aware.** Width is `calc(340px * var(--ui-scale))`, so
+  Settings → UI Scale dials the panel up / down in lock-step with
+  the sidebar. Max-width still respects the available viewport area.
+- **Implicit save-and-close on canvas click.** Already worked by
+  virtue of the outside-click dismiss; the change handlers on every
+  control write through to state live, so closing the panel is the
+  full commit. Explicit X / Escape still close.
+
 ## v2.16.35 — 2026-05-31
 
 ### Side-panel framework + Backdrop / MapFX first users
