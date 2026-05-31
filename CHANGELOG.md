@@ -1,5 +1,24 @@
 # Changelog
 
+## v2.16.34 — 2026-05-31
+
+### Design language sweep — adjacent "+" + sliders for tune
+
+- **"+" button beside each picker** on Map / Markers / Display rows.
+  The "Add new..." sentinel that used to live at the bottom of the
+  dropdown is gone — easy to miss, slow to discover. The adjacent
+  icon button is the standard pattern (Stripe, Linear, GitHub, Material).
+- **Sparkle → sliders icon** on Backdrop and MapFX (FoW) tune buttons.
+  Sparkle reads as "fancy effect", not "configure parameters". The
+  sliders-horizontal Lucide glyph is the standard "tune parameters"
+  affordance — matches what people are used to in audio plugins,
+  dashboards, and settings dashes.
+
+Next on the design sweep: a generic right-edge side-panel framework
+(v2.16.35), then promote Visual Filter's param controls into it
+(v2.16.36), then the same treatment for Backdrop + FoW tune popovers
+and the Player Voice messaging threads when each lands.
+
 ## v2.16.33 — 2026-05-31
 
 ### Sidebar simplify — reorg + Player Connection retired

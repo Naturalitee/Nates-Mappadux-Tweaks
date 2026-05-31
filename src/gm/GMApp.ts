@@ -18,7 +18,11 @@ import { TextMapEditor } from './TextMapEditor.ts';
 import { MapCalibrationModal } from './MapCalibrationModal.ts';
 import { ProjectorViewportEditor } from './ProjectorViewportEditor.ts';
 import { HamburgerMenu } from './HamburgerMenu.ts';
-import { SELECT_ADD_SENTINEL, appendAddOption } from './selectAdd.ts';
+// v2.16.34 — appendAddOption retired (the sentinel option at the bottom
+// of each picker was replaced by an adjacent "+" icon button). The
+// SELECT_ADD_SENTINEL constant is still imported because the change
+// handlers keep a defensive branch in case a cached UI emits it.
+import { SELECT_ADD_SENTINEL } from './selectAdd.ts';
 import { EditableSelect } from './EditableSelect.ts';
 import { getAllSetups, setActiveSetupId, saveSetup } from '../projector/calibrationStorage.ts';
 import { SoundboardPanel, type SoundboardBroadcast } from './SoundboardPanel.ts';
@@ -2385,9 +2389,11 @@ export class GMApp {
       this.mapSelect.appendChild(opt);
     }
 
-    // Trailing "+ Add New Map" sentinel — picking it opens the add-map modal
-    // (handled in the change listener).
-    appendAddOption(this.mapSelect, '+ Add New Map…');
+    // v2.16.34 — sentinel "+ Add New Map" option retired. The
+    // discoverable "+" button beside the dropdown is the affordance now
+    // (bound in bindUIControls → #add-map-btn). The SELECT_ADD_SENTINEL
+    // branch in the change handler stays as a defensive no-op so any
+    // cached UI that still emits it doesn't crash.
 
     if (maps.length > 0) {
       const last = session?.lastMapId ? (maps.find((m) => m.id === session.lastMapId) ?? maps[0]!) : maps[0]!;
@@ -3373,7 +3379,9 @@ export class GMApp {
       sel.appendChild(opt);
     }
 
-    appendAddOption(sel, '+ Calibrate New Display…');
+    // v2.16.34 — sentinel "+ Calibrate New Display" retired in favour of
+    // the adjacent "+" button (#add-display-btn). Defensive branch in the
+    // change handler stays for safety.
 
     // Selected option reflects the LIVE state only — when nothing's running,
     // default to "No Projection" so picking the previously-active setup
@@ -4873,6 +4881,20 @@ export class GMApp {
       void this._copyMappaduxUrl();
     });
 
+    // v2.16.34 — "+" button beside the Map picker. Wires to the same
+    // openAddMapDialog flow the SELECT_ADD_SENTINEL branch used to call,
+    // so existing flows (modal cancel/restore, post-add dropdown refresh)
+    // keep working identically.
+    document.querySelector('#add-map-btn')?.addEventListener('click', () => {
+      this.openAddMapDialog();
+    });
+    document.querySelector('#add-display-btn')?.addEventListener('click', () => {
+      // Mirror the SELECT_ADD_SENTINEL branch in _onProjectorSelectChange:
+      // calibration runs in its own popup so the user can drag it to the
+      // physical display. Storage event refreshes the dropdown after save.
+      window.open(`/calibrate.html${this._instanceQuery()}`, '_blank', 'noopener,popup,width=1280,height=800');
+    });
+
     // Map selection — also handles the "+ Add New Map" sentinel that lives
     // at the bottom of the dropdown.
     this.mapSelect.addEventListener('change', async () => {
@@ -5622,6 +5644,12 @@ export class GMApp {
       this._deleteMarker(this.selectedMarkerId);
     });
 
+    // v2.16.34 — "+" button beside the Marker picker. Same action the
+    // SELECT_ADD_SENTINEL branch fires: create a new marker at map centre,
+    // select it, let updateMarkerPanel rebuild the dropdown.
+    document.querySelector('#add-marker-btn')?.addEventListener('click', () => {
+      this.markerEditor.addMarker(0.5, 0.5);
+    });
 
     this.markerSelect.addEventListener('change', () => {
       const v = this.markerSelect.value;
@@ -6914,7 +6942,9 @@ export class GMApp {
       opt.textContent = m.label || '(unnamed)';
       this.markerSelect.appendChild(opt);
     }
-    appendAddOption(this.markerSelect, '+ Add Marker');
+    // v2.16.34 — sentinel "+ Add Marker" retired; #add-marker-btn beside
+    // the dropdown is the affordance now (bound in bindMarkerEditor /
+    // bindUIControls). Defensive branch in the change handler stays.
     if (sel) this.markerSelect.value = sel.id;
 
     const controlsEl = document.querySelector<HTMLElement>('#marker-controls');
