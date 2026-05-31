@@ -102,9 +102,17 @@ export class PlayerApp {
   private _localOverride: { centerX: number; centerY: number; viewNW: number; viewNH: number } | null = null;
   /** Snapshot of the override at gesture start — gesture deltas are
    *  cumulative, so we re-derive the override from the snapshot each
-   *  pointermove rather than integrating per-frame deltas. */
+   *  pointermove rather than integrating per-frame deltas.
+   *
+   *  `override` is in bv-aspect normalised coords (what we store /
+   *  broadcast); `effective` is the canvas-aspect-extended viewport the
+   *  user actually sees on canvas (used for cursor / centroid /
+   *  drag-delta anchoring so the world point under the finger stays
+   *  glued through the gesture). The two differ when the player's
+   *  canvas aspect doesn't match the GM-defined viewport's aspect. */
   private _gestureSnap: {
-    override: { centerX: number; centerY: number; viewNW: number; viewNH: number };
+    override:  { centerX: number; centerY: number; viewNW: number; viewNH: number };
+    effective: { centerX: number; centerY: number; viewNW: number; viewNH: number };
     midX: number;
     midY: number;
   } | null = null;
@@ -548,8 +556,10 @@ export class PlayerApp {
         // all of them; tap-to-mute still survives because attachGestures
         // doesn't fire onDrag until the pointer actually moves.)
         if (e.phase === 'start') {
+          const snap = this._currentOverrideSnapshot();
           this._gestureSnap = {
-            override: this._currentOverrideSnapshot(),
+            override:  snap,
+            effective: this._expandToCanvasAspect(snap),
             midX: e.clientX, midY: e.clientY,
           };
           return;
@@ -557,11 +567,15 @@ export class PlayerApp {
         if (!this._gestureSnap || !this._broadcastView) return;
         const canvasRect = canvas.getBoundingClientRect();
         const bv = this._broadcastView;
-        const snap = this._gestureSnap.override;
-        // dx/dy is cumulative from start. Convert client-px → view-norm,
-        // negate (dragging the map right shifts the view-center LEFT).
-        const dnx = -e.dx / canvasRect.width  * snap.viewNW;
-        const dny = -e.dy / canvasRect.height * snap.viewNH;
+        const snap    = this._gestureSnap.override;
+        const snapEff = this._gestureSnap.effective;
+        // dx/dy is cumulative from start. Convert client-px → view-norm
+        // using the EFFECTIVE viewport (what the user actually sees on
+        // canvas). With clip suppressed, dragging the canvas full-width
+        // moves the world by snapEff.viewNW, not snap.viewNW — using
+        // snap here would feel "sticky" off-centre.
+        const dnx = -e.dx / canvasRect.width  * snapEff.viewNW;
+        const dny = -e.dy / canvasRect.height * snapEff.viewNH;
         this._localOverride = {
           centerX: snap.centerX + dnx,
           centerY: snap.centerY + dny,
@@ -578,31 +592,39 @@ export class PlayerApp {
       },
       onTwoFinger: (e) => {
         if (e.phase === 'start') {
+          const snap = this._currentOverrideSnapshot();
           this._gestureSnap = {
-            override: this._currentOverrideSnapshot(),
+            override:  snap,
+            effective: this._expandToCanvasAspect(snap),
             midX: e.midX, midY: e.midY,
           };
           return;
         }
         if (!this._gestureSnap || !this._broadcastView) return;
         const canvasRect = canvas.getBoundingClientRect();
-        const snap = this._gestureSnap.override;
+        const snap    = this._gestureSnap.override;
+        const snapEff = this._gestureSnap.effective;
         // Scale around the original centroid (in client px). e.scale is
         // cumulative — fingers spread → >1 → zoom IN → smaller view.
+        // Cursor / centroid maps to world coords via the EFFECTIVE viewport,
+        // since that's what the user sees; zoom factor applies uniformly to
+        // both the stored override and the effective viewport.
         const u0 = (this._gestureSnap.midX - canvasRect.left) / canvasRect.width;
         const v0 = (this._gestureSnap.midY - canvasRect.top)  / canvasRect.height;
-        const wx0 = snap.centerX - snap.viewNW / 2 + u0 * snap.viewNW;
-        const wy0 = snap.centerY - snap.viewNH / 2 + v0 * snap.viewNH;
-        const newW = snap.viewNW / e.scale;
-        const newH = snap.viewNH / e.scale;
-        // Also account for centroid drift since gesture start (panDx/Dy).
-        const dnx = -e.panDx / canvasRect.width  * snap.viewNW;
-        const dny = -e.panDy / canvasRect.height * snap.viewNH;
+        const wx0 = snapEff.centerX - snapEff.viewNW / 2 + u0 * snapEff.viewNW;
+        const wy0 = snapEff.centerY - snapEff.viewNH / 2 + v0 * snapEff.viewNH;
+        const newW    = snap.viewNW    / e.scale;
+        const newH    = snap.viewNH    / e.scale;
+        const newEffW = snapEff.viewNW / e.scale;
+        const newEffH = snapEff.viewNH / e.scale;
+        // Pan from centroid drift, again in effective space.
+        const dnx = -e.panDx / canvasRect.width  * snapEff.viewNW;
+        const dny = -e.panDy / canvasRect.height * snapEff.viewNH;
         this._localOverride = {
           viewNW:  newW,
           viewNH:  newH,
-          centerX: wx0 - (u0 - 0.5) * newW + dnx,
-          centerY: wy0 - (v0 - 0.5) * newH + dny,
+          centerX: wx0 - (u0 - 0.5) * newEffW + dnx,
+          centerY: wy0 - (v0 - 0.5) * newEffH + dny,
         };
         this._clampOverride(this._broadcastView);
         this._applyEffectiveView();
@@ -622,6 +644,29 @@ export class PlayerApp {
     return { centerX: bv.centerX, centerY: bv.centerY, viewNW: bv.viewNW, viewNH: bv.viewNH };
   }
 
+  /** Expand a bv-aspect viewport snapshot to the canvas-aspect viewport the
+   *  player actually sees on canvas. When the clip pass is off (override
+   *  active), the renderer's camera extends beyond the snapshot's viewNW/H
+   *  in whichever axis is too narrow for the canvas aspect — the cursor's
+   *  client-px position therefore maps to a world coordinate via the
+   *  EXTENDED dimensions, not the original. Used everywhere a gesture needs
+   *  to keep a world point glued to the user's finger / cursor. 2026-05-31. */
+  private _expandToCanvasAspect(
+    s: { centerX: number; centerY: number; viewNW: number; viewNH: number },
+  ): { centerX: number; centerY: number; viewNW: number; viewNH: number } {
+    const canvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
+    if (!canvas || canvas.clientWidth === 0 || canvas.clientHeight === 0) return s;
+    const ma = this.renderer.mapAspect;
+    if (ma <= 0) return s;
+    const sa = canvas.clientWidth / canvas.clientHeight;
+    const va = (s.viewNW * ma) / s.viewNH;
+    let viewNW = s.viewNW;
+    let viewNH = s.viewNH;
+    if (sa > va)      viewNW = (s.viewNH * sa) / ma;
+    else if (sa < va) viewNH = (s.viewNW * ma) / sa;
+    return { centerX: s.centerX, centerY: s.centerY, viewNW, viewNH };
+  }
+
   /** Zoom around a client-px point. factor < 1 = zoom IN, >1 = zoom OUT. */
   private _zoomAtClient(clientX: number, clientY: number, factor: number): void {
     if (!this._broadcastView) return;
@@ -630,16 +675,22 @@ export class PlayerApp {
     const rect = canvas.getBoundingClientRect();
     const u = (clientX - rect.left) / rect.width;
     const v = (clientY - rect.top)  / rect.height;
-    const cur = this._currentOverrideSnapshot();
-    const wx0 = cur.centerX - cur.viewNW / 2 + u * cur.viewNW;
-    const wy0 = cur.centerY - cur.viewNH / 2 + v * cur.viewNH;
-    const newW = cur.viewNW * factor;
-    const newH = cur.viewNH * factor;
+    const cur    = this._currentOverrideSnapshot();
+    const curEff = this._expandToCanvasAspect(cur);
+    // World point under the cursor maps via the EFFECTIVE viewport (matches
+    // what the user sees on canvas); zoom factor applies uniformly to both
+    // the stored override and the effective view.
+    const wx0 = curEff.centerX - curEff.viewNW / 2 + u * curEff.viewNW;
+    const wy0 = curEff.centerY - curEff.viewNH / 2 + v * curEff.viewNH;
+    const newW    = cur.viewNW    * factor;
+    const newH    = cur.viewNH    * factor;
+    const newEffW = curEff.viewNW * factor;
+    const newEffH = curEff.viewNH * factor;
     this._localOverride = {
       viewNW:  newW,
       viewNH:  newH,
-      centerX: wx0 - (u - 0.5) * newW,
-      centerY: wy0 - (v - 0.5) * newH,
+      centerX: wx0 - (u - 0.5) * newEffW,
+      centerY: wy0 - (v - 0.5) * newEffH,
     };
     this._clampOverride(this._broadcastView);
     // If the wheel-out has restored the override to match the broadcast

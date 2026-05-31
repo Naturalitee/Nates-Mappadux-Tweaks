@@ -1,5 +1,20 @@
 # Changelog
 
+## v2.16.29 — 2026-05-31
+
+### Fix — zoom anchor stays glued off-centre
+
+After v2.16.28 the player view fills the canvas when zoomed in (clip
+pass suppressed), but wheel + pinch + drag-pan were still computing
+world coordinates from the GM-defined viewport's normalised dims —
+so off-centre zooms drifted because the rendered view extended past
+those dims in one axis. Now the gesture handlers anchor on the
+EFFECTIVE viewport (canvas-aspect extension), so the world point under
+the cursor / centroid stays glued through the gesture regardless of
+where on the canvas you anchor. Drag-pan also uses the effective
+viewport, so a full-canvas-wide drag moves by the full canvas width
+of world instead of the smaller GM-viewport width.
+
 ## v2.16.28 — 2026-05-31
 
 ### Zoom fixes — projector locked; player zoom-in fills the canvas
