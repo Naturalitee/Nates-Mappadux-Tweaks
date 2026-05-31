@@ -6612,6 +6612,118 @@ option.select-option--add {
   0%, 100% { box-shadow: 0 0 0 0  rgba(34, 197, 94, 0.55), 0 0 4px var(--ok); }
   60%      { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0),    0 0 4px var(--ok); }
 }
+
+/* v2.16.47 — per-player unread message badge on each Players row.
+   Red = unread messages addressed to the GM (gm-bound channel).
+   Orange = unread messages between this player and another player
+   that the GM is monitoring (peer-bound channel). When both are
+   non-zero, red wins (the more direct attention demand). Click
+   opens the message thread in a SidePanel. */
+.player-row-unread {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: rgba(220, 38, 38, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease;
+}
+.player-row-unread:hover { background: rgba(220, 38, 38, 1); transform: scale(1.05); }
+.player-row-unread--peer { background: rgba(245, 158, 11, 0.85); }
+.player-row-unread--peer:hover { background: rgba(245, 158, 11, 1); }
+
+/* v2.16.47 — message thread side panel. Body is a vertical stack:
+   thread above (scrollable, fills available height), composer below
+   (fixed at the bottom of the panel). */
+.mt-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+}
+.mt-thread {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-sm);
+}
+.mt-empty {
+  margin: auto;
+  font-size: var(--font-size-sm);
+  color: var(--text-dim);
+  text-align: center;
+}
+.mt-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  max-width: 95%;
+}
+.mt-msg--player { background: rgba(255, 255, 255, 0.04); align-self: flex-start; }
+.mt-msg--gm     { background: rgba(99,  102, 241, 0.18); align-self: flex-end; }
+.mt-msg-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 0.72rem;
+}
+.mt-msg-from { font-weight: 600; }
+.mt-msg-to   { color: var(--text-dim); }
+.mt-msg-time { margin-left: auto; color: var(--text-dim); }
+.mt-msg-text {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mt-composer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+.mt-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.mt-chip {
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.mt-chip:hover { background: rgba(255, 255, 255, 0.12); color: var(--text-primary); }
+.mt-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 44px;
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+}
+.mt-actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
 .player-row-colour {
   flex: 0 0 auto;
   width: 22px;

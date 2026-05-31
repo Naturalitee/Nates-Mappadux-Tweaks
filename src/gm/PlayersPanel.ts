@@ -8,6 +8,10 @@ export interface PlayerRowInfo {
   placed:         boolean;
   /** A player moved their token; the GM can cancel it. */
   canCancelMove:  boolean;
+  /** v2.16.47 — unread message counts for this player. Red badge for
+   *  gm-bound, orange badge for peer-bound. Zero = no badge. */
+  unreadGm:       number;
+  unreadPeer:     number;
 }
 
 export interface PlayersPanelCallbacks {
@@ -24,6 +28,9 @@ export interface PlayersPanelCallbacks {
   onClearIcon: (id: string) => void | Promise<void>;
   /** Change the token's footprint size — only honoured on calibrated maps. */
   onSetTokenSize: (id: string, size: TokenSize) => void | Promise<void>;
+  /** v2.16.47 — open the message thread for this player (clicking the
+   *  unread badge). The host opens a SidePanel with the thread + composer. */
+  onOpenThread:   (id: string) => void;
 }
 
 /**
@@ -198,6 +205,23 @@ export class PlayersPanel {
     marker.innerHTML = '<svg viewBox="0 0 24 24" width="15" height="15" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-7-5.5-7-11a7 7 0 0 1 14 0c0 5.5-7 11-7 11z"/><circle cx="12" cy="10" r="2.5"/></svg>';
     marker.addEventListener('click', () => void this.cb.onToggleMarker(p.id));
     row.appendChild(marker);
+
+    // v2.16.47 — unread message badge. Red beats orange when both
+    // have unread, since gm-bound demands more attention. Click
+    // opens this player's thread in a SidePanel.
+    const totalUnread = info.unreadGm + info.unreadPeer;
+    if (totalUnread > 0) {
+      const badge = document.createElement('button');
+      badge.type = 'button';
+      const isGm = info.unreadGm > 0;
+      badge.className = 'player-row-unread' + (isGm ? '' : ' player-row-unread--peer');
+      badge.textContent = String(totalUnread);
+      badge.title = isGm
+        ? `${info.unreadGm} unread message${info.unreadGm === 1 ? '' : 's'} to you`
+        : `${info.unreadPeer} unread player-to-player message${info.unreadPeer === 1 ? '' : 's'} you're monitoring`;
+      badge.addEventListener('click', (e) => { e.stopPropagation(); this.cb.onOpenThread(p.id); });
+      row.appendChild(badge);
+    }
 
     // Delete
     const del = document.createElement('button');

@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.16.47 — 2026-05-31
+
+### Player Voice messaging restored on the new framework
+
+GM ↔ player messaging is back, rebuilt on the SidePanel framework
+that landed in v2.16.35. The old PlayerVoicePanel sidebar section is
+gone; each Players row now carries an **unread badge** (red for
+GM-bound messages, orange for peer-bound — the latter populates in
+the next patch). Clicking the badge opens a right-edge SidePanel
+with that player's message thread + a reply composer at the bottom.
+
+- **`MessageThreads` store** — per-player thread state + unread
+  counters + change subscription. Players panel re-renders when
+  threads mutate (badge counts update live).
+- **`MessageThreadPanel` body builder** — renders the thread
+  chronologically (GM messages right-aligned with an accent
+  background, player messages left-aligned), composer with Enter-to-
+  send / Shift-Enter for newline, optional LLM "Suggest replies"
+  button (when an assistant is configured in Settings → Player Voice).
+- **Pre-fetched LLM suggestions** preserved from the v2.16.7 design —
+  when a player message arrives, GM-side fires `client.suggest()` in
+  the background; the chips appear instantly the moment the side
+  panel opens for that player.
+- **Removed `src/gm/PlayerVoicePanel.ts`** — fully retired.
+
+Coming in patch 2 (v2.16.48): player ↔ player threads populate the
+orange badges + the GM-monitored peer-bound stream renders inline.
+
 ## v2.16.46 — 2026-05-31
 
 ### Sidebar panel order reshuffled for play-frequency

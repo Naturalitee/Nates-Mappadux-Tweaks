@@ -28,7 +28,8 @@ import { EditableSelect } from './EditableSelect.ts';
 import { getAllSetups, setActiveSetupId, saveSetup } from '../projector/calibrationStorage.ts';
 import { SoundboardPanel, type SoundboardBroadcast } from './SoundboardPanel.ts';
 import { PlayersPanel } from './PlayersPanel.ts';
-import { PlayerVoicePanel, type PlayerVoiceMessage } from './PlayerVoicePanel.ts';
+import { MessageThreads } from './MessageThreads.ts';
+import { buildMessageThreadPanel } from './MessageThreadPanel.ts';
 import { PlayerRegistry } from '../players/PlayerRegistry.ts';
 import { assetToPlayerIcon } from '../players/playerIcon.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
@@ -378,7 +379,15 @@ export class GMApp {
   // v2.17 Player Voice — persistent players roster + panel.
   private playerRegistry = new PlayerRegistry();
   private playersPanel!: PlayersPanel;
-  private playerVoicePanel!: PlayerVoicePanel;
+  /** v2.16.47 — per-player message thread store. Drives the per-row
+   *  unread badges on the Players panel + populates the side panel
+   *  when the GM clicks a badge. */
+  private _messageThreads = new MessageThreads();
+  /** The playerId whose thread side panel is currently open, or null.
+   *  Read by addIncoming to skip unread bumps for the active thread. */
+  private _openThreadPlayerId: string | null = null;
+  /** Handle to the open thread SidePanel (one at a time). */
+  private _threadSidePanel: import('./SidePanel.ts').SidePanelHandle | null = null;
   /** Ping pulses relayed from players — persist on the GM until dismissed. */
   private pingLayer: PingLayer | null = null;
   /** GM sender colour for message replies — a slate that reads clearly on
@@ -1691,7 +1700,7 @@ export class GMApp {
     this.bindMarkerEditor();
     this.bindSoundboardPanel();
     this.bindPlayersPanel();
-    this.bindPlayerVoicePanel();
+    this.bindMessageThreads();
     this.bindInitiativeTracker();
     this.bindHamburgerMenu();
     this._bindWorkspacePanZoom();
@@ -3638,16 +3647,24 @@ export class GMApp {
       const suggestionsPromise = client
         ? client.suggest(msg.text).catch(() => [] as string[])
         : undefined;
-      const entry: PlayerVoiceMessage = {
+      // v2.16.47 — message lands on the per-player thread store. Unread
+      // counters bump unless the side panel for this sender is already
+      // open. The Players panel re-renders via the store's onChange
+      // subscription so the unread badge appears immediately.
+      const senderPlayerId = sender?.id ?? msg.fromPlayerId;
+      const entry: import('./MessageThreads.ts').ThreadMessage = {
         id: msg.messageId,
-        fromPlayerId: sender?.id ?? msg.fromPlayerId,
+        fromKind: 'player',
+        fromPlayerId: senderPlayerId,
         fromName, fromColor,
-        ...(msg.toPlayerId ? { toPlayerId: msg.toPlayerId, toName: recipient?.characterName || recipient?.playerName || 'player' } : {}),
+        toPlayerId: msg.toPlayerId ?? null,
+        ...(msg.toPlayerId && recipient ? { toName: recipient.characterName || recipient.playerName || 'player' } : {}),
         text: msg.text,
         at: Date.now(),
+        origin: msg.toPlayerId ? 'peer-bound' : 'gm-bound',
         ...(suggestionsPromise ? { suggestionsPromise } : {}),
       };
-      this.playerVoicePanel.addMessage(entry);
+      this._messageThreads.addIncoming(senderPlayerId, entry, this._openThreadPlayerId);
       // Player→player: relay to the addressed player (copy stays in the GM panel).
       if (msg.toPlayerId) {
         this.host.broadcast({
@@ -6192,6 +6209,8 @@ export class GMApp {
         await this.playerRegistry.remove(id);
         this._liveMarkerPos.delete(id);
         this._markerMoveOrigin.delete(id);
+        this._messageThreads.drop(id);
+        if (this._openThreadPlayerId === id) this._threadSidePanel?.close();
         this._refreshPlayersPanel();
         this._broadcastRoster();
         this._refreshPlayerMarkers();
@@ -6210,6 +6229,9 @@ export class GMApp {
         this._refreshPlayersPanel();
         this._refreshPlayerMarkers();
       },
+      // v2.16.47 — click a per-row unread badge → open this player's
+      // message thread in a right-edge SidePanel.
+      onOpenThread: (id) => this._openMessageThread(id),
     });
     // Load the persisted roster, then render the panel + any placed tokens.
     void this.playerRegistry.load().then(() => {
@@ -6222,11 +6244,16 @@ export class GMApp {
     const mapId = this._activeMapId();
     this.playersPanel?.update(
       this.playerRegistry.all(),
-      (id) => ({
-        connected:     this.playerRegistry.isConnected(id),
-        placed:        !!mapId && this.playerRegistry.isPlacedOn(id, mapId),
-        canCancelMove: this._markerMoveOrigin.has(id),
-      }),
+      (id) => {
+        const unread = this._messageThreads.unreadFor(id);
+        return {
+          connected:     this.playerRegistry.isConnected(id),
+          placed:        !!mapId && this.playerRegistry.isPlacedOn(id, mapId),
+          canCancelMove: this._markerMoveOrigin.has(id),
+          unreadGm:      unread.gm,
+          unreadPeer:    unread.peer,
+        };
+      },
     );
   }
 
@@ -6412,26 +6439,86 @@ export class GMApp {
     this.host.broadcast({ type: 'initiative_update', state: this.initiativeTracker.getState() });
   }
 
-  private bindPlayerVoicePanel(): void {
-    this.playerVoicePanel = new PlayerVoicePanel({
-      onReply: (toPlayerId, text) => {
-        this.host.broadcast({
-          type: 'message_deliver',
-          messageId: generateId(),
-          fromKind:  'gm',
-          fromName:  'GM',
-          fromColor: GMApp.GM_MESSAGE_COLOR,
-          toPlayerId,
-          text,
-        });
-      },
-      // v2.17 — LLM reply assistant. Checked at call time so toggling the
-      // assistant on/off in Settings takes effect without rebuilding the panel.
-      onSuggest: async (msg) => {
-        const client = LLMClient.fromSettings();
-        if (!client) throw new Error('No LLM configured — enable the reply assistant in Settings → Player Voice.');
-        return client.suggest(msg.text);
-      },
+  /** v2.16.47 — replaces bindPlayerVoicePanel. The thread store fires
+   *  onChange whenever a message lands or unread counts change; we
+   *  re-render the Players panel so badges update. The thread side
+   *  panel itself is opened by clicking a row's badge (Players panel
+   *  onOpenThread callback). */
+  private bindMessageThreads(): void {
+    this._messageThreads.onChange(() => {
+      this._refreshPlayersPanel();
+      // If the open side panel's thread changed, refresh its body so the
+      // new message shows up immediately.
+      this._threadSidePanel?.refresh();
+    });
+  }
+
+  /** Open / refresh the thread SidePanel for a given player. Clears that
+   *  player's unread counters; subsequent incoming messages bump them
+   *  only after the panel closes. */
+  private _openMessageThread(playerId: string): void {
+    const player = this.playerRegistry.get(playerId);
+    if (!player) return;
+    const displayName = player.characterName || player.playerName || 'player';
+    this._openThreadPlayerId = playerId;
+    this._messageThreads.markRead(playerId);
+
+    void import('./SidePanel.ts').then(({ openSidePanel }) => {
+      // Close any previous thread panel (single-panel-at-a-time).
+      this._threadSidePanel?.close();
+      this._threadSidePanel = openSidePanel({
+        title: `Messages — ${displayName}`,
+        populate: (body) => {
+          const messages = this._messageThreads.messagesFor(playerId);
+          // Pre-fetched suggestions for the most recent inbound message
+          // (the player_message handler pre-fetches when LLM is configured).
+          const lastInbound = [...messages].reverse().find((m) => m.fromKind === 'player');
+          const prefetched  = lastInbound?.suggestionsPromise;
+          buildMessageThreadPanel(body, {
+            messages,
+            toName: displayName,
+            ...(prefetched ? { prefetchedSuggestions: prefetched } : {}),
+            onSend: (text) => this._sendGmMessage(playerId, displayName, text),
+            onSuggest: async () => {
+              const client = LLMClient.fromSettings();
+              if (!client) throw new Error('No LLM configured — enable the reply assistant in Settings → Player Voice.');
+              const ref = lastInbound?.text ?? '';
+              return client.suggest(ref);
+            },
+          });
+        },
+        onClose: () => {
+          this._threadSidePanel = null;
+          this._openThreadPlayerId = null;
+        },
+      });
+    });
+  }
+
+  /** Broadcast a GM reply to a specific player + append it to the local
+   *  thread so the GM sees their own message in the running history. */
+  private _sendGmMessage(toPlayerId: string, toName: string, text: string): void {
+    const messageId = generateId();
+    this.host.broadcast({
+      type: 'message_deliver',
+      messageId,
+      fromKind:  'gm',
+      fromName:  'GM',
+      fromColor: GMApp.GM_MESSAGE_COLOR,
+      toPlayerId,
+      text,
+    });
+    this._messageThreads.addOutgoing(toPlayerId, {
+      id: messageId,
+      fromKind: 'gm',
+      fromPlayerId: null,
+      fromName: 'GM',
+      fromColor: GMApp.GM_MESSAGE_COLOR,
+      toPlayerId,
+      toName,
+      text,
+      at: Date.now(),
+      origin: 'gm-bound',
     });
   }
 
