@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.16.56 — 2026-05-31
+
+### Initiative polish round 3 — contrast, portraits, proportional sizing, top default
+
+- **Contrast-keyed edge text.** Tab labels were white-on-coloured — fine
+  for dark identity tints, illegible on light ones (yellow, mint, light
+  blue). Each card now sets `--init-color-fg` to either near-black or
+  white based on a YIQ brightness check of its colour, and the tab text +
+  disc border + disc text inherit it. Light tabs get dark text; dark
+  tabs stay white. Tab text bumped a touch (0.7rem, weight 800,
+  dual-shadow) for a cleaner read.
+- **Player portrait propagates onto the rail.** Player cards on the
+  player view now show the player's chosen token icon (`iconDataUrl`)
+  as a circular portrait in the body, replacing the initial-letter disc
+  when set. Plumbed through `InitiativeTracker.ingestRoll` (new
+  `markerUrl` param) and `seedUnallocatedFromPlayers` (reads
+  `p.iconDataUrl`). Falls back to the initial disc for players without
+  a chosen icon.
+- **Proportional sizing on the player view.** Player-view cards now
+  size as a proportion of the smaller viewport dimension (`vmin`) with
+  clamp floors + ceilings, so the fan scales gracefully from phone to
+  TV/projector without dominating the map. Negative margins scale
+  along too so the overlap stays consistent. Tab text scales with
+  the cards. GM view stays at its fixed in-panel size.
+- **Default edge → top.** The top of both player and GM views is the
+  least-cluttered surface today; tracker now opens there by default
+  instead of bottom. Still repinnable via the edge select.
+
 ## v2.16.55 — 2026-05-31
 
 ### Panel re-order — Visual Filter below Soundboards, above Transition

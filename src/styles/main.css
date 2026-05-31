@@ -7354,14 +7354,17 @@ option.select-option--add {
 .init-rail.is-vertical   .init-card-tab--right  { display: none; }
 
 .init-card-tab-text {
-  font-size: 0.65rem;
-  font-weight: 700;
-  color: #fff;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+  font-size: 0.7rem;
+  font-weight: 800;
+  /* v2.16.56 — colour driven by per-card --init-color-fg so light
+     identity tints get dark text and dark tints stay white. Dual shadow
+     gives readable contrast against the coloured strip on either side. */
+  color: var(--init-color-fg, #fff);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 2px rgba(0, 0, 0, 0.4);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: clip;
-  letter-spacing: 0.02em;
+  letter-spacing: 0.04em;
 }
 /* Vertical strips read along the strip; rotation depends on side so each
    reads outward (left strip reads bottom-up, right strip reads top-down). */
@@ -7398,16 +7401,32 @@ option.select-option--add {
 .init-card-body--enemy { font-size: 0.75rem; letter-spacing: 0.04em; }
 .init-card-big { font-size: 1.6rem; font-weight: 800; }
 .init-card-disc {
-  width: 34px;
-  height: 34px;
+  width: 44%;
+  aspect-ratio: 1 / 1;
+  min-width: 30px;
+  max-width: 56px;
   border-radius: 50%;
   background: var(--init-color);
-  border: 2px solid #fff;
+  border: 2px solid var(--init-color-fg, #fff);
+  color: var(--init-color-fg, #fff);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.9rem;
+  font-size: 1.05rem;
+  font-weight: 900;
   box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.25);
+}
+/* Player portrait — circular crop of the player's chosen token icon.
+   v2.16.56 — replaces the initial disc when the player has set a token. */
+.init-card-portrait {
+  width: 80%;
+  aspect-ratio: 1 / 1;
+  max-width: 64px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 2px solid var(--init-color);
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  user-select: none;
 }
 /* Dark duck silhouette on player-view enemy cards. */
 .init-card-duck {
@@ -7490,14 +7509,35 @@ option.select-option--add {
 .player-init.is-edge-right  { top: 50%; transform: translateY(-50%); right: 0;  max-height: 100%; border-radius: 14px 0 0 14px; box-shadow: -8px 0 28px rgba(0, 0, 0, 0.45); }
 .player-init .init-rail { padding: var(--space-sm) 50px var(--space-sm) var(--space-sm); min-height: 96px; }
 /* Player cards on the player view get a slightly richer felt — deeper
-   shadow and a subtle inner highlight to read as physical cards, not chrome. */
+   shadow and a subtle inner highlight to read as physical cards, not chrome.
+   v2.16.56 — sized as a proportion of the smaller viewport dimension so
+   cards scale gracefully from phone to projector without dominating the
+   map. clamp() floors keep them readable on tiny screens; ceilings stop
+   them swallowing the 4K projector view. */
 .player-init .init-card {
+  width:  clamp(60px,  8vmin,  104px);
+  height: clamp(82px, 11vmin,  140px);
   box-shadow: 0 4px 10px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
   border-color: color-mix(in srgb, var(--init-color), black 40%);
 }
 .player-init .init-card.is-active {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6), 0 0 18px color-mix(in srgb, var(--init-color), transparent 35%);
 }
+.player-init .init-card--round-marker {
+  width:  clamp(38px, 5vmin, 70px);
+  height: clamp(82px, 11vmin, 140px);
+}
+.player-init .init-rail.is-vertical .init-card--round-marker {
+  width:  clamp(60px,  8vmin, 104px);
+  height: clamp(38px, 5vmin, 70px);
+}
+/* Negative margin scales with card size so overlap stays consistent.
+   ~half the card dimension into the next. */
+.player-init .init-rail.is-horizontal .init-card { margin-right:  clamp(-52px, -4vmin, -28px); }
+.player-init .init-rail.is-vertical   .init-card { margin-bottom: clamp(-72px, -5.5vmin, -38px); }
+/* Tab text scales a touch on the player view so names stay readable when
+   cards size up on a TV / projector. */
+.player-init .init-card-tab-text { font-size: clamp(0.6rem, 1vmin, 0.9rem); }
 
 /* v2.16.54 — Card-styled roll prompt on the player view. Generic modal
    replaced with an atmospheric "INITIATIVE" banner + a single oversized

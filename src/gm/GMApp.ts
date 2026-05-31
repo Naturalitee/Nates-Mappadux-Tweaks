@@ -3733,7 +3733,7 @@ export class GMApp {
       const player = this.playerRegistry.playerForClient(msg.clientId);
       if (!player || player.id !== msg.playerId) return;
       const name = player.characterName || player.playerName || 'Player';
-      this.initiativeTracker?.ingestRoll(player.id, name, player.color, msg.value);
+      this.initiativeTracker?.ingestRoll(player.id, name, player.color, msg.value, player.iconDataUrl);
       this.setStatus(`${name} rolled ${msg.value}`, 'ok');
       return;
     }

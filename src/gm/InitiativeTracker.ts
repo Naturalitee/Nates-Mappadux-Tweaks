@@ -62,7 +62,7 @@ export class InitiativeTracker {
   toggle(): void { this.state.visible ? this.close() : this.open(); }
 
   /** Ingest a player's typed roll value. Called by GMApp on MsgInitiativeRoll. */
-  ingestRoll(playerId: string, name: string, color: string, value: string): void {
+  ingestRoll(playerId: string, name: string, color: string, value: string, markerUrl?: string): void {
     this._mutate((s) => {
       // Drop any existing card / tray entry for this player.
       const deck = s.activeDeck.filter((c) => c.playerId !== playerId);
@@ -75,6 +75,7 @@ export class InitiativeTracker {
         playerId,
         value,
         isSpent: false,
+        ...(markerUrl ? { markerUrl } : {}),
       };
       return addCardToDeck({ ...s, activeDeck: deck, unallocated: tray }, card);
     });
@@ -99,6 +100,7 @@ export class InitiativeTracker {
           playerId: p.id,
           value: '',
           isSpent: false,
+          ...(p.iconDataUrl ? { markerUrl: p.iconDataUrl } : {}),
         });
       }
       return { ...s, unallocated: [...s.unallocated, ...additions] };
@@ -284,6 +286,9 @@ export class InitiativeTracker {
       + (index === 0 ? ' is-active' : '')
       + (card.isSpent ? ' is-spent' : '');
     el.style.setProperty('--init-color', card.color);
+    // v2.16.56 — auto-pick a contrasting fg colour so the edge labels stay
+    // legible on light identity tints (yellow / mint / light blue).
+    el.style.setProperty('--init-color-fg', _isLightColor(card.color) ? '#0b0d12' : '#ffffff');
     el.style.zIndex = String(100 - index);
     el.draggable = card.type !== 'round-marker';
     el.dataset['cardId'] = card.id;
@@ -399,4 +404,23 @@ function mkBtn(label: string, className: string, onClick: () => void): HTMLButto
   b.textContent = label;
   b.addEventListener('click', onClick);
   return b;
+}
+
+/** YIQ brightness check — returns true for "light" hex colours so callers
+ *  can pick a dark foreground against them. Accepts #rgb / #rrggbb. */
+function _isLightColor(hex: string): boolean {
+  const m = hex.replace('#', '');
+  let r = 0, g = 0, b = 0;
+  if (m.length === 3) {
+    r = parseInt(m[0]! + m[0]!, 16);
+    g = parseInt(m[1]! + m[1]!, 16);
+    b = parseInt(m[2]! + m[2]!, 16);
+  } else if (m.length === 6) {
+    r = parseInt(m.slice(0, 2), 16);
+    g = parseInt(m.slice(2, 4), 16);
+    b = parseInt(m.slice(4, 6), 16);
+  } else {
+    return false;
+  }
+  return (r * 299 + g * 587 + b * 114) / 1000 > 150;
 }

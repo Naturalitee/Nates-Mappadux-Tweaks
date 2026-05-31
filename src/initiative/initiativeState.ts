@@ -51,7 +51,9 @@ export function defaultInitiativeState(): InitiativeState {
     unallocated: [],
     threatBench: ['A', 'B', 'C', 'D', 'E', 'F'].map(makeThreatCard),
     sortMode: 'high-to-low',
-    edge:     'bottom',
+    // v2.16.56 — default to TOP since the top of the player & GM views are
+    // the least-cluttered surfaces today. Easy to repin via the edge select.
+    edge:     'top',
     visible:  false,
   };
 }
