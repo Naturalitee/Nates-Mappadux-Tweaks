@@ -1,5 +1,14 @@
 # Changelog
 
+## v2.16.55 — 2026-05-31
+
+### Panel re-order — Visual Filter below Soundboards, above Transition
+
+GM panel order reshuffled so Visual Filter sits where it logically belongs
+on the "scene look + cut" cluster — directly above Map Transition,
+following the Soundboards / Soundtracks / Projection chain. Was previously
+floating up between Fog and Soundboards.
+
 ## v2.16.54 — 2026-05-31
 
 ### Initiative polish (round 2) — delete corner + card-styled roll prompt
