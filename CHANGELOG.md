@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.16.52 — 2026-05-31
+
+### Reply assistant — gated pre-fetch + button rename
+
+- **Auto pre-fetch now gates on `!msg.toPlayerId`.** Only inbound
+  messages addressed to the GM trigger an automatic LLM suggestion
+  call. Player-to-player traffic (which the GM is just monitoring)
+  no longer burns tokens on suggestions the GM may never need.
+- **"Suggest replies" → "↻ Re-roll".** With auto pre-fetch covering
+  the common case, the button's primary job is now to refresh the
+  chips, not to ask for them in the first place. Label reads
+  "↻ Re-roll" on threads that had a pre-fetch and stays as
+  "Suggest replies" on peer-bound threads where the GM is opting in
+  fresh; after the first manual ask the label flips to "↻ Re-roll"
+  for subsequent clicks.
+
 ## v2.16.51 — 2026-05-31
 
 ### Messaging arrow polish + LLM cleanup

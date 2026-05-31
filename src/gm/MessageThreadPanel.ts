@@ -23,8 +23,10 @@ export interface MessageThreadPanelOptions {
   /** Send a GM reply text. The caller wires this to a broadcast. */
   onSend: (text: string) => void;
   /** Optional LLM reply-suggestions helper. When provided, the panel
-   *  surfaces a "Suggest replies" button that fills chips above the
-   *  composer for the GM to one-click + edit. */
+   *  surfaces a small button above the composer. Labels as "Re-roll"
+   *  when chips are already (or about to be) on display from the
+   *  auto pre-fetch; "Suggest replies" when the thread didn't get an
+   *  auto pre-fetch (peer-bound traffic) and the GM is opting in. */
   onSuggest?: () => Promise<string[]>;
   /** Pre-fetched suggestions for the most recent inbound message, if
    *  the assistant was configured at message-arrival time. Resolved
@@ -68,11 +70,20 @@ export function buildMessageThreadPanel(body: HTMLElement, opts: MessageThreadPa
   const actions = document.createElement('div');
   actions.className = 'mt-actions';
 
+  // v2.16.52 — auto pre-fetch covers the common to-GM case, so the
+  // button's primary job is now "re-roll" (refresh the chips) rather
+  // than "ask in the first place". Label switches based on whether the
+  // panel was handed a pre-fetched promise: present → "Re-roll", absent
+  // → "Suggest replies" (peer-bound thread; GM is opting in).
+  const idleLabel = opts.prefetchedSuggestions ? '↻ Re-roll' : 'Suggest replies';
   if (opts.onSuggest) {
     const suggestBtn = document.createElement('button');
     suggestBtn.type = 'button';
     suggestBtn.className = 'btn btn--ghost btn--xs';
-    suggestBtn.textContent = 'Suggest replies';
+    suggestBtn.title = opts.prefetchedSuggestions
+      ? 'Re-roll the suggestion options'
+      : 'Ask the assistant for reply suggestions';
+    suggestBtn.textContent = idleLabel;
     suggestBtn.addEventListener('click', async () => {
       suggestBtn.disabled = true;
       suggestBtn.textContent = 'Thinking…';
@@ -83,7 +94,9 @@ export function buildMessageThreadPanel(body: HTMLElement, opts: MessageThreadPa
         chips.textContent = `Suggestions unavailable: ${(err as Error).message}`;
       } finally {
         suggestBtn.disabled = false;
-        suggestBtn.textContent = 'Suggest replies';
+        // After the first manual ask, subsequent clicks are also re-rolls.
+        suggestBtn.textContent = '↻ Re-roll';
+        suggestBtn.title = 'Re-roll the suggestion options';
       }
     });
     actions.appendChild(suggestBtn);

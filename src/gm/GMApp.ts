@@ -3680,8 +3680,13 @@ export class GMApp {
       // they're (usually) ready by the time the GM opens the reply box. Silent
       // — the panel renders them on open if they resolved; the manual button
       // still surfaces explicit errors.
+      // v2.16.52 — gate on !msg.toPlayerId. Only to-GM messages get the
+      // auto pre-fetch; peer-bound (player→player) traffic skips it so we
+      // don't burn LLM tokens on conversations the GM may never reply to.
+      // The manual Re-roll/Suggest button stays available on every thread,
+      // so the GM can still opt in to a suggestion on peer-bound chatter.
       const client = LLMClient.fromSettings();
-      const suggestionsPromise = client
+      const suggestionsPromise = client && !msg.toPlayerId
         ? client.suggest(msg.text).catch(() => [] as string[])
         : undefined;
       // v2.16.47 — message lands on the per-player thread store. Unread
