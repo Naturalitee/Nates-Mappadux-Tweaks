@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.16.40 — 2026-05-31
+
+### Inline Player View preview (PiP) on the GM canvas
+
+- **New "Show Player View" pill at the bottom-left of the canvas.** Click
+  to open an inline preview frame — 33 % canvas-width at 16:9, defaults
+  to the bottom-left, draggable anywhere on the canvas with the position
+  persisted across reloads (`dmr_pip_position`).
+- **Header chrome on the inline frame**: minimise back to the pill,
+  pop-out to a standalone window. Pop-out reopens the pill so the GM
+  can spawn another inline preview as many times as wanted — useful when
+  one window is already on a second display and the GM wants a local
+  preview of what's showing there.
+- **"Open Player Window" button retired** from the Player Views panel.
+  Replaced entirely by the PiP overlay's pop-out chrome. One concept,
+  one place.
+- **Iframe loads the player URL with `?gmPreview=1`** so the inline
+  preview is a viewer of the live state — no identify modal, no
+  player-only UI, no token. Same flag the old preview popup used.
+- **Defaults to open on first session** so a new GM immediately sees
+  what their players see. State persists (`dmr_pip_visible`).
+
 ## v2.16.39 — 2026-05-31
 
 ### Unified side-panel control builders

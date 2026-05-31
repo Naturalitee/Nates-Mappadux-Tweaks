@@ -332,6 +332,9 @@ export class GMApp {
    *  TransitionPanel itself is constructed inside the body each open;
    *  refresh() rebuilds from scratch which is cheap for this surface. */
   private _transitionSidePanel: import('./SidePanel.ts').SidePanelHandle | null = null;
+  /** v2.16.40 — inline Player View PiP overlay (constructed lazily after
+   *  the canvas-wrapper is in the DOM). */
+  private _playerPip: import('./PlayerPip.ts').PlayerPip | null = null;
 
   /** Pre-rendered bitmaps for marker icons. Keys follow the marker.icon
    *  string — bare 'libAsset:<id>' for raster, '<libAsset:id>#<color>'
@@ -1663,6 +1666,27 @@ export class GMApp {
     this._resetGmTransform();
     this._applyWorkspaceTransform();
 
+    // v2.16.40 — Inline PiP preview of the player view. Lives on the
+    // canvas-wrapper; defaults to open on first session so a new GM
+    // immediately sees what their players see. Pop-out replicates the
+    // old "Open Player Window" flow as many times as wanted.
+    void import('./PlayerPip.ts').then(({ PlayerPip }) => {
+      const wrapper = document.getElementById('canvas-wrapper');
+      if (!wrapper) return;
+      this._playerPip = new PlayerPip({
+        canvasWrapper: wrapper,
+        getPlayerUrl: () => {
+          const code = this.host.roomCode;
+          if (!code) return '';
+          const u = new URL(this._buildPlayerUrl(code));
+          // Preview mode — suppresses the identify modal + player-only
+          // chrome so the GM sees a clean viewer of the live state.
+          u.searchParams.set('gmPreview', '1');
+          return u.toString();
+        },
+      });
+    });
+
     // Resume positional audio context on first user gesture (autoplay policy)
     const resumePA = () => this.audio.tryResume();
     document.addEventListener('click',      resumePA);
@@ -1791,6 +1815,11 @@ export class GMApp {
     // is stale, restore the QR.
     this._setBrokerErrorVisible(false);
     this.roomCodeEl.textContent = roomCode;
+    // v2.16.40 — room code is what the PiP URL needs. If the iframe was
+    // mounted before this fired (host.roomCode returned '' from the
+    // getPlayerUrl callback) refresh it now so the inline preview shows
+    // the live state.
+    this._playerPip?.refresh();
 
     // On localhost, replace with the real LAN IP so QR/URL works for other devices.
     // __DEV_LAN_IP__ is injected at build time by vite.config.ts (null in prod).
@@ -5083,20 +5112,11 @@ export class GMApp {
     // ?gmPreview=1 so the popup recognises itself as the GM's preview view and
     // (by default) suppresses player-only chrome + interaction. Real player
     // tabs connecting via the QR never carry the flag.
-    document.querySelector('#open-player-btn')?.addEventListener('click', () => {
-      const code = this.roomCodeEl.textContent?.trim() ?? '';
-      const w = Math.min(1600, screen.width  - 80);
-      const h = Math.min(1000, screen.height - 80);
-      const l = Math.round((screen.width  - w) / 2);
-      const t = Math.round((screen.height - h) / 2);
-      const url = new URL(this._buildPlayerUrl(code));
-      url.searchParams.set('gmPreview', '1');
-      window.open(
-        url.toString(),
-        'dmr-player',
-        `noopener,width=${w},height=${h},left=${l},top=${t}`
-      );
-    });
+    // v2.16.40 — Open Player Window button retired. The PlayerPip overlay
+    // on the canvas (Show Player View / pop-out chrome) is the single
+    // affordance now. The handler is removed; the HTML button is gone
+    // too. Pop-out from the PiP frame opens a standalone window with
+    // the same URL the old button used.
 
     // v2.16.33 — Copy-player-URL handlers used to live on the QR + a
     // dedicated copy button in the Player Connection panel. Both are
