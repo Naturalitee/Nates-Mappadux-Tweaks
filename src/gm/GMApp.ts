@@ -259,6 +259,12 @@ export class GMApp {
    * ProjectorViewportEditor) or via direct setter (MarkerLayer).
    */
   private gmTransform = new CanvasTransform({ minScale: 0.5, maxScale: 8 });
+  /** v2.16.31 — GM workspace default zoom. Slightly < 1 so the map sits
+   *  inside the canvas with a small breathing margin, making the panel
+   *  icons at the edges easier to reach. GM only — the player + projector
+   *  views still fill their canvases. Used on first paint AND on "Reset
+   *  View". */
+  private static readonly GM_DEFAULT_SCALE = 0.95;
 
   /** Reference to the shared overlay layer so non-marker code paths
    *  (viewport rect chrome, workspace pan, etc.) can push updates. */
@@ -676,7 +682,7 @@ export class GMApp {
         case 'ArrowRight': this.gmTransform.panByWorld( step, 0);  break;
         case 'ArrowUp':    this.gmTransform.panByWorld(0,  step);  break;
         case 'ArrowDown':  this.gmTransform.panByWorld(0, -step);  break;
-        case 'r': case 'R': this.gmTransform.reset(); break;
+        case 'r': case 'R': this._resetGmTransform(); break;
         default: handled = false;
       }
       if (handled) {
@@ -847,7 +853,7 @@ export class GMApp {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'reset-view-btn';
-      btn.title = 'Reset workspace view (centred, 100%)';
+      btn.title = 'Reset workspace view';
       btn.innerHTML =
         '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
           '<polyline points="1 4 1 10 7 10"/>' +
@@ -855,14 +861,30 @@ export class GMApp {
         '</svg>' +
         '<span class="reset-view-btn__label">Reset view</span>';
       btn.addEventListener('click', () => {
-        this.gmTransform.reset();
+        this._resetGmTransform();
         this._applyWorkspaceTransform();
       });
       btn.hidden = true;
       wrapper.appendChild(btn);
       this._resetViewBtn = btn;
     }
-    this._resetViewBtn.hidden = this.gmTransform.isIdentity;
+    this._resetViewBtn.hidden = this._isGmTransformAtDefault();
+  }
+
+  /** Apply the GM workspace's "reset" transform — slightly zoomed out
+   *  (GM_DEFAULT_SCALE) so the map sits inside the canvas with a small
+   *  breathing margin, making the side-panel icons easier to reach. */
+  private _resetGmTransform(): void {
+    this.gmTransform.set(GMApp.GM_DEFAULT_SCALE, 0, 0);
+  }
+
+  /** True when the GM workspace transform matches the "reset" state. Used
+   *  to toggle the Reset View button's visibility (hidden at default). */
+  private _isGmTransformAtDefault(): boolean {
+    const eps = 1e-4;
+    return Math.abs(this.gmTransform.scale - GMApp.GM_DEFAULT_SCALE) < eps
+        && Math.abs(this.gmTransform.offsetX) < eps
+        && Math.abs(this.gmTransform.offsetY) < eps;
   }
 
   /**
@@ -1627,6 +1649,12 @@ export class GMApp {
     this._bindCanvasUndo();
     this._bindStagecraftPanel();
     this._bindSoundtracksPanel();
+
+    // Seed the workspace transform at the GM default (slightly zoomed out)
+    // so first paint already shows the small breathing margin. Reset View
+    // and 'R' key both return to this same default.
+    this._resetGmTransform();
+    this._applyWorkspaceTransform();
 
     // Resume positional audio context on first user gesture (autoplay policy)
     const resumePA = () => this.audio.tryResume();

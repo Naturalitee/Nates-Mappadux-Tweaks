@@ -1,5 +1,25 @@
 # Changelog
 
+## v2.16.31 — 2026-05-31
+
+### Small icons go inline; GM reset leaves a breathing margin
+
+- **SVG-derived icons no longer race over PeerJS.** Player-icon delivery
+  used a chunked binary transport (header + JSON + binary chunks) for
+  every icon regardless of size — and during multi-player identify
+  cycles, back-to-back small-icon broadcasts could intermittently lose
+  a delivery. Icons whose `data:` URL is ≤ 10 KB now ride INLINE on the
+  JSON message (single frame, atomic), which covers the SVG-derived
+  ones that were affected. Bitmap icons larger than 10 KB still use
+  chunked transport as before. The receiver already supported both
+  paths.
+- **GM workspace reset leaves a small breathing margin.** First paint
+  and Reset View now sit at scale 0.95 instead of 1.0, so the map has
+  a few-pixel border around every edge — easier to reach the panel
+  icons that hug the workspace edges. Player + projector views still
+  fill their canvases. 'R' key + Reset View button both honour the new
+  default.
+
 ## v2.16.30 — 2026-05-31
 
 ### Patch E — optional filter pass over player tokens

@@ -512,13 +512,26 @@ export class Host {
       void _d;
       jsonMsg = noUrl as Record<string, unknown>;
     }
-    // v2.17 — player_icon_update routes through the same chunked-blob path so
-    // a single multi-KB icon doesn't blow past the DataChannel limit.
+    // v2.17 — player_icon_update routes through the chunked-blob path
+    // for multi-KB bitmap icons that would blow past the DataChannel
+    // message limit. v2.16.31: small icons (SVG-rendered lucide-style,
+    // typically < 10 KB base64) are sent INLINE in the JSON instead.
+    // The chunked path uses several frames per delivery (header + JSON +
+    // chunks) and back-to-back icon broadcasts during a multi-player
+    // identify / hello cycle were intermittently racing — inline keeps
+    // each small icon atomic and avoids the race window. The receiver
+    // already handles both inline `msg.dataUrl` and chunked `blob` paths
+    // (see ProjectorApp + PlayerApp player_icon_update handlers).
     if (rest.type === 'player_icon_update' && rest.dataUrl) {
-      audioBuffer = this._dataUrlToBuffer(rest.dataUrl);
-      const { dataUrl: _d, ...noUrl } = rest;
-      void _d;
-      jsonMsg = noUrl as Record<string, unknown>;
+      const INLINE_ICON_MAX = 10 * 1024;
+      if (rest.dataUrl.length <= INLINE_ICON_MAX) {
+        jsonMsg = rest as Record<string, unknown>;
+      } else {
+        audioBuffer = this._dataUrlToBuffer(rest.dataUrl);
+        const { dataUrl: _d, ...noUrl } = rest;
+        void _d;
+        jsonMsg = noUrl as Record<string, unknown>;
+      }
     }
 
     // For full_state / map_change: strip dataUrls from soundboardActive and soundboardAssets;
