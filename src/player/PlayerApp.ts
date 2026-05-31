@@ -57,7 +57,10 @@ export class PlayerApp {
   private sbAssetUrls = new Map<string, string>();
   /** Current slot configurations (for restoring on reconnect) */
   private sbSlots: SoundboardSlot[] = [];
-  /** Master mute flag — starts true so first click both satisfies autoplay policy and unmutes */
+  /** Master mute flag. Defaults to muted; pop-out windows from the GM's
+   *  PiP (gmPreview=1 && !pip=1) start UNMUTED in init() because the
+   *  user just clicked pop-out — the resulting popup inherits that
+   *  gesture and can autoplay (v2.16.43). */
   private sbMuted = true;
   /** slotIds paused by a mute transition — used to resume them on unmute. */
   private _sbPausedByMute = new Set<string>();
@@ -220,6 +223,20 @@ export class PlayerApp {
   private _pressStart: { x: number; y: number } | null = null;
 
   async init(): Promise<void> {
+    // v2.16.43 — pop-out windows from the GM's PiP start UNMUTED. The
+    // user just clicked the pop-out button, so the new popup inherits
+    // a fresh user gesture and can autoplay. PiP iframes themselves
+    // (pip=1) stay muted; identified-by-QR remote players also stay
+    // muted (no gmPreview flag), small icon top-right is their toggle.
+    if (this._gmPreviewFlag && !this._isPip) this.sbMuted = false;
+
+    // v2.16.43 — PiP iframes have no use for the floating fullscreen
+    // button (the iframe is bounded by its host frame).
+    if (this._isPip) {
+      const fs = document.getElementById('player-fullscreen-btn');
+      if (fs) fs.hidden = true;
+    }
+
     // v2.15 — Viewer owns the chrome (lifecycle, fullscreen, faff
     // overlay, mute indicator) AND the rendering pipeline (Renderer,
     // marker layer, transition engine). PlayerApp drives the P2P side
@@ -227,15 +244,12 @@ export class PlayerApp {
     // Viewer via readonly fields. Profile-driven so future viewer
     // kinds slot in without forking these init paths.
     this.viewer = new Viewer(PROFILE_PLAYER, {
-      fullscreenBtn:        document.getElementById('player-fullscreen-btn'),
+      fullscreenBtn:        this._isPip ? null : document.getElementById('player-fullscreen-btn'),
       rendererCanvas:       document.querySelector<HTMLCanvasElement>('#renderer-canvas')!,
       markerOverlayEl:      document.getElementById('marker-overlay'),
       transitionCanvas:     document.querySelector<HTMLCanvasElement>('#transition-canvas'),
       preserveDrawingBuffer: true,
-      // v2.14.20 — once the player has had their first interaction
-      // (canvas tap to unmute), the icon-only mute button takes over
-      // as the toggle source. This callback hands control back to
-      // PlayerApp's mute pipeline.
+      // Icon-only mute button is the single audio toggle source.
       onMuteToggle: () => this._toggleMute(),
     });
     this.viewer.init();
@@ -789,7 +803,17 @@ export class PlayerApp {
     this.guest?.destroy();
 
     this.guest = new Guest({
-      onConnected:    () => { this.setStatus(''); void this._onConnectedIdentity(); },
+      onConnected:    () => {
+        this.setStatus('');
+        // v2.16.43 — tell the GM this peer is a PiP / pop-out preview so
+        // it shows "GM Player View disconnected" instead of the generic
+        // "Player (peerid…) disconnected" when the GM minimises / closes
+        // the preview.
+        if (this._gmPreviewFlag) {
+          try { this.guest?.send({ type: 'gm_preview_hello' }); } catch { /* best-effort */ }
+        }
+        void this._onConnectedIdentity();
+      },
       onDisconnected: () => this.setStatus('Disconnected — waiting for GM…'),
       onReconnecting: (attempt, delayMs) => {
         const secs = Math.round(delayMs / 1000);

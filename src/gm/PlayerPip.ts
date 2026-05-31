@@ -27,6 +27,7 @@
 
 const STORAGE_POSITION = 'dmr_pip_position';
 const STORAGE_VISIBLE  = 'dmr_pip_visible';
+const STORAGE_WIDTH    = 'dmr_pip_width';
 
 interface PersistedPosition { x: number; y: number }
 
@@ -45,6 +46,10 @@ export class PlayerPip {
 
   private pipFrame: HTMLElement | null = null;
   private showButton: HTMLElement | null = null;
+  /** Tracks the user-resized width so we can persist on debounced
+   *  changes from the CSS-native bottom-right resize handle. */
+  private _resizeObserver: ResizeObserver | null = null;
+  private _resizeSaveTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(opts: PlayerPipOptions) {
     this.wrapper = opts.canvasWrapper;
@@ -115,6 +120,10 @@ export class PlayerPip {
       '</svg>' +
       '<span>Show Player View</span>';
     btn.addEventListener('click', () => this.show());
+    // Same propagation-stop as the frame so clicking the pill doesn't
+    // also trigger a workspace pan-start on the canvas underneath.
+    btn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    btn.addEventListener('pointerup',   (e) => e.stopPropagation());
     this.wrapper.appendChild(btn);
     this.showButton = btn;
   }
@@ -185,14 +194,50 @@ export class PlayerPip {
       frame.style.left   = '12px';
       frame.style.bottom = '12px';
     }
+    // Restore user-resized width if present. Height auto-computes from
+    // the CSS aspect-ratio so we only need to track width.
+    const w = this._loadWidth();
+    if (w !== null) frame.style.width = `${w}px`;
 
     this.wrapper.appendChild(frame);
     this.pipFrame = frame;
+
+    // Watch for CSS-native resize from the bottom-right handle; persist
+    // the new width on a short debounce so we don't hammer localStorage
+    // during the drag.
+    this._resizeObserver = new ResizeObserver(() => {
+      if (this._resizeSaveTimer !== null) clearTimeout(this._resizeSaveTimer);
+      this._resizeSaveTimer = setTimeout(() => {
+        if (this.pipFrame) this._saveWidth(this.pipFrame.offsetWidth);
+        this._resizeSaveTimer = null;
+      }, 250);
+    });
+    this._resizeObserver.observe(frame);
+
+    // v2.16.43 — stop pointer/wheel/click events on the PiP frame from
+    // bubbling up to the canvas-wrapper's pan/zoom + workspace gesture
+    // handlers. Otherwise clicking the header to drag the PiP also
+    // pans the GM camera underneath, and scrolling on the iframe area
+    // zooms the GM. The iframe itself is its own document so events
+    // inside it never bubble here — only chrome interactions matter.
+    const stop = (e: Event) => e.stopPropagation();
+    frame.addEventListener('pointerdown', stop);
+    frame.addEventListener('pointerup', stop);
+    frame.addEventListener('wheel', stop, { passive: true });
+    frame.addEventListener('click', stop);
+    frame.addEventListener('dblclick', stop);
+    frame.addEventListener('contextmenu', stop);
 
     this._bindDrag(header, frame);
   }
 
   private _removePipFrame(): void {
+    this._resizeObserver?.disconnect();
+    this._resizeObserver = null;
+    if (this._resizeSaveTimer !== null) {
+      clearTimeout(this._resizeSaveTimer);
+      this._resizeSaveTimer = null;
+    }
     this.pipFrame?.remove();
     this.pipFrame = null;
   }
@@ -265,6 +310,21 @@ export class PlayerPip {
 
   private _savePosition(pos: PersistedPosition): void {
     try { localStorage.setItem(STORAGE_POSITION, JSON.stringify(pos)); }
+    catch { /* quota / disabled — ignore */ }
+  }
+
+  private _loadWidth(): number | null {
+    try {
+      const raw = localStorage.getItem(STORAGE_WIDTH);
+      if (!raw) return null;
+      const n = parseFloat(raw);
+      return Number.isFinite(n) && n > 0 ? n : null;
+    } catch { return null; }
+  }
+
+  private _saveWidth(w: number): void {
+    if (!Number.isFinite(w) || w <= 0) return;
+    try { localStorage.setItem(STORAGE_WIDTH, String(w)); }
     catch { /* quota / disabled — ignore */ }
   }
 }

@@ -882,6 +882,18 @@ export interface MsgProjectorHello {
 }
 
 /**
+ * v2.16.43 — PiP iframe / pop-out window → GM identification. PlayerApp
+ * sends this on PeerJS connect when the URL carries `?gmPreview=1`, so
+ * the GM can show "GM Player View disconnected" instead of a generic
+ * "Player (peerid…) disconnected" when the GM minimises / closes the
+ * preview. No payload beyond the type — peer id on the wire is all the
+ * GM needs to track these.
+ */
+export interface MsgGmPreviewHello {
+  type: 'gm_preview_hello';
+}
+
+/**
  * Projector → GM clean disconnect notification. Sent on window unload so the
  * GM can drop the entry from its connection map and re-shuffle monitor roles
  * without waiting for transport-level disconnect (BroadcastChannel never
@@ -1285,6 +1297,7 @@ export type GMMessage =
   | MsgTrackerScan
   | MsgTrackerBlob
   | MsgProjectorHello
+  | MsgGmPreviewHello
   | MsgProjectorBye
   | MsgProjectorRole
   | MsgProjectorShutdown

@@ -1,5 +1,33 @@
 # Changelog
 
+## v2.16.43 — 2026-05-31
+
+### PiP polish
+
+- **PiP frame is now resizable.** Standard CSS resize handle at the
+  bottom-right; aspect-ratio stays locked at 16:9 (only width
+  changes). Width persists across reloads alongside the position
+  (`dmr_pip_width`).
+- **Pointer events on the PiP no longer leak.** Drag-to-move was
+  pulling the GM camera along with it because the pointerdown
+  bubbled to the canvas-wrapper's pan handlers. Now stopped at the
+  frame + the Show pill.
+- **Fullscreen button suppressed inside the PiP iframe.** The frame
+  itself is bounded; the floating fullscreen button was pointless
+  there.
+- **"GM Player View disconnected" replaces "Player (peerid…)
+  disconnected"** when a PiP iframe or pop-out window closes. PlayerApp
+  sends `gm_preview_hello` on connect when `?gmPreview=1`; GMApp tracks
+  those peer ids and swaps the status text on disconnect.
+- **Pop-out windows from the PiP start unmuted.** The user just
+  clicked pop-out — that user activation lets the new window autoplay.
+  PiP iframes themselves stay silently muted (audio in a 33 %
+  preview is pointless).
+
+### Other
+
+- **Panel name restored to "Scaled View"** (was briefly "Player Views").
+
 ## v2.16.42 — 2026-05-31
 
 ### Retired the giant "Tap to start audio" prompt

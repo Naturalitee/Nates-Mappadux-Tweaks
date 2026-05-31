@@ -146,7 +146,7 @@ body.gm-view {
   position: absolute;
   width: 33%;
   min-width: 240px;
-  max-width: 520px;
+  max-width: 80%;
   aspect-ratio: 16 / 9;
   background: var(--bg-panel, #11151f);
   border: 1px solid rgba(255, 255, 255, 0.14);
@@ -156,6 +156,9 @@ body.gm-view {
   display: flex;
   flex-direction: column;
   overflow: hidden;
+  /* v2.16.43 — standard browser resize handle at bottom-right. Only
+     width changes; aspect-ratio above keeps the height in 16:9 lock. */
+  resize: horizontal;
 }
 .player-pip-header {
   display: flex;

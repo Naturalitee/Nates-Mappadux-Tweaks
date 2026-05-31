@@ -1810,6 +1810,11 @@ export class GMApp {
     this.host.start(peerId);
   }
 
+  /** v2.16.43 — peer ids known to be GM-spawned previews (PiP iframe or
+   *  pop-out window). Identified via `gm_preview_hello`; consulted by
+   *  the disconnect handler to swap the status message. */
+  private _gmPreviewPeers = new Set<string>();
+
   private async onHostReady(roomCode: string): Promise<void> {
     // Broker just confirmed our peer id — any prior broker-down notice
     // is stale, restore the QR.
@@ -1889,6 +1894,17 @@ export class GMApp {
     this.projectorEditor?.setConnection(this._primaryProjector() ?? null);
     this.refreshProjectorStatus();
     this._refreshProjectionPanelMode();
+    // v2.16.43 — GM-spawned previews (PiP iframe or pop-out window) get a
+    // friendlier status than the generic "Player (peerid…)…". The
+    // gm_preview_hello tag stays valid for the connection's lifetime
+    // and is consumed here.
+    if (this._gmPreviewPeers.delete(id)) {
+      this._refreshPlayersPanel();
+      this._broadcastRoster();
+      this._updatePlayerCount();
+      this.setStatus('GM Player View disconnected', 'ok');
+      return;
+    }
     // v2.17 Player Voice — look up the player BEFORE clearing the binding so
     // we can use their real name in the status rather than the peer hash.
     const bound = this.playerRegistry.playerForPeer(id);
@@ -3475,6 +3491,13 @@ export class GMApp {
   }
 
   private onPeerMessage(_peerId: string, msg: GMMessage): void {
+    if (msg.type === 'gm_preview_hello') {
+      // v2.16.43 — tag this peer as a GM preview (PiP iframe or pop-out
+      // window). The disconnect handler reads the set to show a sane
+      // status message instead of "Player (peerid…) disconnected".
+      this._gmPreviewPeers.add(_peerId);
+      return;
+    }
     if (msg.type === 'player_identify') {
       // v2.17 Player Voice — a device player introduced themselves. Upsert
       // the persistent record, bind the live connection, refresh + rebroadcast.
