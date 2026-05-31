@@ -1,5 +1,22 @@
 # Changelog
 
+## v2.16.54 — 2026-05-31
+
+### Initiative polish (round 2) — delete corner + card-styled roll prompt
+
+- **Delete cross moved to the upper-right corner** of every GM card,
+  per spec §5. Hidden by default, reveals on hover/active so it isn't
+  a constant visual distraction. Bottom chrome strip now holds just
+  the value input.
+- **Card-styled player roll prompt.** The generic dialog is gone.
+  When the GM calls for initiative the player view fades to a dark
+  backdrop, an **INITIATIVE** banner pulses overhead, and a single
+  oversized card materialises in the centre — edged in the player's
+  identity colour, with a big numeric-friendly input and a SEND
+  button. Lands as "you're being dealt in" rather than "a dialog
+  popped up". Pushes toward the BG3 cards-on-the-table reference
+  Alex flagged 2026-05-31.
+
 ## v2.16.53 — 2026-05-31
 
 ### Initiative tracker polish (round 1) — bidirectional tabs, dark duck, prominent Call

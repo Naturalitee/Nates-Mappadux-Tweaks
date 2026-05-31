@@ -1139,7 +1139,7 @@ export class PlayerApp {
       await this.openIdentityModal();
       if (!this.identity) return;
     }
-    const value = await this._initiativeRollModal.open(message);
+    const value = await this._initiativeRollModal.open(message, this.identity.color);
     if (!value) return;
     this.guest.send({ type: 'initiative_roll', playerId: this.playerId, clientId: this.clientId, value });
   }

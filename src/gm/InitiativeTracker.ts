@@ -355,7 +355,17 @@ export class InitiativeTracker {
     }
     el.appendChild(body);
 
-    // Value editor + delete (chrome appears on selected/hover)
+    // v2.16.54 — delete moved from the bottom chrome strip to a small
+    // upper-right corner cross, per spec §5. Reveals on hover/active.
+    const del = document.createElement('button');
+    del.type = 'button';
+    del.className = 'init-card-delete';
+    del.title = card.type === 'enemy' ? 'Return to threat bench' : 'Move to unallocated tray';
+    del.textContent = '×';
+    del.addEventListener('click', (e) => { e.stopPropagation(); this._delete(card.id); });
+    el.appendChild(del);
+
+    // Value editor chrome — bottom strip, reveals on hover/active.
     const chrome = document.createElement('div');
     chrome.className = 'init-card-chrome';
 
@@ -367,14 +377,6 @@ export class InitiativeTracker {
     valInput.placeholder = '–';
     valInput.addEventListener('change', () => this._editValue(card.id, valInput.value));
     chrome.appendChild(valInput);
-
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.className = 'init-card-delete';
-    del.title = card.type === 'enemy' ? 'Return to threat bench' : 'Move to unallocated tray';
-    del.textContent = '×';
-    del.addEventListener('click', () => this._delete(card.id));
-    chrome.appendChild(del);
 
     el.appendChild(chrome);
     return el;

@@ -2,15 +2,22 @@
  * PlayerInitiativeRollModal (v2.17 Player Voice) — pops on the player view
  * when the GM hits "Call for Initiative". Player types their roll result and
  * the value goes back to the GM, who creates / updates their card on the rail.
+ *
+ * v2.16.54 — redesigned to feel like a card on the table rather than a
+ * generic modal. A single oversized card-shaped panel materialises over a
+ * dark backdrop with a deep red "INITIATIVE" overhead so the call lands
+ * with the weight the spec asks for (§4.1 "atmospheric INITIATIVE alert
+ * title card"). Player's identity colour edges the prompt card. Numeric
+ * keypad-friendly: large input, big SEND button.
  */
 export class PlayerInitiativeRollModal {
   private overlay: HTMLElement | null = null;
   private resolver: ((value: string | null) => void) | null = null;
   private onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') this._resolve(null); };
 
-  open(message?: string): Promise<string | null> {
+  open(message?: string, playerColor?: string): Promise<string | null> {
     this._resolve(null); // close any prior open call so a fresh broadcast wins
-    this.overlay = this._build(message);
+    this.overlay = this._build(message, playerColor);
     document.body.appendChild(this.overlay);
     document.addEventListener('keydown', this.onKey);
     return new Promise((resolve) => { this.resolver = resolve; });
@@ -24,74 +31,65 @@ export class PlayerInitiativeRollModal {
     this.resolver = null;
   }
 
-  private _build(message?: string): HTMLElement {
+  private _build(message?: string, playerColor?: string): HTMLElement {
     const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
+    overlay.className = 'init-roll-overlay';
 
-    const dialog = document.createElement('div');
-    dialog.className = 'modal-dialog modal-dialog--sm';
-    overlay.appendChild(dialog);
+    const banner = document.createElement('div');
+    banner.className = 'init-roll-banner';
+    banner.textContent = 'INITIATIVE';
+    overlay.appendChild(banner);
 
-    const header = document.createElement('div');
-    header.className = 'modal-header';
-    const title = document.createElement('span');
-    title.className = 'modal-title';
+    const card = document.createElement('div');
+    card.className = 'init-roll-card';
+    if (playerColor) card.style.setProperty('--init-color', playerColor);
+    overlay.appendChild(card);
+
+    // Card-style edge tabs (top + bottom) mirroring the fanned-deck idiom.
+    for (const side of ['top', 'bottom'] as const) {
+      const tab = document.createElement('div');
+      tab.className = `init-roll-card-tab init-roll-card-tab--${side}`;
+      card.appendChild(tab);
+    }
+
+    const title = document.createElement('div');
+    title.className = 'init-roll-title';
     title.textContent = 'Roll for Initiative';
-    header.appendChild(title);
-    const close = document.createElement('button');
-    close.type = 'button';
-    close.className = 'modal-close';
-    close.textContent = '×';
-    close.addEventListener('click', () => this._resolve(null));
-    header.appendChild(close);
-    dialog.appendChild(header);
-
-    const body = document.createElement('div');
-    body.style.padding = 'var(--space-md)';
-    body.style.display = 'flex';
-    body.style.flexDirection = 'column';
-    body.style.gap = 'var(--space-sm)';
-    dialog.appendChild(body);
+    card.appendChild(title);
 
     if (message?.trim()) {
       const note = document.createElement('p');
-      note.style.margin = '0';
-      note.style.fontSize = 'var(--font-size-sm)';
-      note.style.color = 'var(--text-secondary)';
+      note.className = 'init-roll-note';
       note.textContent = message;
-      body.appendChild(note);
+      card.appendChild(note);
     }
+
     const intro = document.createElement('p');
-    intro.style.margin = '0';
-    intro.style.fontSize = 'var(--font-size-sm)';
-    intro.style.color = 'var(--text-secondary)';
-    intro.textContent = 'Type the result you rolled (e.g. 18, or "Fast" — whatever fits your system).';
-    body.appendChild(intro);
+    intro.className = 'init-roll-intro';
+    intro.textContent = 'Type your roll — a number, or whatever your system uses.';
+    card.appendChild(intro);
 
     const input = document.createElement('input');
     input.type = 'text';
-    input.className = 'select-full';
-    input.placeholder = 'e.g. 18';
+    input.className = 'init-roll-input';
+    input.placeholder = '—';
     input.autocomplete = 'off';
-    body.appendChild(input);
+    input.inputMode = 'numeric';
+    card.appendChild(input);
     setTimeout(() => input.focus(), 0);
 
-    const footer = document.createElement('div');
-    footer.style.padding = 'var(--space-md)';
-    footer.style.borderTop = '1px solid var(--border)';
-    footer.style.display = 'flex';
-    footer.style.justifyContent = 'flex-end';
-    footer.style.gap = 'var(--space-sm)';
+    const actions = document.createElement('div');
+    actions.className = 'init-roll-actions';
 
     const cancelBtn = document.createElement('button');
     cancelBtn.type = 'button';
-    cancelBtn.className = 'btn btn--ghost';
+    cancelBtn.className = 'init-roll-skip';
     cancelBtn.textContent = 'Skip';
     cancelBtn.addEventListener('click', () => this._resolve(null));
 
     const sendBtn = document.createElement('button');
     sendBtn.type = 'button';
-    sendBtn.className = 'btn btn--primary';
+    sendBtn.className = 'init-roll-send';
     sendBtn.textContent = 'Send';
 
     const submit = () => {
@@ -102,8 +100,8 @@ export class PlayerInitiativeRollModal {
     sendBtn.addEventListener('click', submit);
     input.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); submit(); } });
 
-    footer.append(cancelBtn, sendBtn);
-    dialog.appendChild(footer);
+    actions.append(cancelBtn, sendBtn);
+    card.appendChild(actions);
 
     return overlay;
   }
