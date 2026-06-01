@@ -47,7 +47,7 @@ import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
 import { Host } from '../p2p/Host.ts';
 import { generateRoomCode, generateInstanceId } from '../p2p/roomCode.ts';
 import { saveSession, loadSession, getAllMaps, getMap, saveMap, deleteMap, clearAssetLibraries, clearEverything, getActiveInstanceId } from '../storage/db.ts';
-import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, arePingsEnabled, isMessagingEnabled, arePlayerMarkersMovable } from '../storage/localSettings.ts';
+import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, arePingsEnabled, isMessagingEnabled, arePlayerMarkersMovable, getInitiativeSortDirection } from '../storage/localSettings.ts';
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { seedAudioAssets } from '../storage/seedAudioAssets.ts';
 import { migrateLegacyMaps } from '../storage/seedMapAssets.ts';
@@ -6515,6 +6515,13 @@ export class GMApp {
         this.setStatus('Call for Initiative broadcast', 'ok');
       },
       getPlayers: () => this.playerRegistry.all(),
+    });
+    // v2.16.65 — Initiative direction setting (Settings → Player Voice).
+    // Apply on startup + whenever the GM changes it in the dialog.
+    this.initiativeTracker.setSortDirection(getInitiativeSortDirection());
+    window.addEventListener('mappadux:initiative-direction-changed', (e) => {
+      const dir = (e as CustomEvent).detail as 'high-to-low' | 'low-to-high';
+      this.initiativeTracker?.setSortDirection(dir);
     });
     // Broadcast initial state so any already-connected players sync up.
     this.host.broadcast({ type: 'initiative_update', state: this.initiativeTracker.getState() });

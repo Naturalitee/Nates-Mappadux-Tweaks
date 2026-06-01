@@ -228,6 +228,26 @@ export function injectFromStaging(state: InitiativeState, cardId: string): Initi
   return state;
 }
 
+/** v2.16.65 — Pull a card from the discard pile back into either the
+ *  threat bench (for enemies — they jump to the TOP) or the unallocated
+ *  tray (for players). Used by drag-from-discard handlers on those
+ *  zones. No-op for round-marker or unknown id. */
+export function restoreFromDiscard(state: InitiativeState, cardId: string): InitiativeState {
+  const discIdx = state.discarded.findIndex((c) => c.id === cardId);
+  if (discIdx === -1) return state;
+  const card = state.discarded[discIdx]!;
+  if (card.type === 'round-marker') return state;
+  const wiped: InitiativeCard = { ...card, value: '', isSpent: false };
+  const discarded = state.discarded.filter((_, i) => i !== discIdx);
+  if (card.type === 'enemy') {
+    // Enemies jump back to the TOP of the threat bench so the GM can
+    // grab them again immediately.
+    return { ...state, discarded, threatBench: [wiped, ...state.threatBench] };
+  }
+  // Players land at the back of the unallocated tray.
+  return { ...state, discarded, unallocated: [...state.unallocated, wiped] };
+}
+
 /** v2.16.63 — Reset everything ready for a new combat but PRESERVE the
  *  discard pile. Called by the in-tracker Call for Initiative so a GM
  *  starting a fresh fight keeps the running "dead/out" tally intact. */

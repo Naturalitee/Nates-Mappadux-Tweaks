@@ -7544,7 +7544,12 @@ option.select-option--add {
    55% opacity ("everyone goes ghosted at end of round") — confusing.
    The position cue (spent cards sit behind END ROUND) is enough; if a
    stronger cue ever comes back it should NOT be opacity. */
-.init-card.is-dragging { outline: 2px solid var(--accent); outline-offset: 2px; cursor: grabbing; }
+/* v2.16.65 — hide the original card while it's being dragged so the
+   browser's drag image is the only one visible (was showing both the
+   ghost AND the original outlined card, which read as duplicate). The
+   slot is preserved via visibility (vs display:none) so the layout
+   doesn't collapse during the drag. */
+.init-card.is-dragging { visibility: hidden; }
 .init-card.is-drop-target { outline: 2px dashed var(--accent); outline-offset: 2px; }
 /* v2.16.63 — rail gap on drag-hover. As the GM drags a card over the
    rail, cards at and after the insertion point shift away to open a
@@ -7803,7 +7808,16 @@ option.select-option--add {
 .player-init.is-edge-top    { left: 50%; transform: translateX(-50%); top: 0;    max-width: 100%; border-radius: 0 0 14px 14px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
 .player-init.is-edge-left   { top: 50%; transform: translateY(-50%); left: 0;   max-height: 100%; border-radius: 0 14px 14px 0; box-shadow: 8px 0 28px rgba(0, 0, 0, 0.45); }
 .player-init.is-edge-right  { top: 50%; transform: translateY(-50%); right: 0;  max-height: 100%; border-radius: 14px 0 0 14px; box-shadow: -8px 0 28px rgba(0, 0, 0, 0.45); }
-.player-init .init-rail { padding: var(--space-sm) 50px var(--space-sm) var(--space-sm); min-height: 96px; }
+/* v2.16.65 — vertical mode (left/right edge) gets a slimmer padding
+   since the player view doesn't carry the GM's button column. */
+.player-init.is-edge-left,
+.player-init.is-edge-right { padding: var(--space-md) 4px; }
+/* v2.16.65 — directional padding so the LAST card's exposed edge is
+   never clipped by the container in either orientation. Was always
+   right-padded (broke vertical mode where the last card's bottom is
+   the visible edge). */
+.player-init .init-rail.is-horizontal { padding: var(--space-sm) 50px var(--space-sm) var(--space-sm); min-height: 96px; }
+.player-init .init-rail.is-vertical   { padding: var(--space-sm) var(--space-sm) 50px var(--space-sm); min-height: 96px; }
 /* Player cards on the player view get a slightly richer felt — deeper
    shadow and a subtle inner highlight to read as physical cards, not chrome.
    v2.16.56 — sized as a proportion of the smaller viewport dimension so

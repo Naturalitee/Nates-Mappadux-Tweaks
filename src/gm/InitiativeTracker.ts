@@ -1,6 +1,7 @@
 import type { InitiativeCard, InitiativeState, InitiativeEdge, PersistentPlayer } from '../types.ts';
 import {
   saveInitiativeState,
+  sortActiveDeck,
   advanceTurn,
   patchCardValue,
   addCardToDeck,
@@ -9,6 +10,7 @@ import {
   discardCard,
   endCombat,
   resetForNewCombat,
+  restoreFromDiscard,
   reorderCard,
   jumpToFront,
   makeRoundMarker,
@@ -65,6 +67,18 @@ export class InitiativeTracker {
    *  the discard pile so dead characters / monsters stay dead across
    *  combats within the same campaign session. */
   resetForNewCombat(): void { this._mutate(resetForNewCombat); }
+
+  /** v2.16.65 — Sync sort direction from the global Settings dialog.
+   *  Updates lastNumericSortMode + (re-applies sort unless GM is in
+   *  manual mode). Doesn't reset the deck — just rewrites direction. */
+  setSortDirection(dir: 'high-to-low' | 'low-to-high'): void {
+    this._mutate((s) => ({
+      ...s,
+      lastNumericSortMode: dir,
+      sortMode: s.sortMode === 'manual' ? 'manual' : dir,
+      activeDeck: s.sortMode === 'manual' ? s.activeDeck : sortActiveDeck(s.activeDeck, dir),
+    }));
+  }
 
   getState(): InitiativeState { return this.state; }
 
@@ -193,16 +207,48 @@ export class InitiativeTracker {
     // cycle dock position top → right → bottom → left → top. Replaces
     // the edge dropdown with a tactile grip the GM can see + grab. The
     // chosen edge persists via state.edge.
-    const dragBar = document.createElement('button');
-    dragBar.type = 'button';
+    const dragBar = document.createElement('div');
     dragBar.className = 'init-drag-bar';
-    dragBar.title = `Click to cycle dock position (currently ${this.state.edge}). Top → Right → Bottom → Left → Top.`;
-    dragBar.setAttribute('aria-label', 'Cycle dock position');
-    // v2.16.64 — stop events bubbling to the GM canvas behind, which
-    // was scrolling/panning when the GM clicked the grip.
-    dragBar.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); this._cycleEdge(); });
-    dragBar.addEventListener('mousedown', (e) => { e.stopPropagation(); });
-    dragBar.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+    dragBar.title = `Drag to a screen edge to dock the tracker (currently ${this.state.edge}). Quick click cycles through edges.`;
+    dragBar.setAttribute('aria-label', 'Drag to dock the tracker');
+    dragBar.setAttribute('role', 'button');
+    // v2.16.65 — real drag with snap-to-edge on release. Pointer is
+    // captured so the drag survives leaving the bar. Quick clicks
+    // (no meaningful movement) cycle to the next edge as a fallback
+    // so the bar still works on keyboard / touch with no drag motion.
+    let dragStart: { x: number; y: number } | null = null;
+    dragBar.addEventListener('pointerdown', (e) => {
+      e.stopPropagation();
+      e.preventDefault();
+      dragStart = { x: e.clientX, y: e.clientY };
+      dragBar.setPointerCapture?.(e.pointerId);
+      dragBar.classList.add('is-grabbing');
+    });
+    dragBar.addEventListener('pointerup', (e) => {
+      e.stopPropagation();
+      dragBar.classList.remove('is-grabbing');
+      if (!dragStart) return;
+      const dx = e.clientX - dragStart.x;
+      const dy = e.clientY - dragStart.y;
+      const moved = Math.hypot(dx, dy) > 24;
+      dragStart = null;
+      if (moved) {
+        // Snap to whichever viewport edge the cursor was closest to on release.
+        const x = e.clientX, y = e.clientY;
+        const w = window.innerWidth, h = window.innerHeight;
+        const distances: Array<[InitiativeEdge, number]> = [
+          ['top',    y],
+          ['bottom', h - y],
+          ['left',   x],
+          ['right',  w - x],
+        ];
+        distances.sort((a, b) => a[1] - b[1]);
+        this._setEdge(distances[0]![0]);
+      } else {
+        this._cycleEdge();
+      }
+    });
+    dragBar.addEventListener('pointercancel', () => { dragStart = null; dragBar.classList.remove('is-grabbing'); });
     dragBar.addEventListener('wheel', (e) => { e.stopPropagation(); }, { passive: true });
     ctl.append(dragBar);
 
@@ -285,6 +331,22 @@ export class InitiativeTracker {
     zone.appendChild(label);
     const stack = document.createElement('div');
     stack.className = 'init-stack init-stack--bench';
+    // v2.16.65 — discarded enemies dragged here jump back to the TOP
+    // of the bench so the next-letter slot is the GM's revived monster.
+    zone.addEventListener('dragover', (e) => {
+      if (e.dataTransfer?.getData('application/x-init-pile') !== 'discard') return;
+      e.preventDefault();
+      stack.classList.add('is-drop-target');
+    });
+    zone.addEventListener('dragleave', () => stack.classList.remove('is-drop-target'));
+    zone.addEventListener('drop', (e) => {
+      stack.classList.remove('is-drop-target');
+      if (e.dataTransfer?.getData('application/x-init-pile') !== 'discard') return;
+      const id = e.dataTransfer?.getData('application/x-init-card');
+      if (!id) return;
+      e.preventDefault();
+      this._mutate((s) => restoreFromDiscard(s, id));
+    });
     if (this.state.threatBench.length === 0) {
       stack.appendChild(this._emptyHint('Bench empty.'));
     } else {
@@ -324,6 +386,22 @@ export class InitiativeTracker {
     zone.appendChild(label);
     const row = document.createElement('div');
     row.className = 'init-row init-row--unallocated';
+    // v2.16.65 — discarded player cards dragged here land back in the
+    // tray (cleared value) so the GM can re-add them to play.
+    zone.addEventListener('dragover', (e) => {
+      if (e.dataTransfer?.getData('application/x-init-pile') !== 'discard') return;
+      e.preventDefault();
+      row.classList.add('is-drop-target');
+    });
+    zone.addEventListener('dragleave', () => row.classList.remove('is-drop-target'));
+    zone.addEventListener('drop', (e) => {
+      row.classList.remove('is-drop-target');
+      if (e.dataTransfer?.getData('application/x-init-pile') !== 'discard') return;
+      const id = e.dataTransfer?.getData('application/x-init-card');
+      if (!id) return;
+      e.preventDefault();
+      this._mutate((s) => restoreFromDiscard(s, id));
+    });
     if (this.state.unallocated.length === 0) {
       row.appendChild(this._emptyHint('Everyone is in the rail.'));
     } else {

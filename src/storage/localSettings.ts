@@ -80,6 +80,24 @@ export function setScaledViewTransitionsEnabled(enabled: boolean): void {
   } catch { /* private mode etc. — no-op */ }
 }
 
+/** v2.16.65 — Initiative sort direction. One-shot GM preference; default
+ *  High → Low (D&D / Pathfinder / most d20). Low → High suits roll-under
+ *  systems (Cyberpunk Red, Call of Cthulhu, etc.). Manual mode is still
+ *  reachable via drag-reorder regardless of this setting. */
+export const INITIATIVE_SORT_DIRECTION_KEY = 'mappadux:initiative_sort_direction';
+
+export function getInitiativeSortDirection(): 'high-to-low' | 'low-to-high' {
+  try {
+    const v = localStorage.getItem(INITIATIVE_SORT_DIRECTION_KEY);
+    return v === 'low-to-high' ? 'low-to-high' : 'high-to-low';
+  } catch { return 'high-to-low'; }
+}
+
+export function setInitiativeSortDirection(dir: 'high-to-low' | 'low-to-high'): void {
+  try { localStorage.setItem(INITIATIVE_SORT_DIRECTION_KEY, dir); }
+  catch { /* private mode etc. — no-op */ }
+}
+
 /** v2.17 Player Voice — GM toggle for player pings. Enabled by default; the
  *  GM can switch it off if they don't want players highlighting the map.
  *  Stored as '0' when DISABLED (absence = enabled) so the common case needs

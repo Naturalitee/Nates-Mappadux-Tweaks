@@ -16,6 +16,8 @@ import {
   UI_SCALE_DEFAULT,
   arePingsEnabled,
   setPingsEnabled,
+  getInitiativeSortDirection,
+  setInitiativeSortDirection,
   isMessagingEnabled,
   setMessagingEnabled,
   arePlayerMarkersMovable,
@@ -498,9 +500,45 @@ export class SettingsDialog {
       set: setShowFullPlayerUiInPreview,
     }));
 
+    sec.appendChild(this._buildInitiativeOrderBlock());
     sec.appendChild(this._buildLlmAssistantBlock());
 
     return sec;
+  }
+
+  /** v2.16.65 — Initiative sort direction. One-shot GM preference; the
+   *  in-tracker dropdown has been removed in favour of this single
+   *  control. Default High → Low. */
+  private _buildInitiativeOrderBlock(): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'settings-danger-row';
+    row.style.alignItems = 'center';
+    row.style.justifyContent = 'space-between';
+    const label = document.createElement('div');
+    label.innerHTML =
+      '<strong>Initiative order</strong><br>' +
+      '<span class="settings-stat-sub">Numeric direction for the initiative rail. Default High → Low (d20 systems). Switch to Low → High for roll-under systems (Cyberpunk Red, Call of Cthulhu).</span>';
+    row.appendChild(label);
+    const select = document.createElement('select');
+    select.className = 'select-full';
+    select.style.maxWidth = '180px';
+    for (const [val, txt] of [
+      ['high-to-low', 'High → Low'],
+      ['low-to-high', 'Low → High'],
+    ] as Array<['high-to-low' | 'low-to-high', string]>) {
+      const opt = document.createElement('option');
+      opt.value = val;
+      opt.textContent = txt;
+      if (getInitiativeSortDirection() === val) opt.selected = true;
+      select.appendChild(opt);
+    }
+    select.addEventListener('change', () => {
+      const dir = select.value as 'high-to-low' | 'low-to-high';
+      setInitiativeSortDirection(dir);
+      window.dispatchEvent(new CustomEvent('mappadux:initiative-direction-changed', { detail: dir }));
+    });
+    row.appendChild(select);
+    return row;
   }
 
   /** GM reply assistant — optional LLM that suggests replies to player
