@@ -5,7 +5,6 @@ import {
   advanceTurn,
   patchCardValue,
   addCardToDeck,
-  removeFromDeck,
   injectFromStaging,
   injectFromStagingWithValue,
   discardCard,
@@ -115,7 +114,15 @@ export class InitiativeTracker {
   private _advance(): void { this._mutate(advanceTurn); }
 
   private _setSortMode(mode: InitiativeSortMode): void {
-    this._mutate((s) => ({ ...s, sortMode: mode, activeDeck: sortActiveDeck(s.activeDeck, mode) }));
+    this._mutate((s) => ({
+      ...s,
+      sortMode: mode,
+      // v2.16.60 — remember the last numeric direction. When the GM
+      // later drags a card (which auto-flips sortMode to 'manual'),
+      // type-to-inject still knows which way they were sorting.
+      lastNumericSortMode: mode === 'manual' ? s.lastNumericSortMode : mode,
+      activeDeck: sortActiveDeck(s.activeDeck, mode),
+    }));
   }
 
   private _setEdge(edge: InitiativeEdge): void { this._mutate((s) => ({ ...s, edge })); }
@@ -128,8 +135,6 @@ export class InitiativeTracker {
   private _editValue(cardId: string, value: string): void {
     this._mutate((s) => patchCardValue(s, cardId, value));
   }
-
-  private _delete(cardId: string): void { this._mutate((s) => removeFromDeck(s, cardId)); }
 
   private _inject(cardId: string): void { this._mutate((s) => injectFromStaging(s, cardId)); }
 
@@ -592,15 +597,12 @@ export class InitiativeTracker {
     }
     el.appendChild(body);
 
-    // v2.16.54 — delete moved from the bottom chrome strip to a small
-    // upper-right corner cross, per spec §5. Reveals on hover/active.
-    const del = document.createElement('button');
-    del.type = 'button';
-    del.className = 'init-card-delete';
-    del.title = card.type === 'enemy' ? 'Return to threat bench' : 'Move to unallocated tray';
-    del.textContent = '×';
-    del.addEventListener('click', (e) => { e.stopPropagation(); this._delete(card.id); });
-    el.appendChild(del);
+    // v2.16.60 — corner X removed. Discard pile is the only removal
+    // affordance (drag-only). Cards never disappear — they can be
+    // dragged back when the discard is fanned. The old delete path
+    // (return enemy to bench / player to tray on click) is no longer
+    // surfaced; if the GM wants to un-deck a card without discarding
+    // they drag it to bench / unallocated zones.
 
     // Value editor chrome — bottom strip, reveals on hover/active.
     const chrome = document.createElement('div');

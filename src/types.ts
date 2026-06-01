@@ -598,6 +598,12 @@ export interface InitiativeState {
   discarded: InitiativeCard[];
   /** Sort mode — drives where new cards land when they arrive. */
   sortMode: InitiativeSortMode;
+  /** v2.16.60 — Remembers the last numeric direction (high-to-low or
+   *  low-to-high) the GM chose. When sortMode flips to 'manual' via a
+   *  drag-reorder, this stays put so type-to-inject still knows which
+   *  way the GM was sorting numerically. Always one of the two numeric
+   *  modes — manual is never written here. */
+  lastNumericSortMode: 'high-to-low' | 'low-to-high';
   /** Which edge of the GM/player view the tracker is pinned to. Horizontal
    *  fan on top/bottom; vertical fan on left/right. */
   edge: InitiativeEdge;

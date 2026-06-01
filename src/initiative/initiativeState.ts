@@ -58,6 +58,7 @@ export function defaultInitiativeState(): InitiativeState {
     threatBench: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(makeThreatCard),
     discarded:   [],
     sortMode: 'high-to-low',
+    lastNumericSortMode: 'high-to-low',
     // v2.16.56 — default to TOP since the top of the player & GM views are
     // the least-cluttered surfaces today. Easy to repin via the edge select.
     edge:     'top',
@@ -82,6 +83,7 @@ export function loadInitiativeState(): InitiativeState {
       threatBench: Array.isArray(parsed.threatBench) ? parsed.threatBench : defaultInitiativeState().threatBench,
       discarded:   Array.isArray(parsed.discarded)   ? parsed.discarded   : [],
       sortMode:    (parsed.sortMode as InitiativeSortMode | undefined) ?? 'high-to-low',
+      lastNumericSortMode: (parsed.lastNumericSortMode === 'low-to-high' ? 'low-to-high' : 'high-to-low'),
       edge:        (parsed.edge as InitiativeEdge | undefined) ?? 'top',
       visible:     !!parsed.visible,
     };
@@ -216,32 +218,20 @@ export function endCombat(state: InitiativeState): InitiativeState {
   };
 }
 
-/** v2.16.59 — When END ROUND reaches the front of the deck the GM gets
- *  two choices: Start Next Round (keep initiative order, reset spent
- *  flags — same as advanceTurn would do on a round-marker head) and
- *  Reroll Initiative (some systems re-roll every round). This is the
- *  reroll path: every active player card goes back to the tray with
- *  value cleared, every active enemy is returned to the bench, deck
- *  starts fresh, discarded is preserved. Round marker re-seeded by the
- *  next addCardToDeck. Caller is responsible for broadcasting the
- *  initiative_call to player views. */
+/** v2.16.60 — Reroll Initiative is a HARD RESET (Alex 2026-06-01: "on a
+ *  new roll initiative button press reset everything - dont remember
+ *  them"). Wipes the active deck, tray, discard pile, and reseeds the
+ *  threat bench to the default A-Z. Players are re-added by the
+ *  caller's seedUnallocatedFromPlayers() and re-prompted via the
+ *  broadcast in onCallForInitiative. Equivalent to endCombat() — kept
+ *  as a separate function so the call site reads as the right action. */
 export function rerollInitiative(state: InitiativeState): InitiativeState {
-  // Active players → tray (value cleared, spent cleared).
-  const playerCards = state.activeDeck
-    .filter((c) => c.type === 'player')
-    .map((c) => ({ ...c, value: '', isSpent: false }));
-  // Active enemies → bench (value cleared). Letters stay so the GM
-  // recognises which monsters are returning.
-  const enemyCards = state.activeDeck
-    .filter((c) => c.type === 'enemy')
-    .map((c) => ({ ...c, value: '', isSpent: false }));
   return {
     ...state,
     activeDeck:  [],
-    unallocated: [...state.unallocated.map((c) => ({ ...c, value: '', isSpent: false })), ...playerCards],
-    // Returned enemies go to the FRONT of the bench so they're the next
-    // letters available (the deeper unused letters wait their turn).
-    threatBench: [...enemyCards, ...state.threatBench],
+    unallocated: [],
+    threatBench: defaultInitiativeState().threatBench,
+    discarded:   [],
   };
 }
 
@@ -295,8 +285,11 @@ export function injectFromStagingWithValue(state: InitiativeState, cardId: strin
 
   let activeDeck: InitiativeCard[];
   if (state.sortMode === 'manual') {
-    // Manual mode: insert by value, preserve other cards' positions.
-    activeDeck = _insertByValue(state.activeDeck, card, 'high-to-low');
+    // Manual mode: insert by value preserving other cards' positions.
+    // v2.16.60 — direction follows the last numeric mode the GM chose,
+    // so a GM who set Low → High (Cyberpunk / Call of Cthulhu) keeps
+    // that polarity even after drag-reordering switched sort to manual.
+    activeDeck = _insertByValue(state.activeDeck, card, state.lastNumericSortMode);
   } else {
     // Numeric mode: full sort.
     activeDeck = sortActiveDeck([...state.activeDeck, card], state.sortMode);

@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.60 — 2026-06-01
+
+Initiative: GM threats render BLACK body with RED edges (was all-red); manual-mode type-to-inject now follows the last numeric direction the GM chose; corner X removed from rail cards (Discard is the sole removal path); Reroll Initiative is now a HARD reset (wipes deck + tray + discard, reseeds A-Z, re-prompts everyone).
+
 ## v2.16.59 — 2026-06-01
 
 Initiative polish: static bench (top + spine depth + "+N"), A-Z, threats red, END ROUND black/yellow on bottom edge, enemy edges upright, big close-up duck on player view, manual-mode type-to-inject sorts correctly, Reroll Initiative when END ROUND tops.

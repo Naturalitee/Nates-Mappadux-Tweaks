@@ -7285,8 +7285,8 @@ option.select-option--add {
   left: calc(var(--depth, 1) * 3px);
   width: 76px;
   height: 100px;
-  background: linear-gradient(155deg, #4a1414 0%, #1a0606 100%);
-  border: 1px solid #7f1d1d;
+  background: linear-gradient(155deg, #0a0a0a 0%, #1a0606 100%);
+  border: 1px solid #b91c1c;
   border-radius: 8px;
   z-index: calc(5 - var(--depth, 1));
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
@@ -7473,15 +7473,15 @@ option.select-option--add {
   background: linear-gradient(135deg, color-mix(in srgb, var(--init-color), black 60%) 0%, color-mix(in srgb, var(--init-color), black 80%) 100%);
   border-color: var(--init-color);
 }
-/* v2.16.59 — GM threats wear evil red. Player-view enemies override
-   --init-color back to charcoal in .player-init below so the player
-   side stays atmospheric, not aggressive. */
+/* v2.16.60 — GM threats are BLACK with RED edges. Black is the GM-
+   reserved colour for monster identity; the red edge is the scary cue.
+   Player-view enemies override back to charcoal in .player-init below. */
 .init-card--enemy {
   --init-color: #b91c1c;
   --init-color-fg: #fff;
-  background: linear-gradient(155deg, #7f1d1d 0%, #1a0606 100%);
-  border-color: #ef4444;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5), 0 0 12px rgba(220, 38, 38, 0.25);
+  background: linear-gradient(155deg, #0a0a0a 0%, #1a0606 100%);
+  border-color: #b91c1c;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.6), 0 0 10px rgba(185, 28, 28, 0.2);
 }
 /* Round marker — black body, yellow edge accent, "END ROUND" upright
    along the bottom tab. Sized like a normal card so the bottom tab fits
