@@ -7163,23 +7163,26 @@ option.select-option--add {
    Initiative tracker (v2.16.8) — fanned deck, edge-pinnable both axes
    ════════════════════════════════════════════════════════════════════════ */
 
+/* v2.16.69 — tracker tightened: bound by content, no fixed wide cap.
+   width: max-content (auto-sized to the button + card row), short
+   padding, no border. The drag-bar grip is the visual delimiter. */
 .init-tracker {
   position: absolute;
   z-index: 8;
   pointer-events: auto;
   display: flex;
-  gap: var(--space-sm);
-  padding: var(--space-sm);
+  gap: 6px;
+  padding: 4px;
   background: rgba(10, 14, 26, 0.94);
   backdrop-filter: blur(8px);
-  border: 1px solid var(--border);
   color: var(--text-primary);
   font-family: var(--font-ui);
+  width: max-content;
 }
-.init-tracker.is-edge-bottom { left: 0; right: 0; bottom: 0; border-radius: 8px 8px 0 0; max-height: 55%; }
-.init-tracker.is-edge-top    { left: 0; right: 0; top: 0;    border-radius: 0 0 8px 8px; max-height: 55%; }
-.init-tracker.is-edge-left   { top: 0; bottom: 0; left: 0;   border-radius: 0 8px 8px 0; max-width: 38%; }
-.init-tracker.is-edge-right  { top: 0; bottom: 0; right: 0;  border-radius: 8px 0 0 8px; max-width: 38%; }
+.init-tracker.is-edge-bottom { left: 50%; transform: translateX(-50%); bottom: 0; border-radius: 8px 8px 0 0; max-width: 100%; }
+.init-tracker.is-edge-top    { left: 50%; transform: translateX(-50%); top: 0;    border-radius: 0 0 8px 8px; max-width: 100%; }
+.init-tracker.is-edge-left   { top: 50%;  transform: translateY(-50%); left: 0;   border-radius: 0 8px 8px 0; max-height: 100%; }
+.init-tracker.is-edge-right  { top: 50%;  transform: translateY(-50%); right: 0;  border-radius: 8px 0 0 8px; max-height: 100%; }
 
 /* v2.16.64 — both orientations now lay out controls + zones on the
    SAME line. In horizontal-rail mode (tracker pinned to top/bottom)
@@ -7238,13 +7241,14 @@ option.select-option--add {
   background: repeating-linear-gradient(90deg, transparent 0, transparent 4px, rgba(255, 255, 255, 0.35) 4px, rgba(255, 255, 255, 0.35) 6px);
 }
 .init-btn {
-  padding: 6px 10px;
+  padding: 4px 8px;
   background: var(--bg-input);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   color: var(--text-primary);
   font-family: var(--font-ui);
-  font-size: var(--font-size-sm);
+  font-size: 0.78rem;
+  white-space: nowrap;
   cursor: pointer;
 }
 .init-btn:hover { border-color: var(--border-focus); background: var(--bg-hover); }
@@ -7793,31 +7797,27 @@ option.select-option--add {
 /* Player-side container — atmospheric "cards on the table" framing rather
    than a chrome strip. Translucent dark wash, soft shadow underneath the
    deck so the cards feel like they're sitting on something, no border
-   line. v2.16.53 — tightened toward Alex's "just one fan beautifully
-   rendered" brief; controls live exclusively on the GM side. */
+   line. v2.16.69 — content-bound, no chrome padding beyond what the
+   cards need. */
 .player-init {
   position: fixed;
   z-index: 8;
   pointer-events: auto;
-  padding: var(--space-sm) var(--space-md);
+  padding: 4px;
   background:
     radial-gradient(ellipse at center, rgba(20, 26, 42, 0.55) 0%, rgba(10, 14, 26, 0.78) 75%);
   backdrop-filter: blur(8px);
+  width: max-content;
 }
 .player-init.is-edge-bottom { left: 50%; transform: translateX(-50%); bottom: 0; max-width: 100%; border-radius: 14px 14px 0 0; box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.45); }
 .player-init.is-edge-top    { left: 50%; transform: translateX(-50%); top: 0;    max-width: 100%; border-radius: 0 0 14px 14px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
 .player-init.is-edge-left   { top: 50%; transform: translateY(-50%); left: 0;   max-height: 100%; border-radius: 0 14px 14px 0; box-shadow: 8px 0 28px rgba(0, 0, 0, 0.45); }
 .player-init.is-edge-right  { top: 50%; transform: translateY(-50%); right: 0;  max-height: 100%; border-radius: 14px 0 0 14px; box-shadow: -8px 0 28px rgba(0, 0, 0, 0.45); }
-/* v2.16.65 — vertical mode (left/right edge) gets a slimmer padding
-   since the player view doesn't carry the GM's button column. */
-.player-init.is-edge-left,
-.player-init.is-edge-right { padding: var(--space-md) 4px; }
-/* v2.16.65 — directional padding so the LAST card's exposed edge is
-   never clipped by the container in either orientation. Was always
-   right-padded (broke vertical mode where the last card's bottom is
-   the visible edge). */
-.player-init .init-rail.is-horizontal { padding: var(--space-sm) 50px var(--space-sm) var(--space-sm); min-height: 96px; }
-.player-init .init-rail.is-vertical   { padding: var(--space-sm) var(--space-sm) 50px var(--space-sm); min-height: 96px; }
+/* v2.16.69 — content-bound everywhere; no extra padding for vertical mode. */
+/* v2.16.69 — minimal padding; the rail just needs enough slack for the
+   last card's exposed edge not to be clipped by the container. */
+.player-init .init-rail.is-horizontal { padding: 4px 26px 4px 4px; }
+.player-init .init-rail.is-vertical   { padding: 4px 4px 26px 4px; }
 /* Player cards on the player view get a slightly richer felt — deeper
    shadow and a subtle inner highlight to read as physical cards, not chrome.
    v2.16.56 — sized as a proportion of the smaller viewport dimension so

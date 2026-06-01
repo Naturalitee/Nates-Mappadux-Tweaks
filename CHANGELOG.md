@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.69 — 2026-06-01
+
+Initiative: tracker + player rail both `width: max-content` (bound by the buttons + cards, no fixed wide cap); borders removed, padding minimised; button padding cut. Fixes the PiP-reconnect-flap-when-tracker-open: GM no longer fires the full broadcast burst (roster + features + markers + icons + initiative_update) on every re-identify — only on truly NEW player joins; re-identifies from existing peers just refresh bindings.
+
 ## v2.16.68 — 2026-06-01
 
 Fixes: tracker drags work again (reverted root-level event swallow, replaced with a target-based shouldStart gate in the GM canvas pan handler — so panning is skipped when the pointerdown lands inside the tracker / panels / modals); GM PiP preview window no longer flaps reconnect every ~10s when GM switches focus to the main window (visibility-driven reconnect now suppressed in gmPreview mode since BroadcastChannel handles the local link).
