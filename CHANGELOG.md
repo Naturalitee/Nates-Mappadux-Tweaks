@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.74 — 2026-06-01
+
+Edge-snap outline now anchors to the tracker's actual docked area (its offsetParent = the canvas region right of the GM sidebar), so the left/right hint lands exactly where the tracker settles instead of over the sidebar. Discard revive expanded: drag a discarded card to the rail to drop it straight back into combat at a chosen slot; dragging to the bench/tray still routes by card home (enemy → bench, player → tray).
+
 ## v2.16.73 — 2026-06-01
 
 Card drag rebuilt on Pointer Events — works for mouse AND touch now (HTML5 drag-and-drop was mouse-only and was being blocked for mouse anyway). A ghost card follows the cursor; the source hides; rail gap + drop-zone highlight track live; drop resolves rail reorder / inject / discard / revive by hit-testing the zone under the pointer. Also: left/right edge-snap outline raised above the side panels so it's visible on every edge.

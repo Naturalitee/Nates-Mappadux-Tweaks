@@ -326,8 +326,11 @@ export class InitiativeTracker {
     return distances[0]![0];
   }
 
-  /** v2.16.72 — show the snap-target outline along the given edge so the
-   *  GM sees where the tracker will dock before releasing. */
+  /** v2.16.74 — show the snap-target outline along the given edge. The
+   *  tracker is position:absolute inside the canvas area (to the RIGHT of
+   *  the GM sidebar), so its edges are the CONTAINER's edges, not the
+   *  viewport's. Anchor the hint to the tracker's offsetParent rect so the
+   *  outline lands exactly where the docked tracker will. */
   private _showEdgeHint(edge: InitiativeEdge): void {
     if (!this._edgeHint) {
       this._edgeHint = document.createElement('div');
@@ -335,13 +338,19 @@ export class InitiativeTracker {
       document.body.appendChild(this._edgeHint);
     }
     const hint = this._edgeHint;
-    hint.style.cssText = ''; // reset, then set per edge below
+    const container = (this.root.offsetParent as HTMLElement | null) ?? document.documentElement;
+    const r = container.getBoundingClientRect();
+    const SLIM = 120;
+    let left = r.left, top = r.top, width = r.width, height = r.height;
+    if (edge === 'top')    { height = SLIM; }
+    if (edge === 'bottom') { top = r.bottom - SLIM; height = SLIM; }
+    if (edge === 'left')   { width = SLIM; }
+    if (edge === 'right')  { left = r.right - SLIM; width = SLIM; }
+    hint.style.left   = `${left}px`;
+    hint.style.top    = `${top}px`;
+    hint.style.width  = `${width}px`;
+    hint.style.height = `${height}px`;
     hint.classList.add('is-visible');
-    const SLIM = '120px';
-    if (edge === 'top')    { hint.style.left = '0'; hint.style.right = '0'; hint.style.top = '0';    hint.style.height = SLIM; }
-    if (edge === 'bottom') { hint.style.left = '0'; hint.style.right = '0'; hint.style.bottom = '0'; hint.style.height = SLIM; }
-    if (edge === 'left')   { hint.style.top = '0'; hint.style.bottom = '0'; hint.style.left = '0';   hint.style.width = SLIM; }
-    if (edge === 'right')  { hint.style.top = '0'; hint.style.bottom = '0'; hint.style.right = '0';  hint.style.width = SLIM; }
   }
 
   private _hideEdgeHint(): void {

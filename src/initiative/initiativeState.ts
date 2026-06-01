@@ -290,22 +290,29 @@ export function resetForNewCombat(state: InitiativeState): InitiativeState {
 export function injectFromStagingAt(state: InitiativeState, cardId: string, insertIndex: number): InitiativeState {
   const benchIdx = state.threatBench.findIndex((c) => c.id === cardId);
   const trayIdx  = state.unallocated.findIndex((c) => c.id === cardId);
+  // v2.16.74 — also accept a card dragged straight from the discard pile
+  // into the rail (revive directly into combat at a chosen slot).
+  const discIdx  = state.discarded.findIndex((c) => c.id === cardId);
   let card: InitiativeCard | undefined;
   let threatBench = state.threatBench;
   let unallocated = state.unallocated;
+  let discarded   = state.discarded;
   if (benchIdx !== -1) {
     card = state.threatBench[benchIdx]!;
     threatBench = state.threatBench.filter((_, i) => i !== benchIdx);
   } else if (trayIdx !== -1) {
     card = state.unallocated[trayIdx]!;
     unallocated = state.unallocated.filter((_, i) => i !== trayIdx);
+  } else if (discIdx !== -1) {
+    card = state.discarded[discIdx]!;
+    discarded = state.discarded.filter((_, i) => i !== discIdx);
   } else {
     return state;
   }
   const next = state.activeDeck.slice();
   const clamped = Math.max(0, Math.min(insertIndex, next.length));
   next.splice(clamped, 0, card);
-  return { ...state, threatBench, unallocated, sortMode: 'manual', activeDeck: ensureRoundMarker(next) };
+  return { ...state, threatBench, unallocated, discarded, sortMode: 'manual', activeDeck: ensureRoundMarker(next) };
 }
 
 /** Wipe everything but keep settings (sort mode + edge + visible). */
