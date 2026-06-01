@@ -559,16 +559,20 @@ export class InitiativeTracker {
     });
 
     if (card.type === 'round-marker') {
-      // v2.16.59 — "END ROUND" runs along the always-visible BOTTOM
-      // edge so the GM reads it upright at a glance. Card body stays
-      // black with the yellow accent driven by CSS.
-      const tab = document.createElement('div');
-      tab.className = 'init-card-tab init-card-tab--bottom init-card-tab--round-end';
-      const t = document.createElement('span');
-      t.className = 'init-card-tab-text';
-      t.textContent = 'END ROUND';
-      tab.appendChild(t);
-      el.appendChild(tab);
+      // v2.16.62 — treat the round marker like any other card: same
+      // 4-edge tab pattern with CSS hiding three of four based on rail
+      // orientation. END ROUND text reads on whichever edge is visible
+      // (right in horizontal rail, bottom in vertical). No special
+      // positioning — just always at the back of the deck.
+      for (const side of ['left', 'right', 'top', 'bottom'] as const) {
+        const tab = document.createElement('div');
+        tab.className = `init-card-tab init-card-tab--${side}`;
+        const t = document.createElement('span');
+        t.className = 'init-card-tab-text';
+        t.textContent = 'END ROUND';
+        tab.appendChild(t);
+        el.appendChild(tab);
+      }
       return el;
     }
 

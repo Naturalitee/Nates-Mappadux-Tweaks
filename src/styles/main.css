@@ -7345,11 +7345,11 @@ option.select-option--add {
 .init-card--unallocated { /* coloured by player --init-color */
   opacity: 0.96;
 }
-/* Discard — desaturated + dimmed so the GM can read the history but
-   not confuse a discarded card with a live one. */
+/* Discard — desaturated so the GM reads it as "out" without making it
+   transparent. v2.16.62 — opacity dropped; the grayscale + brightness
+   filter is the cue. */
 .init-card--discard, .init-card.is-discarded {
   filter: grayscale(0.6) brightness(0.7);
-  opacity: 0.75;
   cursor: default;
 }
 
@@ -7465,8 +7465,11 @@ option.select-option--add {
 .init-rail.is-horizontal .init-card { margin-right: -38px; }
 .init-rail.is-vertical   .init-card { margin-bottom: -55px; }
 .init-card.is-active { transform: scale(1.12); z-index: 200 !important; box-shadow: 0 0 12px rgba(255, 255, 255, 0.18); }
-.init-card.is-spent  { opacity: 0.55; }
-.init-card.is-dragging { opacity: 0.5; cursor: grabbing; }
+/* v2.16.62 — no transparency-as-state cues. is-spent used to fade to
+   55% opacity ("everyone goes ghosted at end of round") — confusing.
+   The position cue (spent cards sit behind END ROUND) is enough; if a
+   stronger cue ever comes back it should NOT be opacity. */
+.init-card.is-dragging { outline: 2px solid var(--accent); outline-offset: 2px; cursor: grabbing; }
 .init-card.is-drop-target { outline: 2px dashed var(--accent); outline-offset: 2px; }
 
 .init-card--player {
@@ -7483,36 +7486,16 @@ option.select-option--add {
   border-color: #b91c1c;
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.6), 0 0 10px rgba(185, 28, 28, 0.2);
 }
-/* Round marker — black body, yellow edge accent, "END ROUND" upright
-   along the bottom tab. Sized like a normal card so the bottom tab fits
-   the text comfortably. v2.16.62 — also cancels the fan's inward pull
-   from the previous card so the full bottom edge is visible. */
+/* Round marker — yellow palette, black body. v2.16.62 — treated like
+   any other card: standard tab system, no overlap break-out, no
+   special tab-side rules. CSS just owns its colour. */
 .init-card--round-marker {
   --init-color: #fbbf24;
+  --init-color-fg: #1a1006;
   background: #000;
   border: 2px solid #fbbf24;
   cursor: default;
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5), 0 0 14px rgba(251, 191, 36, 0.3);
-}
-/* Offset the negative margin the previous card applies so the round
-   marker sits cleanly at the rear of the fan with its bottom "END
-   ROUND" tab fully visible — still part of the same row, just no
-   longer slipped under the prior card. */
-.init-rail.is-horizontal .init-card--round-marker { margin-left: 42px; }
-.init-rail.is-vertical   .init-card--round-marker { margin-top:  60px; }
-/* The bottom tab of the round-marker is ALWAYS shown (even in
-   horizontal-rail mode where bottom tabs are normally hidden) because
-   that's where the "END ROUND" label lives. */
-.init-card--round-marker .init-card-tab { display: none; }
-.init-card--round-marker .init-card-tab--bottom { display: flex; background: #fbbf24; border-top: 1px solid #fde68a; }
-.init-card--round-marker .init-card-tab--bottom .init-card-tab-text {
-  writing-mode: horizontal-tb;
-  transform: none;
-  color: #1a1006;
-  font-size: 0.72rem;
-  font-weight: 900;
-  letter-spacing: 0.12em;
-  text-shadow: none;
 }
 
 /* v2.16.53 — bidirectional name tabs. A card in a fanned deck only exposes
@@ -7746,21 +7729,12 @@ option.select-option--add {
 .player-init .init-card.is-active {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6), 0 0 18px color-mix(in srgb, var(--init-color), transparent 35%);
 }
-/* v2.16.62 — player-view round marker matches the standard card size
-   in both rail orientations so the "END ROUND" bottom-edge text has
-   room to read. Was previously squashed narrower than other cards. */
+/* v2.16.62 — player-view round marker is the same size as every other
+   card; no margin break-out. It's just the last card in the fan. */
 .player-init .init-card--round-marker {
   width:  clamp(60px,  8vmin, 104px);
   height: clamp(82px, 11vmin, 140px);
 }
-.player-init .init-rail.is-vertical .init-card--round-marker {
-  width:  clamp(60px,  8vmin, 104px);
-  height: clamp(82px, 11vmin, 140px);
-}
-/* And cancel the inward pull from the previous card on the player
-   view too. Proportional units so it scales with the card size. */
-.player-init .init-rail.is-horizontal .init-card--round-marker { margin-left: clamp(32px, 4.5vmin, 56px); }
-.player-init .init-rail.is-vertical   .init-card--round-marker { margin-top:  clamp(48px, 6vmin,  78px); }
 /* Negative margin scales with card size so overlap stays consistent.
    ~half the card dimension into the next. */
 .player-init .init-rail.is-horizontal .init-card { margin-right:  clamp(-52px, -4vmin, -28px); }

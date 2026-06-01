@@ -47,15 +47,10 @@ export class PlayerInitiativeRail {
     el.style.zIndex = String(100 - index);
 
     if (card.type === 'round-marker') {
-      // v2.16.59 — END ROUND along the always-visible bottom edge; black
-      // body + yellow accent driven by CSS so player and GM views match.
-      const tab = document.createElement('div');
-      tab.className = 'init-card-tab init-card-tab--bottom init-card-tab--round-end';
-      const t = document.createElement('span');
-      t.className = 'init-card-tab-text';
-      t.textContent = 'END ROUND';
-      tab.appendChild(t);
-      el.appendChild(tab);
+      // v2.16.62 — treat like any other card. _appendEdgeTabs paints
+      // all four edges; CSS hides three based on rail orientation so
+      // "END ROUND" reads on whichever edge is currently exposed.
+      _appendEdgeTabs(el, 'END ROUND');
       return el;
     }
 
