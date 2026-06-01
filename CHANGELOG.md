@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.71 — 2026-06-01
+
+Fixes the reconnect loop (root-caused, not guessed): `initiative_update` is sent as one un-chunked JSON frame, and since v2.16.56 each player card carried `markerUrl` (the token icon as a base64 data URL). With the tracker open, seeded player cards pushed that frame past the DataChannel's ~16KB single-frame limit → channel close → reconnect loop. The broadcast copy now strips `markerUrl` (GM keeps it locally; player rail falls back to the initial disc). Also: tracker docked to a side is now slim (button column drops to card width, labels wrap; no more 38% cap); drag-bar visibly drags the whole tracker (follows cursor, dimmed, highlight ring) and snaps to the nearest edge on release.
+
 ## v2.16.70 — 2026-06-01
 
 Rolled back v2.16.69 (tracker resize used the wrong axis; the PiP reconnect fix did not hold). Tree is back to the v2.16.68 state. Tracker slimming, drag-to-edge follow, and the reconnect loop will be redone individually.

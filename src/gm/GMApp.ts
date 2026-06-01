@@ -36,7 +36,7 @@ import { PingLayer } from '../rendering/PingLayer.ts';
 import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
 import { LLMClient } from '../ai/LLMClient.ts';
 import { InitiativeTracker } from './InitiativeTracker.ts';
-import { loadInitiativeState } from '../initiative/initiativeState.ts';
+import { loadInitiativeState, stripInitiativeForWire } from '../initiative/initiativeState.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { FilterPanel } from '../filters/FilterPanel.ts';
@@ -3626,7 +3626,7 @@ export class GMApp {
         this._refreshPlayerMarkers(); // let the new joiner see existing tokens
         this._broadcastAllPlayerIcons(); // seed their per-player icon cache
         // Initiative tracker — fire current state to the new joiner.
-        if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: this.initiativeTracker.getState() });
+        if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
         const who = msg.playerName || msg.characterName || 'A player';
         this.setStatus(`${who} joined`, 'ok');
       });
@@ -3852,7 +3852,7 @@ export class GMApp {
       // re-apply, so it's cheap.
       this._refreshPlayerMarkers();
       this._broadcastAllPlayerIcons();
-      if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: this.initiativeTracker.getState() });
+      if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
     }
   }
 
@@ -6511,7 +6511,9 @@ export class GMApp {
     this.initiativeTracker = new InitiativeTracker(el, initial, {
       onChange: (state) => {
         // Mirror the state to every player view so they render in lock-step.
-        this.host.broadcast({ type: 'initiative_update', state });
+        // v2.16.71 — strip per-card markerUrl data URLs so the JSON stays
+        // under the DataChannel single-frame limit (see stripInitiativeForWire).
+        this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(state) });
       },
       onCallForInitiative: () => {
         // v2.16.63 — reset deck + tray + bench (preserving discard),
@@ -6532,7 +6534,7 @@ export class GMApp {
       this.initiativeTracker?.setSortDirection(dir);
     });
     // Broadcast initial state so any already-connected players sync up.
-    this.host.broadcast({ type: 'initiative_update', state: this.initiativeTracker.getState() });
+    this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
   }
 
   /** v2.16.47 — replaces bindPlayerVoicePanel. The thread store fires

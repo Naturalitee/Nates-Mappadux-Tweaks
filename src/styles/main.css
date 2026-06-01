@@ -7178,8 +7178,18 @@ option.select-option--add {
 }
 .init-tracker.is-edge-bottom { left: 0; right: 0; bottom: 0; border-radius: 8px 8px 0 0; max-height: 55%; }
 .init-tracker.is-edge-top    { left: 0; right: 0; top: 0;    border-radius: 0 0 8px 8px; max-height: 55%; }
-.init-tracker.is-edge-left   { top: 0; bottom: 0; left: 0;   border-radius: 0 8px 8px 0; max-width: 38%; }
-.init-tracker.is-edge-right  { top: 0; bottom: 0; right: 0;  border-radius: 8px 0 0 8px; max-width: 38%; }
+/* v2.16.71 — docked to a SIDE, the tracker spans full height but is only
+   as wide as it needs to be (the cards + a slim button column). Width is
+   content-driven; the button column is forced down to card width below. */
+.init-tracker.is-edge-left   { top: 0; bottom: 0; left: 0;   border-radius: 0 8px 8px 0; width: max-content; max-width: 40vw; }
+.init-tracker.is-edge-right  { top: 0; bottom: 0; right: 0;  border-radius: 8px 0 0 8px; width: max-content; max-width: 40vw; }
+/* v2.16.71 — visible dock-drag: tracker follows the cursor, dimmed, with
+   a highlight ring so it clearly reads as being moved. */
+.init-tracker.is-dock-dragging {
+  transition: none;
+  box-shadow: 0 0 0 2px var(--accent), 0 12px 40px rgba(0, 0, 0, 0.6);
+  cursor: grabbing;
+}
 
 /* v2.16.64 — both orientations now lay out controls + zones on the
    SAME line. In horizontal-rail mode (tracker pinned to top/bottom)
@@ -7208,6 +7218,17 @@ option.select-option--add {
 }
 .init-tracker.is-horizontal .init-controls { flex-direction: row; align-items: stretch; }
 .init-tracker.is-vertical   .init-controls { flex-direction: column; align-items: stretch; }
+/* v2.16.71 — when docked to a side, the button column drops to card width
+   (~84px) and the labels wrap, so the whole tracker is no wider than a
+   single card. This is the slim-down the GM asked for. */
+.init-tracker.is-vertical .init-controls-primary { min-width: 0; width: 84px; }
+.init-tracker.is-vertical .init-btn {
+  white-space: normal;
+  line-height: 1.1;
+  padding: 5px 4px;
+  font-size: 0.72rem;
+  text-align: center;
+}
 
 /* Drag-bar grip — click cycles dock position. Vertical strip in
    horizontal-rail mode, horizontal strip in vertical-rail mode. */

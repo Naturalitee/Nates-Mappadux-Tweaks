@@ -90,6 +90,27 @@ export function loadInitiativeState(): InitiativeState {
   } catch { return defaultInitiativeState(); }
 }
 
+/** v2.16.71 — Strip heavyweight per-card fields before an initiative_update
+ *  goes over the wire. `markerUrl` carries the player's token icon as a
+ *  base64 data URL (plumbed in v2.16.56); with several players seeded into
+ *  the tray it pushes the JSON past the ~16KB single-frame limit on the
+ *  PeerJS DataChannel (Host.sendTo sends regular messages whole, not
+ *  chunked), which silently closes the channel → reconnect loop. The GM
+ *  renders from its own in-memory state (which keeps markerUrl); only the
+ *  broadcast copy is slimmed. The player rail falls back to the initial-
+ *  letter disc when markerUrl is absent. */
+export function stripInitiativeForWire(state: InitiativeState): InitiativeState {
+  const slim = (cards: InitiativeCard[]): InitiativeCard[] =>
+    cards.map(({ markerUrl: _drop, ...rest }) => rest);
+  return {
+    ...state,
+    activeDeck:  slim(state.activeDeck),
+    unallocated: slim(state.unallocated),
+    threatBench: slim(state.threatBench),
+    discarded:   slim(state.discarded),
+  };
+}
+
 /** Sort the active deck per sort mode. ROUND END is just a regular card
  *  in the comparator — given a magic always-last score so it lands at
  *  the end naturally (no separate filter-then-append).

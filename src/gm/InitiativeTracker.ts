@@ -221,13 +221,33 @@ export class InitiativeTracker {
     // captured so the drag survives leaving the bar. Quick clicks
     // (no meaningful movement) cycle to the next edge as a fallback
     // so the bar still works on keyboard / touch with no drag motion.
+    // v2.16.71 — VISIBLE drag. While dragging, the whole tracker follows
+    // the cursor (translate + dimmed) so it reads as "I am moving this".
+    // On release it snaps to the nearest viewport edge. A quick click with
+    // no real movement still cycles edges as a keyboard/touch fallback.
     let dragStart: { x: number; y: number } | null = null;
+    const clearDragVisual = () => {
+      this.root.style.transform = '';
+      this.root.style.opacity = '';
+      this.root.classList.remove('is-dock-dragging');
+    };
     dragBar.addEventListener('pointerdown', (e) => {
       e.stopPropagation();
       e.preventDefault();
       dragStart = { x: e.clientX, y: e.clientY };
       dragBar.setPointerCapture?.(e.pointerId);
       dragBar.classList.add('is-grabbing');
+    });
+    dragBar.addEventListener('pointermove', (e) => {
+      if (!dragStart) return;
+      const dx = e.clientX - dragStart.x;
+      const dy = e.clientY - dragStart.y;
+      // Only start the visible follow once past a small threshold so a
+      // click doesn't jitter the tracker.
+      if (Math.hypot(dx, dy) < 6 && !this.root.classList.contains('is-dock-dragging')) return;
+      this.root.classList.add('is-dock-dragging');
+      this.root.style.transform = `translate(${dx}px, ${dy}px)`;
+      this.root.style.opacity = '0.85';
     });
     dragBar.addEventListener('pointerup', (e) => {
       e.stopPropagation();
@@ -237,6 +257,7 @@ export class InitiativeTracker {
       const dy = e.clientY - dragStart.y;
       const moved = Math.hypot(dx, dy) > 24;
       dragStart = null;
+      clearDragVisual();
       if (moved) {
         // Snap to whichever viewport edge the cursor was closest to on release.
         const x = e.clientX, y = e.clientY;
@@ -253,7 +274,7 @@ export class InitiativeTracker {
         this._cycleEdge();
       }
     });
-    dragBar.addEventListener('pointercancel', () => { dragStart = null; dragBar.classList.remove('is-grabbing'); });
+    dragBar.addEventListener('pointercancel', () => { dragStart = null; dragBar.classList.remove('is-grabbing'); clearDragVisual(); });
     dragBar.addEventListener('wheel', (e) => { e.stopPropagation(); }, { passive: true });
     ctl.append(dragBar);
 
