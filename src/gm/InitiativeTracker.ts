@@ -7,6 +7,8 @@ import {
   addCardToDeck,
   removeFromDeck,
   injectFromStaging,
+  injectFromStagingWithValue,
+  discardCard,
   endCombat,
   reorderCard,
   jumpToFront,
@@ -130,6 +132,17 @@ export class InitiativeTracker {
 
   private _inject(cardId: string): void { this._mutate((s) => injectFromStaging(s, cardId)); }
 
+  /** v2.16.58 — type-to-inject: drop the staged card into the active deck
+   *  AND patch its value in one mutation so it lands at the correct sort
+   *  position immediately. Used by the value input on bench / tray cards. */
+  private _injectWithValue(cardId: string, value: string): void {
+    this._mutate((s) => injectFromStagingWithValue(s, cardId, value));
+  }
+
+  /** v2.16.58 — drag-to-discard: move a card from ANY pile into the
+   *  discard zone. Out of THIS combat; End Combat clears the discard. */
+  private _discard(cardId: string): void { this._mutate((s) => discardCard(s, cardId)); }
+
   private _reorder(cardId: string, toIndex: number): void { this._mutate((s) => reorderCard(s, cardId, toIndex)); }
 
   private _jumpToFront(cardId: string): void { this._mutate((s) => jumpToFront(s, cardId)); }
@@ -150,11 +163,16 @@ export class InitiativeTracker {
     if (!this.state.visible) return;
 
     this.root.appendChild(this._renderControls());
+    // v2.16.58 — four zones, all rendered with the SAME card visual idiom
+    // for the "lean into cards" pass. Bench + Discard are stacks (cards
+    // cascading behind the top one); Unallocated is a row of full cards;
+    // Rail is the fanned active deck.
     const zones = document.createElement('div');
     zones.className = 'init-zones';
     zones.appendChild(this._renderBench());
-    zones.appendChild(this._renderRail());
     zones.appendChild(this._renderUnallocated());
+    zones.appendChild(this._renderRail());
+    zones.appendChild(this._renderDiscard());
     this.root.appendChild(zones);
   }
 
@@ -208,65 +226,222 @@ export class InitiativeTracker {
 
   private _renderBench(): HTMLElement {
     const zone = document.createElement('div');
-    zone.className = 'init-zone init-bench';
+    zone.className = 'init-zone init-zone--bench';
     const label = document.createElement('span');
     label.className = 'init-zone-label';
     label.textContent = 'Threats';
     zone.appendChild(label);
-    const list = document.createElement('div');
-    list.className = 'init-zone-list';
-    for (const card of this.state.threatBench) {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'init-chip init-chip--enemy';
-      chip.style.setProperty('--init-color', card.color);
-      chip.textContent = card.threatLetter ?? '?';
-      chip.title = `Drop ${card.name} into the rail`;
-      chip.addEventListener('click', () => this._inject(card.id));
-      list.appendChild(chip);
+    const stack = document.createElement('div');
+    stack.className = 'init-stack init-stack--bench';
+    if (this.state.threatBench.length === 0) {
+      stack.appendChild(this._emptyHint('Bench empty.'));
+    } else {
+      // Top of the stack is the LAST card in the array so we render in
+      // reverse — later DOM children sit on top by document order, but
+      // we also cascade via CSS variable --stack-pos for the offset.
+      const total = this.state.threatBench.length;
+      for (let i = 0; i < total; i++) {
+        const card = this.state.threatBench[i]!;
+        const isTop = i === 0;
+        stack.appendChild(this._renderStagingCard(card, 'bench', { isTop, stackPos: i, stackSize: total }));
+      }
     }
-    zone.appendChild(list);
+    zone.appendChild(stack);
     return zone;
   }
 
   private _renderUnallocated(): HTMLElement {
     const zone = document.createElement('div');
-    zone.className = 'init-zone init-unallocated';
+    zone.className = 'init-zone init-zone--unallocated';
     const label = document.createElement('span');
     label.className = 'init-zone-label';
     label.textContent = 'Unallocated';
     zone.appendChild(label);
-    const list = document.createElement('div');
-    list.className = 'init-zone-list';
+    const row = document.createElement('div');
+    row.className = 'init-row init-row--unallocated';
     if (this.state.unallocated.length === 0) {
-      const empty = document.createElement('span');
-      empty.className = 'init-zone-empty';
-      empty.textContent = '— everyone is in the rail —';
-      list.appendChild(empty);
+      row.appendChild(this._emptyHint('Everyone is in the rail.'));
+    } else {
+      for (const card of this.state.unallocated) {
+        row.appendChild(this._renderStagingCard(card, 'unallocated', { isTop: true, stackPos: 0, stackSize: 1 }));
+      }
     }
-    for (const card of this.state.unallocated) {
-      const chip = document.createElement('button');
-      chip.type = 'button';
-      chip.className = 'init-chip init-chip--player init-chip--ghost';
-      chip.style.setProperty('--init-color', card.color);
-      chip.textContent = card.name;
-      chip.title = 'Drop this player into the rail (enter their roll afterwards)';
-      chip.addEventListener('click', () => this._inject(card.id));
-      list.appendChild(chip);
-    }
-    zone.appendChild(list);
+    zone.appendChild(row);
     return zone;
+  }
+
+  /** v2.16.58 — Discard pile. Cards dragged here are out of THIS combat.
+   *  Rendered as a dimmed stack so the GM can see what's been taken out
+   *  but can't accidentally re-use it. End Combat clears it. */
+  private _renderDiscard(): HTMLElement {
+    const zone = document.createElement('div');
+    zone.className = 'init-zone init-zone--discard';
+    const label = document.createElement('span');
+    label.className = 'init-zone-label';
+    label.textContent = 'Discard';
+    zone.appendChild(label);
+    const stack = document.createElement('div');
+    stack.className = 'init-stack init-stack--discard';
+    // Make the whole zone a drop target so the GM can fling cards in from
+    // anywhere — rail, bench, tray. The state engine handles all three.
+    zone.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer?.types.includes('application/x-init-card')) return;
+      e.preventDefault();
+      stack.classList.add('is-drop-target');
+    });
+    zone.addEventListener('dragleave', () => stack.classList.remove('is-drop-target'));
+    zone.addEventListener('drop', (e) => {
+      stack.classList.remove('is-drop-target');
+      const id = e.dataTransfer?.getData('application/x-init-card');
+      if (!id) return;
+      e.preventDefault();
+      this._discard(id);
+    });
+    if (this.state.discarded.length === 0) {
+      stack.appendChild(this._emptyHint('Drag here to remove from combat.'));
+    } else {
+      const total = this.state.discarded.length;
+      for (let i = 0; i < total; i++) {
+        const card = this.state.discarded[i]!;
+        stack.appendChild(this._renderStagingCard(card, 'discard', { isTop: i === total - 1, stackPos: i, stackSize: total }));
+      }
+    }
+    zone.appendChild(stack);
+    return zone;
+  }
+
+  /** v2.16.58 — Render a staging card (bench / unallocated / discard).
+   *  Re-uses the rail card visual idiom (tabs, body, portrait/letter)
+   *  but swaps in value-input + drag handlers appropriate to the pile.
+   *  - bench:       drag to rail OR discard; top has value-input
+   *  - unallocated: drag to rail OR discard; every card has value-input
+   *  - discard:     no drag, no input (out of combat); slightly dimmed
+   */
+  private _renderStagingCard(
+    card: InitiativeCard,
+    pile: 'bench' | 'unallocated' | 'discard',
+    opts: { isTop: boolean; stackPos: number; stackSize: number },
+  ): HTMLElement {
+    const el = document.createElement('div');
+    el.className = `init-card init-card--${card.type} init-card--staging init-card--${pile}`;
+    if (pile === 'discard') el.classList.add('is-discarded');
+    el.style.setProperty('--init-color', card.color);
+    el.style.setProperty('--init-color-fg', _isLightColor(card.color) ? '#0b0d12' : '#ffffff');
+    // Stack-position CSS variable lets the layout cascade staged cards.
+    el.style.setProperty('--stack-pos', String(opts.stackPos));
+    el.style.setProperty('--stack-size', String(opts.stackSize));
+    el.dataset['cardId'] = card.id;
+    el.dataset['pile'] = pile;
+
+    // Drag source — every staging card is draggable except discard.
+    if (pile !== 'discard') {
+      el.draggable = true;
+      el.addEventListener('dragstart', (e) => {
+        e.dataTransfer?.setData('text/plain', card.id);
+        e.dataTransfer?.setData('application/x-init-card', card.id);
+        e.dataTransfer?.setData('application/x-init-pile', pile);
+        el.classList.add('is-dragging');
+      });
+      el.addEventListener('dragend', () => el.classList.remove('is-dragging'));
+    }
+
+    // Edge tabs (single-edge per orientation, per v2.16.57).
+    const edgeText = card.type === 'enemy' ? (card.threatLetter ?? '?') : card.name;
+    for (const side of ['left', 'right', 'top', 'bottom'] as const) {
+      const tab = document.createElement('div');
+      tab.className = `init-card-tab init-card-tab--${side}`;
+      const t = document.createElement('span');
+      t.className = 'init-card-tab-text';
+      t.textContent = edgeText;
+      tab.appendChild(t);
+      el.appendChild(tab);
+    }
+
+    // Body — big letter for enemies, portrait/initial for players. Same
+    // rules as the rail.
+    const body = document.createElement('div');
+    body.className = 'init-card-body';
+    if (card.type === 'enemy') {
+      const big = document.createElement('div');
+      big.className = 'init-card-big';
+      big.textContent = card.threatLetter ?? '?';
+      body.appendChild(big);
+    } else if (card.markerUrl) {
+      const img = document.createElement('img');
+      img.className = 'init-card-portrait';
+      img.src = card.markerUrl;
+      img.alt = '';
+      img.draggable = false;
+      body.appendChild(img);
+    } else {
+      const disc = document.createElement('div');
+      disc.className = 'init-card-disc';
+      disc.textContent = (card.name.trim()[0] ?? '?').toUpperCase();
+      body.appendChild(disc);
+    }
+    el.appendChild(body);
+
+    // Value input — only on the TOP card of the bench (so the GM types
+    // into the "next available threat") and on every unallocated card
+    // (each player rolls independently). Discard cards have no input.
+    if ((pile === 'bench' && opts.isTop) || pile === 'unallocated') {
+      const valInput = document.createElement('input');
+      valInput.type = 'text';
+      valInput.className = 'init-card-stage-value';
+      valInput.placeholder = '#';
+      valInput.title = 'Type the roll value + Enter to slot this card into the rail at the right position.';
+      valInput.autocomplete = 'off';
+      const commit = () => {
+        const v = valInput.value.trim();
+        if (!v) return;
+        this._injectWithValue(card.id, v);
+      };
+      valInput.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') { e.preventDefault(); commit(); }
+        if (e.key === 'Escape') { valInput.value = ''; valInput.blur(); }
+      });
+      // Don't let typing in the input start a drag of the card.
+      valInput.addEventListener('mousedown', (e) => e.stopPropagation());
+      valInput.addEventListener('dragstart', (e) => e.preventDefault());
+      el.appendChild(valInput);
+    }
+
+    return el;
+  }
+
+  private _emptyHint(text: string): HTMLElement {
+    const empty = document.createElement('span');
+    empty.className = 'init-zone-empty';
+    empty.textContent = text;
+    return empty;
   }
 
   private _renderRail(): HTMLElement {
     const zone = document.createElement('div');
-    zone.className = 'init-zone init-rail-zone';
+    zone.className = 'init-zone init-zone--rail init-rail-zone';
     const label = document.createElement('span');
     label.className = 'init-zone-label';
     label.textContent = 'Rail';
     zone.appendChild(label);
     const rail = document.createElement('div');
     rail.className = `init-rail ${isHorizontal(this.state.edge) ? 'is-horizontal' : 'is-vertical'}`;
+    // v2.16.58 — rail accepts drops from bench / unallocated (inject) AND
+    // from itself (reorder). Per-card drop targets handle the precise
+    // position; the rail container catches "drop anywhere in here" for
+    // staging piles when the GM doesn't aim at a specific slot.
+    rail.addEventListener('dragover', (e) => {
+      if (!e.dataTransfer?.types.includes('application/x-init-card')) return;
+      e.preventDefault();
+    });
+    rail.addEventListener('drop', (e) => {
+      const id = e.dataTransfer?.getData('application/x-init-card');
+      const pile = e.dataTransfer?.getData('application/x-init-pile');
+      if (!id) return;
+      // Only handle "stray" drops not consumed by a card-level handler.
+      if ((e.target as HTMLElement).closest('.init-card')) return;
+      e.preventDefault();
+      if (pile === 'bench' || pile === 'unallocated') this._inject(id);
+    });
     for (let i = 0; i < this.state.activeDeck.length; i++) {
       rail.appendChild(this._renderCard(this.state.activeDeck[i]!, i));
     }
@@ -293,11 +468,13 @@ export class InitiativeTracker {
     el.draggable = card.type !== 'round-marker';
     el.dataset['cardId'] = card.id;
 
-    // Drag handlers — drag-to-reorder switches to manual sort mode.
+    // Drag handlers — drag-to-reorder switches to manual sort mode; drops
+    // from bench/unallocated inject the card at this position.
     el.addEventListener('dragstart', (e) => {
       if (card.type === 'round-marker') { e.preventDefault(); return; }
       e.dataTransfer?.setData('text/plain', card.id);
       e.dataTransfer?.setData('application/x-init-card', card.id);
+      e.dataTransfer?.setData('application/x-init-pile', 'rail');
       el.classList.add('is-dragging');
     });
     el.addEventListener('dragend', () => el.classList.remove('is-dragging'));
@@ -310,9 +487,16 @@ export class InitiativeTracker {
     el.addEventListener('drop', (e) => {
       el.classList.remove('is-drop-target');
       const draggedId = e.dataTransfer?.getData('application/x-init-card');
+      const pile = e.dataTransfer?.getData('application/x-init-pile');
       if (!draggedId || draggedId === card.id) return;
       e.preventDefault();
-      this._reorder(draggedId, index);
+      // v2.16.58 — drops from bench/unallocated inject (and the state
+      // engine sorts); drops from rail reorder.
+      if (pile === 'bench' || pile === 'unallocated') {
+        this._inject(draggedId);
+      } else {
+        this._reorder(draggedId, index);
+      }
     });
 
     // Right-click → Jump to Front (sudden reaction / boss phase trigger).

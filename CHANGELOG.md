@@ -1,5 +1,42 @@
 # Changelog
 
+## v2.16.58 — 2026-06-01
+
+### Initiative — GM zone redesign (REALLY leaning into cards)
+
+GM area rebuilt around the card metaphor across the board. Threat
+bench, Unallocated tray, and a new Discard pile are now rendered with
+the SAME card visual as the active rail, not the small chips they
+were before.
+
+- **Threat bench → stacked deck.** A is the top card; B–F (A–Z in
+  theory) peek out behind via a CSS-only cascading offset. Hover
+  splays the stack so the GM can grab a deeper letter. Top card has
+  a value input — type a roll + Enter and the card flies to the
+  correct slot on the rail; B becomes the new top.
+- **Unallocated tray → row of full cards.** Each persistent player
+  who hasn't yet rolled gets a full card (portrait or initial disc,
+  identity colour, name on the edge) with its own value input. Type
+  the roll + Enter to slot them at the right sort position.
+- **New Discard pile** at the right end of the row. Drag ANY card
+  here — from rail, bench, or unallocated — to remove it from THIS
+  combat. Discarded cards render desaturated + dimmed so the GM can
+  read the history. End Combat clears the pile along with everything
+  else.
+- **Drag rules.** Drag a bench/unallocated card onto the rail (or a
+  rail slot) → it injects at the right sort position. Drag a rail
+  card onto another rail slot → it reorders (switches to manual
+  sort, same as before). Drag anything into Discard → it's out.
+  Discard doesn't accept returns (intentional — End Combat is the
+  reset path).
+- **State engine additions.** `InitiativeState.discarded` array;
+  `discardCard(state, id)` pulls from any pile; new
+  `injectFromStagingWithValue` composes inject + patch in one
+  mutation so type-to-inject lands cards at the correct position
+  atomically. End Combat clears discarded.
+- **Same single-edge tab rule applies to staging cards** — the
+  visual idiom is uniform across all zones.
+
 ## v2.16.57 — 2026-06-01
 
 ### Initiative — lean into cards (player rail single-edge label, big portrait)

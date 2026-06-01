@@ -7234,10 +7234,116 @@ option.select-option--add {
   flex: 1;
   min-height: 0;
   min-width: 0;
+  align-items: flex-start;
 }
 .init-tracker.is-vertical .init-zones { flex-direction: column; }
 .init-zone { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.init-zone--bench    { flex: 0 0 auto; }
+.init-zone--unallocated { flex: 0 1 auto; min-width: 0; max-width: 40%; }
+.init-zone--rail     { flex: 1 1 auto; min-width: 0; }
+.init-zone--discard  { flex: 0 0 auto; }
 .init-rail-zone { flex: 1; min-width: 0; }
+
+/* v2.16.58 — Staging stacks (bench + discard). Cards rendered with
+   cascading offset via --stack-pos so the top card sits clean and
+   subsequent cards peek out behind it. z-index uses stack-size minus
+   pos so the FIRST array entry visually overlays the rest. */
+.init-stack {
+  position: relative;
+  width: 84px;
+  height: 116px;
+  flex-shrink: 0;
+}
+.init-stack--discard { width: 84px; height: 116px; }
+.init-stack .init-card--staging {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 76px;
+  height: 100px;
+  margin: 0;
+  transform: translate(calc(var(--stack-pos, 0) * 5px), calc(var(--stack-pos, 0) * 5px));
+  z-index: calc(var(--stack-size, 1) - var(--stack-pos, 0));
+  transition: transform 200ms ease, box-shadow 200ms ease, opacity 200ms ease;
+}
+/* Splay the bench stack on hover so the GM can grab a deeper card if
+   they need a specific letter. Top card stays put; deeper cards fan
+   down-right. Lift z on hover so the splayed cards float over the
+   adjacent zone instead of getting clipped by it. */
+.init-stack--bench:hover { z-index: 50; }
+.init-stack--bench:hover .init-card--staging {
+  transform: translate(calc(var(--stack-pos, 0) * 18px), calc(var(--stack-pos, 0) * 10px));
+}
+.init-stack--bench.is-drop-target,
+.init-stack--discard.is-drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+  border-radius: 10px;
+}
+
+/* Unallocated row — full cards in a single rank, gap between. */
+.init-row--unallocated {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 4px 2px;
+}
+
+/* Staged card baseline — slightly smaller than rail cards and with a
+   little extra margin for the value input that sits below the body. */
+.init-card--staging {
+  width: 76px;
+  height: 100px;
+  cursor: grab;
+}
+.init-card--bench { /* coloured by --init-color (charcoal) */ }
+.init-card--unallocated { /* coloured by player --init-color */
+  opacity: 0.96;
+}
+/* Discard — desaturated + dimmed so the GM can read the history but
+   not confuse a discarded card with a live one. */
+.init-card--discard, .init-card.is-discarded {
+  filter: grayscale(0.6) brightness(0.7);
+  opacity: 0.75;
+  cursor: default;
+}
+
+/* Value input on staging cards — type a roll value + Enter to slot the
+   card into the rail at the correct sort position. Sits at the bottom
+   of the card, mostly transparent until focused. */
+.init-card-stage-value {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  right: 4px;
+  width: auto;
+  padding: 2px 4px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+  text-shadow: none;
+  z-index: 5;
+  /* Pull above the right-edge tab strip so the input always shows the
+     full value. */
+}
+.init-card-stage-value:focus {
+  background: rgba(0, 0, 0, 0.75);
+  border-color: var(--init-color, var(--accent));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--init-color, var(--accent)), transparent 60%);
+}
+.init-card-stage-value::placeholder { color: rgba(255, 255, 255, 0.45); }
+/* When the input is the only thing in the unallocated card and the
+   GM is typing, the body's portrait should NOT swallow click events
+   meant for the input. */
+.init-card--staging .init-card-portrait,
+.init-card--staging .init-card-disc { pointer-events: none; }
 .init-zone-label {
   font-size: var(--font-size-sm);
   text-transform: uppercase;
@@ -7359,13 +7465,21 @@ option.select-option--add {
    For a horizontal fan each card's RIGHT edge is the slice always exposed
    to the eye (every card's left is tucked under the one above it); the
    reverse holds for a vertical fan. Hiding the other three edges frees
-   the card body for a bigger portrait/icon. */
+   the card body for a bigger portrait/icon. v2.16.58 — staging cards
+   (bench / unallocated / discard) inherit the same rule via the tracker
+   root's orientation class so the visual idiom is uniform. */
 .init-rail.is-horizontal .init-card-tab--left,
 .init-rail.is-horizontal .init-card-tab--top,
-.init-rail.is-horizontal .init-card-tab--bottom { display: none; }
+.init-rail.is-horizontal .init-card-tab--bottom,
+.init-tracker.is-horizontal .init-card--staging .init-card-tab--left,
+.init-tracker.is-horizontal .init-card--staging .init-card-tab--top,
+.init-tracker.is-horizontal .init-card--staging .init-card-tab--bottom { display: none; }
 .init-rail.is-vertical   .init-card-tab--left,
 .init-rail.is-vertical   .init-card-tab--right,
-.init-rail.is-vertical   .init-card-tab--top    { display: none; }
+.init-rail.is-vertical   .init-card-tab--top,
+.init-tracker.is-vertical .init-card--staging .init-card-tab--left,
+.init-tracker.is-vertical .init-card--staging .init-card-tab--right,
+.init-tracker.is-vertical .init-card--staging .init-card-tab--top    { display: none; }
 
 .init-card-tab-text {
   font-size: 0.7rem;
@@ -7404,6 +7518,9 @@ option.select-option--add {
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
 }
 .init-rail.is-vertical .init-card-body { margin: 0 0 16px 0; }   /* vertical fan → bottom tab */
+/* Staging cards mirror rail body margins. */
+.init-tracker.is-horizontal .init-card--staging .init-card-body { margin: 0 16px 0 0; }
+.init-tracker.is-vertical   .init-card--staging .init-card-body { margin: 0 0 16px 0; }
 .init-card-body--marker {
   margin: 0;
   font-size: 0.6rem;
