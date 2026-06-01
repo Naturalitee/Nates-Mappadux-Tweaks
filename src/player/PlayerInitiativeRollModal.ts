@@ -23,6 +23,10 @@ export class PlayerInitiativeRollModal {
     return new Promise((resolve) => { this.resolver = resolve; });
   }
 
+  /** v2.16.64 — close the prompt without sending a value. Used when the
+   *  GM ends combat before this player rolled. */
+  cancel(): void { this._resolve(null); }
+
   private _resolve(value: string | null): void {
     if (this.overlay) this.overlay.remove();
     this.overlay = null;

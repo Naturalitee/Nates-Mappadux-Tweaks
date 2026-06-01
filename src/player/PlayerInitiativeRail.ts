@@ -20,7 +20,43 @@ export class PlayerInitiativeRail {
     this._render();
   }
 
-  setState(state: InitiativeState | null): void { this.state = state; this._render(); }
+  /** v2.16.64 — FLIP animation. Capture every visible card's screen
+   *  position BEFORE the re-render; after the render, animate each
+   *  matching card from its old position to its new one. Cards that
+   *  appear new (didn't exist before) just appear; cards that vanish
+   *  (gone from state) get removed without exit animation. Gives the
+   *  player a smooth slide as the deck reorders / advances rather than
+   *  cards teleporting. */
+  setState(state: InitiativeState | null): void {
+    const prevRects = new Map<string, DOMRect>();
+    for (const el of this.root.querySelectorAll<HTMLElement>('[data-card-id]')) {
+      const id = el.dataset['cardId'];
+      if (id) prevRects.set(id, el.getBoundingClientRect());
+    }
+    this.state = state;
+    this._render();
+    if (prevRects.size === 0) return;
+    for (const el of this.root.querySelectorAll<HTMLElement>('[data-card-id]')) {
+      const id = el.dataset['cardId'];
+      if (!id) continue;
+      const prev = prevRects.get(id);
+      if (!prev) continue;
+      const next = el.getBoundingClientRect();
+      const dx = prev.left - next.left;
+      const dy = prev.top - next.top;
+      if (Math.abs(dx) < 1 && Math.abs(dy) < 1) continue;
+      // Web Animations API — overrides the computed transform for the
+      // animation duration, then returns to the declared transform (so
+      // active-card scale isn't fought with).
+      el.animate(
+        [
+          { transform: `translate(${dx}px, ${dy}px)` },
+          { transform: 'none' },
+        ],
+        { duration: 380, easing: 'cubic-bezier(0.2, 0.8, 0.2, 1)', composite: 'add' as CompositeOperation },
+      );
+    }
+  }
 
   private _render(): void {
     this.root.replaceChildren();
@@ -45,6 +81,7 @@ export class PlayerInitiativeRail {
       + (index === 0 ? ' is-active' : '')
       + (card.isSpent ? ' is-spent' : '');
     el.style.zIndex = String(100 - index);
+    el.dataset['cardId'] = card.id;
 
     if (card.type === 'round-marker') {
       // v2.16.62 — treat like any other card. _appendEdgeTabs paints

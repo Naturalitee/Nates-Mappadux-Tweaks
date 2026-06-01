@@ -1,7 +1,6 @@
-import type { InitiativeCard, InitiativeState, InitiativeEdge, InitiativeSortMode, PersistentPlayer } from '../types.ts';
+import type { InitiativeCard, InitiativeState, InitiativeEdge, PersistentPlayer } from '../types.ts';
 import {
   saveInitiativeState,
-  sortActiveDeck,
   advanceTurn,
   patchCardValue,
   addCardToDeck,
@@ -128,17 +127,6 @@ export class InitiativeTracker {
 
   private _advance(): void { this._mutate(advanceTurn); }
 
-  private _setSortMode(mode: InitiativeSortMode): void {
-    this._mutate((s) => ({
-      ...s,
-      sortMode: mode,
-      // v2.16.60 — remember the last numeric direction. When the GM
-      // later drags a card (which auto-flips sortMode to 'manual'),
-      // type-to-inject still knows which way they were sorting.
-      lastNumericSortMode: mode === 'manual' ? s.lastNumericSortMode : mode,
-      activeDeck: sortActiveDeck(s.activeDeck, mode),
-    }));
-  }
 
   private _setEdge(edge: InitiativeEdge): void { this._mutate((s) => ({ ...s, edge })); }
 
@@ -210,7 +198,12 @@ export class InitiativeTracker {
     dragBar.className = 'init-drag-bar';
     dragBar.title = `Click to cycle dock position (currently ${this.state.edge}). Top → Right → Bottom → Left → Top.`;
     dragBar.setAttribute('aria-label', 'Cycle dock position');
-    dragBar.addEventListener('click', () => this._cycleEdge());
+    // v2.16.64 — stop events bubbling to the GM canvas behind, which
+    // was scrolling/panning when the GM clicked the grip.
+    dragBar.addEventListener('click', (e) => { e.stopPropagation(); e.preventDefault(); this._cycleEdge(); });
+    dragBar.addEventListener('mousedown', (e) => { e.stopPropagation(); });
+    dragBar.addEventListener('pointerdown', (e) => { e.stopPropagation(); });
+    dragBar.addEventListener('wheel', (e) => { e.stopPropagation(); }, { passive: true });
     ctl.append(dragBar);
 
     // Primary column: Advance, Roll Initiative, End Combat — the three
@@ -231,25 +224,9 @@ export class InitiativeTracker {
     const end = mkBtn('End Combat', 'init-btn init-btn--danger', () => this._endCombat());
     primary.append(advance, reroll, end);
     ctl.append(primary);
-
-    // Secondary: sort dropdown only (the edge dropdown moved to the
-    // drag-bar). Manual mode is reached implicitly by dragging a card.
-    const sort = document.createElement('select');
-    sort.className = 'init-sort';
-    sort.title = 'Sort mode — drag any card to reorder freely (auto-switches to manual until you pick a direction again)';
-    for (const [mode, label] of [
-      ['high-to-low', 'High → Low'],
-      ['low-to-high', 'Low → High'],
-    ] as Array<['high-to-low' | 'low-to-high', string]>) {
-      const opt = document.createElement('option');
-      opt.value = mode;
-      opt.textContent = label;
-      if (this.state.lastNumericSortMode === mode) opt.selected = true;
-      sort.appendChild(opt);
-    }
-    sort.addEventListener('change', () => this._setSortMode(sort.value as InitiativeSortMode));
-    ctl.append(sort);
-
+    // v2.16.64 — sort-direction dropdown removed. Direction is a
+    // one-time settings choice (default High → Low). Manual mode is
+    // reached implicitly by dragging a card.
     return ctl;
   }
 

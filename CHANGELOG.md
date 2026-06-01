@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.64 — 2026-06-01
+
+Initiative final-polish pass: tracker now lays controls + cards on the SAME line (single row); sort dropdown removed (one-shot setting, default High → Low); drag-bar grip no longer bubbles events to the GM canvas behind; player-view FLIP animation slides cards smoothly when the deck reorders / advances; when GM ends combat before a player has rolled, their roll-prompt modal closes.
+
 ## v2.16.63 — 2026-06-01
 
 Initiative big-sweep: 3-button primary stack (Advance=green / Reroll Initiative=orange / End Combat=red); left-edge drag-bar cycles dock position (top default + remembered); rail opens a visual gap as a card is dragged over so drop lands exactly where the GM aimed; advance now sends card to back of WHOLE deck (END ROUND is a regular placeable card so GM can queue cards behind it for next round); END ROUND sorts to end via comparator score, not a special branch; click Discard pile to fan + drag a card back to revive; Reroll Initiative resets deck/tray/bench preserving discard.

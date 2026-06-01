@@ -1670,6 +1670,13 @@ export class PlayerApp {
       case 'initiative_update': {
         // v2.17 Player Voice — atmospheric initiative rail update.
         this.initiativeRail?.setState(msg.state);
+        // v2.16.64 — if the GM ended combat (tracker visibility flipped
+        // off OR deck went empty) while we still had a roll prompt
+        // open, close the prompt rather than leaving the player staring
+        // at an orphaned modal.
+        if (!msg.state.visible || msg.state.activeDeck.length === 0) {
+          this._initiativeRollModal.cancel();
+        }
         break;
       }
 

@@ -7181,8 +7181,13 @@ option.select-option--add {
 .init-tracker.is-edge-left   { top: 0; bottom: 0; left: 0;   border-radius: 0 8px 8px 0; max-width: 38%; }
 .init-tracker.is-edge-right  { top: 0; bottom: 0; right: 0;  border-radius: 8px 0 0 8px; max-width: 38%; }
 
-.init-tracker.is-horizontal { flex-direction: column; }
-.init-tracker.is-vertical   { flex-direction: row; overflow-y: auto; }
+/* v2.16.64 — both orientations now lay out controls + zones on the
+   SAME line. In horizontal-rail mode (tracker pinned to top/bottom)
+   the controls column sits to the LEFT of the zones row. In vertical-
+   rail mode (left/right edge) the controls column sits to the LEFT
+   of a vertical zones column (the tracker is tall and narrow). */
+.init-tracker.is-horizontal { flex-direction: row; align-items: stretch; }
+.init-tracker.is-vertical   { flex-direction: column; overflow-y: auto; }
 
 /* v2.16.63 — three-button primary stack (Advance / Roll Initiative /
    End Combat) anchored to the left of the controls bar. Drag-bar grip
@@ -7201,7 +7206,8 @@ option.select-option--add {
   flex-shrink: 0;
   min-width: 130px;
 }
-.init-tracker.is-vertical .init-controls { flex-direction: row; align-items: stretch; }
+.init-tracker.is-horizontal .init-controls { flex-direction: row; align-items: stretch; }
+.init-tracker.is-vertical   .init-controls { flex-direction: column; align-items: stretch; }
 
 /* Drag-bar grip — click cycles dock position. Vertical strip in
    horizontal-rail mode, horizontal strip in vertical-rail mode. */
