@@ -396,6 +396,38 @@
       </div>
     </section>
 
+    <!-- v2.16.76 — Annotate: per-map progress clocks + freehand whiteboard,
+         shared live to players + projector. The bypass toggle visually
+         mutes them on the player/projector views (GM still sees them). -->
+    <section class="panel" id="annotate-panel">
+      <div class="panel-header">
+        <button type="button" class="panel-title" aria-expanded="false">Annotate</button>
+        <span class="panel-toggle-icon" aria-hidden="true" title="Show to players"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Show annotations (clocks + whiteboard) on all views. Off = hidden everywhere, GM included (the per-map data is kept). Default off.">
+          <input type="checkbox" id="annotate-bypass-toggle" />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="panel-body" hidden>
+        <p class="annotate-section-label">Progress clocks</p>
+        <div class="annotate-clock-form">
+          <input id="annotate-clock-name" class="select-full" type="text" autocomplete="off" placeholder="Name (e.g. Alarm raised)" />
+          <div class="annotate-clock-row">
+            <label for="annotate-clock-segments" class="annotate-seg-label">Segments</label>
+            <input id="annotate-clock-segments" type="number" min="2" max="24" value="4" />
+            <div id="annotate-clock-colors" class="annotate-color-row"></div>
+          </div>
+          <button id="annotate-add-clock" class="btn btn--sm btn--full">+ Add clock</button>
+        </div>
+        <p class="annotate-section-label">Whiteboard</p>
+        <div class="annotate-wb-row">
+          <button id="annotate-draw-toggle" class="btn btn--sm" title="Toggle freehand drawing on the map">Draw</button>
+          <div id="annotate-pen-colors" class="annotate-color-row"></div>
+          <button id="annotate-wb-clear" class="btn btn--sm btn--danger" title="Erase the whole whiteboard for this map">Clear</button>
+        </div>
+      </div>
+    </section>
+
     <section class="panel" id="soundboard-panel">
       <div class="panel-header">
         <button type="button" class="panel-title" aria-expanded="false">Soundboard</button>
@@ -628,6 +660,10 @@
       <!-- v2.17 Player Voice — fanned-deck initiative tracker (GM face).
            Edge-pinnable; shows the rail, threat bench, and unallocated tray. -->
       <div id="initiative-tracker" class="init-tracker" hidden></div>
+      <!-- v2.16.76 — Annotate layers. Whiteboard canvas sits over the map;
+           clocks float as a draggable HUD above it. -->
+      <canvas id="annotate-whiteboard" class="annotate-whiteboard" hidden></canvas>
+      <div id="annotate-clocks" class="annotate-clocks"></div>
     </div>
 
     <div id="marker-context-menu" class="context-menu" hidden>

@@ -7181,6 +7181,107 @@ option.select-option--add {
 }
 
 /* ════════════════════════════════════════════════════════════════════════
+   Annotate (v2.16.76) — progress clocks HUD + whiteboard + panel form
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* Clocks float over the map as a draggable HUD. The container is
+   non-interactive (clicks pass to the map); individual clocks opt back in. */
+.annotate-clocks {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+}
+.annotate-clocks .clock {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  padding: 6px 8px;
+  background: rgba(8, 11, 20, 0.62);
+  border: 1px solid color-mix(in srgb, var(--clock-color, #888), black 30%);
+  border-radius: 10px;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  user-select: none;
+}
+.annotate-clocks:not(.is-interactive) .clock { pointer-events: none; }
+.clock-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  max-width: 160px;
+}
+.clock-name {
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.clock-del {
+  flex-shrink: 0;
+  width: 16px;
+  height: 16px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 14px;
+  background: transparent;
+  border: 1px solid var(--danger);
+  border-radius: 50%;
+  color: var(--danger);
+  cursor: pointer;
+}
+.clock-del:hover { background: var(--danger); color: #fff; }
+.clock-dial { display: block; }
+.clock-wedge {
+  fill: rgba(255, 255, 255, 0.06);
+  stroke: color-mix(in srgb, var(--clock-color, #888), black 10%);
+  stroke-width: 1.5;
+  transition: fill 120ms ease;
+}
+.clock-wedge.is-filled { fill: var(--clock-color, #888); }
+.clock-wedge:hover { fill: color-mix(in srgb, var(--clock-color, #888), white 20%); }
+.clock-count {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: color-mix(in srgb, var(--clock-color, #ccc), white 25%);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Panel form */
+.annotate-section-label {
+  margin: var(--space-sm) 0 2px 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+.annotate-clock-form { display: flex; flex-direction: column; gap: 6px; }
+.annotate-clock-row { display: flex; align-items: center; gap: 8px; }
+.annotate-seg-label { font-size: var(--font-size-sm); color: var(--text-secondary); }
+#annotate-clock-segments { width: 52px; padding: 4px 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); }
+.annotate-color-row { display: flex; gap: 5px; flex-wrap: wrap; }
+.annotate-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+}
+.annotate-swatch.is-selected { border-color: #fff; box-shadow: 0 0 6px rgba(255, 255, 255, 0.5); }
+.annotate-wb-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+
+/* ════════════════════════════════════════════════════════════════════════
    Initiative tracker (v2.16.8) — fanned deck, edge-pinnable both axes
    ════════════════════════════════════════════════════════════════════════ */
 

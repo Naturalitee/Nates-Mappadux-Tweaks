@@ -37,6 +37,8 @@ import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
 import { LLMClient } from '../ai/LLMClient.ts';
 import { InitiativeTracker } from './InitiativeTracker.ts';
 import { loadInitiativeState, stripInitiativeForWire } from '../initiative/initiativeState.ts';
+import { AnnotateController } from './AnnotateController.ts';
+import { isAnnotateMuted, setAnnotateMuted } from '../storage/localSettings.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { FilterPanel } from '../filters/FilterPanel.ts';
@@ -408,6 +410,8 @@ export class GMApp {
   private _markerMoveOrigin = new Map<string, { x: number; y: number; facing?: number }>();
   /** Initiative tracker (fanned-deck rail, threat bench, unallocated tray). */
   private initiativeTracker: InitiativeTracker | null = null;
+  /** v2.16.76 — per-map annotations (progress clocks + whiteboard). */
+  private annotate: AnnotateController | null = null;
 
   private interactions   = new MarkerInteractionRegistry();
   private audio          = this.interactions.register(new PositionalAudioInteraction());
@@ -1710,6 +1714,7 @@ export class GMApp {
     this.bindPlayersPanel();
     this.bindMessageThreads();
     this.bindInitiativeTracker();
+    this.bindAnnotate();
     this.bindHamburgerMenu();
     this._bindWorkspacePanZoom();
     this._bindCanvasUndo();
@@ -3158,6 +3163,9 @@ export class GMApp {
     this._liveMarkerPos.clear();
     this._markerMoveOrigin.clear();
     this._refreshPlayerMarkers();
+    // v2.16.76 — load this map's annotations (clocks + whiteboard) and
+    // broadcast them; annotations are per-map.
+    this.annotate?.setMap(this._activeMapId() ?? null);
 
     // v2.12.x — if this map is a video asset and we have its full
     // bytes queued, send the bundle as a separate follow-up so
@@ -3627,6 +3635,8 @@ export class GMApp {
         this._broadcastAllPlayerIcons(); // seed their per-player icon cache
         // Initiative tracker — fire current state to the new joiner.
         if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
+        // v2.16.76 — annotations (clocks) for the new joiner.
+        this.annotate?.rebroadcast();
         const who = msg.playerName || msg.characterName || 'A player';
         this.setStatus(`${who} joined`, 'ok');
       });
@@ -3853,6 +3863,7 @@ export class GMApp {
       this._refreshPlayerMarkers();
       this._broadcastAllPlayerIcons();
       if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
+      this.annotate?.rebroadcast();
     }
   }
 
@@ -6535,6 +6546,30 @@ export class GMApp {
     });
     // Broadcast initial state so any already-connected players sync up.
     this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
+  }
+
+  /** v2.16.76 — per-map Annotate layer (progress clocks; whiteboard next).
+   *  Clocks broadcast to players + projector; the bypass toggle mutes the
+   *  whole layer (default muted on a fresh load). */
+  private bindAnnotate(): void {
+    const clocksEl = document.getElementById('annotate-clocks');
+    if (!clocksEl) return;
+    this.annotate = new AnnotateController(clocksEl, {
+      broadcastClocks: (clocks) => this.host.broadcast({ type: 'annotate_clocks', clocks }),
+    });
+    // Bypass toggle (checked = shown). Default muted, so init unchecked.
+    const toggle = document.getElementById('annotate-bypass-toggle') as HTMLInputElement | null;
+    const muted0 = isAnnotateMuted();
+    if (toggle) {
+      toggle.checked = !muted0;
+      toggle.addEventListener('change', () => {
+        setAnnotateMuted(!toggle.checked);
+        this.annotate?.setMuted(!toggle.checked);
+      });
+    }
+    this.annotate.setMuted(muted0);
+    // Seed with the active map (if one is already loaded).
+    this.annotate.setMap(this._activeMapId() ?? null);
   }
 
   /** v2.16.47 — replaces bindPlayerVoicePanel. The thread store fires

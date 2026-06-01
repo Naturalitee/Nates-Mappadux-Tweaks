@@ -7,6 +7,7 @@ import { getMarkerAspect } from '../rendering/MarkerLayer.ts';
 import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
 import { PlayerInitiativeRail } from '../player/PlayerInitiativeRail.ts';
+import { ClocksLayer } from '../annotate/ClocksLayer.ts';
 import {
   type ProjectorSetup,
   getActiveSetup,
@@ -116,6 +117,7 @@ export class ProjectorApp {
   private playerMarkerLayer: PlayerMarkerLayer | null = null;
   private pingLayer:         PingLayer         | null = null;
   private initiativeRail:    PlayerInitiativeRail | null = null;
+  private _annotateClocks:   ClocksLayer | null = null;
   private _playerIcons   = new Map<string, string>();
   private _lastPlayerMarkers: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; hasIcon?: boolean; tokenSize?: import('../types.ts').TokenSize }> = [];
   /** Icons currently being requested via `player_icon_request` — debounce so a
@@ -271,6 +273,9 @@ export class ProjectorApp {
     }
     const initEl = document.getElementById('player-initiative');
     if (initEl) this.initiativeRail = new PlayerInitiativeRail(initEl);
+    // v2.16.76 — read-only progress clocks mirrored from the GM.
+    const clocksEl = document.getElementById('annotate-clocks');
+    if (clocksEl) this._annotateClocks = new ClocksLayer(clocksEl, false);
 
     // Post-map-load: render markers + re-apply calibrated view now
     // that the renderer knows the new map's aspect ratio. _applyView
@@ -804,6 +809,11 @@ export class ProjectorApp {
         // v2.17 Player Voice — atmospheric initiative rail. Same face the
         // players see (giant numbers / threat letters stay GM-only).
         this.initiativeRail?.setState(msg.state);
+        break;
+      }
+      case 'annotate_clocks': {
+        // v2.16.76 — mirror the GM's progress clocks (read-only).
+        this._annotateClocks?.setClocks(msg.clocks);
         break;
       }
       // player_features, player_roster, player_marker_move, message_deliver,

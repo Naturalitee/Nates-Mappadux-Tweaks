@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.76 — 2026-06-01
+
+New **Annotate** panel (below Fog, above Soundboard) — slice 1: **progress clocks** (Blades-in-the-Dark style). Add a clock with a name, segment count, and colour (red danger / green racing / etc.) chosen up front; it appears as a draggable segmented dial on the map. Click a wedge to fill/unfill, × to remove. Clocks are per-map (persist on map switch + refresh, saved to localStorage) and shared live to players + projector. A bypass switch on the panel visually mutes all annotations on every view (GM included) without deleting them — default OFF (muted) on a fresh load. Whiteboard slice next.
+
 ## v2.16.75 — 2026-06-01
 
 Player-view tracker slimmed: cards sit on the map with just a faint tint hugging the fan (no heavy wash/blur), content-width, and overflow:visible so the scaled active card no longer triggers a stray scrollbar. Players panel header gains a "# connected/total" badge (total includes offline players) in the right-margin slot where other panels carry their toggle icon.

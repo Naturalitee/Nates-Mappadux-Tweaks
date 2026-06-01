@@ -1283,6 +1283,63 @@ export interface MsgInitiativeRoll {
   value: string;
 }
 
+// ─── Annotate (v2.16.76) — per-map GM annotations: clocks + whiteboard ───────
+
+/** A Blades-in-the-Dark style progress clock: a segmented circle the GM
+ *  fills as a situation advances (red = danger, green = racing, etc.).
+ *  Tied to a map; shared live to players + projector. */
+export interface ProgressClock {
+  id: string;
+  name: string;
+  /** Total wedges. */
+  segments: number;
+  /** Wedges currently filled, 0..segments. */
+  filled: number;
+  /** Hex colour for filled wedges + accents. */
+  color: string;
+  /** HUD position as a fraction (0..1) of the view, so it lands in the
+   *  same relative spot on GM / player / projector regardless of size. */
+  x: number;
+  y: number;
+}
+
+/** One freehand whiteboard stroke. Points are normalised map coordinates
+ *  (0..1) so the drawing pans / zooms with the map on every surface. */
+export interface AnnotateStroke {
+  id: string;
+  color: string;
+  width: number;
+  points: Array<{ x: number; y: number }>;
+}
+
+/** Per-map annotation state. Persisted per mapId (localStorage) and
+ *  broadcast to viewers. */
+export interface AnnotateState {
+  clocks: ProgressClock[];
+  strokes: AnnotateStroke[];
+}
+
+/** GM → viewers: the full clocks list for the active map (small payload,
+ *  sent whole on every change). */
+export interface MsgAnnotateClocks {
+  type: 'annotate_clocks';
+  clocks: ProgressClock[];
+}
+
+/** GM → viewers: append a single whiteboard stroke. Sent one-per-message
+ *  (never the whole board at once) to stay under the DataChannel
+ *  single-frame limit. */
+export interface MsgAnnotateStroke {
+  type: 'annotate_stroke';
+  stroke: AnnotateStroke;
+}
+
+/** GM → viewers: clear the whole whiteboard. Also used as the first step
+ *  of a full resync (clear, then re-send each stroke). */
+export interface MsgAnnotateClear {
+  type: 'annotate_clear';
+}
+
 export type GMMessage =
   | MsgFullState
   | MsgViewUpdate
@@ -1328,7 +1385,10 @@ export type GMMessage =
   | MsgPlayerMarkerMove
   | MsgInitiativeUpdate
   | MsgInitiativeCall
-  | MsgInitiativeRoll;
+  | MsgInitiativeRoll
+  | MsgAnnotateClocks
+  | MsgAnnotateStroke
+  | MsgAnnotateClear;
 
 // ─── Storage types ───────────────────────────────────────────────────────────
 

@@ -7,6 +7,7 @@ import { PlayerMessageToasts } from './PlayerMessageToasts.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
 import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
 import { PlayerInitiativeRail } from './PlayerInitiativeRail.ts';
+import { ClocksLayer } from '../annotate/ClocksLayer.ts';
 import { PlayerInitiativeRollModal } from './PlayerInitiativeRollModal.ts';
 import { showFullPlayerUiInPreview } from '../storage/localSettings.ts';
 import { Viewer } from '../viewers/Viewer.ts';
@@ -223,6 +224,8 @@ export class PlayerApp {
    *  clear on a successful player_icon_update or after 5 s. */
   private _pendingIconRequests = new Map<string, ReturnType<typeof setTimeout>>();
   private initiativeRail: PlayerInitiativeRail | null = null;
+  /** v2.16.76 — read-only progress clocks mirrored from the GM. */
+  private _annotateClocks: ClocksLayer | null = null;
   private _initiativeRollModal = new PlayerInitiativeRollModal();
   /** Roster broadcast by the GM — used to list other players as message targets. */
   private roster: Array<{ id: string; playerName: string; characterName: string; color: string; connected: boolean }> = [];
@@ -296,6 +299,9 @@ export class PlayerApp {
       // (the initiative_update broadcast no longer carries the data URL).
       this.initiativeRail.setIconResolver((pid) => this._playerIcons.get(pid));
     }
+    // v2.16.76 — read-only progress clocks mirrored from the GM.
+    const clocksEl = document.getElementById('annotate-clocks');
+    if (clocksEl) this._annotateClocks = new ClocksLayer(clocksEl, false);
 
     // v2.17 Player Voice — player tokens. Players can drag only their own, and
     // only while the GM allows movable markers.
@@ -1692,6 +1698,12 @@ export class PlayerApp {
         if (!msg.state.visible || msg.state.activeDeck.length === 0) {
           this._initiativeRollModal.cancel();
         }
+        break;
+      }
+
+      case 'annotate_clocks': {
+        // v2.16.76 — mirror the GM's progress clocks (read-only).
+        this._annotateClocks?.setClocks(msg.clocks);
         break;
       }
 

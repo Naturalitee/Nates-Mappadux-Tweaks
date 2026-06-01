@@ -98,6 +98,24 @@ export function setInitiativeSortDirection(dir: 'high-to-low' | 'low-to-high'): 
   catch { /* private mode etc. — no-op */ }
 }
 
+/** v2.16.76 — Annotate mute. When set, clocks + whiteboard are hidden on
+ *  ALL surfaces (GM, player, projector) without deleting the per-map data.
+ *  Default MUTED on a fresh load (Alex 2026-06-01) — the GM reveals
+ *  annotations deliberately. '1' muted, '0' shown; absent = muted. */
+export const ANNOTATE_MUTED_KEY = 'mappadux:annotate_muted';
+
+export function isAnnotateMuted(): boolean {
+  try {
+    const v = localStorage.getItem(ANNOTATE_MUTED_KEY);
+    return v === null ? true : v === '1';
+  } catch { return true; }
+}
+
+export function setAnnotateMuted(muted: boolean): void {
+  try { localStorage.setItem(ANNOTATE_MUTED_KEY, muted ? '1' : '0'); }
+  catch { /* private mode — no-op */ }
+}
+
 /** v2.17 Player Voice — GM toggle for player pings. Enabled by default; the
  *  GM can switch it off if they don't want players highlighting the map.
  *  Stored as '0' when DISABLED (absence = enabled) so the common case needs
