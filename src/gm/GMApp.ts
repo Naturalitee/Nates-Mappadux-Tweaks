@@ -6686,11 +6686,9 @@ export class GMApp {
       icon: 'settings',
       onSelect: () => { void this.openSettings(); },
     });
-    this.hamburger.addItem({
-      label: 'Initiative Tracker',
-      icon: 'swords',
-      onSelect: () => { this.initiativeTracker?.toggle(); },
-    });
+    // v2.16.66 — Initiative Tracker hamburger entry removed. Roll
+    // Initiative (orange button in the Players panel) opens the
+    // tracker; End Combat closes it. No reason to keep a third path.
 
     // v2.14.90 — Spawn a fresh Mappadux instance in a new tab with
     // its own IndexedDB. Useful for splitting the party (two

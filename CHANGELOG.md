@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.66 — 2026-06-01
+
+Initiative Tracker entry dropped from the hamburger menu — orange "Roll Initiative" in the Players panel opens it, End Combat closes it.
+
 ## v2.16.65 — 2026-06-01
 
 Initiative: Sort direction moved to Settings → Player Voice (one-shot, default High → Low); drag-bar grip is now a true drag-to-edge handle (snap-to-closest-edge on release; short clicks still cycle); discarded enemies dragged to bench jump to TOP, discarded players dragged to tray restore there; dragged rail card no longer leaves a ghost copy visible; vertical-rail padding fixed so END ROUND / "!" labels at the bottom edge aren't clipped; slimmer player-view padding in vertical mode.
