@@ -3619,30 +3619,16 @@ export class GMApp {
       // v2.17 Player Voice — a device player introduced themselves. Upsert
       // the persistent record, bind the live connection, refresh + rebroadcast.
       console.info('[gm] player_identify received', { from: _peerId, playerId: msg.playerId, name: msg.characterName || msg.playerName });
-      // v2.16.69 — seed-broadcasts ONLY for genuinely-new players. The
-      // PiP popup re-identifies on every full_state (a defensive PlayerApp
-      // re-send), and each re-identify was triggering a full broadcast
-      // burst (roster + player_features + player_markers + icons +
-      // initiative_update) — the big initiative_update payload was
-      // landing in the PeerJS DataChannel back-to-back with the icon
-      // bundle, filling the buffer and dropping the channel. Loop:
-      // close → reconnect (new clientId) → full_state → re-identify
-      // → burst → close → … visible in the GM log as a stream of
-      // identify_received with fresh clientIds. Now we ONLY re-seed
-      // when the playerId is one we haven't seen before; existing
-      // re-identifies just refresh bindings (already idempotent).
-      const wasKnown = this.playerRegistry.get(msg.playerId) !== undefined;
       void this.playerRegistry.identify(_peerId, msg).then(() => {
         this._refreshPlayersPanel();
-        if (!wasKnown) {
-          this._broadcastRoster();
-          this._broadcastPlayerFeatures();
-          this._refreshPlayerMarkers();
-          this._broadcastAllPlayerIcons();
-          if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: this.initiativeTracker.getState() });
-        }
+        this._broadcastRoster();
+        this._broadcastPlayerFeatures();
+        this._refreshPlayerMarkers(); // let the new joiner see existing tokens
+        this._broadcastAllPlayerIcons(); // seed their per-player icon cache
+        // Initiative tracker — fire current state to the new joiner.
+        if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: this.initiativeTracker.getState() });
         const who = msg.playerName || msg.characterName || 'A player';
-        if (!wasKnown) this.setStatus(`${who} joined`, 'ok');
+        this.setStatus(`${who} joined`, 'ok');
       });
       return;
     }

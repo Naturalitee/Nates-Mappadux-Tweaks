@@ -1,8 +1,8 @@
 # Changelog
 
-## v2.16.69 — 2026-06-01
+## v2.16.70 — 2026-06-01
 
-Initiative: tracker + player rail both `width: max-content` (bound by the buttons + cards, no fixed wide cap); borders removed, padding minimised; button padding cut. Fixes the PiP-reconnect-flap-when-tracker-open: GM no longer fires the full broadcast burst (roster + features + markers + icons + initiative_update) on every re-identify — only on truly NEW player joins; re-identifies from existing peers just refresh bindings.
+Rolled back v2.16.69 (tracker resize used the wrong axis; the PiP reconnect fix did not hold). Tree is back to the v2.16.68 state. Tracker slimming, drag-to-edge follow, and the reconnect loop will be redone individually.
 
 ## v2.16.68 — 2026-06-01
 
