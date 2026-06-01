@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.68 — 2026-06-01
+
+Fixes: tracker drags work again (reverted root-level event swallow, replaced with a target-based shouldStart gate in the GM canvas pan handler — so panning is skipped when the pointerdown lands inside the tracker / panels / modals); GM PiP preview window no longer flaps reconnect every ~10s when GM switches focus to the main window (visibility-driven reconnect now suppressed in gmPreview mode since BroadcastChannel handles the local link).
+
 ## v2.16.67 — 2026-06-01
 
 Initiative tracker swallows pointer/mouse/touch/wheel events at its root so drags inside the tracker (cards, drag-bar, zones) no longer bubble to the GM canvas and pan the map.

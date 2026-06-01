@@ -614,6 +614,14 @@ export class GMApp {
     let mouseDragBase: { scale: number; offsetX: number; offsetY: number; pxPerWorldX: number; pxPerWorldY: number } | null = null;
 
     attachGestures(wrapper, {
+      // v2.16.68 — Don't treat a pointerdown that landed inside the
+      // initiative tracker (or any UI overlay) as the start of a pan.
+      // Lets the GM drag cards / chrome inside the tracker without the
+      // GM canvas grabbing the same gesture and panning the map.
+      shouldStart: (e) => {
+        const target = e.target as HTMLElement | null;
+        return !target?.closest('.init-tracker, .side-panel, .modal-overlay, .modal-dialog, .panel, .hamburger-menu');
+      },
       // Mouse drag = pan the camera. Single-touch drags pass through
       // to the editors (fog draw, marker selection, etc.); we only
       // claim mouse here. The rect chrome's move/resize handles

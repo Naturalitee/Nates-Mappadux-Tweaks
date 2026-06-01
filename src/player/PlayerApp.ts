@@ -386,7 +386,14 @@ export class PlayerApp {
       // silently without firing close, leaving conn.open=true on a dead pipe.
       // A few seconds of "Reconnecting…" on the rare survived-conn case is a
       // small cost vs. needing the user to refresh the tab.
-      if (wasHiddenFor > 10_000 && this.roomCode) {
+      // v2.16.68 — Skip the visibility-driven reconnect in GM-preview
+      // mode. The PiP popup keeps registering as "hidden" whenever the
+      // GM focuses the main window, which was triggering teardown +
+      // PeerJS reconnect every ~10s — visible in the GM log as a
+      // stream of "player_identify received" from a fresh PeerJS
+      // clientId each time. BroadcastChannel still works regardless
+      // of visibility, so the PiP doesn't need this defensive reconnect.
+      if (wasHiddenFor > 10_000 && this.roomCode && !this._gmPreviewFlag) {
         this.setStatus('Reconnecting…');
         this.guest?.connect(this.roomCode);
       }

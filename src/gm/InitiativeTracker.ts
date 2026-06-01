@@ -58,15 +58,11 @@ export class InitiativeTracker {
     this.state = ensureMarkerIfActive(initial);
     this.cb = cb;
     this._render();
-    // v2.16.67 — swallow pointer events at the tracker root so drags
-    // anywhere inside (cards, drag-bar, zones) don't bubble down to the
-    // GM canvas which would otherwise interpret the mousedown as a pan.
-    // Stops at this element; never let it pass to the canvas behind.
-    const stop = (e: Event) => e.stopPropagation();
-    this.root.addEventListener('pointerdown', stop);
-    this.root.addEventListener('mousedown',   stop);
-    this.root.addEventListener('touchstart',  stop, { passive: true });
-    this.root.addEventListener('wheel',       stop, { passive: true });
+    // v2.16.68 — REVERTED v2.16.67's root-level stopPropagation. It was
+    // breaking HTML5 drag-and-drop on cards because the native drag
+    // initiation path depends on mousedown propagating up. The pan-
+    // suppression now lives in the GM canvas's pan handler (which
+    // checks if the event target lives inside any UI overlay).
   }
 
   /** Replace state wholesale (e.g. after a localStorage reload). */
