@@ -7266,19 +7266,63 @@ option.select-option--add {
   z-index: calc(var(--stack-size, 1) - var(--stack-pos, 0));
   transition: transform 200ms ease, box-shadow 200ms ease, opacity 200ms ease;
 }
-/* Splay the bench stack on hover so the GM can grab a deeper card if
-   they need a specific letter. Top card stays put; deeper cards fan
-   down-right. Lift z on hover so the splayed cards float over the
-   adjacent zone instead of getting clipped by it. */
-.init-stack--bench:hover { z-index: 50; }
-.init-stack--bench:hover .init-card--staging {
-  transform: translate(calc(var(--stack-pos, 0) * 18px), calc(var(--stack-pos, 0) * 10px));
-}
+/* v2.16.59 — bench is now a STATIC deck (top card only + thin spines
+   behind suggesting depth + "+N" count badge). No splay-on-hover; the
+   GM works the top of the stack and B becomes top when A is taken. */
 .init-stack--bench.is-drop-target,
 .init-stack--discard.is-drop-target {
   outline: 2px dashed var(--accent);
   outline-offset: 4px;
   border-radius: 10px;
+}
+
+/* Decorative card-edge spines behind the top of the bench stack. Pure
+   visual depth — non-interactive, no card details, just a hint that
+   there's more underneath. */
+.init-stack-spine {
+  position: absolute;
+  top: calc(var(--depth, 1) * 3px);
+  left: calc(var(--depth, 1) * 3px);
+  width: 76px;
+  height: 100px;
+  background: linear-gradient(155deg, #4a1414 0%, #1a0606 100%);
+  border: 1px solid #7f1d1d;
+  border-radius: 8px;
+  z-index: calc(5 - var(--depth, 1));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* Small "+N more" badge on the bench stack so the GM sees deck depth
+   without splaying. Yellow on charcoal-red for at-a-glance read. */
+.init-stack-count {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fbbf24;
+  border: 2px solid #1a0606;
+  border-radius: 11px;
+  font-size: 0.65rem;
+  font-weight: 900;
+  color: #1a1006;
+  z-index: 200;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+/* v2.16.59 — Player-view enemy cards keep the charcoal palette
+   regardless of the GM-side red. Player view stays atmospheric, not
+   aggressive — the duck silhouette is the threat cue. */
+.player-init .init-card--enemy {
+  --init-color: #1f2937;
+  --init-color-fg: #fff;
+  background: linear-gradient(155deg, #1f2937 0%, #0a0d14 100%);
+  border-color: #334155;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
 /* Unallocated row — full cards in a single rank, gap between. */
@@ -7429,18 +7473,40 @@ option.select-option--add {
   background: linear-gradient(135deg, color-mix(in srgb, var(--init-color), black 60%) 0%, color-mix(in srgb, var(--init-color), black 80%) 100%);
   border-color: var(--init-color);
 }
+/* v2.16.59 — GM threats wear evil red. Player-view enemies override
+   --init-color back to charcoal in .player-init below so the player
+   side stays atmospheric, not aggressive. */
 .init-card--enemy {
-  background: linear-gradient(135deg, #1f2937 0%, #0f172a 100%);
-  border-color: #475569;
+  --init-color: #b91c1c;
+  --init-color-fg: #fff;
+  background: linear-gradient(155deg, #7f1d1d 0%, #1a0606 100%);
+  border-color: #ef4444;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5), 0 0 12px rgba(220, 38, 38, 0.25);
 }
+/* Round marker — black body, yellow edge accent, "END ROUND" upright
+   along the bottom tab. Sized like a normal card so the bottom tab fits
+   the text comfortably. */
 .init-card--round-marker {
-  width: 50px;
-  background: var(--bg-input);
-  border-color: var(--init-color);
-  border-style: dashed;
+  --init-color: #fbbf24;
+  background: #000;
+  border: 2px solid #fbbf24;
   cursor: default;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5), 0 0 14px rgba(251, 191, 36, 0.3);
 }
-.init-rail.is-vertical .init-card--round-marker { width: 76px; height: 50px; }
+/* The bottom tab of the round-marker is ALWAYS shown (even in
+   horizontal-rail mode where bottom tabs are normally hidden) because
+   that's where the "END ROUND" label lives. */
+.init-card--round-marker .init-card-tab { display: none; }
+.init-card--round-marker .init-card-tab--bottom { display: flex; background: #fbbf24; border-top: 1px solid #fde68a; }
+.init-card--round-marker .init-card-tab--bottom .init-card-tab-text {
+  writing-mode: horizontal-tb;
+  transform: none;
+  color: #1a1006;
+  font-size: 0.72rem;
+  font-weight: 900;
+  letter-spacing: 0.12em;
+  text-shadow: none;
+}
 
 /* v2.16.53 — bidirectional name tabs. A card in a fanned deck only exposes
    ONE edge of its body to the eye (the previous card sits on top, hiding
@@ -7493,6 +7559,18 @@ option.select-option--add {
   overflow: hidden;
   text-overflow: clip;
   letter-spacing: 0.04em;
+}
+/* v2.16.59 — enemy edge labels (A-Z) and player-view enemy "!" read
+   UPRIGHT in the narrow side tab rather than vertically rotated. A
+   single character fits easily and reads at-a-glance. */
+.init-card--enemy .init-card-tab--left .init-card-tab-text,
+.init-card--enemy .init-card-tab--right .init-card-tab-text {
+  writing-mode: horizontal-tb;
+  transform: none;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  max-height: none;
 }
 /* Vertical strips read along the strip; rotation depends on side so each
    reads outward (left strip reads bottom-up, right strip reads top-down). */
@@ -7565,12 +7643,13 @@ option.select-option--add {
   box-shadow: 0 3px 8px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(0, 0, 0, 0.2);
   user-select: none;
 }
-/* Dark duck silhouette on player-view enemy cards. */
+/* Dark duck silhouette on player-view enemy cards. v2.16.59 — close-up
+   fills the body, brighter (was nearly invisible at opacity 0.35). */
 .init-card-duck {
-  width: 60%;
-  max-width: 48px;
-  height: auto;
-  filter: brightness(0) opacity(0.35);
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: brightness(0.35) contrast(1.1);
   pointer-events: none;
   user-select: none;
 }

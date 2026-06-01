@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.59 — 2026-06-01
+
+Initiative polish: static bench (top + spine depth + "+N"), A-Z, threats red, END ROUND black/yellow on bottom edge, enemy edges upright, big close-up duck on player view, manual-mode type-to-inject sorts correctly, Reroll Initiative when END ROUND tops.
+
 ## v2.16.58 — 2026-06-01
 
 ### Initiative — GM zone redesign (REALLY leaning into cards)

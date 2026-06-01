@@ -47,20 +47,23 @@ export class PlayerInitiativeRail {
     el.style.zIndex = String(100 - index);
 
     if (card.type === 'round-marker') {
-      el.style.setProperty('--init-color', card.color);
-      const body = document.createElement('div');
-      body.className = 'init-card-body init-card-body--marker';
-      body.textContent = 'ROUND END';
-      el.appendChild(body);
+      // v2.16.59 — END ROUND along the always-visible bottom edge; black
+      // body + yellow accent driven by CSS so player and GM views match.
+      const tab = document.createElement('div');
+      tab.className = 'init-card-tab init-card-tab--bottom init-card-tab--round-end';
+      const t = document.createElement('span');
+      t.className = 'init-card-tab-text';
+      t.textContent = 'END ROUND';
+      tab.appendChild(t);
+      el.appendChild(tab);
       return el;
     }
 
     if (card.type === 'enemy') {
-      // Information blackout: uniform charcoal tabs on every edge with "!",
-      // body shows a dark Mappadux duck silhouette — atmospheric, on-brand,
-      // and dryly funny. Replaces the spec's "???" edge label and "abstract
-      // backdrop" asset slot (we already have the gfx — 2026-05-31).
-      el.style.setProperty('--init-color', '#1f2937');
+      // Information blackout: charcoal palette driven by CSS, edge tabs
+      // say "!" (upright on the player view too), body fills with a
+      // dark Mappadux duck close-up. v2.16.59 — let CSS own the palette
+      // so the GM-side red doesn't bleed across to the player view.
       _appendEdgeTabs(el, '!');
       const body = document.createElement('div');
       body.className = 'init-card-body init-card-body--enemy';

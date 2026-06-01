@@ -11,12 +11,15 @@ const STORAGE_KEY = 'mappadux:initiative_state';
 /** Stable id for the ROUND END separator. */
 export const ROUND_MARKER_ID = 'round-end-marker';
 
-/** Default colour palette for the GM Threat Bench letters (charcoal so it stays
- *  in the reserved range; players see "???" / "Opposition" anyway). */
-export const THREAT_COLOR = '#1f2937';
+/** v2.16.59 — GM threat cards now read as evil-red so the GM clocks them
+ *  instantly against the cooler player tints. (Player view enemies still
+ *  paint charcoal via PlayerInitiativeRail's own hardcode — only the GM
+ *  side gets the red.) */
+export const THREAT_COLOR = '#b91c1c';
 
-/** Neutral tone for the ROUND END card. */
-export const ROUND_MARKER_COLOR = '#475569';
+/** v2.16.59 — Yellow for the ROUND END card so its edge matches the
+ *  yellow body text. Background gets a black override in CSS. */
+export const ROUND_MARKER_COLOR = '#fbbf24';
 
 /** Make a fresh ROUND END separator card. */
 export function makeRoundMarker(): InitiativeCard {
@@ -49,7 +52,10 @@ export function defaultInitiativeState(): InitiativeState {
   return {
     activeDeck:  [],
     unallocated: [],
-    threatBench: ['A', 'B', 'C', 'D', 'E', 'F'].map(makeThreatCard),
+    // v2.16.59 — full A-Z reserve (was A-F). The GM works through the
+     // top of the stack; deeper letters wait their turn. After Z the
+     // bench is empty.
+    threatBench: 'ABCDEFGHIJKLMNOPQRSTUVWXYZ'.split('').map(makeThreatCard),
     discarded:   [],
     sortMode: 'high-to-low',
     // v2.16.56 — default to TOP since the top of the player & GM views are
@@ -82,7 +88,13 @@ export function loadInitiativeState(): InitiativeState {
   } catch { return defaultInitiativeState(); }
 }
 
-/** Sort the active deck per sort mode, keeping the ROUND END marker last. */
+/** Sort the active deck per sort mode, keeping the ROUND END marker last.
+ *  v2.16.59 — TIE-BREAK BY ARRIVAL ORDER. When two cards have equal
+ *  values the comparator returns 0 and the ES2019+ stable-sort guarantee
+ *  preserves their input order. addCardToDeck appends new cards to the
+ *  END of [...activeDeck, newCard] so a later submitter lands BEHIND an
+ *  earlier one on a tie — "if the player is slow, their problem" (Alex
+ *  2026-06-01). DO NOT add a fallback tie-break here. */
 export function sortActiveDeck(deck: InitiativeCard[], mode: InitiativeSortMode): InitiativeCard[] {
   if (mode === 'manual') return deck;
   const roundMarker = deck.find((c) => c.type === 'round-marker');
@@ -97,7 +109,10 @@ export function sortActiveDeck(deck: InitiativeCard[], mode: InitiativeSortMode)
     // line up where the GM expects.
     if (aIsNum) return -1;
     if (bIsNum) return 1;
-    return mode === 'high-to-low' ? b.value.localeCompare(a.value) : a.value.localeCompare(b.value);
+    // v2.16.59 — non-numeric values (FAST / SLOW / ACE / etc) sort
+    // ALPHABETICALLY A→Z regardless of numeric sort direction. Same-string
+    // ties resolve by arrival order via stable sort (Alex 2026-06-01).
+    return a.value.localeCompare(b.value, undefined, { sensitivity: 'base' });
   });
   return roundMarker ? [...rest, roundMarker] : rest;
 }
@@ -201,6 +216,35 @@ export function endCombat(state: InitiativeState): InitiativeState {
   };
 }
 
+/** v2.16.59 — When END ROUND reaches the front of the deck the GM gets
+ *  two choices: Start Next Round (keep initiative order, reset spent
+ *  flags — same as advanceTurn would do on a round-marker head) and
+ *  Reroll Initiative (some systems re-roll every round). This is the
+ *  reroll path: every active player card goes back to the tray with
+ *  value cleared, every active enemy is returned to the bench, deck
+ *  starts fresh, discarded is preserved. Round marker re-seeded by the
+ *  next addCardToDeck. Caller is responsible for broadcasting the
+ *  initiative_call to player views. */
+export function rerollInitiative(state: InitiativeState): InitiativeState {
+  // Active players → tray (value cleared, spent cleared).
+  const playerCards = state.activeDeck
+    .filter((c) => c.type === 'player')
+    .map((c) => ({ ...c, value: '', isSpent: false }));
+  // Active enemies → bench (value cleared). Letters stay so the GM
+  // recognises which monsters are returning.
+  const enemyCards = state.activeDeck
+    .filter((c) => c.type === 'enemy')
+    .map((c) => ({ ...c, value: '', isSpent: false }));
+  return {
+    ...state,
+    activeDeck:  [],
+    unallocated: [...state.unallocated.map((c) => ({ ...c, value: '', isSpent: false })), ...playerCards],
+    // Returned enemies go to the FRONT of the bench so they're the next
+    // letters available (the deeper unused letters wait their turn).
+    threatBench: [...enemyCards, ...state.threatBench],
+  };
+}
+
 /** v2.16.58 — Drop a card from ANY pile (active deck, bench, tray) into the
  *  discard pile. Cards in the discard pile are out of THIS combat; they
  *  won't return to bench / tray automatically. End Combat clears the
@@ -225,11 +269,77 @@ export function discardCard(state: InitiativeState, cardId: string): InitiativeS
 /** v2.16.58 — Inject a card from the bench/tray into the active deck AND
  *  immediately patch its value in one mutation so the card lands at the
  *  correct sort position. Used by the type-to-inject flow on bench/tray
- *  cards. If value is empty it's a plain inject (current behaviour). */
+ *  cards. If value is empty it's a plain inject (current behaviour).
+ *
+ *  v2.16.59 — In MANUAL sort mode the previous compose-then-patch
+ *  approach left the new card at the back (manual sort doesn't auto-
+ *  resort). Now we insert the staged card directly at its value-sorted
+ *  position regardless of mode — descending by default in manual; the
+ *  rest of the manually-positioned cards stay where the GM put them. */
 export function injectFromStagingWithValue(state: InitiativeState, cardId: string, value: string): InitiativeState {
-  const after = injectFromStaging(state, cardId);
-  if (!value.trim()) return after;
-  return patchCardValue(after, cardId, value.trim());
+  // Find + extract the card from whichever staging pile holds it.
+  const benchIdx = state.threatBench.findIndex((c) => c.id === cardId);
+  const trayIdx  = state.unallocated.findIndex((c) => c.id === cardId);
+  let card: InitiativeCard | undefined;
+  let threatBench = state.threatBench;
+  let unallocated = state.unallocated;
+  if (benchIdx !== -1) {
+    card = { ...state.threatBench[benchIdx]!, value: value.trim() };
+    threatBench = state.threatBench.filter((_, i) => i !== benchIdx);
+  } else if (trayIdx !== -1) {
+    card = { ...state.unallocated[trayIdx]!, value: value.trim() };
+    unallocated = state.unallocated.filter((_, i) => i !== trayIdx);
+  } else {
+    return state;
+  }
+
+  let activeDeck: InitiativeCard[];
+  if (state.sortMode === 'manual') {
+    // Manual mode: insert by value, preserve other cards' positions.
+    activeDeck = _insertByValue(state.activeDeck, card, 'high-to-low');
+  } else {
+    // Numeric mode: full sort.
+    activeDeck = sortActiveDeck([...state.activeDeck, card], state.sortMode);
+  }
+  activeDeck = ensureRoundMarker(activeDeck);
+  return { ...state, threatBench, unallocated, activeDeck };
+}
+
+/** Insert a card into the active deck by VALUE without disturbing the
+ *  order of the other cards. Used when type-to-injecting in manual mode
+ *  so the new card slots into the right place but everyone else's
+ *  GM-curated position stays put. */
+function _insertByValue(deck: InitiativeCard[], card: InitiativeCard, dir: 'high-to-low' | 'low-to-high'): InitiativeCard[] {
+  const cardN = parseFloat(card.value);
+  const cardIsNum = !isNaN(cardN) && card.value.trim() !== '';
+  if (!cardIsNum) {
+    // Non-numeric: alphabetical A→Z slot, sitting AFTER all numeric
+    // cards and AFTER any earlier-letter non-numeric cards. Same-string
+    // ties land at the END of the equal-string run (arrival-order tie-
+    // break per the sortActiveDeck contract).
+    let i = 0;
+    while (i < deck.length) {
+      const d = deck[i]!;
+      if (d.type === 'round-marker') break;
+      const dN = parseFloat(d.value);
+      const dIsNum = !isNaN(dN) && d.value.trim() !== '';
+      if (dIsNum) { i++; continue; }   // numerics always ahead of strings
+      if (d.value.localeCompare(card.value, undefined, { sensitivity: 'base' }) > 0) break;
+      i++;
+    }
+    return [...deck.slice(0, i), card, ...deck.slice(i)];
+  }
+  let i = 0;
+  while (i < deck.length) {
+    const d = deck[i]!;
+    if (d.type === 'round-marker') break;
+    const dN = parseFloat(d.value);
+    const dIsNum = !isNaN(dN) && d.value.trim() !== '';
+    if (!dIsNum) break;            // non-numeric existing card: insert before it
+    if (dir === 'high-to-low' ? dN < cardN : dN > cardN) break;
+    i++;
+  }
+  return [...deck.slice(0, i), card, ...deck.slice(i)];
 }
 
 /** Manual drag-reorder of a card within the active deck (sort mode → manual). */

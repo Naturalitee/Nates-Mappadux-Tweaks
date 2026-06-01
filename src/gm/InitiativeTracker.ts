@@ -10,6 +10,7 @@ import {
   injectFromStagingWithValue,
   discardCard,
   endCombat,
+  rerollInitiative,
   reorderCard,
   jumpToFront,
   makeRoundMarker,
@@ -181,7 +182,17 @@ export class InitiativeTracker {
     ctl.className = 'init-controls';
 
     const call = mkBtn('Call for Initiative', 'init-btn init-btn--primary', () => this.cb.onCallForInitiative());
-    const advance = mkBtn('Advance ▶', 'init-btn', () => this._advance());
+    // v2.16.59 — when the END ROUND card lands at the front of the deck
+    // the GM gets two choices (rather than one auto-advance): keep the
+    // initiative order for the next round, or reroll. Most systems do
+    // the former; some (Daggerheart-style) reroll every round.
+    const headIsRoundEnd = this.state.activeDeck[0]?.type === 'round-marker';
+    const advance = headIsRoundEnd
+      ? mkBtn('Start Next Round ▶', 'init-btn init-btn--primary', () => this._advance())
+      : mkBtn('Advance ▶', 'init-btn', () => this._advance());
+    const reroll = headIsRoundEnd
+      ? mkBtn('Reroll Initiative', 'init-btn', () => this._rerollInitiative())
+      : null;
 
     const sort = document.createElement('select');
     sort.className = 'init-sort';
@@ -220,8 +231,18 @@ export class InitiativeTracker {
     const close = mkBtn('×', 'init-close', () => this.close());
     close.title = 'Hide tracker (state is kept)';
 
-    ctl.append(call, advance, sort, edge, end, close);
+    if (reroll) ctl.append(call, advance, reroll, sort, edge, end, close);
+    else        ctl.append(call, advance,         sort, edge, end, close);
     return ctl;
+  }
+
+  /** v2.16.59 — reset everyone's roll value + re-prompt the players. */
+  private _rerollInitiative(): void {
+    this._mutate(rerollInitiative);
+    // Reuse the existing Call for Initiative wiring — it broadcasts the
+    // prompt to player views AND re-seeds any missing players into the
+    // unallocated tray.
+    this.cb.onCallForInitiative();
   }
 
   private _renderBench(): HTMLElement {
@@ -236,14 +257,27 @@ export class InitiativeTracker {
     if (this.state.threatBench.length === 0) {
       stack.appendChild(this._emptyHint('Bench empty.'));
     } else {
-      // Top of the stack is the LAST card in the array so we render in
-      // reverse — later DOM children sit on top by document order, but
-      // we also cascade via CSS variable --stack-pos for the offset.
+      // v2.16.59 — static deck. Only the TOP card (A by default) is
+      // rendered; deeper letters are represented by 2–4 thin "card
+      // edge" spines so the GM sees the deck has depth without any
+      // splay or animation. When A is taken (drag-to-rail, type-to-
+      // inject, or drag-to-discard) B becomes the new top.
       const total = this.state.threatBench.length;
-      for (let i = 0; i < total; i++) {
-        const card = this.state.threatBench[i]!;
-        const isTop = i === 0;
-        stack.appendChild(this._renderStagingCard(card, 'bench', { isTop, stackPos: i, stackSize: total }));
+      const top = this.state.threatBench[0]!;
+      const depth = Math.min(4, total - 1);
+      for (let i = depth; i >= 1; i--) {
+        const spine = document.createElement('div');
+        spine.className = 'init-stack-spine';
+        spine.style.setProperty('--depth', String(i));
+        stack.appendChild(spine);
+      }
+      stack.appendChild(this._renderStagingCard(top, 'bench', { isTop: true, stackPos: 0, stackSize: total }));
+      if (total > 1) {
+        const count = document.createElement('span');
+        count.className = 'init-stack-count';
+        count.textContent = `+${total - 1}`;
+        count.title = `${total - 1} more letters waiting in the bench (next is ${this.state.threatBench[1]!.threatLetter ?? '?'}).`;
+        stack.appendChild(count);
       }
     }
     zone.appendChild(stack);
@@ -325,8 +359,12 @@ export class InitiativeTracker {
     const el = document.createElement('div');
     el.className = `init-card init-card--${card.type} init-card--staging init-card--${pile}`;
     if (pile === 'discard') el.classList.add('is-discarded');
-    el.style.setProperty('--init-color', card.color);
-    el.style.setProperty('--init-color-fg', _isLightColor(card.color) ? '#0b0d12' : '#ffffff');
+    // v2.16.59 — only player cards inherit their identity colour inline;
+    // enemy cards take the red CSS palette, round-marker the yellow.
+    if (card.type === 'player') {
+      el.style.setProperty('--init-color', card.color);
+      el.style.setProperty('--init-color-fg', _isLightColor(card.color) ? '#0b0d12' : '#ffffff');
+    }
     // Stack-position CSS variable lets the layout cascade staged cards.
     el.style.setProperty('--stack-pos', String(opts.stackPos));
     el.style.setProperty('--stack-size', String(opts.stackSize));
@@ -357,14 +395,15 @@ export class InitiativeTracker {
       el.appendChild(tab);
     }
 
-    // Body — big letter for enemies, portrait/initial for players. Same
-    // rules as the rail.
+    // Body — big VALUE for enemies AND players on the GM side (the
+    // letter lives on the edge label, like the player's name lives on
+    // theirs). Portrait/initial for players when no value yet.
     const body = document.createElement('div');
     body.className = 'init-card-body';
     if (card.type === 'enemy') {
       const big = document.createElement('div');
       big.className = 'init-card-big';
-      big.textContent = card.threatLetter ?? '?';
+      big.textContent = card.value || '—';
       body.appendChild(big);
     } else if (card.markerUrl) {
       const img = document.createElement('img');
@@ -460,10 +499,13 @@ export class InitiativeTracker {
     el.className = 'init-card init-card--' + card.type
       + (index === 0 ? ' is-active' : '')
       + (card.isSpent ? ' is-spent' : '');
-    el.style.setProperty('--init-color', card.color);
-    // v2.16.56 — auto-pick a contrasting fg colour so the edge labels stay
-    // legible on light identity tints (yellow / mint / light blue).
-    el.style.setProperty('--init-color-fg', _isLightColor(card.color) ? '#0b0d12' : '#ffffff');
+    // v2.16.59 — for enemy and round-marker the palette is owned by CSS
+    // (red for threats, yellow on black for END ROUND) so inline
+    // --init-color would override the global rule.
+    if (card.type === 'player') {
+      el.style.setProperty('--init-color', card.color);
+      el.style.setProperty('--init-color-fg', _isLightColor(card.color) ? '#0b0d12' : '#ffffff');
+    }
     el.style.zIndex = String(100 - index);
     el.draggable = card.type !== 'round-marker';
     el.dataset['cardId'] = card.id;
@@ -506,10 +548,16 @@ export class InitiativeTracker {
     });
 
     if (card.type === 'round-marker') {
-      const body = document.createElement('div');
-      body.className = 'init-card-body init-card-body--marker';
-      body.textContent = 'ROUND END';
-      el.appendChild(body);
+      // v2.16.59 — "END ROUND" runs along the always-visible BOTTOM
+      // edge so the GM reads it upright at a glance. Card body stays
+      // black with the yellow accent driven by CSS.
+      const tab = document.createElement('div');
+      tab.className = 'init-card-tab init-card-tab--bottom init-card-tab--round-end';
+      const t = document.createElement('span');
+      t.className = 'init-card-tab-text';
+      t.textContent = 'END ROUND';
+      tab.appendChild(t);
+      el.appendChild(tab);
       return el;
     }
 
