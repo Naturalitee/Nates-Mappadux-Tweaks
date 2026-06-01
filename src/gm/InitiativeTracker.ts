@@ -587,13 +587,16 @@ export class InitiativeTracker {
       el.appendChild(tab);
     }
 
-    // Main body — GM-facing mechanical face: giant value (player) or threat letter (enemy)
+    // Main body — GM-facing mechanical face: giant VALUE on both enemy
+    // and player cards (the letter / name lives on the edge label).
+    // v2.16.62 — was previously showing the threat letter in the body
+    // too; that duplicated the edge label and hid the GM's typed roll.
     const body = document.createElement('div');
     body.className = 'init-card-body';
     if (card.type === 'enemy') {
       const big = document.createElement('div');
       big.className = 'init-card-big';
-      big.textContent = card.threatLetter ?? '?';
+      big.textContent = card.value || '—';
       body.appendChild(big);
     } else {
       const big = document.createElement('div');

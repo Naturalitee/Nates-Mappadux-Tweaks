@@ -7485,7 +7485,8 @@ option.select-option--add {
 }
 /* Round marker — black body, yellow edge accent, "END ROUND" upright
    along the bottom tab. Sized like a normal card so the bottom tab fits
-   the text comfortably. */
+   the text comfortably. v2.16.62 — also cancels the fan's inward pull
+   from the previous card so the full bottom edge is visible. */
 .init-card--round-marker {
   --init-color: #fbbf24;
   background: #000;
@@ -7493,6 +7494,12 @@ option.select-option--add {
   cursor: default;
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5), 0 0 14px rgba(251, 191, 36, 0.3);
 }
+/* Offset the negative margin the previous card applies so the round
+   marker sits cleanly at the rear of the fan with its bottom "END
+   ROUND" tab fully visible — still part of the same row, just no
+   longer slipped under the prior card. */
+.init-rail.is-horizontal .init-card--round-marker { margin-left: 42px; }
+.init-rail.is-vertical   .init-card--round-marker { margin-top:  60px; }
 /* The bottom tab of the round-marker is ALWAYS shown (even in
    horizontal-rail mode where bottom tabs are normally hidden) because
    that's where the "END ROUND" label lives. */
@@ -7739,14 +7746,21 @@ option.select-option--add {
 .player-init .init-card.is-active {
   box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6), 0 0 18px color-mix(in srgb, var(--init-color), transparent 35%);
 }
+/* v2.16.62 — player-view round marker matches the standard card size
+   in both rail orientations so the "END ROUND" bottom-edge text has
+   room to read. Was previously squashed narrower than other cards. */
 .player-init .init-card--round-marker {
-  width:  clamp(38px, 5vmin, 70px);
+  width:  clamp(60px,  8vmin, 104px);
   height: clamp(82px, 11vmin, 140px);
 }
 .player-init .init-rail.is-vertical .init-card--round-marker {
   width:  clamp(60px,  8vmin, 104px);
-  height: clamp(38px, 5vmin, 70px);
+  height: clamp(82px, 11vmin, 140px);
 }
+/* And cancel the inward pull from the previous card on the player
+   view too. Proportional units so it scales with the card size. */
+.player-init .init-rail.is-horizontal .init-card--round-marker { margin-left: clamp(32px, 4.5vmin, 56px); }
+.player-init .init-rail.is-vertical   .init-card--round-marker { margin-top:  clamp(48px, 6vmin,  78px); }
 /* Negative margin scales with card size so overlap stays consistent.
    ~half the card dimension into the next. */
 .player-init .init-rail.is-horizontal .init-card { margin-right:  clamp(-52px, -4vmin, -28px); }
