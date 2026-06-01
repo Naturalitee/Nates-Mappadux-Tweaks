@@ -6553,10 +6553,27 @@ export class GMApp {
    *  whole layer (default muted on a fresh load). */
   private bindAnnotate(): void {
     const clocksEl = document.getElementById('annotate-clocks');
-    if (!clocksEl) return;
-    this.annotate = new AnnotateController(clocksEl, {
-      broadcastClocks: (clocks) => this.host.broadcast({ type: 'annotate_clocks', clocks }),
-    });
+    const boardEl = document.getElementById('annotate-whiteboard') as HTMLCanvasElement | null;
+    if (!clocksEl || !boardEl) return;
+    boardEl.hidden = false; // always present; pointer-events gate draw mode
+    this.annotate = new AnnotateController(
+      {
+        clocksRoot: clocksEl,
+        whiteboardCanvas: boardEl,
+        project:   (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        unproject: (cx, cy) => {
+          const wrap = document.getElementById('canvas-wrapper');
+          if (!wrap) return null;
+          const r = wrap.getBoundingClientRect();
+          return this.renderer.canvasCssToMapNorm(cx - r.left, cy - r.top);
+        },
+      },
+      {
+        broadcastClocks: (clocks) => this.host.broadcast({ type: 'annotate_clocks', clocks }),
+        broadcastStroke: (stroke) => this.host.broadcast({ type: 'annotate_stroke', stroke }),
+        broadcastClear:  () => this.host.broadcast({ type: 'annotate_clear' }),
+      },
+    );
     // Bypass toggle (checked = shown). Default muted, so init unchecked.
     const toggle = document.getElementById('annotate-bypass-toggle') as HTMLInputElement | null;
     const muted0 = isAnnotateMuted();

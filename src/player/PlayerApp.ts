@@ -8,6 +8,7 @@ import { PingLayer } from '../rendering/PingLayer.ts';
 import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
 import { PlayerInitiativeRail } from './PlayerInitiativeRail.ts';
 import { ClocksLayer } from '../annotate/ClocksLayer.ts';
+import { WhiteboardLayer } from '../annotate/WhiteboardLayer.ts';
 import { PlayerInitiativeRollModal } from './PlayerInitiativeRollModal.ts';
 import { showFullPlayerUiInPreview } from '../storage/localSettings.ts';
 import { Viewer } from '../viewers/Viewer.ts';
@@ -226,6 +227,8 @@ export class PlayerApp {
   private initiativeRail: PlayerInitiativeRail | null = null;
   /** v2.16.76 — read-only progress clocks mirrored from the GM. */
   private _annotateClocks: ClocksLayer | null = null;
+  /** v2.16.77 — read-only whiteboard mirrored from the GM. */
+  private _annotateBoard: WhiteboardLayer | null = null;
   private _initiativeRollModal = new PlayerInitiativeRollModal();
   /** Roster broadcast by the GM — used to list other players as message targets. */
   private roster: Array<{ id: string; playerName: string; characterName: string; color: string; connected: boolean }> = [];
@@ -302,6 +305,9 @@ export class PlayerApp {
     // v2.16.76 — read-only progress clocks mirrored from the GM.
     const clocksEl = document.getElementById('annotate-clocks');
     if (clocksEl) this._annotateClocks = new ClocksLayer(clocksEl, false);
+    // v2.16.77 — read-only whiteboard mirrored from the GM.
+    const boardEl = document.getElementById('annotate-whiteboard') as HTMLCanvasElement | null;
+    if (boardEl) this._annotateBoard = new WhiteboardLayer(boardEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));
 
     // v2.17 Player Voice — player tokens. Players can drag only their own, and
     // only while the GM allows movable markers.
@@ -1704,6 +1710,15 @@ export class PlayerApp {
       case 'annotate_clocks': {
         // v2.16.76 — mirror the GM's progress clocks (read-only).
         this._annotateClocks?.setClocks(msg.clocks);
+        break;
+      }
+      case 'annotate_stroke': {
+        // v2.16.77 — append a whiteboard stroke from the GM.
+        this._annotateBoard?.addStroke(msg.stroke);
+        break;
+      }
+      case 'annotate_clear': {
+        this._annotateBoard?.clear();
         break;
       }
 

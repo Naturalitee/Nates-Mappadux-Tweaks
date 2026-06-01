@@ -7184,6 +7184,18 @@ option.select-option--add {
    Annotate (v2.16.76) — progress clocks HUD + whiteboard + panel form
    ════════════════════════════════════════════════════════════════════════ */
 
+/* Whiteboard canvas overlays the map exactly. pointer-events:none by
+   default so the map gets pan/zoom; the GM's draw toggle flips it to auto. */
+.annotate-whiteboard {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 7;
+  pointer-events: none;
+  touch-action: none;
+}
+
 /* Clocks float over the map as a draggable HUD. The container is
    non-interactive (clicks pass to the map); individual clocks opt back in. */
 .annotate-clocks {
@@ -7280,6 +7292,7 @@ option.select-option--add {
 }
 .annotate-swatch.is-selected { border-color: #fff; box-shadow: 0 0 6px rgba(255, 255, 255, 0.5); }
 .annotate-wb-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#annotate-draw-toggle.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
 
 /* ════════════════════════════════════════════════════════════════════════
    Initiative tracker (v2.16.8) — fanned deck, edge-pinnable both axes

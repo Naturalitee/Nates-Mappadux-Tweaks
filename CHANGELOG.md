@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.77 — 2026-06-01
+
+Annotate slice 2: **whiteboard**. Toggle Draw, pick a pen colour, and draw freehand on the map; Clear wipes it. Strokes are stored in map-normalised coords so they pan/zoom with the map, are per-map (persist + saved), and mirror live to players + projector (sent one stroke per message to stay frame-safe). Covered by the same Annotate bypass mute.
+
 ## v2.16.76 — 2026-06-01
 
 New **Annotate** panel (below Fog, above Soundboard) — slice 1: **progress clocks** (Blades-in-the-Dark style). Add a clock with a name, segment count, and colour (red danger / green racing / etc.) chosen up front; it appears as a draggable segmented dial on the map. Click a wedge to fill/unfill, × to remove. Clocks are per-map (persist on map switch + refresh, saved to localStorage) and shared live to players + projector. A bypass switch on the panel visually mutes all annotations on every view (GM included) without deleting them — default OFF (muted) on a fresh load. Whiteboard slice next.

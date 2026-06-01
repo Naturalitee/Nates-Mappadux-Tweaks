@@ -8,6 +8,7 @@ import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
 import { PlayerInitiativeRail } from '../player/PlayerInitiativeRail.ts';
 import { ClocksLayer } from '../annotate/ClocksLayer.ts';
+import { WhiteboardLayer } from '../annotate/WhiteboardLayer.ts';
 import {
   type ProjectorSetup,
   getActiveSetup,
@@ -118,6 +119,7 @@ export class ProjectorApp {
   private pingLayer:         PingLayer         | null = null;
   private initiativeRail:    PlayerInitiativeRail | null = null;
   private _annotateClocks:   ClocksLayer | null = null;
+  private _annotateBoard:    WhiteboardLayer | null = null;
   private _playerIcons   = new Map<string, string>();
   private _lastPlayerMarkers: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; hasIcon?: boolean; tokenSize?: import('../types.ts').TokenSize }> = [];
   /** Icons currently being requested via `player_icon_request` — debounce so a
@@ -276,6 +278,9 @@ export class ProjectorApp {
     // v2.16.76 — read-only progress clocks mirrored from the GM.
     const clocksEl = document.getElementById('annotate-clocks');
     if (clocksEl) this._annotateClocks = new ClocksLayer(clocksEl, false);
+    // v2.16.77 — read-only whiteboard mirrored from the GM.
+    const boardEl = document.getElementById('annotate-whiteboard') as HTMLCanvasElement | null;
+    if (boardEl) this._annotateBoard = new WhiteboardLayer(boardEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));
 
     // Post-map-load: render markers + re-apply calibrated view now
     // that the renderer knows the new map's aspect ratio. _applyView
@@ -814,6 +819,14 @@ export class ProjectorApp {
       case 'annotate_clocks': {
         // v2.16.76 — mirror the GM's progress clocks (read-only).
         this._annotateClocks?.setClocks(msg.clocks);
+        break;
+      }
+      case 'annotate_stroke': {
+        this._annotateBoard?.addStroke(msg.stroke);
+        break;
+      }
+      case 'annotate_clear': {
+        this._annotateBoard?.clear();
         break;
       }
       // player_features, player_roster, player_marker_move, message_deliver,

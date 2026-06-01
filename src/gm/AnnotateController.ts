@@ -1,99 +1,173 @@
-import type { AnnotateState, ProgressClock } from '../types.ts';
+import type { AnnotateState, AnnotateStroke, ProgressClock } from '../types.ts';
 import { ClocksLayer } from '../annotate/ClocksLayer.ts';
+import { WhiteboardLayer } from '../annotate/WhiteboardLayer.ts';
 import { emptyAnnotateState, loadAnnotateState, saveAnnotateState, makeClock } from '../annotate/annotateState.ts';
+import { generateId } from '../utils/id.ts';
 
 export interface AnnotateControllerCallbacks {
   /** Push the current clocks to viewers (empty list when muted). */
   broadcastClocks: (clocks: ProgressClock[]) => void;
+  /** Append one whiteboard stroke to viewers. */
+  broadcastStroke: (stroke: AnnotateStroke) => void;
+  /** Clear the whiteboard on viewers (also the first step of a resync). */
+  broadcastClear: () => void;
 }
 
-/** Preset clock colours — red danger, amber, green racing, cyan, violet,
- *  white. The GM picks one before adding a clock. */
+export interface AnnotateControllerOpts {
+  clocksRoot: HTMLElement;
+  whiteboardCanvas: HTMLCanvasElement;
+  project: (x: number, y: number) => { x: number; y: number } | null;
+  unproject: (clientX: number, clientY: number) => { x: number; y: number } | null;
+}
+
+/** Preset clock colours — red danger, amber, green racing, cyan, violet, white. */
 const CLOCK_COLORS = ['#ef4444', '#f59e0b', '#22c55e', '#06b6d4', '#a855f7', '#e5e7eb'];
+/** Whiteboard pen palette. */
+const PEN_COLORS = ['#fde047', '#ef4444', '#22c55e', '#06b6d4', '#ffffff', '#111827'];
+const PEN_WIDTH = 3;
+/** Min screen-px travel before a new point is recorded (downsample). */
+const SAMPLE_DIST = 2.5;
 
 /**
- * AnnotateController (v2.16.76) — GM-side owner of the per-map annotation
- * layer. Slice 1: Blades-style progress clocks. Holds the active map's
- * AnnotateState, renders the interactive clocks HUD, drives the add-clock
- * form, persists per map, and broadcasts to players + projector. A global
- * "mute" switch hides the layer from players/projector (the GM still sees
- * + edits it).
+ * AnnotateController (v2.16.77) — GM-side owner of the per-map annotation
+ * layer: Blades-style progress clocks + a freehand whiteboard. Holds the
+ * active map's state, renders the interactive layers, drives the panel,
+ * persists per map, and broadcasts to players + projector. A global mute
+ * hides everything on every surface (GM included) without deleting it.
  */
 export class AnnotateController {
   private mapId: string | null = null;
   private state: AnnotateState = emptyAnnotateState();
   private muted = false;
   private clocksLayer: ClocksLayer;
-  private _pickColor = CLOCK_COLORS[0]!;
+  private board: WhiteboardLayer;
+  private _clockColor = CLOCK_COLORS[0]!;
+  private _penColor = PEN_COLORS[0]!;
+  private _drawing = false;
+  private canvas: HTMLCanvasElement;
 
-  constructor(clocksRoot: HTMLElement, private cb: AnnotateControllerCallbacks) {
-    this.clocksLayer = new ClocksLayer(clocksRoot, true, {
+  constructor(private opts: AnnotateControllerOpts, private cb: AnnotateControllerCallbacks) {
+    this.canvas = opts.whiteboardCanvas;
+    this.clocksLayer = new ClocksLayer(opts.clocksRoot, true, {
       onSetFilled: (id, filled) => this._mutate((s) => ({
         ...s,
         clocks: s.clocks.map((c) => c.id === id ? { ...c, filled: Math.max(0, Math.min(c.segments, filled)) } : c),
       })),
-      onMove: (id, x, y) => this._mutate((s) => ({
-        ...s,
-        clocks: s.clocks.map((c) => c.id === id ? { ...c, x, y } : c),
-      })),
+      onMove: (id, x, y) => this._mutate((s) => ({ ...s, clocks: s.clocks.map((c) => c.id === id ? { ...c, x, y } : c) })),
       onRemove: (id) => this._mutate((s) => ({ ...s, clocks: s.clocks.filter((c) => c.id !== id) })),
     });
+    this.board = new WhiteboardLayer(this.canvas, opts.project);
     this._bindPanel();
+    this._bindDrawing();
   }
 
   /** Switch to a map: load its saved annotations, render, re-broadcast. */
   setMap(mapId: string | null): void {
     this.mapId = mapId;
     this.state = mapId ? loadAnnotateState(mapId) : emptyAnnotateState();
-    this._renderClocks();
-    this._broadcast();
+    this._renderLocal();
+    this._broadcastAll();
   }
 
-  /** Re-broadcast the current state (e.g. a player just connected). */
-  rebroadcast(): void { this._broadcast(); }
+  /** Re-broadcast everything (e.g. a viewer just connected). */
+  rebroadcast(): void { this._broadcastAll(); }
 
-  /** Mute = hide everywhere, GM view included (Alex 2026-06-01). The
-   *  per-map data is untouched; unmute brings them straight back. */
+  /** Mute hides clocks + whiteboard everywhere, GM included. Data is kept. */
   setMuted(muted: boolean): void {
     this.muted = muted;
-    this._renderClocks();
-    this._broadcast();
+    this._renderLocal();
+    this._broadcastAll();
   }
 
   // ── Panel wiring ───────────────────────────────────────────────────────────
 
   private _bindPanel(): void {
-    // Colour swatches.
-    const colors = document.getElementById('annotate-clock-colors');
-    if (colors) {
-      colors.replaceChildren();
-      for (const hex of CLOCK_COLORS) {
-        const sw = document.createElement('button');
-        sw.type = 'button';
-        sw.className = 'annotate-swatch' + (hex === this._pickColor ? ' is-selected' : '');
-        sw.style.background = hex;
-        sw.title = hex;
-        sw.addEventListener('click', () => {
-          this._pickColor = hex;
-          colors.querySelectorAll('.annotate-swatch').forEach((el) => el.classList.remove('is-selected'));
-          sw.classList.add('is-selected');
-        });
-        colors.appendChild(sw);
-      }
-    }
+    this._buildSwatches('annotate-clock-colors', CLOCK_COLORS, this._clockColor, (hex) => { this._clockColor = hex; });
+    this._buildSwatches('annotate-pen-colors', PEN_COLORS, this._penColor, (hex) => { this._penColor = hex; });
 
     const nameEl = document.getElementById('annotate-clock-name') as HTMLInputElement | null;
     const segEl  = document.getElementById('annotate-clock-segments') as HTMLInputElement | null;
-    const addBtn = document.getElementById('annotate-add-clock');
     const add = () => {
       const name = nameEl?.value.trim() || '';
       const segs = parseInt(segEl?.value || '4', 10);
       if (!name) { nameEl?.focus(); return; }
-      this._mutate((s) => ({ ...s, clocks: [...s.clocks, makeClock(name, segs, this._pickColor)] }));
+      this._mutate((s) => ({ ...s, clocks: [...s.clocks, makeClock(name, segs, this._clockColor)] }));
       if (nameEl) nameEl.value = '';
     };
-    addBtn?.addEventListener('click', add);
+    document.getElementById('annotate-add-clock')?.addEventListener('click', add);
     nameEl?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+
+    const drawBtn = document.getElementById('annotate-draw-toggle');
+    drawBtn?.addEventListener('click', () => {
+      this._drawing = !this._drawing;
+      drawBtn.classList.toggle('is-active', this._drawing);
+      this.canvas.style.pointerEvents = this._drawing ? 'auto' : 'none';
+      this.canvas.style.cursor = this._drawing ? 'crosshair' : '';
+    });
+
+    document.getElementById('annotate-wb-clear')?.addEventListener('click', () => {
+      this._mutate((s) => ({ ...s, strokes: [] }));
+      this.cb.broadcastClear();
+    });
+  }
+
+  private _buildSwatches(containerId: string, colors: string[], selected: string, onPick: (hex: string) => void): void {
+    const host = document.getElementById(containerId);
+    if (!host) return;
+    host.replaceChildren();
+    for (const hex of colors) {
+      const sw = document.createElement('button');
+      sw.type = 'button';
+      sw.className = 'annotate-swatch' + (hex === selected ? ' is-selected' : '');
+      sw.style.background = hex;
+      sw.title = hex;
+      sw.addEventListener('click', () => {
+        onPick(hex);
+        host.querySelectorAll('.annotate-swatch').forEach((el) => el.classList.remove('is-selected'));
+        sw.classList.add('is-selected');
+      });
+      host.appendChild(sw);
+    }
+  }
+
+  // ── Whiteboard draw capture ──────────────────────────────────────────────
+
+  private _bindDrawing(): void {
+    let live: AnnotateStroke | null = null;
+    let lastX = 0, lastY = 0;
+    let pointerId = -1;
+
+    this.canvas.addEventListener('pointerdown', (e) => {
+      if (!this._drawing || this.muted) return;
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      e.stopPropagation();
+      e.preventDefault();
+      this.canvas.setPointerCapture?.(e.pointerId);
+      pointerId = e.pointerId;
+      const n = this.opts.unproject(e.clientX, e.clientY);
+      live = { id: generateId(), color: this._penColor, width: PEN_WIDTH, points: n ? [n] : [] };
+      lastX = e.clientX; lastY = e.clientY;
+      this.board.setLive(live);
+    });
+    this.canvas.addEventListener('pointermove', (e) => {
+      if (!live || e.pointerId !== pointerId) return;
+      e.stopPropagation();
+      if (Math.hypot(e.clientX - lastX, e.clientY - lastY) < SAMPLE_DIST) return;
+      const n = this.opts.unproject(e.clientX, e.clientY);
+      if (n) { live.points.push(n); lastX = e.clientX; lastY = e.clientY; this.board.setLive(live); }
+    });
+    const finish = (e: PointerEvent) => {
+      if (!live || e.pointerId !== pointerId) return;
+      e.stopPropagation();
+      const stroke = live;
+      live = null; pointerId = -1;
+      this.board.setLive(null);
+      if (stroke.points.length === 0) return;
+      this._mutate((s) => ({ ...s, strokes: [...s.strokes, stroke] }));
+      if (!this.muted) this.cb.broadcastStroke(stroke);
+    };
+    this.canvas.addEventListener('pointerup', finish);
+    this.canvas.addEventListener('pointercancel', (e) => { if (e.pointerId === pointerId) { live = null; pointerId = -1; this.board.setLive(null); } });
   }
 
   // ── Core ───────────────────────────────────────────────────────────────────
@@ -101,12 +175,23 @@ export class AnnotateController {
   private _mutate(fn: (s: AnnotateState) => AnnotateState): void {
     this.state = fn(this.state);
     if (this.mapId) saveAnnotateState(this.mapId, this.state);
-    this._renderClocks();
-    this._broadcast();
+    this._renderLocal();
+    // Clocks change → re-broadcast clocks (small). Stroke add broadcasts the
+    // single stroke itself at the call site; clear broadcasts clear there.
+    this.cb.broadcastClocks(this.muted ? [] : this.state.clocks);
   }
 
-  /** Muted hides them on the GM view too. */
-  private _renderClocks(): void { this.clocksLayer.setClocks(this.muted ? [] : this.state.clocks); }
+  /** Render both layers on the GM (respecting mute). */
+  private _renderLocal(): void {
+    this.clocksLayer.setClocks(this.muted ? [] : this.state.clocks);
+    this.board.setStrokes(this.state.strokes);
+    this.board.setHidden(this.muted);
+  }
 
-  private _broadcast(): void { this.cb.broadcastClocks(this.muted ? [] : this.state.clocks); }
+  /** Full resync to viewers: clocks + clear-then-resend every stroke. */
+  private _broadcastAll(): void {
+    this.cb.broadcastClocks(this.muted ? [] : this.state.clocks);
+    this.cb.broadcastClear();
+    if (!this.muted) for (const st of this.state.strokes) this.cb.broadcastStroke(st);
+  }
 }
