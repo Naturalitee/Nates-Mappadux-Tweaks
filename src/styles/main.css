@@ -1155,6 +1155,27 @@ body.player-view #renderer-canvas {
   transform: translateY(-50%) rotate(90deg);
 }
 
+/* v2.16.75 — Players panel header count badge. Sits in the right margin
+   where other panels carry their vision/ear toggle icon; the "#" reads
+   as "player count". Shows connected / total (total includes offline). */
+.panel-count-badge {
+  position: absolute;
+  right: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 2px 7px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 .panel-body {
   display: flex;
   flex-direction: column;
@@ -7866,29 +7887,31 @@ option.select-option--add {
    deck so the cards feel like they're sitting on something, no border
    line. v2.16.53 — tightened toward Alex's "just one fan beautifully
    rendered" brief; controls live exclusively on the GM side. */
+/* v2.16.75 — minimal player chrome: cards sit directly on the map with
+   just a faint tint hugging the fan. No heavy wash, no blur, content-
+   width so it never spans more than the cards need, overflow visible so
+   no stray scrollbar from the scaled active card. */
 .player-init {
   position: fixed;
   z-index: 8;
   pointer-events: auto;
-  padding: var(--space-sm) var(--space-md);
-  background:
-    radial-gradient(ellipse at center, rgba(20, 26, 42, 0.55) 0%, rgba(10, 14, 26, 0.78) 75%);
-  backdrop-filter: blur(8px);
+  padding: 5px;
+  width: max-content;
+  max-width: 100vw;
+  max-height: 100vh;
+  overflow: visible;
+  background: rgba(8, 11, 20, 0.30);
+  border-radius: 12px;
 }
-.player-init.is-edge-bottom { left: 50%; transform: translateX(-50%); bottom: 0; max-width: 100%; border-radius: 14px 14px 0 0; box-shadow: 0 -8px 28px rgba(0, 0, 0, 0.45); }
-.player-init.is-edge-top    { left: 50%; transform: translateX(-50%); top: 0;    max-width: 100%; border-radius: 0 0 14px 14px; box-shadow: 0 8px 28px rgba(0, 0, 0, 0.45); }
-.player-init.is-edge-left   { top: 50%; transform: translateY(-50%); left: 0;   max-height: 100%; border-radius: 0 14px 14px 0; box-shadow: 8px 0 28px rgba(0, 0, 0, 0.45); }
-.player-init.is-edge-right  { top: 50%; transform: translateY(-50%); right: 0;  max-height: 100%; border-radius: 14px 0 0 14px; box-shadow: -8px 0 28px rgba(0, 0, 0, 0.45); }
-/* v2.16.65 — vertical mode (left/right edge) gets a slimmer padding
-   since the player view doesn't carry the GM's button column. */
-.player-init.is-edge-left,
-.player-init.is-edge-right { padding: var(--space-md) 4px; }
-/* v2.16.65 — directional padding so the LAST card's exposed edge is
-   never clipped by the container in either orientation. Was always
-   right-padded (broke vertical mode where the last card's bottom is
-   the visible edge). */
-.player-init .init-rail.is-horizontal { padding: var(--space-sm) 50px var(--space-sm) var(--space-sm); min-height: 96px; }
-.player-init .init-rail.is-vertical   { padding: var(--space-sm) var(--space-sm) 50px var(--space-sm); min-height: 96px; }
+.player-init.is-edge-bottom { left: 50%; transform: translateX(-50%); bottom: 0; border-radius: 12px 12px 0 0; }
+.player-init.is-edge-top    { left: 50%; transform: translateX(-50%); top: 0;    border-radius: 0 0 12px 12px; }
+.player-init.is-edge-left   { top: 50%; transform: translateY(-50%); left: 0;   border-radius: 0 12px 12px 0; }
+.player-init.is-edge-right  { top: 50%; transform: translateY(-50%); right: 0;  border-radius: 12px 0 0 12px; }
+/* v2.16.75 — slim, scroll-free rail. overflow:visible lets the scaled
+   active card spill onto the map instead of triggering a scrollbar; a
+   touch of trailing padding keeps the last card's exposed edge clear. */
+.player-init .init-rail.is-horizontal { padding: 4px 24px 4px 4px; min-height: 0; overflow: visible; }
+.player-init .init-rail.is-vertical   { padding: 4px 4px 24px 4px; min-height: 0; overflow: visible; }
 /* Player cards on the player view get a slightly richer felt — deeper
    shadow and a subtle inner highlight to read as physical cards, not chrome.
    v2.16.56 — sized as a proportion of the smaller viewport dimension so
@@ -7908,7 +7931,6 @@ option.select-option--add {
    has scale(1.12); player view bumps to 1.22 so the current actor reads
    from across the table. */
 .player-init .init-card.is-active { transform: scale(1.22); transform-origin: center; }
-.player-init { padding: 14px var(--space-md); overflow: visible; }
 /* v2.16.62 — player-view round marker is the same size as every other
    card; no margin break-out. It's just the last card in the fan. */
 .player-init .init-card--round-marker {

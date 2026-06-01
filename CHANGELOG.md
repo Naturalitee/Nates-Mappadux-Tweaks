@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.75 — 2026-06-01
+
+Player-view tracker slimmed: cards sit on the map with just a faint tint hugging the fan (no heavy wash/blur), content-width, and overflow:visible so the scaled active card no longer triggers a stray scrollbar. Players panel header gains a "# connected/total" badge (total includes offline players) in the right-margin slot where other panels carry their toggle icon.
+
 ## v2.16.74 — 2026-06-01
 
 Edge-snap outline now anchors to the tracker's actual docked area (its offsetParent = the canvas region right of the GM sidebar), so the left/right hint lands exactly where the tracker settles instead of over the sidebar. Discard revive expanded: drag a discarded card to the rail to drop it straight back into combat at a chosen slot; dragging to the bench/tray still routes by card home (enemy → bench, player → tray).

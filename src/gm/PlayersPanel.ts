@@ -50,6 +50,8 @@ export class PlayersPanel {
   private listEl: HTMLElement | null;
   private addBtn: HTMLButtonElement | null;
   private callInitBtn: HTMLButtonElement | null;
+  /** v2.16.75 — connected / total badge in the panel header. */
+  private countBadge: HTMLElement | null;
   private cb: PlayersPanelCallbacks;
   private lastPlayers: PersistentPlayer[] = [];
 
@@ -58,6 +60,7 @@ export class PlayersPanel {
     this.listEl = document.querySelector<HTMLElement>('#players-list');
     this.addBtn = document.querySelector<HTMLButtonElement>('#add-player-btn');
     this.callInitBtn = document.querySelector<HTMLButtonElement>('#call-initiative-btn');
+    this.countBadge = document.querySelector<HTMLElement>('#players-count-badge');
     this.addBtn?.addEventListener('click', () => {
       const used = this.lastPlayers.map((p) => p.color);
       void this.cb.onAddManaged('', '', pickDefaultPlayerColor(used));
@@ -67,6 +70,15 @@ export class PlayersPanel {
 
   update(players: PersistentPlayer[], info: (id: string) => PlayerRowInfo): void {
     this.lastPlayers = players;
+
+    // v2.16.75 — header badge: connected / total (total counts offline,
+    // GM-managed players too). Sits where other panels carry their toggle.
+    if (this.countBadge) {
+      const connected = players.filter((p) => info(p.id).connected).length;
+      this.countBadge.textContent = `# ${connected}/${players.length}`;
+      this.countBadge.title = `${connected} connected of ${players.length} total (including offline)`;
+    }
+
     if (!this.listEl) return;
     this.listEl.replaceChildren();
 
