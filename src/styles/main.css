@@ -7298,10 +7298,18 @@ option.select-option--add {
   width: 76px;
   height: 100px;
   flex-shrink: 0;
-  background: var(--bg-base);
-  border: 1px solid var(--border);
-  border-radius: 6px;
-  transition: transform 200ms ease, opacity 200ms ease;
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--init-color, #475569), black 45%) 0%, color-mix(in srgb, var(--init-color, #1f2937), black 75%) 100%);
+  border: 1px solid color-mix(in srgb, var(--init-color, #475569), white 10%);
+  border-radius: 8px;
+  /* v2.16.57 — paper-card depth: outer drop shadow + a thin highlight at
+     the top edge selling the "card is sitting above the table" feel,
+     plus a subtle inset darkening at the bottom for the lift. */
+  box-shadow:
+    0 3px 6px rgba(0, 0, 0, 0.45),
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.3) inset;
+  transition: transform 200ms ease, opacity 200ms ease, box-shadow 200ms ease;
   cursor: grab;
 }
 .init-rail.is-horizontal .init-card { margin-right: -38px; }
@@ -7343,15 +7351,21 @@ option.select-option--add {
   overflow: hidden;
   pointer-events: none;
 }
-.init-card-tab--left   { left: 0;  top: 0; bottom: 0; width: 14px; border-radius: 6px 0 0 6px; }
-.init-card-tab--right  { right: 0; top: 0; bottom: 0; width: 14px; border-radius: 0 6px 6px 0; }
-.init-card-tab--top    { left: 0; right: 0; top: 0;    height: 14px; border-radius: 6px 6px 0 0; }
-.init-card-tab--bottom { left: 0; right: 0; bottom: 0; height: 14px; border-radius: 0 0 6px 6px; }
-/* Hide the irrelevant pair per orientation. */
+.init-card-tab--left   { left: 0;  top: 0; bottom: 0; width: 16px; border-radius: 6px 0 0 6px; }
+.init-card-tab--right  { right: 0; top: 0; bottom: 0; width: 16px; border-radius: 0 6px 6px 0; }
+.init-card-tab--top    { left: 0; right: 0; top: 0;    height: 16px; border-radius: 6px 6px 0 0; }
+.init-card-tab--bottom { left: 0; right: 0; bottom: 0; height: 16px; border-radius: 0 0 6px 6px; }
+/* v2.16.57 — only the always-visible edge of the fan carries the name.
+   For a horizontal fan each card's RIGHT edge is the slice always exposed
+   to the eye (every card's left is tucked under the one above it); the
+   reverse holds for a vertical fan. Hiding the other three edges frees
+   the card body for a bigger portrait/icon. */
+.init-rail.is-horizontal .init-card-tab--left,
 .init-rail.is-horizontal .init-card-tab--top,
 .init-rail.is-horizontal .init-card-tab--bottom { display: none; }
 .init-rail.is-vertical   .init-card-tab--left,
-.init-rail.is-vertical   .init-card-tab--right  { display: none; }
+.init-rail.is-vertical   .init-card-tab--right,
+.init-rail.is-vertical   .init-card-tab--top    { display: none; }
 
 .init-card-tab-text {
   font-size: 0.7rem;
@@ -7375,8 +7389,10 @@ option.select-option--add {
 .init-card-tab--bottom .init-card-tab-text { max-width: calc(100% - 8px); }
 
 .init-card-body {
-  /* Margins clear whichever pair of tabs is showing. */
-  margin: 0 14px;
+  /* v2.16.57 — body margin only on the side with the visible tab so the
+     portrait gets every pixel of the other three sides for max card-art
+     feel. */
+  margin: 0 16px 0 0;       /* horizontal fan → right tab */
   height: 100%;
   display: flex;
   align-items: center;
@@ -7387,7 +7403,7 @@ option.select-option--add {
   padding: 4px;
   text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
 }
-.init-rail.is-vertical .init-card-body { margin: 14px 0; }
+.init-rail.is-vertical .init-card-body { margin: 0 0 16px 0; }   /* vertical fan → bottom tab */
 .init-card-body--marker {
   margin: 0;
   font-size: 0.6rem;
@@ -7401,31 +7417,35 @@ option.select-option--add {
 .init-card-body--enemy { font-size: 0.75rem; letter-spacing: 0.04em; }
 .init-card-big { font-size: 1.6rem; font-weight: 800; }
 .init-card-disc {
-  width: 44%;
+  /* v2.16.57 — grew to nearly fill the body now that there's only one
+     side tab. Reads as a centred "minted token" rather than a small dot. */
+  width: 80%;
   aspect-ratio: 1 / 1;
-  min-width: 30px;
-  max-width: 56px;
+  min-width: 38px;
+  max-width: 86px;
   border-radius: 50%;
-  background: var(--init-color);
+  background: radial-gradient(circle at 30% 25%, color-mix(in srgb, var(--init-color), white 25%) 0%, var(--init-color) 50%, color-mix(in srgb, var(--init-color), black 25%) 100%);
   border: 2px solid var(--init-color-fg, #fff);
   color: var(--init-color-fg, #fff);
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.05rem;
+  font-size: 1.6rem;
   font-weight: 900;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5), inset 0 1px 2px rgba(255, 255, 255, 0.25);
+  letter-spacing: 0.02em;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55), inset 0 1px 3px rgba(255, 255, 255, 0.3), inset 0 -1px 3px rgba(0, 0, 0, 0.3);
 }
-/* Player portrait — circular crop of the player's chosen token icon.
-   v2.16.56 — replaces the initial disc when the player has set a token. */
+/* Player portrait — square card-art crop of the player's chosen token icon
+   with rounded corners and an inset border in their identity colour.
+   v2.16.57 — REALLY leaning into cards: portrait fills the body like a
+   trading card illustration, not a tiny avatar dot. */
 .init-card-portrait {
-  width: 80%;
-  aspect-ratio: 1 / 1;
-  max-width: 64px;
-  border-radius: 50%;
+  width: 92%;
+  height: 92%;
+  border-radius: 8px;
   object-fit: cover;
-  border: 2px solid var(--init-color);
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.5);
+  border: 1.5px solid color-mix(in srgb, var(--init-color), white 15%);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(0, 0, 0, 0.2);
   user-select: none;
 }
 /* Dark duck silhouette on player-view enemy cards. */

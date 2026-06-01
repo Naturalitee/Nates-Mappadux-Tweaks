@@ -1,5 +1,27 @@
 # Changelog
 
+## v2.16.57 — 2026-06-01
+
+### Initiative — lean into cards (player rail single-edge label, big portrait)
+
+- **Single-edge identity label.** Horizontal fans now show the name on
+  the RIGHT edge only (the always-exposed slice when cards stack
+  leftward beneath each other); vertical fans show it on the BOTTOM
+  edge only. Frees three sides for the card art.
+- **Portrait fills the card body** as trading-card art instead of being
+  squeezed into a tiny avatar circle. Square crop with rounded corners
+  + an identity-coloured inner border. Initial-letter disc fallback
+  also grew (~80% body), now rendered as a minted token with radial
+  highlight + bevel.
+- **Card depth.** Paper-card stack feel: identity-tinted gradient
+  background, top-edge highlight, bottom-inset darkening, refined
+  drop shadow. Reads as a card sitting above the table, not a flat
+  rectangle.
+
+Setting up Step 2 in next commit: GM zone redesign (bench as stacked
+deck of full cards, unallocated as full cards, type-to-inject,
+drag-to-rail, drag-to-discard, new discard pile).
+
 ## v2.16.56 — 2026-05-31
 
 ### Initiative polish round 3 — contrast, portraits, proportional sizing, top default
