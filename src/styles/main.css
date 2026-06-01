@@ -7462,8 +7462,12 @@ option.select-option--add {
   transition: transform 200ms ease, opacity 200ms ease, box-shadow 200ms ease;
   cursor: grab;
 }
-.init-rail.is-horizontal .init-card { margin-right: -38px; }
-.init-rail.is-vertical   .init-card { margin-bottom: -55px; }
+/* v2.16.62 — loosened the GM fan so the value text on each card is
+   readable. Was -38px / -55px (~50% overlap → only the right tab
+   visible); now ~25-30% overlap leaves the body content showing.
+   Player-view margins are overridden separately below in .player-init. */
+.init-rail.is-horizontal .init-card { margin-right: -20px; }
+.init-rail.is-vertical   .init-card { margin-bottom: -32px; }
 .init-card.is-active { transform: scale(1.12); z-index: 200 !important; box-shadow: 0 0 12px rgba(255, 255, 255, 0.18); }
 /* v2.16.62 — no transparency-as-state cues. is-spent used to fade to
    55% opacity ("everyone goes ghosted at end of round") — confusing.
