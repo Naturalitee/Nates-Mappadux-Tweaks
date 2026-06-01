@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.62 — 2026-06-01
+
+Initiative polish round 4: GM rail enemy cards show the typed value (was still showing the threat letter); END ROUND treated as a standard card with yellow/black caution-stripe body; GM fan loosened (~25-30% overlap) so the big value text is readable; transparency-as-state cues removed (no more faded spent/dragging cards); discarded cards desaturate instead of fade; player view round marker matches standard card size.
+
 ## v2.16.61 — 2026-06-01
 
 Initiative: hide × removed from the tracker (End Combat is the sole close + wipe); Manual/Freeform dropped from the sort dropdown (drag-reorder is the only way into manual mode).

@@ -7490,16 +7490,23 @@ option.select-option--add {
   border-color: #b91c1c;
   box-shadow: 0 3px 6px rgba(0, 0, 0, 0.6), 0 0 10px rgba(185, 28, 28, 0.2);
 }
-/* Round marker — yellow palette, black body. v2.16.62 — treated like
-   any other card: standard tab system, no overlap break-out, no
-   special tab-side rules. CSS just owns its colour. */
+/* Round marker — yellow + black caution stripes like a highway barrier
+   so everyone at the table reads "stop / end" at a glance. The yellow
+   tab on the visible edge keeps the "END ROUND" label legible against
+   the busy striped body. v2.16.62. */
 .init-card--round-marker {
   --init-color: #fbbf24;
   --init-color-fg: #1a1006;
-  background: #000;
+  background: repeating-linear-gradient(
+    -45deg,
+    #fbbf24 0,
+    #fbbf24 11px,
+    #000    11px,
+    #000    22px
+  );
   border: 2px solid #fbbf24;
   cursor: default;
-  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5), 0 0 14px rgba(251, 191, 36, 0.3);
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5), 0 0 14px rgba(251, 191, 36, 0.35);
 }
 
 /* v2.16.53 — bidirectional name tabs. A card in a fanned deck only exposes
