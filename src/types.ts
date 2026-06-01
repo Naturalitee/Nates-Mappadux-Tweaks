@@ -1303,6 +1303,26 @@ export interface ProgressClock {
   y: number;
 }
 
+/** A real-time timer / countdown overlay (v2.16.78). Running state is
+ *  expressed as absolute epoch anchors so every surface ticks locally
+ *  from the same numbers — no per-second broadcast. */
+export interface AnnotateTimer {
+  id: string;
+  name: string;
+  mode: 'countup' | 'countdown';
+  color: string;
+  /** HUD position as a fraction (0..1) of the view. */
+  x: number;
+  y: number;
+  /** Countdown total in ms (ignored for count-up). */
+  durationMs: number;
+  running: boolean;
+  /** Epoch (ms) the current run segment started; valid while running. */
+  startedAt: number;
+  /** Elapsed ms accumulated from previous run segments (before current). */
+  baseElapsedMs: number;
+}
+
 /** One freehand whiteboard stroke. Points are normalised map coordinates
  *  (0..1) so the drawing pans / zooms with the map on every surface. */
 export interface AnnotateStroke {
@@ -1317,6 +1337,7 @@ export interface AnnotateStroke {
 export interface AnnotateState {
   clocks: ProgressClock[];
   strokes: AnnotateStroke[];
+  timers: AnnotateTimer[];
 }
 
 /** GM → viewers: the full clocks list for the active map (small payload,
@@ -1338,6 +1359,14 @@ export interface MsgAnnotateStroke {
  *  of a full resync (clear, then re-send each stroke). */
 export interface MsgAnnotateClear {
   type: 'annotate_clear';
+}
+
+/** GM → viewers: the full timers list for the active map. Absolute epoch
+ *  anchors let each surface tick locally, so this is only re-sent on a
+ *  GM edit (add / start / pause / reset / move / remove). */
+export interface MsgAnnotateTimers {
+  type: 'annotate_timers';
+  timers: AnnotateTimer[];
 }
 
 export type GMMessage =
@@ -1388,7 +1417,8 @@ export type GMMessage =
   | MsgInitiativeRoll
   | MsgAnnotateClocks
   | MsgAnnotateStroke
-  | MsgAnnotateClear;
+  | MsgAnnotateClear
+  | MsgAnnotateTimers;
 
 // ─── Storage types ───────────────────────────────────────────────────────────
 

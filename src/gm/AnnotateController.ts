@@ -1,12 +1,15 @@
-import type { AnnotateState, AnnotateStroke, ProgressClock } from '../types.ts';
+import type { AnnotateState, AnnotateStroke, ProgressClock, AnnotateTimer } from '../types.ts';
 import { ClocksLayer } from '../annotate/ClocksLayer.ts';
 import { WhiteboardLayer } from '../annotate/WhiteboardLayer.ts';
-import { emptyAnnotateState, loadAnnotateState, saveAnnotateState, makeClock } from '../annotate/annotateState.ts';
+import { TimersLayer } from '../annotate/TimersLayer.ts';
+import { emptyAnnotateState, loadAnnotateState, saveAnnotateState, makeClock, makeTimer } from '../annotate/annotateState.ts';
 import { generateId } from '../utils/id.ts';
 
 export interface AnnotateControllerCallbacks {
   /** Push the current clocks to viewers (empty list when muted). */
   broadcastClocks: (clocks: ProgressClock[]) => void;
+  /** Push the current timers to viewers (empty list when muted). */
+  broadcastTimers: (timers: AnnotateTimer[]) => void;
   /** Append one whiteboard stroke to viewers. */
   broadcastStroke: (stroke: AnnotateStroke) => void;
   /** Clear the whiteboard on viewers (also the first step of a resync). */
@@ -15,6 +18,7 @@ export interface AnnotateControllerCallbacks {
 
 export interface AnnotateControllerOpts {
   clocksRoot: HTMLElement;
+  timersRoot: HTMLElement;
   whiteboardCanvas: HTMLCanvasElement;
   project: (x: number, y: number) => { x: number; y: number } | null;
   unproject: (clientX: number, clientY: number) => { x: number; y: number } | null;
@@ -40,8 +44,10 @@ export class AnnotateController {
   private state: AnnotateState = emptyAnnotateState();
   private muted = false;
   private clocksLayer: ClocksLayer;
+  private timersLayer: TimersLayer;
   private board: WhiteboardLayer;
   private _clockColor = CLOCK_COLORS[0]!;
+  private _timerColor = CLOCK_COLORS[1]!;
   private _penColor = PEN_COLORS[0]!;
   private _drawing = false;
   private canvas: HTMLCanvasElement;
@@ -56,9 +62,23 @@ export class AnnotateController {
       onMove: (id, x, y) => this._mutate((s) => ({ ...s, clocks: s.clocks.map((c) => c.id === id ? { ...c, x, y } : c) })),
       onRemove: (id) => this._mutate((s) => ({ ...s, clocks: s.clocks.filter((c) => c.id !== id) })),
     });
+    this.timersLayer = new TimersLayer(opts.timersRoot, true, {
+      onToggle: (id) => this._mutate((s) => ({ ...s, timers: s.timers.map((t) => t.id === id ? this._toggleTimer(t) : t) })),
+      onReset:  (id) => this._mutate((s) => ({ ...s, timers: s.timers.map((t) => t.id === id ? { ...t, running: false, startedAt: 0, baseElapsedMs: 0 } : t) })),
+      onMove:   (id, x, y) => this._mutate((s) => ({ ...s, timers: s.timers.map((t) => t.id === id ? { ...t, x, y } : t) })),
+      onRemove: (id) => this._mutate((s) => ({ ...s, timers: s.timers.filter((t) => t.id !== id) })),
+    });
     this.board = new WhiteboardLayer(this.canvas, opts.project);
     this._bindPanel();
     this._bindDrawing();
+  }
+
+  /** Start ↔ pause a timer, re-anchoring the absolute epoch + elapsed base. */
+  private _toggleTimer(t: AnnotateTimer): AnnotateTimer {
+    if (t.running) {
+      return { ...t, running: false, baseElapsedMs: t.baseElapsedMs + Math.max(0, Date.now() - t.startedAt), startedAt: 0 };
+    }
+    return { ...t, running: true, startedAt: Date.now() };
   }
 
   /** Switch to a map: load its saved annotations, render, re-broadcast. */
@@ -83,6 +103,7 @@ export class AnnotateController {
 
   private _bindPanel(): void {
     this._buildSwatches('annotate-clock-colors', CLOCK_COLORS, this._clockColor, (hex) => { this._clockColor = hex; });
+    this._buildSwatches('annotate-timer-colors', CLOCK_COLORS, this._timerColor, (hex) => { this._timerColor = hex; });
     this._buildSwatches('annotate-pen-colors', PEN_COLORS, this._penColor, (hex) => { this._penColor = hex; });
 
     const nameEl = document.getElementById('annotate-clock-name') as HTMLInputElement | null;
@@ -96,6 +117,25 @@ export class AnnotateController {
     };
     document.getElementById('annotate-add-clock')?.addEventListener('click', add);
     nameEl?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); add(); } });
+
+    // Timer / countdown.
+    const tNameEl = document.getElementById('annotate-timer-name') as HTMLInputElement | null;
+    const tModeEl = document.getElementById('annotate-timer-mode') as HTMLSelectElement | null;
+    const tDurEl  = document.getElementById('annotate-timer-duration') as HTMLInputElement | null;
+    const addTimer = () => {
+      const name = tNameEl?.value.trim() || '';
+      const mode = (tModeEl?.value === 'countup' ? 'countup' : 'countdown') as 'countup' | 'countdown';
+      const durMs = parseDuration(tDurEl?.value || '5:00');
+      if (!name) { tNameEl?.focus(); return; }
+      this._mutate((s) => ({ ...s, timers: [...s.timers, makeTimer(name, mode, durMs, this._timerColor)] }));
+      if (tNameEl) tNameEl.value = '';
+    };
+    document.getElementById('annotate-add-timer')?.addEventListener('click', addTimer);
+    tNameEl?.addEventListener('keydown', (e) => { if (e.key === 'Enter') { e.preventDefault(); addTimer(); } });
+    // Duration input only matters for countdown — dim it on count-up.
+    const syncDur = () => { if (tDurEl) tDurEl.disabled = tModeEl?.value === 'countup'; };
+    tModeEl?.addEventListener('change', syncDur);
+    syncDur();
 
     const drawBtn = document.getElementById('annotate-draw-toggle');
     drawBtn?.addEventListener('click', () => {
@@ -176,22 +216,38 @@ export class AnnotateController {
     this.state = fn(this.state);
     if (this.mapId) saveAnnotateState(this.mapId, this.state);
     this._renderLocal();
-    // Clocks change → re-broadcast clocks (small). Stroke add broadcasts the
-    // single stroke itself at the call site; clear broadcasts clear there.
+    // Re-broadcast the small HUD lists (clocks + timers). Strokes broadcast
+    // individually at their own call sites.
     this.cb.broadcastClocks(this.muted ? [] : this.state.clocks);
+    this.cb.broadcastTimers(this.muted ? [] : this.state.timers);
   }
 
-  /** Render both layers on the GM (respecting mute). */
+  /** Render all layers on the GM (respecting mute). */
   private _renderLocal(): void {
     this.clocksLayer.setClocks(this.muted ? [] : this.state.clocks);
+    this.timersLayer.setTimers(this.muted ? [] : this.state.timers);
     this.board.setStrokes(this.state.strokes);
     this.board.setHidden(this.muted);
   }
 
-  /** Full resync to viewers: clocks + clear-then-resend every stroke. */
+  /** Full resync to viewers: clocks + timers + clear-then-resend every stroke. */
   private _broadcastAll(): void {
     this.cb.broadcastClocks(this.muted ? [] : this.state.clocks);
+    this.cb.broadcastTimers(this.muted ? [] : this.state.timers);
     this.cb.broadcastClear();
     if (!this.muted) for (const st of this.state.strokes) this.cb.broadcastStroke(st);
   }
+}
+
+/** Parse "mm:ss" / "h:mm:ss" / plain seconds → milliseconds. */
+function parseDuration(raw: string): number {
+  const s = raw.trim();
+  if (!s) return 0;
+  if (s.includes(':')) {
+    const parts = s.split(':').map((p) => parseInt(p, 10) || 0);
+    let sec = 0;
+    for (const p of parts) sec = sec * 60 + p;
+    return sec * 1000;
+  }
+  return (parseInt(s, 10) || 0) * 1000;
 }

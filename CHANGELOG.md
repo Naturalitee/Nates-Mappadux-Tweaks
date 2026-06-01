@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.78 — 2026-06-01
+
+Annotate slice 3: **timers / countdowns** — a real time-based clock. Add a named timer in count-up or countdown mode (mm:ss) with a colour; it floats as a draggable HUD card with start/pause, reset, and × controls. Running state is stored as absolute epoch anchors, so every surface (GM + players + projector) ticks locally in sync with no per-second network traffic — only GM edits broadcast. Per-map + saved + mute-aware like the rest of Annotate. Countdown flashes red at zero.
+
 ## v2.16.77 — 2026-06-01
 
 Annotate slice 2: **whiteboard**. Toggle Draw, pick a pen colour, and draw freehand on the map; Clear wipes it. Strokes are stored in map-normalised coords so they pan/zoom with the map, are per-map (persist + saved), and mirror live to players + projector (sent one stroke per message to stay frame-safe). Covered by the same Annotate bypass mute.

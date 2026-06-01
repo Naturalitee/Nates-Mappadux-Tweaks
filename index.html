@@ -419,6 +419,19 @@
           </div>
           <button id="annotate-add-clock" class="btn btn--sm btn--full">+ Add clock</button>
         </div>
+        <p class="annotate-section-label">Timer / countdown</p>
+        <div class="annotate-clock-form">
+          <input id="annotate-timer-name" class="select-full" type="text" autocomplete="off" placeholder="Name (e.g. Bomb)" />
+          <div class="annotate-clock-row">
+            <select id="annotate-timer-mode" class="annotate-timer-mode">
+              <option value="countdown">Countdown</option>
+              <option value="countup">Count up</option>
+            </select>
+            <input id="annotate-timer-duration" type="text" autocomplete="off" value="5:00" title="Countdown length — mm:ss" />
+            <div id="annotate-timer-colors" class="annotate-color-row"></div>
+          </div>
+          <button id="annotate-add-timer" class="btn btn--sm btn--full">+ Add timer</button>
+        </div>
         <p class="annotate-section-label">Whiteboard</p>
         <div class="annotate-wb-row">
           <button id="annotate-draw-toggle" class="btn btn--sm" title="Toggle freehand drawing on the map">Draw</button>
@@ -664,6 +677,7 @@
            clocks float as a draggable HUD above it. -->
       <canvas id="annotate-whiteboard" class="annotate-whiteboard" hidden></canvas>
       <div id="annotate-clocks" class="annotate-clocks"></div>
+      <div id="annotate-timers" class="annotate-clocks"></div>
     </div>
 
     <div id="marker-context-menu" class="context-menu" hidden>

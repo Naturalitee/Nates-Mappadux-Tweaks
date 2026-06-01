@@ -1,4 +1,4 @@
-import type { AnnotateState, ProgressClock } from '../types.ts';
+import type { AnnotateState, ProgressClock, AnnotateTimer } from '../types.ts';
 import { generateId } from '../utils/id.ts';
 
 /**
@@ -11,7 +11,7 @@ import { generateId } from '../utils/id.ts';
 const KEY_PREFIX = 'mappadux:annotate:';
 
 export function emptyAnnotateState(): AnnotateState {
-  return { clocks: [], strokes: [] };
+  return { clocks: [], strokes: [], timers: [] };
 }
 
 export function loadAnnotateState(mapId: string): AnnotateState {
@@ -22,6 +22,7 @@ export function loadAnnotateState(mapId: string): AnnotateState {
     return {
       clocks:  Array.isArray(p.clocks)  ? p.clocks  : [],
       strokes: Array.isArray(p.strokes) ? p.strokes : [],
+      timers:  Array.isArray(p.timers)  ? p.timers  : [],
     };
   } catch { return emptyAnnotateState(); }
 }
@@ -42,5 +43,22 @@ export function makeClock(name: string, segments: number, color: string): Progre
     color,
     x: 0.5,
     y: 0.18,
+  };
+}
+
+/** Build a fresh timer. Starts paused at full. `nowEpoch` keeps Date.now()
+ *  out of this pure helper (caller passes it). */
+export function makeTimer(name: string, mode: 'countup' | 'countdown', durationMs: number, color: string): AnnotateTimer {
+  return {
+    id: generateId(),
+    name: name.trim() || (mode === 'countdown' ? 'Countdown' : 'Timer'),
+    mode,
+    color,
+    x: 0.5,
+    y: 0.30,
+    durationMs: Math.max(0, durationMs),
+    running: false,
+    startedAt: 0,
+    baseElapsedMs: 0,
   };
 }

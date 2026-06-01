@@ -7267,6 +7267,71 @@ option.select-option--add {
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
 
+/* Timers / countdowns — draggable HUD cards (share .annotate-clocks
+   container positioning). */
+.annotate-clocks .a-timer {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 5px 10px;
+  min-width: 78px;
+  background: rgba(8, 11, 20, 0.66);
+  border: 1px solid var(--timer-color, #888);
+  border-radius: 10px;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  user-select: none;
+}
+.annotate-clocks:not(.is-interactive) .a-timer { pointer-events: none; }
+.a-timer-head { display: flex; align-items: center; gap: 6px; max-width: 150px; }
+.a-timer-name {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  color: #fff;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.a-timer-del {
+  flex-shrink: 0;
+  width: 15px; height: 15px;
+  padding: 0; font-size: 12px; line-height: 13px;
+  background: transparent;
+  border: 1px solid var(--danger);
+  border-radius: 50%;
+  color: var(--danger);
+  cursor: pointer;
+}
+.a-timer-del:hover { background: var(--danger); color: #fff; }
+.a-timer-time {
+  font-family: var(--font-ui);
+  font-size: 1.5rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  color: var(--timer-color, #fff);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  font-variant-numeric: tabular-nums;
+}
+.a-timer.is-done .a-timer-time { color: var(--danger); animation: a-timer-flash 1s ease-in-out infinite; }
+@keyframes a-timer-flash { 50% { opacity: 0.35; } }
+.a-timer-ctrls { display: flex; gap: 6px; margin-top: 1px; }
+.a-timer-btn {
+  width: 22px; height: 20px;
+  padding: 0; font-size: 0.7rem; line-height: 1;
+  background: rgba(255, 255, 255, 0.1);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 4px;
+  color: #fff;
+  cursor: pointer;
+}
+.a-timer-btn:hover { background: rgba(255, 255, 255, 0.22); }
+
 /* Panel form */
 .annotate-section-label {
   margin: var(--space-sm) 0 2px 0;
@@ -7280,6 +7345,9 @@ option.select-option--add {
 .annotate-clock-row { display: flex; align-items: center; gap: 8px; }
 .annotate-seg-label { font-size: var(--font-size-sm); color: var(--text-secondary); }
 #annotate-clock-segments { width: 52px; padding: 4px 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); }
+.annotate-timer-mode { padding: 4px 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: var(--font-size-sm); }
+#annotate-timer-duration { width: 60px; padding: 4px 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); text-align: center; }
+#annotate-timer-duration:disabled { opacity: 0.4; }
 .annotate-color-row { display: flex; gap: 5px; flex-wrap: wrap; }
 .annotate-swatch {
   width: 20px;

@@ -6553,12 +6553,14 @@ export class GMApp {
    *  whole layer (default muted on a fresh load). */
   private bindAnnotate(): void {
     const clocksEl = document.getElementById('annotate-clocks');
+    const timersEl = document.getElementById('annotate-timers');
     const boardEl = document.getElementById('annotate-whiteboard') as HTMLCanvasElement | null;
-    if (!clocksEl || !boardEl) return;
+    if (!clocksEl || !timersEl || !boardEl) return;
     boardEl.hidden = false; // always present; pointer-events gate draw mode
     this.annotate = new AnnotateController(
       {
         clocksRoot: clocksEl,
+        timersRoot: timersEl,
         whiteboardCanvas: boardEl,
         project:   (x, y) => this.renderer.mapNormToCanvasCss(x, y),
         unproject: (cx, cy) => {
@@ -6570,6 +6572,7 @@ export class GMApp {
       },
       {
         broadcastClocks: (clocks) => this.host.broadcast({ type: 'annotate_clocks', clocks }),
+        broadcastTimers: (timers) => this.host.broadcast({ type: 'annotate_timers', timers }),
         broadcastStroke: (stroke) => this.host.broadcast({ type: 'annotate_stroke', stroke }),
         broadcastClear:  () => this.host.broadcast({ type: 'annotate_clear' }),
       },
