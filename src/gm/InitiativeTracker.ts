@@ -45,16 +45,25 @@ export class InitiativeTracker {
   /** v2.16.63 — discard pile expansion state (UI-only, not persisted).
    *  When true, the discard cards fan out so the GM can grab one back. */
   private _discardExpanded = false;
-  /** v2.16.63 — index where a dragged card would land if dropped. null
-   *  when no drag is over the rail. Drives the visual "gap" between
-   *  rail cards as the GM hovers. */
-  private _dragOverInsertIndex: number | null = null;
-  /** Cached rail element so dragover updates can re-paint gap classes
-   *  without a full re-render. */
+  /** Cached rail element so pointer-drag can hit-test + re-paint gap
+   *  classes without a full re-render. */
   private _railEl: HTMLElement | null = null;
   /** v2.16.72 — full-viewport edge-hint overlay shown while dragging the
    *  dock grip, outlining where the tracker will snap. Lazily created. */
   private _edgeHint: HTMLElement | null = null;
+  /** v2.16.73 — pointer-based card drag (replaces HTML5 drag-and-drop,
+   *  which doesn't fire on touch and was being blocked for mouse). Works
+   *  for mouse + touch + pen via Pointer Events. Null when no drag. */
+  private _cardDrag: {
+    cardId: string;
+    pile: 'rail' | 'bench' | 'unallocated' | 'discard';
+    el: HTMLElement;
+    ghost: HTMLElement | null;
+    pointerId: number;
+    startX: number; startY: number;
+    grabX: number;  grabY: number;
+    active: boolean;
+  } | null = null;
 
   constructor(root: HTMLElement, initial: InitiativeState, cb: InitiativeTrackerCallbacks) {
     this.root = root;
@@ -376,6 +385,119 @@ export class InitiativeTracker {
     }
   }
 
+  // ── Pointer-based card drag (v2.16.73) ─────────────────────────────────────
+  // Replaces HTML5 drag-and-drop: works for mouse + touch, and sidesteps the
+  // recent mouse regression where native dragstart stopped firing.
+
+  /** Make a card a pointer-drag source. A short press/click still passes
+   *  through to click / dblclick handlers (we only begin a drag once the
+   *  pointer moves past a threshold). */
+  private _makeCardDraggable(el: HTMLElement, cardId: string, pile: 'rail' | 'bench' | 'unallocated' | 'discard'): void {
+    el.style.touchAction = 'none'; // let us own the gesture on touch
+    el.addEventListener('pointerdown', (e) => {
+      if (e.button !== 0 && e.pointerType === 'mouse') return;
+      // Don't hijack interactions with inputs / the inline value editor.
+      if ((e.target as HTMLElement).closest('input, button, .init-card-edit')) return;
+      const rect = el.getBoundingClientRect();
+      this._cardDrag = {
+        cardId, pile, el, ghost: null, pointerId: e.pointerId,
+        startX: e.clientX, startY: e.clientY,
+        grabX: e.clientX - rect.left, grabY: e.clientY - rect.top,
+        active: false,
+      };
+      el.setPointerCapture?.(e.pointerId);
+    });
+    el.addEventListener('pointermove', (e) => this._onCardPointerMove(e));
+    el.addEventListener('pointerup',   (e) => this._onCardPointerUp(e));
+    el.addEventListener('pointercancel', () => this._cancelCardDrag());
+  }
+
+  private _onCardPointerMove(e: PointerEvent): void {
+    const d = this._cardDrag;
+    if (!d || e.pointerId !== d.pointerId) return;
+    const dx = e.clientX - d.startX, dy = e.clientY - d.startY;
+    if (!d.active) {
+      if (Math.hypot(dx, dy) < 6) return; // still a click, not a drag
+      d.active = true;
+      d.el.classList.add('is-dragging');
+      const rect = d.el.getBoundingClientRect();
+      const ghost = d.el.cloneNode(true) as HTMLElement;
+      ghost.classList.add('init-card-ghost');
+      ghost.classList.remove('is-dragging');
+      ghost.style.width  = `${rect.width}px`;
+      ghost.style.height = `${rect.height}px`;
+      ghost.style.margin = '0';
+      document.body.appendChild(ghost);
+      d.ghost = ghost;
+    }
+    if (d.ghost) {
+      d.ghost.style.left = `${e.clientX - d.grabX}px`;
+      d.ghost.style.top  = `${e.clientY - d.grabY}px`;
+    }
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    if (this._railEl && under?.closest('.init-zone--rail')) {
+      this._applyRailGap(this._computeRailInsertIndex(this._railEl, e.clientX, e.clientY));
+    } else {
+      this._applyRailGap(null);
+    }
+    this._highlightZone(under, d.pile);
+  }
+
+  private _onCardPointerUp(e: PointerEvent): void {
+    const d = this._cardDrag;
+    if (!d || e.pointerId !== d.pointerId) return;
+    this._cardDrag = null;
+    d.el.classList.remove('is-dragging');
+    d.ghost?.remove();
+    this._clearZoneHighlights();
+    if (!d.active) { this._applyRailGap(null); return; } // was a click
+
+    const under = document.elementFromPoint(e.clientX, e.clientY);
+    const zone = under?.closest('.init-zone--rail, .init-zone--bench, .init-zone--unallocated, .init-zone--discard') as HTMLElement | null;
+    const railIdx = this._railEl ? this._computeRailInsertIndex(this._railEl, e.clientX, e.clientY) : this.state.activeDeck.length;
+    this._applyRailGap(null);
+    if (!zone) return; // dropped in empty space → snap back (no-op)
+
+    if (zone.classList.contains('init-zone--rail')) {
+      if (d.pile === 'rail') this._reorder(d.cardId, railIdx);
+      else                   this._mutate((s) => injectFromStagingAt(s, d.cardId, railIdx));
+    } else if (zone.classList.contains('init-zone--discard')) {
+      if (d.pile !== 'discard') this._discard(d.cardId);
+    } else if (zone.classList.contains('init-zone--bench') || zone.classList.contains('init-zone--unallocated')) {
+      if (d.pile === 'discard') this._mutate((s) => restoreFromDiscard(s, d.cardId));
+    }
+  }
+
+  private _cancelCardDrag(): void {
+    const d = this._cardDrag;
+    if (!d) return;
+    this._cardDrag = null;
+    d.el.classList.remove('is-dragging');
+    d.ghost?.remove();
+    this._applyRailGap(null);
+    this._clearZoneHighlights();
+  }
+
+  /** Highlight the drop zone currently under the pointer (when it's a
+   *  valid target for the dragged card's source pile). */
+  private _highlightZone(under: Element | null, pile: 'rail' | 'bench' | 'unallocated' | 'discard'): void {
+    this._clearZoneHighlights();
+    const zone = under?.closest('.init-zone--rail, .init-zone--bench, .init-zone--unallocated, .init-zone--discard') as HTMLElement | null;
+    if (!zone) return;
+    const isRail = zone.classList.contains('init-zone--rail');
+    const isDiscard = zone.classList.contains('init-zone--discard');
+    const isStaging = zone.classList.contains('init-zone--bench') || zone.classList.contains('init-zone--unallocated');
+    let valid = false;
+    if (isRail)          valid = true;                    // anything can enter the rail
+    else if (isDiscard)  valid = pile !== 'discard';      // discard accepts from elsewhere
+    else if (isStaging)  valid = pile === 'discard';      // bench/tray accept revives
+    if (valid) (zone.querySelector('.init-stack, .init-row, .init-rail') ?? zone).classList.add('is-drop-target');
+  }
+
+  private _clearZoneHighlights(): void {
+    this.root.querySelectorAll('.is-drop-target').forEach((el) => el.classList.remove('is-drop-target'));
+  }
+
   private _renderBench(): HTMLElement {
     const zone = document.createElement('div');
     zone.className = 'init-zone init-zone--bench';
@@ -385,22 +507,8 @@ export class InitiativeTracker {
     zone.appendChild(label);
     const stack = document.createElement('div');
     stack.className = 'init-stack init-stack--bench';
-    // v2.16.65 — discarded enemies dragged here jump back to the TOP
-    // of the bench so the next-letter slot is the GM's revived monster.
-    zone.addEventListener('dragover', (e) => {
-      if (e.dataTransfer?.getData('application/x-init-pile') !== 'discard') return;
-      e.preventDefault();
-      stack.classList.add('is-drop-target');
-    });
-    zone.addEventListener('dragleave', () => stack.classList.remove('is-drop-target'));
-    zone.addEventListener('drop', (e) => {
-      stack.classList.remove('is-drop-target');
-      if (e.dataTransfer?.getData('application/x-init-pile') !== 'discard') return;
-      const id = e.dataTransfer?.getData('application/x-init-card');
-      if (!id) return;
-      e.preventDefault();
-      this._mutate((s) => restoreFromDiscard(s, id));
-    });
+    // v2.16.73 — drop handling (discard → bench revive) is done by the
+    // pointer-drag pointerup resolver, which hit-tests this zone.
     if (this.state.threatBench.length === 0) {
       stack.appendChild(this._emptyHint('Bench empty.'));
     } else {
@@ -440,22 +548,8 @@ export class InitiativeTracker {
     zone.appendChild(label);
     const row = document.createElement('div');
     row.className = 'init-row init-row--unallocated';
-    // v2.16.65 — discarded player cards dragged here land back in the
-    // tray (cleared value) so the GM can re-add them to play.
-    zone.addEventListener('dragover', (e) => {
-      if (e.dataTransfer?.getData('application/x-init-pile') !== 'discard') return;
-      e.preventDefault();
-      row.classList.add('is-drop-target');
-    });
-    zone.addEventListener('dragleave', () => row.classList.remove('is-drop-target'));
-    zone.addEventListener('drop', (e) => {
-      row.classList.remove('is-drop-target');
-      if (e.dataTransfer?.getData('application/x-init-pile') !== 'discard') return;
-      const id = e.dataTransfer?.getData('application/x-init-card');
-      if (!id) return;
-      e.preventDefault();
-      this._mutate((s) => restoreFromDiscard(s, id));
-    });
+    // v2.16.73 — discard → tray revive is handled by the pointer-drag
+    // pointerup resolver (hit-tests this zone).
     if (this.state.unallocated.length === 0) {
       row.appendChild(this._emptyHint('Everyone is in the rail.'));
     } else {
@@ -479,24 +573,8 @@ export class InitiativeTracker {
     zone.appendChild(label);
     const stack = document.createElement('div');
     stack.className = `init-stack init-stack--discard${this._discardExpanded ? ' is-expanded' : ''}`;
-    // Drop target for incoming discards from any pile.
-    zone.addEventListener('dragover', (e) => {
-      if (!e.dataTransfer?.types.includes('application/x-init-card')) return;
-      // Only accept discard drops when not already a drag FROM discard
-      // (we don't accept discarded cards back into the discard pile).
-      if (e.dataTransfer.getData('application/x-init-pile') === 'discard') return;
-      e.preventDefault();
-      stack.classList.add('is-drop-target');
-    });
-    zone.addEventListener('dragleave', () => stack.classList.remove('is-drop-target'));
-    zone.addEventListener('drop', (e) => {
-      stack.classList.remove('is-drop-target');
-      if (e.dataTransfer?.getData('application/x-init-pile') === 'discard') return;
-      const id = e.dataTransfer?.getData('application/x-init-card');
-      if (!id) return;
-      e.preventDefault();
-      this._discard(id);
-    });
+    // v2.16.73 — "drop a card here to discard" is handled by the pointer-
+    // drag pointerup resolver (hit-tests this zone).
     if (this.state.discarded.length === 0) {
       stack.appendChild(this._emptyHint('Drag here to remove from combat.'));
     } else {
@@ -551,20 +629,11 @@ export class InitiativeTracker {
     el.dataset['cardId'] = card.id;
     el.dataset['pile'] = pile;
 
-    // Drag source — bench/unallocated cards are always draggable.
-    // Discard cards are only draggable while the pile is expanded
-    // (v2.16.63 click-to-fan affordance) so the GM can pull them back.
+    // Drag source (v2.16.73 — pointer-based). Bench/unallocated cards are
+    // always draggable; discard cards only while the pile is expanded
+    // (click-to-fan) so the GM can pull them back.
     const draggable = pile !== 'discard' || this._discardExpanded;
-    if (draggable) {
-      el.draggable = true;
-      el.addEventListener('dragstart', (e) => {
-        e.dataTransfer?.setData('text/plain', card.id);
-        e.dataTransfer?.setData('application/x-init-card', card.id);
-        e.dataTransfer?.setData('application/x-init-pile', pile);
-        el.classList.add('is-dragging');
-      });
-      el.addEventListener('dragend', () => el.classList.remove('is-dragging'));
-    }
+    if (draggable) this._makeCardDraggable(el, card.id, pile);
 
     // Edge tabs (single-edge per orientation, per v2.16.57).
     const edgeText = card.type === 'enemy' ? (card.threatLetter ?? '?') : card.name;
@@ -647,42 +716,10 @@ export class InitiativeTracker {
     zone.appendChild(label);
     const rail = document.createElement('div');
     rail.className = `init-rail ${isHorizontal(this.state.edge) ? 'is-horizontal' : 'is-vertical'}`;
-    // v2.16.63 — rail gap-on-drag. As the GM drags any card over the
-    // rail, the cards at and after the would-be insertion point shift
-    // away to open a gap. Drop lands at that index precisely. Drops
-    // from bench / unallocated / discard inject at the gap; rail→rail
-    // drops reorder. Per-card drop handlers are gone (rail-level owns it).
+    // v2.16.73 — rail gap-on-drag is driven by the pointer-drag handlers
+    // (_onCardPointerMove) which hit-test this element via elementFromPoint.
+    // We just cache the rail node here.
     this._railEl = rail;
-    rail.addEventListener('dragover', (e) => {
-      if (!e.dataTransfer?.types.includes('application/x-init-card')) return;
-      e.preventDefault();
-      const newIndex = this._computeRailInsertIndex(rail, e.clientX, e.clientY);
-      if (newIndex !== this._dragOverInsertIndex) {
-        this._dragOverInsertIndex = newIndex;
-        this._applyRailGap(newIndex);
-      }
-    });
-    rail.addEventListener('dragleave', (e) => {
-      // Only clear the gap when leaving the rail entirely — moving
-      // between sibling cards fires dragleave + dragenter pairs.
-      if (rail.contains(e.relatedTarget as Node | null)) return;
-      this._applyRailGap(null);
-      this._dragOverInsertIndex = null;
-    });
-    rail.addEventListener('drop', (e) => {
-      const id = e.dataTransfer?.getData('application/x-init-card');
-      const pile = e.dataTransfer?.getData('application/x-init-pile');
-      const insertIndex = this._dragOverInsertIndex ?? this.state.activeDeck.length;
-      this._applyRailGap(null);
-      this._dragOverInsertIndex = null;
-      if (!id) return;
-      e.preventDefault();
-      if (pile === 'bench' || pile === 'unallocated' || pile === 'discard') {
-        this._mutate((s) => injectFromStagingAt(s, id, insertIndex));
-      } else if (pile === 'rail') {
-        this._reorder(id, insertIndex);
-      }
-    });
     for (let i = 0; i < this.state.activeDeck.length; i++) {
       rail.appendChild(this._renderCard(this.state.activeDeck[i]!, i));
     }
@@ -709,20 +746,10 @@ export class InitiativeTracker {
       el.style.setProperty('--init-color-fg', _isLightColor(card.color) ? '#0b0d12' : '#ffffff');
     }
     el.style.zIndex = String(100 - index);
-    el.draggable = card.type !== 'round-marker';
     el.dataset['cardId'] = card.id;
 
-    // v2.16.63 — drag source only. The rail-level dragover/drop handler
-    // computes the precise insertion index (via the gap visual) and
-    // routes inject vs reorder. Per-card drop handlers are gone.
-    el.addEventListener('dragstart', (e) => {
-      if (card.type === 'round-marker') { e.preventDefault(); return; }
-      e.dataTransfer?.setData('text/plain', card.id);
-      e.dataTransfer?.setData('application/x-init-card', card.id);
-      e.dataTransfer?.setData('application/x-init-pile', 'rail');
-      el.classList.add('is-dragging');
-    });
-    el.addEventListener('dragend', () => el.classList.remove('is-dragging'));
+    // v2.16.73 — pointer-based drag source. Round marker is not draggable.
+    if (card.type !== 'round-marker') this._makeCardDraggable(el, card.id, 'rail');
 
     // Right-click → Jump to Front (sudden reaction / boss phase trigger).
     el.addEventListener('contextmenu', (e) => {

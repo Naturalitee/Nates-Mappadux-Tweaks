@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.73 — 2026-06-01
+
+Card drag rebuilt on Pointer Events — works for mouse AND touch now (HTML5 drag-and-drop was mouse-only and was being blocked for mouse anyway). A ghost card follows the cursor; the source hides; rail gap + drop-zone highlight track live; drop resolves rail reorder / inject / discard / revive by hit-testing the zone under the pointer. Also: left/right edge-snap outline raised above the side panels so it's visible on every edge.
+
 ## v2.16.72 — 2026-06-01
 
 Player card portraits restored (resolved by playerId from the icon cache now that markerUrl is stripped from the wire); the redundant value number under rail cards removed in favour of double-click-to-edit; side dock slimmed to one card-column wide (fixed the max-content blow-out); drag-bar now shows a dashed outline of the target edge while dragging. NOTE: mouse card-drag rebuild on pointer events (for mouse + touch) is the next patch.

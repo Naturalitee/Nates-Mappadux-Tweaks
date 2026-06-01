@@ -7198,7 +7198,9 @@ option.select-option--add {
    the GM sees where the tracker will land before releasing. */
 .init-edge-hint {
   position: fixed;
-  z-index: 7;
+  /* v2.16.73 — above the GM side panels so the left/right outline isn't
+     hidden under the docked control UI (was z-index 7, under the panels). */
+  z-index: 900;
   pointer-events: none;
   display: none;
   border: 2px dashed var(--accent);
@@ -7206,6 +7208,19 @@ option.select-option--add {
   box-sizing: border-box;
 }
 .init-edge-hint.is-visible { display: block; }
+/* v2.16.73 — pointer-drag ghost: a clone of the card that follows the
+   cursor while dragging. Fixed-positioned, above everything, click-through
+   so elementFromPoint hit-tests the zone underneath, not the ghost. */
+.init-card-ghost {
+  position: fixed !important;
+  z-index: 2000;
+  margin: 0 !important;
+  pointer-events: none;
+  opacity: 0.92;
+  transform: rotate(-3deg) scale(1.04);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
+  transition: none !important;
+}
 /* v2.16.72 — double-click-to-edit input overlaid on a rail card. */
 .init-card-edit {
   position: absolute;
