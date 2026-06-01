@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.63 — 2026-06-01
+
+Initiative big-sweep: 3-button primary stack (Advance=green / Reroll Initiative=orange / End Combat=red); left-edge drag-bar cycles dock position (top default + remembered); rail opens a visual gap as a card is dragged over so drop lands exactly where the GM aimed; advance now sends card to back of WHOLE deck (END ROUND is a regular placeable card so GM can queue cards behind it for next round); END ROUND sorts to end via comparator score, not a special branch; click Discard pile to fan + drag a card back to revive; Reroll Initiative resets deck/tray/bench preserving discard.
+
 ## v2.16.62 — 2026-06-01
 
 Initiative polish round 4: GM rail enemy cards show the typed value (was still showing the threat letter); END ROUND treated as a standard card with yellow/black caution-stripe body; GM fan loosened (~25-30% overlap) so the big value text is readable; transparency-as-state cues removed (no more faded spent/dragging cards); discarded cards desaturate instead of fade; player view round marker matches standard card size.

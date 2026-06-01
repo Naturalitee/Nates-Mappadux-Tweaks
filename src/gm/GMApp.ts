@@ -6286,6 +6286,11 @@ export class GMApp {
       // roster so the GM doesn't have to dig into the tracker overlay
       // first. Opens the tracker (if hidden) + broadcasts the prompt.
       onCallForInitiative: () => {
+        // v2.16.63 — Call for Initiative wipes deck + tray + bench
+        // (preserving discard) BEFORE seeding + broadcasting. Both the
+        // Players-panel orange button and the in-tracker Call route
+        // through this path so behaviour is uniform.
+        this.initiativeTracker?.resetForNewCombat();
         this.initiativeTracker?.open();
         this.initiativeTracker?.seedUnallocatedFromPlayers();
         this.host.broadcast({ type: 'initiative_call' });
@@ -6501,8 +6506,10 @@ export class GMApp {
         this.host.broadcast({ type: 'initiative_update', state });
       },
       onCallForInitiative: () => {
-        // Seed the unallocated tray with any persistent players who don't
-        // already have a card, then broadcast the prompt to all players.
+        // v2.16.63 — reset deck + tray + bench (preserving discard),
+        // then seed players and broadcast. The Players-panel orange
+        // button routes through the same path via bindPlayersPanel.
+        this.initiativeTracker?.resetForNewCombat();
         this.initiativeTracker?.seedUnallocatedFromPlayers();
         this.host.broadcast({ type: 'initiative_call' });
         this.setStatus('Call for Initiative broadcast', 'ok');

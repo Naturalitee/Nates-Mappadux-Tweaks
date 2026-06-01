@@ -5,11 +5,11 @@ import {
   advanceTurn,
   patchCardValue,
   addCardToDeck,
-  injectFromStaging,
+  injectFromStagingAt,
   injectFromStagingWithValue,
   discardCard,
   endCombat,
-  rerollInitiative,
+  resetForNewCombat,
   reorderCard,
   jumpToFront,
   makeRoundMarker,
@@ -41,6 +41,16 @@ export class InitiativeTracker {
   private state: InitiativeState;
   private root: HTMLElement;
   private cb: InitiativeTrackerCallbacks;
+  /** v2.16.63 — discard pile expansion state (UI-only, not persisted).
+   *  When true, the discard cards fan out so the GM can grab one back. */
+  private _discardExpanded = false;
+  /** v2.16.63 — index where a dragged card would land if dropped. null
+   *  when no drag is over the rail. Drives the visual "gap" between
+   *  rail cards as the GM hovers. */
+  private _dragOverInsertIndex: number | null = null;
+  /** Cached rail element so dragover updates can re-paint gap classes
+   *  without a full re-render. */
+  private _railEl: HTMLElement | null = null;
 
   constructor(root: HTMLElement, initial: InitiativeState, cb: InitiativeTrackerCallbacks) {
     this.root = root;
@@ -51,6 +61,11 @@ export class InitiativeTracker {
 
   /** Replace state wholesale (e.g. after a localStorage reload). */
   setState(state: InitiativeState): void { this.state = ensureMarkerIfActive(state); this._render(); }
+
+  /** v2.16.63 — Reset for a new combat: wipes deck + tray + bench, keeps
+   *  the discard pile so dead characters / monsters stay dead across
+   *  combats within the same campaign session. */
+  resetForNewCombat(): void { this._mutate(resetForNewCombat); }
 
   getState(): InitiativeState { return this.state; }
 
@@ -138,8 +153,6 @@ export class InitiativeTracker {
     this._mutate((s) => patchCardValue(s, cardId, value));
   }
 
-  private _inject(cardId: string): void { this._mutate((s) => injectFromStaging(s, cardId)); }
-
   /** v2.16.58 — type-to-inject: drop the staged card into the active deck
    *  AND patch its value in one mutation so it lands at the correct sort
    *  position immediately. Used by the value input on bench / tray cards. */
@@ -188,24 +201,39 @@ export class InitiativeTracker {
     const ctl = document.createElement('div');
     ctl.className = 'init-controls';
 
-    const call = mkBtn('Call for Initiative', 'init-btn init-btn--primary', () => this.cb.onCallForInitiative());
-    // v2.16.59 — when the END ROUND card lands at the front of the deck
-    // the GM gets two choices (rather than one auto-advance): keep the
-    // initiative order for the next round, or reroll. Most systems do
-    // the former; some (Daggerheart-style) reroll every round.
+    // v2.16.63 — far-left (or top in vertical mode) drag bar. Click to
+    // cycle dock position top → right → bottom → left → top. Replaces
+    // the edge dropdown with a tactile grip the GM can see + grab. The
+    // chosen edge persists via state.edge.
+    const dragBar = document.createElement('button');
+    dragBar.type = 'button';
+    dragBar.className = 'init-drag-bar';
+    dragBar.title = `Click to cycle dock position (currently ${this.state.edge}). Top → Right → Bottom → Left → Top.`;
+    dragBar.setAttribute('aria-label', 'Cycle dock position');
+    dragBar.addEventListener('click', () => this._cycleEdge());
+    ctl.append(dragBar);
+
+    // Primary column: Advance, Roll Initiative, End Combat — the three
+    // main combat-loop actions. Reroll Initiative joins them only when
+    // END ROUND is at the front of the deck (round transition).
+    const primary = document.createElement('div');
+    primary.className = 'init-controls-primary';
+
     const headIsRoundEnd = this.state.activeDeck[0]?.type === 'round-marker';
     const advance = headIsRoundEnd
-      ? mkBtn('Start Next Round ▶', 'init-btn init-btn--primary', () => this._advance())
-      : mkBtn('Advance ▶', 'init-btn', () => this._advance());
-    const reroll = headIsRoundEnd
-      ? mkBtn('Reroll Initiative', 'init-btn', () => this._rerollInitiative())
-      : null;
+      ? mkBtn('Start Next Round ▶', 'init-btn init-btn--advance', () => this._advance())
+      : mkBtn('Advance ▶', 'init-btn init-btn--advance', () => this._advance());
+    // v2.16.63 — "Reroll Initiative" (orange) is the consolidated primary
+    // initiative action. Resets deck + tray + bench (preserving discard)
+    // and re-prompts players. Both this button and the Players-panel
+    // orange one route through cb.onCallForInitiative.
+    const reroll = mkBtn('Reroll Initiative', 'init-btn init-btn--roll', () => this.cb.onCallForInitiative());
+    const end = mkBtn('End Combat', 'init-btn init-btn--danger', () => this._endCombat());
+    primary.append(advance, reroll, end);
+    ctl.append(primary);
 
-    // v2.16.61 — sort dropdown shows the two NUMERIC directions only.
-    // Manual mode is reached implicitly by dragging a card; selecting a
-    // numeric direction here re-applies that sort and exits manual.
-    // Displayed value follows lastNumericSortMode so the dropdown
-    // reflects the GM's chosen polarity even mid-manual.
+    // Secondary: sort dropdown only (the edge dropdown moved to the
+    // drag-bar). Manual mode is reached implicitly by dragging a card.
     const sort = document.createElement('select');
     sort.className = 'init-sort';
     sort.title = 'Sort mode — drag any card to reorder freely (auto-switches to manual until you pick a direction again)';
@@ -220,40 +248,55 @@ export class InitiativeTracker {
       sort.appendChild(opt);
     }
     sort.addEventListener('change', () => this._setSortMode(sort.value as InitiativeSortMode));
+    ctl.append(sort);
 
-    const edge = document.createElement('select');
-    edge.className = 'init-edge';
-    edge.title = 'Pin the tracker to an edge of the view';
-    for (const [val, label] of [
-      ['bottom', '⤓ Bottom'],
-      ['top',    '⤒ Top'],
-      ['left',   '◀ Left'],
-      ['right',  '▶ Right'],
-    ] as Array<[InitiativeEdge, string]>) {
-      const opt = document.createElement('option');
-      opt.value = val;
-      opt.textContent = label;
-      if (this.state.edge === val) opt.selected = true;
-      edge.appendChild(opt);
-    }
-    edge.addEventListener('change', () => this._setEdge(edge.value as InitiativeEdge));
-
-    const end = mkBtn('End Combat', 'init-btn init-btn--danger', () => this._endCombat());
-    // v2.16.61 — hide × removed. End Combat is now the sole "stop" path;
-    // it wipes the rail + tray + bench + discard AND closes the tracker.
-
-    if (reroll) ctl.append(call, advance, reroll, sort, edge, end);
-    else        ctl.append(call, advance,         sort, edge, end);
     return ctl;
   }
 
-  /** v2.16.59 — reset everyone's roll value + re-prompt the players. */
-  private _rerollInitiative(): void {
-    this._mutate(rerollInitiative);
-    // Reuse the existing Call for Initiative wiring — it broadcasts the
-    // prompt to player views AND re-seeds any missing players into the
-    // unallocated tray.
-    this.cb.onCallForInitiative();
+  /** v2.16.63 — cycle through the four dock edges. The drag-bar click
+   *  invokes this; the chosen edge persists via state.edge → localStorage. */
+  private _cycleEdge(): void {
+    const order: InitiativeEdge[] = ['top', 'right', 'bottom', 'left'];
+    const idx = order.indexOf(this.state.edge);
+    const next = order[(idx + 1) % order.length]!;
+    this._setEdge(next);
+  }
+
+  /** v2.16.63 — figure out which slot the cursor would drop into based on
+   *  rail-card midpoints. Skips the card currently being dragged so the
+   *  source position doesn't influence the gap calc. */
+  private _computeRailInsertIndex(rail: HTMLElement, clientX: number, clientY: number): number {
+    const isH = isHorizontal(this.state.edge);
+    const cards = Array.from(rail.querySelectorAll<HTMLElement>('.init-card'));
+    let realIndex = 0;
+    for (let i = 0; i < cards.length; i++) {
+      const card = cards[i]!;
+      if (card.classList.contains('is-dragging')) continue;
+      const rect = card.getBoundingClientRect();
+      const cursor = isH ? clientX : clientY;
+      const midpoint = isH ? rect.left + rect.width / 2 : rect.top + rect.height / 2;
+      if (cursor < midpoint) return realIndex;
+      realIndex++;
+    }
+    return realIndex;
+  }
+
+  /** v2.16.63 — open / close the rail "gap" by toggling .is-gap-shift on
+   *  cards at or after the insertion point. Direct DOM mutation, not a
+   *  re-render — keeps the drag UX 60fps. */
+  private _applyRailGap(insertIndex: number | null): void {
+    if (!this._railEl) return;
+    const cards = Array.from(this._railEl.querySelectorAll<HTMLElement>('.init-card'));
+    let nonDraggedIndex = 0;
+    for (const card of cards) {
+      if (card.classList.contains('is-dragging')) continue;
+      if (insertIndex !== null && nonDraggedIndex >= insertIndex) {
+        card.classList.add('is-gap-shift');
+      } else {
+        card.classList.remove('is-gap-shift');
+      }
+      nonDraggedIndex++;
+    }
   }
 
   private _renderBench(): HTMLElement {
@@ -326,17 +369,20 @@ export class InitiativeTracker {
     label.textContent = 'Discard';
     zone.appendChild(label);
     const stack = document.createElement('div');
-    stack.className = 'init-stack init-stack--discard';
-    // Make the whole zone a drop target so the GM can fling cards in from
-    // anywhere — rail, bench, tray. The state engine handles all three.
+    stack.className = `init-stack init-stack--discard${this._discardExpanded ? ' is-expanded' : ''}`;
+    // Drop target for incoming discards from any pile.
     zone.addEventListener('dragover', (e) => {
       if (!e.dataTransfer?.types.includes('application/x-init-card')) return;
+      // Only accept discard drops when not already a drag FROM discard
+      // (we don't accept discarded cards back into the discard pile).
+      if (e.dataTransfer.getData('application/x-init-pile') === 'discard') return;
       e.preventDefault();
       stack.classList.add('is-drop-target');
     });
     zone.addEventListener('dragleave', () => stack.classList.remove('is-drop-target'));
     zone.addEventListener('drop', (e) => {
       stack.classList.remove('is-drop-target');
+      if (e.dataTransfer?.getData('application/x-init-pile') === 'discard') return;
       const id = e.dataTransfer?.getData('application/x-init-card');
       if (!id) return;
       e.preventDefault();
@@ -345,6 +391,20 @@ export class InitiativeTracker {
     if (this.state.discarded.length === 0) {
       stack.appendChild(this._emptyHint('Drag here to remove from combat.'));
     } else {
+      // v2.16.63 — clicking the stack toggles "expanded" mode. While
+      // expanded the cards fan out to the side AND become draggable,
+      // letting the GM pull one back into the rail/bench/tray if they
+      // discarded by mistake. No card EVER disappears.
+      stack.style.cursor = 'pointer';
+      stack.title = this._discardExpanded
+        ? 'Click to close the discard fan'
+        : 'Click to fan the discard — pull a card back to revive it';
+      stack.addEventListener('click', (e) => {
+        // Ignore clicks that bubbled up from a dragstart-related event.
+        if ((e.target as HTMLElement).closest('.init-card-stage-value')) return;
+        this._discardExpanded = !this._discardExpanded;
+        this._render();
+      });
       const total = this.state.discarded.length;
       for (let i = 0; i < total; i++) {
         const card = this.state.discarded[i]!;
@@ -382,8 +442,11 @@ export class InitiativeTracker {
     el.dataset['cardId'] = card.id;
     el.dataset['pile'] = pile;
 
-    // Drag source — every staging card is draggable except discard.
-    if (pile !== 'discard') {
+    // Drag source — bench/unallocated cards are always draggable.
+    // Discard cards are only draggable while the pile is expanded
+    // (v2.16.63 click-to-fan affordance) so the GM can pull them back.
+    const draggable = pile !== 'discard' || this._discardExpanded;
+    if (draggable) {
       el.draggable = true;
       el.addEventListener('dragstart', (e) => {
         e.dataTransfer?.setData('text/plain', card.id);
@@ -475,22 +538,41 @@ export class InitiativeTracker {
     zone.appendChild(label);
     const rail = document.createElement('div');
     rail.className = `init-rail ${isHorizontal(this.state.edge) ? 'is-horizontal' : 'is-vertical'}`;
-    // v2.16.58 — rail accepts drops from bench / unallocated (inject) AND
-    // from itself (reorder). Per-card drop targets handle the precise
-    // position; the rail container catches "drop anywhere in here" for
-    // staging piles when the GM doesn't aim at a specific slot.
+    // v2.16.63 — rail gap-on-drag. As the GM drags any card over the
+    // rail, the cards at and after the would-be insertion point shift
+    // away to open a gap. Drop lands at that index precisely. Drops
+    // from bench / unallocated / discard inject at the gap; rail→rail
+    // drops reorder. Per-card drop handlers are gone (rail-level owns it).
+    this._railEl = rail;
     rail.addEventListener('dragover', (e) => {
       if (!e.dataTransfer?.types.includes('application/x-init-card')) return;
       e.preventDefault();
+      const newIndex = this._computeRailInsertIndex(rail, e.clientX, e.clientY);
+      if (newIndex !== this._dragOverInsertIndex) {
+        this._dragOverInsertIndex = newIndex;
+        this._applyRailGap(newIndex);
+      }
+    });
+    rail.addEventListener('dragleave', (e) => {
+      // Only clear the gap when leaving the rail entirely — moving
+      // between sibling cards fires dragleave + dragenter pairs.
+      if (rail.contains(e.relatedTarget as Node | null)) return;
+      this._applyRailGap(null);
+      this._dragOverInsertIndex = null;
     });
     rail.addEventListener('drop', (e) => {
       const id = e.dataTransfer?.getData('application/x-init-card');
       const pile = e.dataTransfer?.getData('application/x-init-pile');
+      const insertIndex = this._dragOverInsertIndex ?? this.state.activeDeck.length;
+      this._applyRailGap(null);
+      this._dragOverInsertIndex = null;
       if (!id) return;
-      // Only handle "stray" drops not consumed by a card-level handler.
-      if ((e.target as HTMLElement).closest('.init-card')) return;
       e.preventDefault();
-      if (pile === 'bench' || pile === 'unallocated') this._inject(id);
+      if (pile === 'bench' || pile === 'unallocated' || pile === 'discard') {
+        this._mutate((s) => injectFromStagingAt(s, id, insertIndex));
+      } else if (pile === 'rail') {
+        this._reorder(id, insertIndex);
+      }
     });
     for (let i = 0; i < this.state.activeDeck.length; i++) {
       rail.appendChild(this._renderCard(this.state.activeDeck[i]!, i));
@@ -521,8 +603,9 @@ export class InitiativeTracker {
     el.draggable = card.type !== 'round-marker';
     el.dataset['cardId'] = card.id;
 
-    // Drag handlers — drag-to-reorder switches to manual sort mode; drops
-    // from bench/unallocated inject the card at this position.
+    // v2.16.63 — drag source only. The rail-level dragover/drop handler
+    // computes the precise insertion index (via the gap visual) and
+    // routes inject vs reorder. Per-card drop handlers are gone.
     el.addEventListener('dragstart', (e) => {
       if (card.type === 'round-marker') { e.preventDefault(); return; }
       e.dataTransfer?.setData('text/plain', card.id);
@@ -531,26 +614,6 @@ export class InitiativeTracker {
       el.classList.add('is-dragging');
     });
     el.addEventListener('dragend', () => el.classList.remove('is-dragging'));
-    el.addEventListener('dragover', (e) => {
-      if (!e.dataTransfer?.types.includes('application/x-init-card')) return;
-      e.preventDefault();
-      el.classList.add('is-drop-target');
-    });
-    el.addEventListener('dragleave', () => el.classList.remove('is-drop-target'));
-    el.addEventListener('drop', (e) => {
-      el.classList.remove('is-drop-target');
-      const draggedId = e.dataTransfer?.getData('application/x-init-card');
-      const pile = e.dataTransfer?.getData('application/x-init-pile');
-      if (!draggedId || draggedId === card.id) return;
-      e.preventDefault();
-      // v2.16.58 — drops from bench/unallocated inject (and the state
-      // engine sorts); drops from rail reorder.
-      if (pile === 'bench' || pile === 'unallocated') {
-        this._inject(draggedId);
-      } else {
-        this._reorder(draggedId, index);
-      }
-    });
 
     // Right-click → Jump to Front (sudden reaction / boss phase trigger).
     el.addEventListener('contextmenu', (e) => {

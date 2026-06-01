@@ -90,7 +90,9 @@ export function loadInitiativeState(): InitiativeState {
   } catch { return defaultInitiativeState(); }
 }
 
-/** Sort the active deck per sort mode, keeping the ROUND END marker last.
+/** Sort the active deck per sort mode. ROUND END is just a regular card
+ *  in the comparator — given a magic always-last score so it lands at
+ *  the end naturally (no separate filter-then-append).
  *  v2.16.59 — TIE-BREAK BY ARRIVAL ORDER. When two cards have equal
  *  values the comparator returns 0 and the ES2019+ stable-sort guarantee
  *  preserves their input order. addCardToDeck appends new cards to the
@@ -99,9 +101,16 @@ export function loadInitiativeState(): InitiativeState {
  *  2026-06-01). DO NOT add a fallback tie-break here. */
 export function sortActiveDeck(deck: InitiativeCard[], mode: InitiativeSortMode): InitiativeCard[] {
   if (mode === 'manual') return deck;
-  const roundMarker = deck.find((c) => c.type === 'round-marker');
-  const rest = deck.filter((c) => c.type !== 'round-marker');
-  rest.sort((a, b) => {
+  return deck.slice().sort((a, b) => {
+    // v2.16.64 — round marker scored as always-last in either direction.
+    // Treats END ROUND like any other card via its "score" rather than
+    // splitting it out of the sort and re-appending.
+    const aIsMarker = a.type === 'round-marker';
+    const bIsMarker = b.type === 'round-marker';
+    if (aIsMarker && bIsMarker) return 0;
+    if (aIsMarker) return 1;
+    if (bIsMarker) return -1;
+
     const an = parseFloat(a.value);
     const bn = parseFloat(b.value);
     const aIsNum = !isNaN(an) && a.value.trim() !== '';
@@ -116,38 +125,40 @@ export function sortActiveDeck(deck: InitiativeCard[], mode: InitiativeSortMode)
     // ties resolve by arrival order via stable sort (Alex 2026-06-01).
     return a.value.localeCompare(b.value, undefined, { sensitivity: 'base' });
   });
-  return roundMarker ? [...rest, roundMarker] : rest;
 }
 
-/** Advance the active turn: the current actor goes to spent at the back; the
- *  next card slides into focus. Cycling past ROUND END resets all spent flags
- *  and parks the marker at the rear for the new round. */
+/** Advance the active turn: the current actor goes to the BACK of the whole
+ *  deck (behind END ROUND if present); the next card slides into focus.
+ *  Cycling past ROUND END resets all spent flags and moves the marker to
+ *  the rear for the new round.
+ *
+ *  v2.16.64 — END ROUND is no longer treated as the "always last" anchor;
+ *  it's a regular card the GM can place wherever they want. Cards advance
+ *  to the very end of the deck (after END ROUND), which lets the GM
+ *  deliberately queue cards BEHIND END ROUND for "acts next round" play.
+ */
 export function advanceTurn(state: InitiativeState): InitiativeState {
   if (state.activeDeck.length === 0) return state;
   const [head, ...rest] = state.activeDeck;
   if (head!.type === 'round-marker') {
+    // End-of-round transition: spent flags clear; END ROUND parks at back.
     return {
       ...state,
       activeDeck: [...rest.map((c) => ({ ...c, isSpent: false })), head!],
     };
   }
   const spent: InitiativeCard = { ...head!, isSpent: true };
-  const roundIdx = rest.findIndex((c) => c.type === 'round-marker');
-  const newDeck = roundIdx === -1
-    ? [...rest, spent]
-    : [...rest.slice(0, roundIdx), spent, ...rest.slice(roundIdx)];
-  return { ...state, activeDeck: newDeck };
+  return { ...state, activeDeck: [...rest, spent] };
 }
 
-/** Ensure the ROUND END marker sits at the back of the active deck. Idempotent. */
+/** Ensure the ROUND END marker EXISTS in the active deck (creates one at
+ *  the back if missing). Does NOT relocate an existing marker — END ROUND
+ *  is a placeable card from v2.16.64 onward, so a marker the GM has
+ *  positioned mid-deck stays put. sortActiveDeck still moves the marker
+ *  to the end as part of a full numeric sort. */
 export function ensureRoundMarker(deck: InitiativeCard[]): InitiativeCard[] {
   if (deck.length === 0) return [];
-  const hasMarker = deck.some((c) => c.type === 'round-marker');
-  if (hasMarker) {
-    const marker = deck.find((c) => c.type === 'round-marker')!;
-    const rest = deck.filter((c) => c.type !== 'round-marker');
-    return [...rest, marker];
-  }
+  if (deck.some((c) => c.type === 'round-marker')) return deck;
   return [...deck, makeRoundMarker()];
 }
 
@@ -186,7 +197,9 @@ export function removeFromDeck(state: InitiativeState, cardId: string): Initiati
   return { ...state, activeDeck: newDeck, unallocated: [...state.unallocated, wiped] };
 }
 
-/** Drop a card from the threat bench or unallocated tray into the active deck. */
+/** Drop a card from the threat bench, unallocated tray, OR discard pile into
+ *  the active deck. v2.16.63 — discard added so the "click discard, fan,
+ *  drag a card back" flow can restore a removed card via the same drop path. */
 export function injectFromStaging(state: InitiativeState, cardId: string): InitiativeState {
   const benchIdx = state.threatBench.findIndex((c) => c.id === cardId);
   if (benchIdx !== -1) {
@@ -204,7 +217,54 @@ export function injectFromStaging(state: InitiativeState, cardId: string): Initi
       card,
     );
   }
+  const discIdx = state.discarded.findIndex((c) => c.id === cardId);
+  if (discIdx !== -1) {
+    const card = state.discarded[discIdx]!;
+    return addCardToDeck(
+      { ...state, discarded: state.discarded.filter((_, i) => i !== discIdx) },
+      card,
+    );
+  }
   return state;
+}
+
+/** v2.16.63 — Reset everything ready for a new combat but PRESERVE the
+ *  discard pile. Called by the in-tracker Call for Initiative so a GM
+ *  starting a fresh fight keeps the running "dead/out" tally intact. */
+export function resetForNewCombat(state: InitiativeState): InitiativeState {
+  return {
+    ...state,
+    activeDeck: [],
+    unallocated: [],
+    threatBench: defaultInitiativeState().threatBench,
+    // discarded preserved
+  };
+}
+
+/** v2.16.63 — Inject a staged card at a SPECIFIC index in the active deck.
+ *  Used when the GM drags a card from bench/tray onto the rail and the
+ *  rail's gap-on-hover indicator showed where it would land. Switches
+ *  sortMode to manual since the GM positioned by hand. ROUND END is
+ *  kept at the back. */
+export function injectFromStagingAt(state: InitiativeState, cardId: string, insertIndex: number): InitiativeState {
+  const benchIdx = state.threatBench.findIndex((c) => c.id === cardId);
+  const trayIdx  = state.unallocated.findIndex((c) => c.id === cardId);
+  let card: InitiativeCard | undefined;
+  let threatBench = state.threatBench;
+  let unallocated = state.unallocated;
+  if (benchIdx !== -1) {
+    card = state.threatBench[benchIdx]!;
+    threatBench = state.threatBench.filter((_, i) => i !== benchIdx);
+  } else if (trayIdx !== -1) {
+    card = state.unallocated[trayIdx]!;
+    unallocated = state.unallocated.filter((_, i) => i !== trayIdx);
+  } else {
+    return state;
+  }
+  const next = state.activeDeck.slice();
+  const clamped = Math.max(0, Math.min(insertIndex, next.length));
+  next.splice(clamped, 0, card);
+  return { ...state, threatBench, unallocated, sortMode: 'manual', activeDeck: ensureRoundMarker(next) };
 }
 
 /** Wipe everything but keep settings (sort mode + edge + visible). */
