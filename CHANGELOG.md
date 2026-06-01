@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.67 — 2026-06-01
+
+Initiative tracker swallows pointer/mouse/touch/wheel events at its root so drags inside the tracker (cards, drag-bar, zones) no longer bubble to the GM canvas and pan the map.
+
 ## v2.16.66 — 2026-06-01
 
 Initiative Tracker entry dropped from the hamburger menu — orange "Roll Initiative" in the Players panel opens it, End Combat closes it.
