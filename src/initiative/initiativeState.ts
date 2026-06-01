@@ -50,6 +50,7 @@ export function defaultInitiativeState(): InitiativeState {
     activeDeck:  [],
     unallocated: [],
     threatBench: ['A', 'B', 'C', 'D', 'E', 'F'].map(makeThreatCard),
+    discarded:   [],
     sortMode: 'high-to-low',
     // v2.16.56 — default to TOP since the top of the player & GM views are
     // the least-cluttered surfaces today. Easy to repin via the edge select.
@@ -73,8 +74,9 @@ export function loadInitiativeState(): InitiativeState {
       activeDeck:  Array.isArray(parsed.activeDeck)  ? parsed.activeDeck  : [],
       unallocated: Array.isArray(parsed.unallocated) ? parsed.unallocated : [],
       threatBench: Array.isArray(parsed.threatBench) ? parsed.threatBench : defaultInitiativeState().threatBench,
+      discarded:   Array.isArray(parsed.discarded)   ? parsed.discarded   : [],
       sortMode:    (parsed.sortMode as InitiativeSortMode | undefined) ?? 'high-to-low',
-      edge:        (parsed.edge as InitiativeEdge | undefined) ?? 'bottom',
+      edge:        (parsed.edge as InitiativeEdge | undefined) ?? 'top',
       visible:     !!parsed.visible,
     };
   } catch { return defaultInitiativeState(); }
@@ -195,7 +197,39 @@ export function endCombat(state: InitiativeState): InitiativeState {
     activeDeck: [],
     unallocated: [],
     threatBench: defaultInitiativeState().threatBench,
+    discarded:   [],
   };
+}
+
+/** v2.16.58 — Drop a card from ANY pile (active deck, bench, tray) into the
+ *  discard pile. Cards in the discard pile are out of THIS combat; they
+ *  won't return to bench / tray automatically. End Combat clears the
+ *  discard along with everything else. Returns state unchanged if cardId
+ *  is unknown or the card is the ROUND END marker. */
+export function discardCard(state: InitiativeState, cardId: string): InitiativeState {
+  const fromDeck  = state.activeDeck.find((c) => c.id === cardId);
+  const fromBench = state.threatBench.find((c) => c.id === cardId);
+  const fromTray  = state.unallocated.find((c) => c.id === cardId);
+  const card = fromDeck ?? fromBench ?? fromTray;
+  if (!card || card.type === 'round-marker') return state;
+  const wiped: InitiativeCard = { ...card, value: '', isSpent: false };
+  return {
+    ...state,
+    activeDeck:  state.activeDeck.filter((c) => c.id !== cardId),
+    threatBench: state.threatBench.filter((c) => c.id !== cardId),
+    unallocated: state.unallocated.filter((c) => c.id !== cardId),
+    discarded:   [...state.discarded, wiped],
+  };
+}
+
+/** v2.16.58 — Inject a card from the bench/tray into the active deck AND
+ *  immediately patch its value in one mutation so the card lands at the
+ *  correct sort position. Used by the type-to-inject flow on bench/tray
+ *  cards. If value is empty it's a plain inject (current behaviour). */
+export function injectFromStagingWithValue(state: InitiativeState, cardId: string, value: string): InitiativeState {
+  const after = injectFromStaging(state, cardId);
+  if (!value.trim()) return after;
+  return patchCardValue(after, cardId, value.trim());
 }
 
 /** Manual drag-reorder of a card within the active deck (sort mode → manual). */

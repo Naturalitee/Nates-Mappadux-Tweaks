@@ -592,6 +592,10 @@ export interface InitiativeState {
   unallocated: InitiativeCard[];
   /** Reserve threat letters for the GM to inject as enemies appear. */
   threatBench: InitiativeCard[];
+  /** v2.16.58 — Discard pile. Cards dragged here are out of THIS combat
+   *  entirely (won't return to bench / tray). End Combat clears it along
+   *  with everything else. Player view never renders this zone. */
+  discarded: InitiativeCard[];
   /** Sort mode — drives where new cards land when they arrive. */
   sortMode: InitiativeSortMode;
   /** Which edge of the GM/player view the tracker is pinned to. Horizontal
