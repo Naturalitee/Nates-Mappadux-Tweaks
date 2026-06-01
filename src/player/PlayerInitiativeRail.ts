@@ -15,10 +15,24 @@ import type { InitiativeCard, InitiativeState, InitiativeEdge } from '../types.t
  */
 export class PlayerInitiativeRail {
   private state: InitiativeState | null = null;
+  /** v2.16.72 — resolve a player's token icon by id. The icon is NOT
+   *  carried in the (stripped) initiative_update broadcast any more — it
+   *  arrives via the chunked player_icon_update path and is cached by
+   *  PlayerApp — so the rail looks it up here by card.playerId. */
+  private iconFor: ((playerId: string) => string | undefined) | null = null;
 
   constructor(private root: HTMLElement) {
     this._render();
   }
+
+  /** Wire the icon lookup (PlayerApp passes its per-player icon cache). */
+  setIconResolver(fn: (playerId: string) => string | undefined): void {
+    this.iconFor = fn;
+  }
+
+  /** Re-render with the current state (e.g. when a player's icon arrives
+   *  after the initiative state did, so the portrait can fill in). */
+  refresh(): void { this.setState(this.state); }
 
   /** v2.16.64 — FLIP animation. Capture every visible card's screen
    *  position BEFORE the re-render; after the render, animate each
@@ -122,11 +136,14 @@ export class PlayerInitiativeRail {
 
     const body = document.createElement('div');
     body.className = 'init-card-body';
-    if (card.markerUrl) {
+    // markerUrl is stripped from the wire (v2.16.71); fall back to the
+    // icon cache keyed by playerId.
+    const portrait = card.markerUrl ?? (card.playerId ? this.iconFor?.(card.playerId) : undefined);
+    if (portrait) {
       // Player has chosen a token icon — render it as the centred portrait.
       const img = document.createElement('img');
       img.className = 'init-card-portrait';
-      img.src = card.markerUrl;
+      img.src = portrait;
       img.alt = '';
       img.draggable = false;
       body.appendChild(img);

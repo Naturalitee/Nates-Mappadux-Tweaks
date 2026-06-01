@@ -7178,17 +7178,52 @@ option.select-option--add {
 }
 .init-tracker.is-edge-bottom { left: 0; right: 0; bottom: 0; border-radius: 8px 8px 0 0; max-height: 55%; }
 .init-tracker.is-edge-top    { left: 0; right: 0; top: 0;    border-radius: 0 0 8px 8px; max-height: 55%; }
-/* v2.16.71 — docked to a SIDE, the tracker spans full height but is only
-   as wide as it needs to be (the cards + a slim button column). Width is
-   content-driven; the button column is forced down to card width below. */
-.init-tracker.is-edge-left   { top: 0; bottom: 0; left: 0;   border-radius: 0 8px 8px 0; width: max-content; max-width: 40vw; }
-.init-tracker.is-edge-right  { top: 0; bottom: 0; right: 0;  border-radius: 8px 0 0 8px; width: max-content; max-width: 40vw; }
+/* v2.16.72 — docked to a SIDE, the tracker spans full height and is only
+   as wide as one card column. An explicit slim width (NOT max-content,
+   which would expand the flex-wrap unallocated row to a single line and
+   blow the width out). */
+.init-tracker.is-edge-left   { top: 0; bottom: 0; left: 0;   border-radius: 0 8px 8px 0; width: 116px; }
+.init-tracker.is-edge-right  { top: 0; bottom: 0; right: 0;  border-radius: 8px 0 0 8px; width: 116px; }
+/* The vertical rail / zones fit inside the slim column. */
+.init-tracker.is-vertical .init-zone--unallocated { max-width: none; }
+.init-tracker.is-vertical .init-rail.is-vertical { min-width: 0; }
 /* v2.16.71 — visible dock-drag: tracker follows the cursor, dimmed, with
    a highlight ring so it clearly reads as being moved. */
 .init-tracker.is-dock-dragging {
   transition: none;
   box-shadow: 0 0 0 2px var(--accent), 0 12px 40px rgba(0, 0, 0, 0.6);
   cursor: grabbing;
+}
+/* v2.16.72 — snap-target outline shown while dragging the dock grip so
+   the GM sees where the tracker will land before releasing. */
+.init-edge-hint {
+  position: fixed;
+  z-index: 7;
+  pointer-events: none;
+  display: none;
+  border: 2px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent), transparent 88%);
+  box-sizing: border-box;
+}
+.init-edge-hint.is-visible { display: block; }
+/* v2.16.72 — double-click-to-edit input overlaid on a rail card. */
+.init-card-edit {
+  position: absolute;
+  left: 16px; right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  width: auto;
+  padding: 2px 4px;
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 1.1rem;
+  font-weight: 800;
+  text-align: center;
+  outline: none;
 }
 
 /* v2.16.64 — both orientations now lay out controls + zones on the

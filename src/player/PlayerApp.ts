@@ -290,7 +290,12 @@ export class PlayerApp {
 
     // v2.17 Player Voice — initiative rail (atmospheric face).
     const initEl = document.getElementById('player-initiative');
-    if (initEl) this.initiativeRail = new PlayerInitiativeRail(initEl);
+    if (initEl) {
+      this.initiativeRail = new PlayerInitiativeRail(initEl);
+      // v2.16.72 — the rail resolves player portraits from the icon cache
+      // (the initiative_update broadcast no longer carries the data URL).
+      this.initiativeRail.setIconResolver((pid) => this._playerIcons.get(pid));
+    }
 
     // v2.17 Player Voice — player tokens. Players can drag only their own, and
     // only while the GM allows movable markers.
@@ -1670,6 +1675,9 @@ export class PlayerApp {
         const pending = this._pendingIconRequests.get(msg.playerId);
         if (pending) { clearTimeout(pending); this._pendingIconRequests.delete(msg.playerId); }
         this._reRenderPlayerMarkers();
+        // v2.16.72 — an icon may arrive AFTER the initiative state; refresh
+        // the rail so the portrait fills in for the matching player card.
+        this.initiativeRail?.refresh();
         if (msg.playerId === this.playerId) this._refreshIdentityButton();
         break;
       }

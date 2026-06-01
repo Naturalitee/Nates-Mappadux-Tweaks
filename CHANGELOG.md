@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.72 — 2026-06-01
+
+Player card portraits restored (resolved by playerId from the icon cache now that markerUrl is stripped from the wire); the redundant value number under rail cards removed in favour of double-click-to-edit; side dock slimmed to one card-column wide (fixed the max-content blow-out); drag-bar now shows a dashed outline of the target edge while dragging. NOTE: mouse card-drag rebuild on pointer events (for mouse + touch) is the next patch.
+
 ## v2.16.71 — 2026-06-01
 
 Fixes the reconnect loop (root-caused, not guessed): `initiative_update` is sent as one un-chunked JSON frame, and since v2.16.56 each player card carried `markerUrl` (the token icon as a base64 data URL). With the tracker open, seeded player cards pushed that frame past the DataChannel's ~16KB single-frame limit → channel close → reconnect loop. The broadcast copy now strips `markerUrl` (GM keeps it locally; player rail falls back to the initial disc). Also: tracker docked to a side is now slim (button column drops to card width, labels wrap; no more 38% cap); drag-bar visibly drags the whole tracker (follows cursor, dimmed, highlight ring) and snaps to the nearest edge on release.

@@ -52,6 +52,9 @@ export class InitiativeTracker {
   /** Cached rail element so dragover updates can re-paint gap classes
    *  without a full re-render. */
   private _railEl: HTMLElement | null = null;
+  /** v2.16.72 — full-viewport edge-hint overlay shown while dragging the
+   *  dock grip, outlining where the tracker will snap. Lazily created. */
+  private _edgeHint: HTMLElement | null = null;
 
   constructor(root: HTMLElement, initial: InitiativeState, cb: InitiativeTrackerCallbacks) {
     this.root = root;
@@ -248,6 +251,8 @@ export class InitiativeTracker {
       this.root.classList.add('is-dock-dragging');
       this.root.style.transform = `translate(${dx}px, ${dy}px)`;
       this.root.style.opacity = '0.85';
+      // Outline where it will snap.
+      this._showEdgeHint(this._nearestEdge(e.clientX, e.clientY));
     });
     dragBar.addEventListener('pointerup', (e) => {
       e.stopPropagation();
@@ -258,23 +263,14 @@ export class InitiativeTracker {
       const moved = Math.hypot(dx, dy) > 24;
       dragStart = null;
       clearDragVisual();
+      this._hideEdgeHint();
       if (moved) {
-        // Snap to whichever viewport edge the cursor was closest to on release.
-        const x = e.clientX, y = e.clientY;
-        const w = window.innerWidth, h = window.innerHeight;
-        const distances: Array<[InitiativeEdge, number]> = [
-          ['top',    y],
-          ['bottom', h - y],
-          ['left',   x],
-          ['right',  w - x],
-        ];
-        distances.sort((a, b) => a[1] - b[1]);
-        this._setEdge(distances[0]![0]);
+        this._setEdge(this._nearestEdge(e.clientX, e.clientY));
       } else {
         this._cycleEdge();
       }
     });
-    dragBar.addEventListener('pointercancel', () => { dragStart = null; dragBar.classList.remove('is-grabbing'); clearDragVisual(); });
+    dragBar.addEventListener('pointercancel', () => { dragStart = null; dragBar.classList.remove('is-grabbing'); clearDragVisual(); this._hideEdgeHint(); });
     dragBar.addEventListener('wheel', (e) => { e.stopPropagation(); }, { passive: true });
     ctl.append(dragBar);
 
@@ -309,6 +305,38 @@ export class InitiativeTracker {
     const idx = order.indexOf(this.state.edge);
     const next = order[(idx + 1) % order.length]!;
     this._setEdge(next);
+  }
+
+  /** v2.16.72 — which viewport edge is the cursor closest to. */
+  private _nearestEdge(x: number, y: number): InitiativeEdge {
+    const w = window.innerWidth, h = window.innerHeight;
+    const distances: Array<[InitiativeEdge, number]> = [
+      ['top', y], ['bottom', h - y], ['left', x], ['right', w - x],
+    ];
+    distances.sort((a, b) => a[1] - b[1]);
+    return distances[0]![0];
+  }
+
+  /** v2.16.72 — show the snap-target outline along the given edge so the
+   *  GM sees where the tracker will dock before releasing. */
+  private _showEdgeHint(edge: InitiativeEdge): void {
+    if (!this._edgeHint) {
+      this._edgeHint = document.createElement('div');
+      this._edgeHint.className = 'init-edge-hint';
+      document.body.appendChild(this._edgeHint);
+    }
+    const hint = this._edgeHint;
+    hint.style.cssText = ''; // reset, then set per edge below
+    hint.classList.add('is-visible');
+    const SLIM = '120px';
+    if (edge === 'top')    { hint.style.left = '0'; hint.style.right = '0'; hint.style.top = '0';    hint.style.height = SLIM; }
+    if (edge === 'bottom') { hint.style.left = '0'; hint.style.right = '0'; hint.style.bottom = '0'; hint.style.height = SLIM; }
+    if (edge === 'left')   { hint.style.top = '0'; hint.style.bottom = '0'; hint.style.left = '0';   hint.style.width = SLIM; }
+    if (edge === 'right')  { hint.style.top = '0'; hint.style.bottom = '0'; hint.style.right = '0';  hint.style.width = SLIM; }
+  }
+
+  private _hideEdgeHint(): void {
+    this._edgeHint?.classList.remove('is-visible');
   }
 
   /** v2.16.63 — figure out which slot the cursor would drop into based on
@@ -761,20 +789,34 @@ export class InitiativeTracker {
     // surfaced; if the GM wants to un-deck a card without discarding
     // they drag it to bench / unallocated zones.
 
-    // Value editor chrome — bottom strip, reveals on hover/active.
-    const chrome = document.createElement('div');
-    chrome.className = 'init-card-chrome';
-
-    const valInput = document.createElement('input');
-    valInput.type = 'text';
-    valInput.className = 'init-card-value';
-    valInput.value = card.value;
-    valInput.title = 'Initiative value';
-    valInput.placeholder = '–';
-    valInput.addEventListener('change', () => this._editValue(card.id, valInput.value));
-    chrome.appendChild(valInput);
-
-    el.appendChild(chrome);
+    // v2.16.72 — double-click a card to edit its value inline. Replaces
+    // the always-visible value input that left a small redundant number
+    // floating under the active card.
+    el.addEventListener('dblclick', (e) => {
+      e.preventDefault();
+      e.stopPropagation();
+      if (el.querySelector('.init-card-edit')) return;
+      const input = document.createElement('input');
+      input.type = 'text';
+      input.className = 'init-card-edit';
+      input.value = card.value;
+      el.appendChild(input);
+      input.focus();
+      input.select();
+      let done = false;
+      const commit = (save: boolean) => {
+        if (done) return;
+        done = true;
+        if (save) this._editValue(card.id, input.value.trim()); // triggers re-render
+        else input.remove();
+      };
+      input.addEventListener('keydown', (ev) => {
+        ev.stopPropagation();
+        if (ev.key === 'Enter')  { ev.preventDefault(); commit(true); }
+        if (ev.key === 'Escape') { ev.preventDefault(); commit(false); }
+      });
+      input.addEventListener('blur', () => commit(true));
+    });
     return el;
   }
 }
