@@ -128,8 +128,10 @@ export class InitiativeTracker {
   private _setEdge(edge: InitiativeEdge): void { this._mutate((s) => ({ ...s, edge })); }
 
   private _endCombat(): void {
-    if (!confirm('Wipe the tracker (active rail + unallocated + threat bench) and start fresh?')) return;
-    this._mutate(endCombat);
+    if (!confirm('End combat? Clears the rail + tray + bench + discard and closes the tracker.')) return;
+    // v2.16.61 — End Combat is now also the "close tracker" affordance
+    // (the hide × went away). Wipe + close in one mutation.
+    this._mutate((s) => ({ ...endCombat(s), visible: false }));
   }
 
   private _editValue(cardId: string, value: string): void {
@@ -199,18 +201,22 @@ export class InitiativeTracker {
       ? mkBtn('Reroll Initiative', 'init-btn', () => this._rerollInitiative())
       : null;
 
+    // v2.16.61 — sort dropdown shows the two NUMERIC directions only.
+    // Manual mode is reached implicitly by dragging a card; selecting a
+    // numeric direction here re-applies that sort and exits manual.
+    // Displayed value follows lastNumericSortMode so the dropdown
+    // reflects the GM's chosen polarity even mid-manual.
     const sort = document.createElement('select');
     sort.className = 'init-sort';
-    sort.title = 'Sort mode';
+    sort.title = 'Sort mode — drag any card to reorder freely (auto-switches to manual until you pick a direction again)';
     for (const [mode, label] of [
       ['high-to-low', 'High → Low'],
       ['low-to-high', 'Low → High'],
-      ['manual',      'Manual / Freeform'],
-    ] as Array<[InitiativeSortMode, string]>) {
+    ] as Array<['high-to-low' | 'low-to-high', string]>) {
       const opt = document.createElement('option');
       opt.value = mode;
       opt.textContent = label;
-      if (this.state.sortMode === mode) opt.selected = true;
+      if (this.state.lastNumericSortMode === mode) opt.selected = true;
       sort.appendChild(opt);
     }
     sort.addEventListener('change', () => this._setSortMode(sort.value as InitiativeSortMode));
@@ -233,11 +239,11 @@ export class InitiativeTracker {
     edge.addEventListener('change', () => this._setEdge(edge.value as InitiativeEdge));
 
     const end = mkBtn('End Combat', 'init-btn init-btn--danger', () => this._endCombat());
-    const close = mkBtn('×', 'init-close', () => this.close());
-    close.title = 'Hide tracker (state is kept)';
+    // v2.16.61 — hide × removed. End Combat is now the sole "stop" path;
+    // it wipes the rail + tray + bench + discard AND closes the tracker.
 
-    if (reroll) ctl.append(call, advance, reroll, sort, edge, end, close);
-    else        ctl.append(call, advance,         sort, edge, end, close);
+    if (reroll) ctl.append(call, advance, reroll, sort, edge, end);
+    else        ctl.append(call, advance,         sort, edge, end);
     return ctl;
   }
 

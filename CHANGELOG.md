@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.61 — 2026-06-01
+
+Initiative: hide × removed from the tracker (End Combat is the sole close + wipe); Manual/Freeform dropped from the sort dropdown (drag-reorder is the only way into manual mode).
+
 ## v2.16.60 — 2026-06-01
 
 Initiative: GM threats render BLACK body with RED edges (was all-red); manual-mode type-to-inject now follows the last numeric direction the GM chose; corner X removed from rail cards (Discard is the sole removal path); Reroll Initiative is now a HARD reset (wipes deck + tray + discard, reseeds A-Z, re-prompts everyone).
