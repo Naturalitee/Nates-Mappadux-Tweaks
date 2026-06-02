@@ -1,8 +1,17 @@
 import { Guest } from '../p2p/Guest.ts';
+import { cssApproxForFilter } from '../filters/cssApproximations.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { MarkerSprites } from '../rendering/MarkerSprites.ts';
 import { MarkerOverlay, type OverlayItem } from '../rendering/MarkerOverlay.ts';
 import { getMarkerAspect } from '../rendering/MarkerLayer.ts';
+import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
+import { PingLayer } from '../rendering/PingLayer.ts';
+import { PlayerInitiativeRail } from '../player/PlayerInitiativeRail.ts';
+import { ClocksLayer } from '../annotate/ClocksLayer.ts';
+import { TimersLayer } from '../annotate/TimersLayer.ts';
+import { NotesLayer } from '../annotate/NotesLayer.ts';
+import { WhiteboardLayer } from '../annotate/WhiteboardLayer.ts';
+import { TextMapVideoLayer } from '../rendering/TextMapVideoLayer.ts';
 import {
   type ProjectorSetup,
   getActiveSetup,
@@ -108,6 +117,21 @@ export class ProjectorApp {
   private mapPixelsPerSquare: number | null     = null;
   private mapImageWidth:     number             = 0;
   private mapImageHeight:    number             = 0;
+  // v2.17 Player Voice — token / ping / initiative rendering, mirroring PlayerApp.
+  private playerMarkerLayer: PlayerMarkerLayer | null = null;
+  private pingLayer:         PingLayer         | null = null;
+  private initiativeRail:    PlayerInitiativeRail | null = null;
+  private _annotateClocks:   ClocksLayer | null = null;
+  private _annotateTimers:   TimersLayer | null = null;
+  private _annotateNotes:    NotesLayer | null = null;
+  private _annotateBoard:    WhiteboardLayer | null = null;
+  private _textMapVideos:    TextMapVideoLayer | null = null;
+  private _playerIcons   = new Map<string, string>();
+  private _lastPlayerMarkers: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; hasIcon?: boolean; tokenSize?: import('../types.ts').TokenSize }> = [];
+  /** Icons currently being requested via `player_icon_request` — debounce so a
+   *  single missing icon doesn't spawn a request per render frame. Cleared on
+   *  the icon's arrival or after 5 s. v2.16.25. */
+  private _pendingIconRequests = new Map<string, ReturnType<typeof setTimeout>>();
   /** v2.14.18 — grid offset for the active map (border-nudge alignment). */
   private gridOffsetX:       number             = 0;
   private gridOffsetY:       number             = 0;
@@ -236,6 +260,49 @@ export class ProjectorApp {
     this.renderer       = this.viewer.renderer;
     this.markerSprites  = this.viewer.markerSprites;
     this.markerOverlay  = this.viewer.markerOverlay;
+
+    // v2.17 Player Voice — token / ping / initiative layers (mirroring PlayerApp).
+    const pmEl = document.getElementById('player-marker-layer');
+    if (pmEl) {
+      this.playerMarkerLayer = new PlayerMarkerLayer(pmEl, {
+        project:   (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        unproject: () => null,           // projector is read-only; no drag
+        canDrag:   () => false,
+        getPxPerSquare: () => this._tokenPxPerSquare(),
+      });
+    }
+    const pingEl = document.getElementById('ping-layer');
+    if (pingEl) {
+      this.pingLayer = new PingLayer(
+        pingEl,
+        (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        { showLabel: false, persistent: false, ttlMs: 10000 },
+      );
+    }
+    const initEl = document.getElementById('player-initiative');
+    if (initEl) this.initiativeRail = new PlayerInitiativeRail(initEl);
+    // v2.16.76 — read-only progress clocks mirrored from the GM.
+    const anchor = { project: (x: number, y: number) => this.renderer.mapNormToCanvasCss(x, y), unproject: () => null };
+    const clocksEl = document.getElementById('annotate-clocks');
+    if (clocksEl) this._annotateClocks = new ClocksLayer(clocksEl, false, anchor);
+    const timersEl = document.getElementById('annotate-timers');
+    if (timersEl) this._annotateTimers = new TimersLayer(timersEl, false, anchor);
+    const notesEl = document.getElementById('annotate-notes');
+    if (notesEl) this._annotateNotes = new NotesLayer(notesEl, false, anchor);
+    const videoLayerEl = document.getElementById('textmap-video-layer');
+    // v2.16.102 — skip in-map video on touch devices (doesn't render on
+    // mobile; see PlayerApp + backlog). Desktop projectors are unaffected.
+    const isMobileViewer = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    if (videoLayerEl && !isMobileViewer) {
+      this._textMapVideos = new TextMapVideoLayer(videoLayerEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y), { mode: 'viewer' });
+      // v2.16.97 — rebuild the iframe after a fullscreen toggle blanks it.
+      document.addEventListener('fullscreenchange', () => {
+        window.setTimeout(() => this._textMapVideos?.refresh(), 250);
+      });
+    }
+    // v2.16.77 — read-only whiteboard mirrored from the GM.
+    const boardEl = document.getElementById('annotate-whiteboard') as HTMLCanvasElement | null;
+    if (boardEl) this._annotateBoard = new WhiteboardLayer(boardEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));
 
     // Post-map-load: render markers + re-apply calibrated view now
     // that the renderer knows the new map's aspect ratio. _applyView
@@ -432,6 +499,36 @@ export class ProjectorApp {
 
   // ─── Message handling ────────────────────────────────────────────────────
 
+  /** Current screen-pixels-per-map-square at the active zoom, or null when
+   *  uncalibrated. Mirrors PlayerApp / GMApp so player-token footprints scale
+   *  identically across all viewer surfaces. */
+  private _tokenPxPerSquare(): number | null {
+    if (!this.mapPixelsPerSquare || !this.mapImageHeight) return null;
+    const scale = this.renderer.worldToScreenScale();
+    return (this.mapPixelsPerSquare / this.mapImageHeight) * scale.pxPerWorldY;
+  }
+
+  /** Re-merge cached icons into the last received markers and push to the layer. */
+  private _reRenderPlayerMarkers(): void {
+    const merged = this._lastPlayerMarkers.map((m) => {
+      const cached = this._playerIcons.get(m.playerId);
+      return cached ? { ...m, iconDataUrl: cached } : m;
+    });
+    this.playerMarkerLayer?.setMarkers(merged);
+  }
+
+  /** Ask the GM to resend a specific player's icon — fired when a player_markers
+   *  entry says `hasIcon: true` but the local cache is empty. Debounced per
+   *  playerId so the same missing icon can't spawn a request per render frame.
+   *  Cleared on the icon's arrival or after 5 s. v2.16.25 self-heal. */
+  private _requestMissingIcon(playerId: string): void {
+    if (this._pendingIconRequests.has(playerId)) return;
+    if (!this.guest) return;
+    this.guest.send({ type: 'player_icon_request', playerId });
+    const timer = setTimeout(() => this._pendingIconRequests.delete(playerId), 5000);
+    this._pendingIconRequests.set(playerId, timer);
+  }
+
   private _onMessage(msg: GMMessage, blob?: ArrayBuffer): void {
     switch (msg.type) {
       case 'full_state': {
@@ -442,6 +539,9 @@ export class ProjectorApp {
         if (s.view?.backgroundColor) this.currentBackgroundColor = s.view.backgroundColor;
         this.currentBackdrop = s.view?.backdrop ?? null;
         if (s.projectorViewport) this.projectorViewport = s.projectorViewport;
+        // v2.16.100 — videos ride in full_state so a fresh projector gets them
+        // on connect, not only via the discrete textmap_videos message.
+        this._textMapVideos?.setVideos(msg.textMapVideos ?? []);
         if (msg.mapPixelsPerSquare !== undefined) this.mapPixelsPerSquare = msg.mapPixelsPerSquare;
         if (msg.mapImageWidth      !== undefined) this.mapImageWidth      = msg.mapImageWidth;
         if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;
@@ -684,6 +784,99 @@ export class ProjectorApp {
         break;
       }
       // audio messages: intentionally ignored — audio plays on player / GM only.
+
+      case 'player_markers': {
+        // v2.17 Player Voice — tokens placed on the active map. Icon images
+        // arrive separately via player_icon_update; merge cache in.
+        this._lastPlayerMarkers = msg.markers;
+        this._reRenderPlayerMarkers();
+        // v2.16.25 self-heal — any marker the GM flagged hasIcon but we
+        // have nothing cached for → ask the GM to resend it. Covers the
+        // case where the chunked binary delivery was dropped or arrived
+        // before the layer was mounted.
+        for (const m of msg.markers) {
+          if (m.hasIcon && !this._playerIcons.has(m.playerId)) {
+            this._requestMissingIcon(m.playerId);
+          }
+        }
+        break;
+      }
+      case 'player_icon_update': {
+        // PeerJS path → blob arg has the assembled PNG bytes. BC path → dataUrl
+        // inline on the message. Either way, cache something an <img> can use.
+        let url: string | undefined;
+        if (blob) {
+          url = URL.createObjectURL(new Blob([blob], { type: 'image/png' }));
+        } else if (msg.dataUrl) {
+          url = msg.dataUrl;
+        }
+        const prev = this._playerIcons.get(msg.playerId);
+        if (url) this._playerIcons.set(msg.playerId, url);
+        else     this._playerIcons.delete(msg.playerId);
+        if (prev && prev.startsWith('blob:')) URL.revokeObjectURL(prev);
+        // Clear any pending self-heal request — the icon just arrived.
+        const pending = this._pendingIconRequests.get(msg.playerId);
+        if (pending) { clearTimeout(pending); this._pendingIconRequests.delete(msg.playerId); }
+        // v2.16.24 diagnostic — log on every arrival so the projector
+        // console reports which transport delivered (or didn't).
+        console.info(
+          '[projector] player_icon_update',
+          msg.playerId,
+          'via',
+          blob ? `peerjs-blob(${blob.byteLength}B)` : msg.dataUrl ? `bc-dataurl(${msg.dataUrl.length}ch)` : 'CLEAR',
+          'layer?', !!this.playerMarkerLayer,
+          'markersKnown?', this._lastPlayerMarkers.length,
+        );
+        this._reRenderPlayerMarkers();
+        break;
+      }
+      case 'ping_show': {
+        // v2.17 Player Voice — show ping pulses on the table screen too.
+        this.pingLayer?.add({ id: msg.pingId, x: msg.x, y: msg.y, color: msg.color, name: msg.name });
+        break;
+      }
+      case 'initiative_update': {
+        // v2.17 Player Voice — atmospheric initiative rail. Same face the
+        // players see (giant numbers / threat letters stay GM-only).
+        this.initiativeRail?.setState(msg.state);
+        break;
+      }
+      case 'annotate_clocks': {
+        // v2.16.76 — mirror the GM's progress clocks (read-only).
+        this._annotateClocks?.setClocks(msg.clocks);
+        break;
+      }
+      case 'annotate_stroke': {
+        this._annotateBoard?.addStroke(msg.stroke);
+        break;
+      }
+      case 'annotate_clear': {
+        this._annotateBoard?.clear();
+        break;
+      }
+      case 'annotate_timers': {
+        this._annotateTimers?.setTimers(msg.timers);
+        break;
+      }
+      case 'annotate_notes': {
+        this._annotateNotes?.setNotes(msg.notes);
+        break;
+      }
+      case 'textmap_videos': {
+        this._textMapVideos?.setVideos(msg.videos);
+        break;
+      }
+      case 'video_playback': {
+        // v2.16.95 — follow the GM's play/pause/seek/volume for one video.
+        this._textMapVideos?.applyPlayback({
+          id: msg.id, videoId: msg.videoId, state: msg.state,
+          seconds: msg.seconds, volume: msg.volume,
+        });
+        break;
+      }
+      // player_features, player_roster, player_marker_move, message_deliver,
+      // initiative_call, initiative_roll, player_identify, player_bye,
+      // player_forget_me — projector is read-only / not a participant, ignore.
     }
   }
 
@@ -700,10 +893,37 @@ export class ProjectorApp {
   private _applyFilter(): void {
     if (!this.projectorViewport.filterEnabled) {
       this.renderer.setFilterEnabled(false);
+      this._applyMarkerLayerFilter(true);
       return;
     }
     this.renderer.setFilterEnabled(true);
     if (this.currentFilter) this.renderer.setFilter(this.currentFilter);
+    this._applyMarkerLayerFilter(false);
+  }
+
+  /** Patch E v2.16.30 — apply the active filter's CSS approximation to the
+   *  player-marker-layer DOM overlay when the GM has enabled the per-map
+   *  "Affect Player Markers" toggle AND the projector's own filter gate
+   *  is on. Clears the filter otherwise. */
+  private _applyMarkerLayerFilter(forceOff: boolean): void {
+    const layer = document.getElementById('player-marker-layer');
+    if (!layer) return;
+    if (!forceOff && this.currentFilter?.affectPlayerMarkers) {
+      const css = cssApproxForFilter(this.currentFilter.filterId);
+      layer.style.filter = css || '';
+    } else {
+      layer.style.filter = '';
+    }
+    // v2.16.94 — the in-map YouTube video layer ALWAYS participates in the
+    // scene look (no per-map toggle, unlike markers), but still respects the
+    // projector's master filter gate (forceOff). GM removes it by turning the
+    // visual filter off.
+    const videoLayer = document.getElementById('textmap-video-layer');
+    if (videoLayer) {
+      videoLayer.style.filter = (!forceOff && this.currentFilter)
+        ? cssApproxForFilter(this.currentFilter.filterId)
+        : '';
+    }
   }
 
   private _renderMarkers(): void {

@@ -7,8 +7,10 @@ import {
   ensureTextMapElements,
   newTextElement,
   newImageElement,
+  newVideoElement,
   clampElementGeometry,
 } from '../maps/textMapElements.ts';
+import { extractVideoId } from '../stagecraft/youtubePlayer.ts';
 import { ImageAssetStore } from '../images/ImageAssetStore.ts';
 import { ImageAssetModal } from '../images/ImageAssetModal.ts';
 import { ensureFontsLoaded, registerLocalFontsFromAssets, BUNDLED_FONTS } from '../images/fontCatalog.ts';
@@ -586,6 +588,14 @@ export class TextMapEditor {
     addImg.addEventListener('click', () => void this._addNewImage());
     row.appendChild(addImg);
 
+    const addVid = document.createElement('button');
+    addVid.type = 'button';
+    addVid.className = 'btn btn--ghost btn--sm';
+    addVid.textContent = '+ YouTube';
+    addVid.title = 'Embed a live YouTube video — paste a YouTube link';
+    addVid.addEventListener('click', () => this._addNewVideo());
+    row.appendChild(addVid);
+
     const uploadBtn = document.createElement('button');
     uploadBtn.type = 'button';
     uploadBtn.className = 'btn btn--ghost btn--sm';
@@ -1142,6 +1152,20 @@ export class TextMapEditor {
       // Apply persisted tint so currentColor inside the SVG resolves
       // correctly on mount, not just on edit.
       if (el.tint) host.style.color = el.tint;
+    } else if (el.type === 'video') {
+      // v2.16.90 — live YouTube preview. The iframe is pointer-events:none
+      // (CSS) until the element is selected, so the move handle / body drag
+      // work normally; once selected, the GM interacts with YT's controls.
+      body.classList.add('txt-map-el-body--video');
+      const frame = document.createElement('iframe');
+      frame.className = 'txt-map-el-video-frame';
+      frame.src = `https://www.youtube.com/embed/${el.videoId}?rel=0`;
+      frame.allow = 'autoplay; encrypted-media; picture-in-picture';
+      frame.setAttribute('frameborder', '0');
+      frame.allowFullscreen = true;
+      body.appendChild(frame);
+      // Drag the video from anywhere on its frame (when not selected).
+      body.addEventListener('pointerdown', (e) => this._startDrag(e, el.id, 'move'));
     }
     host.appendChild(body);
 
@@ -1223,33 +1247,38 @@ export class TextMapEditor {
     // v2.14.101 — Flip H + Flip V buttons on the top corners of the
     // selected element. Match composite editor's visual treatment +
     // active-state colour when the flip is engaged.
-    const flipH = document.createElement('button');
-    flipH.type = 'button';
-    flipH.className = `txt-map-el-flip txt-map-el-flip--h${el.flipH ? ' is-active' : ''}`;
-    flipH.title = 'Mirror this element horizontally (left ↔ right).';
-    flipH.innerHTML =
-      '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-        '<polyline points="6 4 2 12 6 20"/>' +
-        '<polyline points="18 4 22 12 18 20"/>' +
-        '<line x1="12" y1="2" x2="12" y2="22"/>' +
-      '</svg>';
-    flipH.addEventListener('pointerdown', (ev) => ev.stopPropagation());
-    flipH.addEventListener('click', (ev) => { ev.stopPropagation(); this._toggleFlip(el.id, 'h'); });
-    host.appendChild(flipH);
+    // v2.16.97 — video has no meaningful flip (mirroring a YouTube iframe
+    // just reverses the picture and never survives the rasteriser, which
+    // skips video), so the flip chrome is omitted for video elements.
+    if (el.type !== 'video') {
+      const flipH = document.createElement('button');
+      flipH.type = 'button';
+      flipH.className = `txt-map-el-flip txt-map-el-flip--h${el.flipH ? ' is-active' : ''}`;
+      flipH.title = 'Mirror this element horizontally (left ↔ right).';
+      flipH.innerHTML =
+        '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<polyline points="6 4 2 12 6 20"/>' +
+          '<polyline points="18 4 22 12 18 20"/>' +
+          '<line x1="12" y1="2" x2="12" y2="22"/>' +
+        '</svg>';
+      flipH.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+      flipH.addEventListener('click', (ev) => { ev.stopPropagation(); this._toggleFlip(el.id, 'h'); });
+      host.appendChild(flipH);
 
-    const flipV = document.createElement('button');
-    flipV.type = 'button';
-    flipV.className = `txt-map-el-flip txt-map-el-flip--v${el.flipV ? ' is-active' : ''}`;
-    flipV.title = 'Mirror this element vertically (top ↔ bottom).';
-    flipV.innerHTML =
-      '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-        '<polyline points="4 6 12 2 20 6"/>' +
-        '<polyline points="4 18 12 22 20 18"/>' +
-        '<line x1="2" y1="12" x2="22" y2="12"/>' +
-      '</svg>';
-    flipV.addEventListener('pointerdown', (ev) => ev.stopPropagation());
-    flipV.addEventListener('click', (ev) => { ev.stopPropagation(); this._toggleFlip(el.id, 'v'); });
-    host.appendChild(flipV);
+      const flipV = document.createElement('button');
+      flipV.type = 'button';
+      flipV.className = `txt-map-el-flip txt-map-el-flip--v${el.flipV ? ' is-active' : ''}`;
+      flipV.title = 'Mirror this element vertically (top ↔ bottom).';
+      flipV.innerHTML =
+        '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<polyline points="4 6 12 2 20 6"/>' +
+          '<polyline points="4 18 12 22 20 18"/>' +
+          '<line x1="2" y1="12" x2="22" y2="12"/>' +
+        '</svg>';
+      flipV.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+      flipV.addEventListener('click', (ev) => { ev.stopPropagation(); this._toggleFlip(el.id, 'v'); });
+      host.appendChild(flipV);
+    }
 
     // v2.14.103 — Image-only chrome cluster: aspect-lock + reset
     // stack ABOVE the resize handle in the bottom-right corner,
@@ -1258,18 +1287,24 @@ export class TextMapEditor {
     // at the current width — undoes any stretching the GM did.
     // Text elements skip this — handout text boxes are designed
     // for free reflow at any aspect.
-    if (el.type === 'image') {
+    if (el.type === 'image' || el.type === 'video') {
       const resetBtn = document.createElement('button');
       resetBtn.type = 'button';
       resetBtn.className = 'txt-map-el-reset';
-      resetBtn.title = 'Reset bounding box to the image\'s natural aspect at the current width.';
+      resetBtn.title = el.type === 'video'
+        ? 'Snap the bounding box to a true 16:9 at the current width.'
+        : 'Reset bounding box to the image\'s natural aspect at the current width.';
       resetBtn.innerHTML =
         '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
           '<path d="M3 12a9 9 0 1 0 3-6.7"/>' +
           '<polyline points="3 4 3 9 8 9"/>' +
         '</svg>';
       resetBtn.addEventListener('pointerdown', (ev) => ev.stopPropagation());
-      resetBtn.addEventListener('click', (ev) => { ev.stopPropagation(); void this._resetElementAspect(el.id); });
+      resetBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (el.type === 'video') this._resetVideoAspect(el.id);
+        else void this._resetElementAspect(el.id);
+      });
       host.appendChild(resetBtn);
 
       const locked = el.lockAspect ?? true;
@@ -1404,12 +1439,28 @@ export class TextMapEditor {
     if (host) this._applyGeometry(host, el);
   }
 
+  /** v2.16.96 — Snap a video element's box to a true 16:9 at the
+   *  current width. Mirrors _resetElementAspect but the target ratio
+   *  is fixed (16:9) rather than read from an asset. Element w/h are
+   *  in % of page, so convert the pixel-aspect through the page's own
+   *  pixel aspect. */
+  private _resetVideoAspect(elementId: string): void {
+    const el = this.elements.find((x) => x.id === elementId);
+    if (!el || el.type !== 'video') return;
+    this._pushUndo();
+    const pageAspect = this.cfg.width / Math.max(1, this.cfg.height);
+    el.h = el.w * pageAspect * 9 / 16;
+    clampElementGeometry(el);
+    const host = this.elementNodes.get(elementId);
+    if (host) this._applyGeometry(host, el);
+  }
+
   /** v2.14.102 — Toggle the per-element aspect-ratio lock on an
    *  image element. Pushes undo + re-mounts the element so the
    *  lock button's icon + active state refresh. */
   private _toggleLockAspect(elementId: string): void {
     const el = this.elements.find((x) => x.id === elementId);
-    if (!el || el.type !== 'image') return;
+    if (!el || (el.type !== 'image' && el.type !== 'video')) return;
     this._pushUndo();
     el.lockAspect = !(el.lockAspect ?? true);
     // Re-mount so the lock button's SVG + active class swap. Cheap
@@ -1845,6 +1896,28 @@ export class TextMapEditor {
     });
   }
 
+  /** v2.16.90 — prompt for a YouTube link, parse the id, drop a live
+   *  video element on the page. */
+  private _addNewVideo(): void {
+    const raw = window.prompt('Paste a YouTube link (or video id):', '');
+    if (raw === null) return;
+    const id = extractVideoId(raw.trim());
+    if (!id) { window.alert('That doesn’t look like a YouTube link.'); return; }
+    const el = newVideoElement(id);
+    // v2.16.96 — snap to a true 16:9 box for THIS page's aspect (the factory
+    // default is only a 4:3-page approximation) before mount, so creation is
+    // a single undo step.
+    if (el.type === 'video') {
+      const pageAspect = this.cfg.width / Math.max(1, this.cfg.height);
+      el.h = el.w * pageAspect * 9 / 16;
+      clampElementGeometry(el);
+    }
+    this._pushUndo();
+    this.elements.push(el);
+    this._mountElement(el);
+    this._select(el.id);
+  }
+
   private _deleteSelected(): void {
     if (!this.selectedId) return;
     this._deleteElement(this.selectedId);
@@ -1913,7 +1986,7 @@ export class TextMapEditor {
       // dominant axis wins — whichever the cursor pulled further
       // from the start drives the other through the start aspect.
       // Text elements always free-resize; their content reflows.
-      if (el.type === 'image' && (el.lockAspect ?? true)
+      if ((el.type === 'image' || el.type === 'video') && (el.lockAspect ?? true)
           && state.startGeom.w > 0 && state.startGeom.h > 0) {
         const aspect = state.startGeom.w / state.startGeom.h;
         const wRel = Math.abs((newW - state.startGeom.w) / state.startGeom.w);

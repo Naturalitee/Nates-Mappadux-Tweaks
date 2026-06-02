@@ -1,5 +1,5 @@
 import Peer, { type DataConnection } from 'peerjs';
-import type { GMMessage, SessionState, MarkerIconData, SoundboardAudioData } from '../types.ts';
+import type { GMMessage, SessionState, MarkerIconData, SoundboardAudioData, TextMapVideoElement } from '../types.ts';
 import { LocalChannel } from './LocalChannel.ts';
 import { generateRoomCode } from './roomCode.ts';
 import { isLocalPlayerStaticOnly } from '../storage/localSettings.ts';
@@ -14,6 +14,12 @@ export interface HostEvents {
   /** Inbound message from a peer (e.g. projector_hello). Optional — only
    *  bidirectional callers need to wire this. */
   onPeerMessage?: (peerId: string, msg: GMMessage) => void;
+  /** Fired when a new same-browser subscriber asks for state via BroadcastChannel
+   *  (typically a freshly-opened player / preview / projector window in the same
+   *  browser). Host already responds with full_state; callers can use this hook
+   *  to seed additional Player Voice state (player_markers, per-player icons,
+   *  initiative) the subscriber wouldn't otherwise get if it never identifies. */
+  onLocalRequestState?: () => void;
 }
 
 /**
@@ -59,6 +65,16 @@ export class Host {
   private lastMapGridOffsetX:   number | undefined = undefined;
   private lastMapGridOffsetY:   number | undefined = undefined;
   private lastMapGridColor:     string | undefined = undefined;
+  /** v2.16.100 — live text-map videos for the active map, so every
+   *  full_state (including the BroadcastChannel one a same-browser
+   *  preview / pop-out requests on open) carries them. */
+  private lastTextMapVideos:    TextMapVideoElement[] = [];
+  /** v2.16.108 — current "GM is faffing" hold-screen state (the Player
+   *  Views broadcast toggle, off = hold screen). Cached so a viewer
+   *  joining WHILE it's off gets the hold screen on connect instead of
+   *  the live map (the placeholder was a one-time broadcast otherwise). */
+  private _faffActive  = false;
+  private _faffMessage = '';
   private lastIconData:         MarkerIconData[] = [];
   private lastSoundboardActive: SoundboardAudioData[] = [];
   private lastSoundboardAssets: { assetId: string; dataUrl: string }[] = [];
@@ -163,12 +179,27 @@ export class Host {
           ...(this.lastMapGridOffsetY !== undefined ? { gridOffsetY:       this.lastMapGridOffsetY } : {}),
           ...(this.lastMapGridColor   !== undefined ? { gridColor:         this.lastMapGridColor   } : {}),
           ...(this.lastComposite                    ? { composite:         this.lastComposite      } : {}),
+          ...(this.lastTextMapVideos.length > 0      ? { textMapVideos:     this.lastTextMapVideos  } : {}),
         };
         this.local.send(msg);
+        // v2.16.108 — if the GM is faffing (broadcast toggle off), the new
+        // local window must see the hold screen, not the live map.
+        if (this._faffActive) {
+          this.local.send({ type: 'view_placeholder', target: 'player',    show: true, message: this._faffMessage });
+          this.local.send({ type: 'view_placeholder', target: 'projector', show: true, message: this._faffMessage });
+        }
         // Deliver active positional plays inline (BroadcastChannel supports large payloads)
         for (const p of this.lastPositionalActive.values()) {
           this.local.send({ type: 'positional_play', markerId: p.markerId, assetId: p.assetId, loop: p.loop, volume: p.volume, dataUrl: p.dataUrl });
         }
+      }
+      // v2.17 — let GMApp seed Player Voice state (player_markers,
+      // per-player icons, initiative). lastState doesn't carry these, so
+      // without this hook a freshly-opened local preview / projector
+      // would render initial-letter tokens until the next live update.
+      if (this.events.onLocalRequestState) {
+        try { this.events.onLocalRequestState(); }
+        catch (err) { this.events.onError(err as Error); }
       }
     });
   }
@@ -351,6 +382,20 @@ export class Host {
   /** v2.14.34 — focused setter for the cached grid colour. Used by
    *  the GM map panel's swatch handler so colour-only updates don't
    *  have to round-trip the other map-meta fields. */
+  /** v2.16.100 — keep the cached text-map videos current so a viewer
+   *  joining AFTER a map load sees them in its initial full_state. */
+  setLastTextMapVideos(videos: TextMapVideoElement[]): void {
+    this.lastTextMapVideos = videos;
+  }
+
+  /** v2.16.108 — remember whether the broadcast toggle is showing the hold
+   *  screen, so a late joiner gets it on connect. message is the shared faff
+   *  line currently displayed to existing viewers. */
+  setFaffState(active: boolean, message: string): void {
+    this._faffActive  = active;
+    this._faffMessage = message;
+  }
+
   setLastMapGridColor(color: string | undefined): void {
     this.lastMapGridColor = color;
   }
@@ -414,8 +459,15 @@ export class Host {
           ...(this.lastMapGridOffsetY !== undefined ? { gridOffsetY:       this.lastMapGridOffsetY } : {}),
           ...(this.lastMapGridColor   !== undefined ? { gridColor:         this.lastMapGridColor   } : {}),
           ...(this.lastComposite                    ? { composite:         this.lastComposite      } : {}),
+          ...(this.lastTextMapVideos.length > 0      ? { textMapVideos:     this.lastTextMapVideos  } : {}),
         };
         this.sendTo(conn, msg);
+        // v2.16.108 — if the GM is faffing (broadcast toggle off), the new
+        // peer must see the hold screen, not the live map it just received.
+        if (this._faffActive) {
+          this.sendTo(conn, { type: 'view_placeholder', target: 'player',    show: true, message: this._faffMessage });
+          this.sendTo(conn, { type: 'view_placeholder', target: 'projector', show: true, message: this._faffMessage });
+        }
         // Late-joiner video catchup — if the active map is animated,
         // deliver the cached full video bytes so the new peer can
         // swap from snapshot to VideoTexture, same as live peers did
@@ -436,9 +488,20 @@ export class Host {
     });
 
     conn.on('data', (raw) => {
-      // Inbound peer message (e.g. projector_hello). Ignore if no listener.
-      const data = raw as { type?: string };
-      if (typeof data !== 'object' || !data || typeof data.type !== 'string') return;
+      // Inbound peer message (e.g. projector_hello, player_identify).
+      // Guests now JSON-stringify on send (PeerJS 'raw' serialization can't
+      // pack plain objects into RTCDataChannel), so we parse strings here.
+      // Plain objects still accepted for back-compat with anything older.
+      let data: { type?: string };
+      if (typeof raw === 'string') {
+        try { data = JSON.parse(raw) as { type?: string }; }
+        catch { return; }
+      } else if (typeof raw === 'object' && raw !== null) {
+        data = raw as { type?: string };
+      } else {
+        return;
+      }
+      if (typeof data.type !== 'string') return;
       // PeerJS players send heartbeats too (Guest.send fans out to both
       // transports). They don't change the count — PeerJS lifecycle
       // already tracks these peers — so swallow them here rather than
@@ -486,6 +549,27 @@ export class Host {
       const { dataUrl: _d, ...noUrl } = rest;
       void _d;
       jsonMsg = noUrl as Record<string, unknown>;
+    }
+    // v2.17 — player_icon_update routes through the chunked-blob path
+    // for multi-KB bitmap icons that would blow past the DataChannel
+    // message limit. v2.16.31: small icons (SVG-rendered lucide-style,
+    // typically < 10 KB base64) are sent INLINE in the JSON instead.
+    // The chunked path uses several frames per delivery (header + JSON +
+    // chunks) and back-to-back icon broadcasts during a multi-player
+    // identify / hello cycle were intermittently racing — inline keeps
+    // each small icon atomic and avoids the race window. The receiver
+    // already handles both inline `msg.dataUrl` and chunked `blob` paths
+    // (see ProjectorApp + PlayerApp player_icon_update handlers).
+    if (rest.type === 'player_icon_update' && rest.dataUrl) {
+      const INLINE_ICON_MAX = 10 * 1024;
+      if (rest.dataUrl.length <= INLINE_ICON_MAX) {
+        jsonMsg = rest as Record<string, unknown>;
+      } else {
+        audioBuffer = this._dataUrlToBuffer(rest.dataUrl);
+        const { dataUrl: _d, ...noUrl } = rest;
+        void _d;
+        jsonMsg = noUrl as Record<string, unknown>;
+      }
     }
 
     // For full_state / map_change: strip dataUrls from soundboardActive and soundboardAssets;

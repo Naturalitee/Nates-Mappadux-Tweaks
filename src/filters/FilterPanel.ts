@@ -1,13 +1,24 @@
 import type { FilterDefinition, FilterParam } from './schema.ts';
 import type { FilterParamValues } from '../types.ts';
-import { wireSliderTooltip } from '../utils/sliderReadout.ts';
+import {
+  buildColorRow,
+  buildSliderRow,
+  buildToggleRow,
+  buildSelectRow,
+} from '../gm/sideParamRows.ts';
 
 /**
  * FilterPanel
  *
  * Auto-generates a DOM control panel from a FilterDefinition.
- * Caller provides a container element and a change callback.
- * No framework dependencies — pure DOM manipulation.
+ * v2.16.39 — rebuilt on top of the shared sideParamRows builders so the
+ * look matches Backdrop / MapFX / Map Transition exactly. Param groups
+ * (collapsible sections) are unique to filters and stay here.
+ *
+ * Caller provides a container element and a change callback. The panel
+ * tags every control's input with `data-param-id` so `setValues()` can
+ * push fresh values in without rebuilding the DOM (used during live
+ * state syncs).
  */
 export class FilterPanel {
   private container: HTMLElement;
@@ -40,7 +51,7 @@ export class FilterPanel {
       const body = wrapper.querySelector('.filter-group-body') as HTMLElement;
 
       for (const param of params) {
-        body.appendChild(this.buildControl(param));
+        body.appendChild(this.buildControl(param, filter.name));
       }
 
       this.container.appendChild(wrapper);
@@ -57,7 +68,6 @@ export class FilterPanel {
         el.checked = Boolean(value);
       } else {
         el.value = String(value);
-        this.syncValueDisplay(el);
       }
     }
   }
@@ -119,131 +129,61 @@ export class FilterPanel {
     return section;
   }
 
-  private buildControl(param: FilterParam): HTMLElement {
+  /** Build one control row using the shared sideParamRows builders + tag
+   *  its input with data-param-id so setValues() can push fresh values
+   *  in without rebuilding the row. */
+  private buildControl(param: FilterParam, filterName: string): HTMLElement {
+    const title = `${param.label} — ${filterName}`;
+    let row: HTMLElement;
     switch (param.type) {
-      case 'slider': return this.buildSlider(param);
-      case 'toggle': return this.buildToggle(param);
-      case 'color':  return this.buildColor(param);
-      case 'select': return this.buildSelect(param);
+      case 'slider': {
+        const value = (this.currentValues[param.id] as number) ?? param.default;
+        row = buildSliderRow(
+          { label: param.label, min: param.min, max: param.max, step: param.step, value, title },
+          (v) => {
+            this.currentValues[param.id] = v;
+            this.onChangeCallback({ ...this.currentValues });
+          },
+        );
+        break;
+      }
+      case 'toggle': {
+        const value = (this.currentValues[param.id] as boolean) ?? param.default;
+        row = buildToggleRow(
+          { label: param.label, checked: value, title },
+          (checked) => {
+            this.currentValues[param.id] = checked;
+            this.onChangeCallback({ ...this.currentValues });
+          },
+        );
+        break;
+      }
+      case 'color': {
+        const value = (this.currentValues[param.id] as string) ?? param.default;
+        row = buildColorRow(
+          { label: param.label, value, title },
+          (hex) => {
+            this.currentValues[param.id] = hex;
+            this.onChangeCallback({ ...this.currentValues });
+          },
+        );
+        break;
+      }
+      case 'select': {
+        const value = (this.currentValues[param.id] as string | number) ?? param.default;
+        row = buildSelectRow(
+          { label: param.label, options: param.options, value, title },
+          (v) => {
+            this.currentValues[param.id] = v;
+            this.onChangeCallback({ ...this.currentValues });
+          },
+        );
+        break;
+      }
     }
-  }
-
-  private buildSlider(param: Extract<FilterParam, { type: 'slider' }>): HTMLElement {
-    const row = this.createRow(param.id, param.label, 'param-row--stacked');
-    const value = (this.currentValues[param.id] as number) ?? param.default;
-
-    const input = document.createElement('input');
-    input.type = 'range';
-    input.min = String(param.min);
-    input.max = String(param.max);
-    input.step = String(param.step);
-    input.value = String(value);
-    input.dataset['paramId'] = param.id;
-
-    input.addEventListener('input', () => {
-      const v = parseFloat(input.value);
-      this.currentValues[param.id] = v;
-      this.onChangeCallback({ ...this.currentValues });
-    });
-
-    // v2.12 design call: sliders are "feel" controls; visible numbers
-    // tempt users into precision-twiddling. Title attribute carries
-    // the value for hover / screenshot use.
-    wireSliderTooltip(input, param.label);
-
-    const controls = document.createElement('div');
-    controls.className = 'param-controls';
-    controls.appendChild(input);
-    row.appendChild(controls);
+    // Tag the row's input so setValues() can find it.
+    const input = row.querySelector<HTMLInputElement | HTMLSelectElement>('input, select');
+    if (input) input.dataset['paramId'] = param.id;
     return row;
-  }
-
-  private buildToggle(param: Extract<FilterParam, { type: 'toggle' }>): HTMLElement {
-    const row = this.createRow(param.id, param.label, 'param-row--toggle');
-    const value = (this.currentValues[param.id] as boolean) ?? param.default;
-
-    const label = document.createElement('label');
-    label.className = 'toggle-switch';
-
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.checked = value;
-    input.dataset['paramId'] = param.id;
-
-    input.addEventListener('change', () => {
-      this.currentValues[param.id] = input.checked;
-      this.onChangeCallback({ ...this.currentValues });
-    });
-
-    const slider = document.createElement('span');
-    slider.className = 'toggle-slider';
-
-    label.appendChild(input);
-    label.appendChild(slider);
-    row.appendChild(label);
-    return row;
-  }
-
-  private buildColor(param: Extract<FilterParam, { type: 'color' }>): HTMLElement {
-    const row = this.createRow(param.id, param.label);
-    const value = (this.currentValues[param.id] as string) ?? param.default;
-
-    const input = document.createElement('input');
-    input.type = 'color';
-    input.value = value;
-    input.dataset['paramId'] = param.id;
-
-    input.addEventListener('input', () => {
-      this.currentValues[param.id] = input.value;
-      this.onChangeCallback({ ...this.currentValues });
-    });
-
-    row.appendChild(input);
-    return row;
-  }
-
-  private buildSelect(param: Extract<FilterParam, { type: 'select' }>): HTMLElement {
-    const row = this.createRow(param.id, param.label);
-    const value = this.currentValues[param.id] ?? param.default;
-
-    const select = document.createElement('select');
-    select.dataset['paramId'] = param.id;
-
-    for (const opt of param.options) {
-      const option = document.createElement('option');
-      option.value = String(opt.value);
-      option.textContent = opt.label;
-      if (opt.value === value) option.selected = true;
-      select.appendChild(option);
-    }
-
-    select.addEventListener('change', () => {
-      const raw = select.value;
-      const numeric = parseFloat(raw);
-      this.currentValues[param.id] = isNaN(numeric) ? raw : numeric;
-      this.onChangeCallback({ ...this.currentValues });
-    });
-
-    row.appendChild(select);
-    return row;
-  }
-
-  private createRow(id: string, label: string, extra = ''): HTMLElement {
-    const row = document.createElement('div');
-    row.className = `param-row ${extra}`.trim();
-
-    const lbl = document.createElement('label');
-    lbl.htmlFor = `param-${id}`;
-    lbl.textContent = label + ':';
-
-    row.appendChild(lbl);
-    return row;
-  }
-
-  private syncValueDisplay(input: HTMLInputElement): void {
-    const sibling = input.nextElementSibling;
-    if (sibling instanceof HTMLInputElement && sibling.classList.contains('param-number')) {
-      sibling.value = input.value;
-    }
   }
 }

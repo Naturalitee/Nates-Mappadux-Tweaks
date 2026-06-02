@@ -1,5 +1,1543 @@
 # Changelog
 
+## v2.17.0 — Player Voice (2026-06-02)
+
+The headline of 2.17 is **Player Voice** — your players stop being passive
+viewers and get a voice at the virtual table — plus a wave of GM tooling built
+on top of it (live annotations, in-map video, and a reworked Player Views
+panel). The granular `v2.16.x` history below is the full per-patch record;
+this is the human-readable summary of what changed since the 2.16 Soundtracks
+release.
+
+### Player Voice — your players join in
+
+- **Named, persistent players.** Each player introduces themselves once (name +
+  colour). The GM gets a live roster; identities stick across reconnects, and a
+  GM can also add an "offline" player to act on behalf of someone with no device.
+- **Player tokens.** The GM places a token for any player. With *Let players move
+  their own token* on, that player can drag their own token from their device —
+  the GM watches it move live and gets a one-click "send it back".
+- **Pings.** A player right-clicks (or long-presses) the map to ping a point;
+  everyone sees a pulse in that player's colour, labelled with their name on the
+  GM screen until dismissed.
+- **Messaging.** Players message the GM privately, or each other (copied to the
+  GM). Threads live in the Player Voice panel with an unread count.
+- **Reply Assistant (optional LLM).** Point Mappadux at a local LM Studio server
+  (no key) or a hosted provider like OpenRouter (key + model) and it drafts
+  in-character reply suggestions to player messages — click *Suggest replies*,
+  pick one to send. Everything stays between your browser and the endpoint you
+  choose.
+- **Initiative tracker.** A fanned-deck initiative rail: roll for the table,
+  drag to reorder, advance turns, with a ROUND END marker between rounds. Sort
+  high→low (d20 systems) or low→high (roll-under systems).
+
+### GM annotations — shared and map-anchored
+
+Progress clocks (Blades-style), countdown timers + stopwatches, a freehand
+whiteboard, and sticky notes. Drop them on the map; each is anchored 1:1 to the
+map and mirrored live to players + projector. They're saved with the map and
+travel in the pack.
+
+### In-map YouTube video
+
+Drop a YouTube video onto a handout (Text Map) as a borderless, resizable,
+rotatable element that plays live on the GM, players, and projector. The GM owns
+the controls (play / pause / seek / volume); viewers follow within about half a
+second. Active visual filters tint it like the rest of the scene. (Desktop
+viewers only — mobile video is a documented limitation.)
+
+### Player Views panel (was "Scaled View")
+
+The old Scaled View and player-connection bits are consolidated into one
+**Player Views** panel with two collapsible sections: **Player connections** (a
+join QR plus a summary of connected windows — local / scaled / remote, split PC
+vs mobile) and **Scaled view** (the projector / under-table controls, unchanged).
+*Show Player View* replaces the old "Open Player Window": an inline preview on the
+GM canvas that you can pop out to a full standalone window.
+
+### Quality-of-life
+
+- Settings reorganised into an accordion (one section open at a time), with
+  **Player Permissions**, **Game System**, and **Reply Assistant (LLM)** split
+  into their own sections and the help text trimmed.
+- A run of connection / preview fixes: popped-out windows behave as real player
+  views, the join QR is always a clean flag-free URL, and late joiners get the
+  correct hold-screen / video / overlay state on connect.
+
+## v2.16.114 — 2026-06-02
+
+Added docs/onboarding-content.md — a working doc for the Getting Started refresh: paste-ready redrafted slide copy (kills the stale "just play" and "Open Player Window" text, retitles Player Connections to Player Views, adds the shared-screen table path) plus shot-by-shot scripts for the two onboarding videos ("Make a map in 2 mins" and "Set up your table"). Docs only.
+
+## v2.16.113 — 2026-06-02
+
+Documentation refresh for the 2.17 release: added the high-level v2.17.0 changelog (Player Voice, annotations, in-map video, Player Views panel), and brought README + HELP up to date — new feature sections for Player Voice / annotations / in-map video, the Player Views panel (replacing Player Connection + Scaled View), the reorganised Settings, the atmospheric filter family, and corrected stale naming (Show Player View, Save Map Pack). Docs only.
+
+## v2.16.112 — 2026-06-02
+
+Test maintenance: updated two stale unit tests (initiative advance-turn ordering and LLM reply-chip parsing) to match the current, manually-verified behaviour. No app code change; full unit suite green (47/47).
+
+## v2.16.111 — 2026-06-02
+
+Settings sections are now an accordion — opening one closes the others, so the dialog stays short (no hunting for a scrollbar). The Reply Assistant (LLM) section is reordered into a guided flow: Base URL (pre-filled with the LM Studio local address) - API key - Test connection & fetch models - Model, with clearer wording about when a URL / key is needed.
+
+## v2.16.110 — 2026-06-02
+
+LLM reply assistant: the model is now chosen purely from a dropdown (the manual text field is gone — you rarely know a model's full id), and the button is now "Test connection & fetch models", which fills it from the endpoint (works with OpenRouter and LM Studio). Trimmed the wordy Performance help to the symptom + the fix. Settings body now reliably scrolls when many sections are open.
+
+## v2.16.109 — 2026-06-02
+
+Settings tidy-up. The old Player Voice section is split into three clearer sections — Player Permissions, Game System (initiative order), and Reply Assistant (LLM) — with shortened help text and a visible scrollbar. The LLM model field is clarified against the auto-populated model dropdown (which works with OpenRouter via Test connection). The hamburger menu now gives Open New Instance its own section between the pack-file and asset-library groups.
+
+## v2.16.108 — 2026-06-02
+
+Fixed: a player or projector that connects while the broadcast is toggled off (GM is faffing / hold screen showing) now sees the hold screen on connect, instead of briefly getting the live map. The hold state is remembered and sent to each new connection.
+
+## v2.16.107 — 2026-06-02
+
+A popped-out player window is the GM's own preview on a second screen, so it stays a preview (it no longer registers itself as a phantom player) but now drops the inline-preview flag so it gets the fullscreen button and sound. Real participants still register by scanning the QR or opening the LAN URL, which carry no preview flags.
+
+## v2.16.106 — 2026-06-02
+
+The join QR now encodes one canonical player URL everywhere, with no window-specific options. Previously the QR shown inside the inline player preview carried its gmPreview / pip flags, so scanning it would have opened a muted, non-registering preview instead of a normal player view. The QR (player view, projector, scaled monitor, and the GM Player connections panel) is now just the clean player URL plus the room code.
+
+## v2.16.105 — 2026-06-02
+
+The popped-out player window now also gets the fullscreen button and sound: it was carrying the inline-preview pip flag, which suppresses fullscreen and mutes. Pop-outs now strip both preview flags so they behave as a normal standalone player view.
+
+## v2.16.104 — 2026-06-02
+
+Fixed: a popped-out player window now registers as a real player on its own. Previously a pop-out was treated as a GM preview window, so it only showed up as a connected player when "Show full player UI in the GM preview window" was enabled. That setting now gates only the inline Show Player View preview, as intended; pop-outs and remote devices register normally.
+
+## v2.16.103 — 2026-06-02
+
+Renamed the Scaled View panel to Player Views, with two collapsible subsections: Player connections (a join QR pointing at the LAN player URL, plus a summary of connected player windows by type — local windows, scaled views, and remote, split PC vs mobile) and Scaled view (the existing projector controls). The connections summary is a window/capability count, not the player roster — that stays in the separate Players panel.
+
+## v2.16.102 — 2026-06-02
+
+In-map YouTube videos are now skipped on mobile devices rather than showing an empty box. They don't render on phones (an Android video-compositing limitation), so on touch devices the video is simply omitted from the player / projector view. Reverted the v2.16.101 CSS attempt, which made it worse. Known limitation; desktop is unaffected.
+
+## v2.16.101 — 2026-06-02
+
+Long-shot attempt at getting in-map YouTube videos to render on Android (currently just an outline): on touch devices, drop the video box clip / rounded corners / shadow and promote the iframe to its own layer, to give Android's hardware video overlay a clean hole to punch through. May or may not help depending on device; desktop is unchanged.
+
+## v2.16.100 — 2026-06-02
+
+In-map videos now ride in the full connection snapshot every new view requests on open, so a freshly opened Show Player View / popped-out window (or any late joiner) shows the video immediately, without needing a map change to trigger it.
+
+## v2.16.99 — 2026-06-02
+
+Fixed the real cause of in-map videos staying blank on a fresh Show Player View / popped-out window: the YouTube player was being created while its box was still off-screen (map not yet rendered), and YouTube refuses to paint a player built into a zero-area container. The player is now built lazily, only once its box is actually on-screen with real size — so the video shows on first open without needing a map swap.
+
+## v2.16.98 — 2026-06-02
+
+Fixed the in-map video not appearing in a freshly opened Show Player View / popped-out window (it only showed up after a map swap). Those preview surfaces announce themselves with a different handshake than real players and were skipping the overlay catch-up, so they now receive the current videos (and annotations + tokens) on connect, caught up to the GM's playback position.
+
+## v2.16.97 — 2026-06-02
+
+Video element fixes: removed the (non-functional) flip controls from video in the editor; the in-map video now rebuilds itself after a fullscreen toggle on the player / projector (a cross-origin iframe goes blank when an ancestor enters fullscreen) and re-syncs within about a second-and-a-half; a freshly opened viewer now gets the video and is caught up to the GM's current playback position.
+
+## v2.16.96 — 2026-06-02
+
+Text Map editor: video elements now get the same aspect-lock + reset chrome as images. Aspect lock is ON by default (clips are almost always 16:9, so resizing keeps the ratio), and the reset button snaps the box to a true 16:9 at the current width. New videos are created at 16:9 for the page.
+
+## v2.16.95 — 2026-06-02
+
+In-map YouTube videos are now GM-controlled. Only the GM has video controls (play / pause / seek / volume) via YouTube's own chrome; the player + projector have no controls and follow the GM within about half a second (state + position synced, not frame-accurate). The GM's own video is muted so it never echoes the room screen; viewers carry the audio at the GM's volume.
+
+## v2.16.94 — 2026-06-02
+
+In-map YouTube videos now take on the active visual filter's tint (CSS approximation) on the player + projector, matching the map. No per-map toggle — turn the visual filter off to remove it. The filter can only tint, not stylise (cross-origin video can't be re-shaded), so painterly filters have no effect on the clip.
+
+## v2.16.93 — 2026-06-02
+
+Map Pack panel: the "Edit this Handout / Composite Map" buttons moved down to sit below the backdrop + grid-colour rows, just above the Swap Asset / Clone / Delete actions.
+
+## v2.16.92 — 2026-06-02
+
+Players panel defaults closed on an empty table; opens automatically on first load if there are already players (e.g. saved offline players). The GM's manual toggling is respected after that.
+
+## v2.16.91 — 2026-06-02
+
+Text Map YouTube videos go live (slice 2): a video placed on a handout now renders as a live, map-anchored iframe overlay on the GM canvas, players, and projector — tracking pan/zoom 1:1 like markers, with each viewer using YouTube's own controls (so players can watch on their own viewer). Broadcast via a new textmap_videos message; re-sent to new joiners. Videos render as DOM overlays above the map, so (like annotations) they're not affected by the GL visual filters.
+
+## v2.16.90 — 2026-06-02
+
+Text Maps: new **+ YouTube** element (slice 1) — paste a YouTube link to drop a live, borderless, resizable + rotatable video onto a handout page, using the same editor chrome as text/image. The iframe is click-through until selected (so move/drag work), then YT's own controls take over. Video elements are NOT baked into the rasterised page image (they'll render as live overlays on the map next slice).
+
+## v2.16.89 — 2026-06-02
+
+Map panel: pack name now sits left-aligned right after "Map Pack:" in the header (was pushed to the far right by the header's space-between). Grid-colour now uses the standard full-width colour bar (same control as the Backdrop colour picker) instead of a bespoke small swatch.
+
+## v2.16.88 — 2026-06-02
+
+Map panel: the pack name moves up into the panel header — "Map Pack:" followed by the name in bright white so it reads as the name; a pencil on the right (where other panels carry their switch) edits it inline, replacing the old in-body rename row. Grid-colour swatch aligned to the standard colour picker (32×24, 2px inset).
+
+## v2.16.87 — 2026-06-02
+
+Annotate: pressing an unselected object's move handle now flows straight into a drag in the same press (it was selecting then dropping, needing a second click). Selecting no longer re-renders mid-press; the chrome reflects on release. Matches markers / viewport rects.
+
+## v2.16.86 — 2026-06-02
+
+Annotate: nothing in an object is interactive until it is selected via the move handle — content (clock wedges, note text) is click-through until then, so you select first, then act. Removed the note double-click-to-edit (the edge edit control is the single way in). Fixed note text being clipped at the bottom by the border: auto-fit now measures the text element's own box (inside the padding + border) instead of the padded content.
+
+## v2.16.85 — 2026-06-02
+
+Annotate: type-specific controls moved OUT of the object box onto a bottom-edge control bar that appears only when the object is selected — timers get play/pause + reset, notes get an edit button, all as fixed-size SVG handle-icons (no more text glyphs or in-box buttons crowding the content). Double-click still edits a note.
+
+## v2.16.84 — 2026-06-02
+
+Annotate: now **part of the map data** — annotations live in the per-map SessionState, so they save to IndexedDB and travel inside the `.mappadux` pack (no more separate localStorage key). Editor chrome rebuilt to reuse our **established handle design** (fixed 26px marker-style handles with the standard move / trashcan-delete / rounded-square resize / rotate icons — they no longer shrink on zoom). Chrome accents (selection outline, resize grip, rotate stem) now key off the **object's own colour** rather than the green/orange view-identity colours.
+
+## v2.16.83 — 2026-06-02
+
+Annotate: note text re-fits on map zoom (ResizeObserver per note) so it always fills its frame.
+
+## v2.16.82 — 2026-06-02
+
+Annotate — big rebuild: clocks, timers, and notes are now **map-anchored** (position + size stored in map coordinates), so they pan/zoom with the map and render **1:1 between GM and player/projector** — place one off-map and it's off the player's view until the GM pans there, just like markers. All three share one **editor-chrome** model: a select/move handle (top-left), delete (bottom-left), resize (bottom-right), and **rotate** (above, with stem, snaps near cardinals). Content scales with the box (container-query units) so clocks/timers grow + shrink cleanly; notes still auto-fit their text. They render as DOM overlays above the map, so they're unaffected by visual filters.
+
+## v2.16.81 — 2026-06-02
+
+Annotate: stagger new clocks / timers / notes so a second item doesn't spawn exactly on top of the first.
+
+## v2.16.80 — 2026-06-02
+
+Annotate: **Notes** added — free text boxes with the established editor chrome (select handle top-left to move, delete bottom-left, resize bottom-right) and text that **auto-fits the box** (shrink the box → smaller font, reflowing as needed). Double-click to edit. **GM-only** notes show on the GM view; **Player** notes show on player + projector too. Panel tidied: Whiteboard stays always-visible at the top; Notes / Clocks / Timers are collapsible sub-sections that start closed. Annotate bypass now defaults **ON** (annotations shown by default).
+
+## v2.16.79 — 2026-06-02
+
+Annotate quick polish: Whiteboard section moved to the top of the panel (most used); picking a pen colour now auto-arms Draw; clock + timer name/value text render in the element's own colour; dragging a clock/timer no longer pans the GM map underneath. (Larger rebuild — map-anchored 1:1 clocks/timers with the select/move/resize editor chrome, plus GM/Player Notes — in progress.)
+
+## v2.16.78 — 2026-06-01
+
+Annotate slice 3: **timers / countdowns** — a real time-based clock. Add a named timer in count-up or countdown mode (mm:ss) with a colour; it floats as a draggable HUD card with start/pause, reset, and × controls. Running state is stored as absolute epoch anchors, so every surface (GM + players + projector) ticks locally in sync with no per-second network traffic — only GM edits broadcast. Per-map + saved + mute-aware like the rest of Annotate. Countdown flashes red at zero.
+
+## v2.16.77 — 2026-06-01
+
+Annotate slice 2: **whiteboard**. Toggle Draw, pick a pen colour, and draw freehand on the map; Clear wipes it. Strokes are stored in map-normalised coords so they pan/zoom with the map, are per-map (persist + saved), and mirror live to players + projector (sent one stroke per message to stay frame-safe). Covered by the same Annotate bypass mute.
+
+## v2.16.76 — 2026-06-01
+
+New **Annotate** panel (below Fog, above Soundboard) — slice 1: **progress clocks** (Blades-in-the-Dark style). Add a clock with a name, segment count, and colour (red danger / green racing / etc.) chosen up front; it appears as a draggable segmented dial on the map. Click a wedge to fill/unfill, × to remove. Clocks are per-map (persist on map switch + refresh, saved to localStorage) and shared live to players + projector. A bypass switch on the panel visually mutes all annotations on every view (GM included) without deleting them — default OFF (muted) on a fresh load. Whiteboard slice next.
+
+## v2.16.75 — 2026-06-01
+
+Player-view tracker slimmed: cards sit on the map with just a faint tint hugging the fan (no heavy wash/blur), content-width, and overflow:visible so the scaled active card no longer triggers a stray scrollbar. Players panel header gains a "# connected/total" badge (total includes offline players) in the right-margin slot where other panels carry their toggle icon.
+
+## v2.16.74 — 2026-06-01
+
+Edge-snap outline now anchors to the tracker's actual docked area (its offsetParent = the canvas region right of the GM sidebar), so the left/right hint lands exactly where the tracker settles instead of over the sidebar. Discard revive expanded: drag a discarded card to the rail to drop it straight back into combat at a chosen slot; dragging to the bench/tray still routes by card home (enemy → bench, player → tray).
+
+## v2.16.73 — 2026-06-01
+
+Card drag rebuilt on Pointer Events — works for mouse AND touch now (HTML5 drag-and-drop was mouse-only and was being blocked for mouse anyway). A ghost card follows the cursor; the source hides; rail gap + drop-zone highlight track live; drop resolves rail reorder / inject / discard / revive by hit-testing the zone under the pointer. Also: left/right edge-snap outline raised above the side panels so it's visible on every edge.
+
+## v2.16.72 — 2026-06-01
+
+Player card portraits restored (resolved by playerId from the icon cache now that markerUrl is stripped from the wire); the redundant value number under rail cards removed in favour of double-click-to-edit; side dock slimmed to one card-column wide (fixed the max-content blow-out); drag-bar now shows a dashed outline of the target edge while dragging. NOTE: mouse card-drag rebuild on pointer events (for mouse + touch) is the next patch.
+
+## v2.16.71 — 2026-06-01
+
+Fixes the reconnect loop (root-caused, not guessed): `initiative_update` is sent as one un-chunked JSON frame, and since v2.16.56 each player card carried `markerUrl` (the token icon as a base64 data URL). With the tracker open, seeded player cards pushed that frame past the DataChannel's ~16KB single-frame limit → channel close → reconnect loop. The broadcast copy now strips `markerUrl` (GM keeps it locally; player rail falls back to the initial disc). Also: tracker docked to a side is now slim (button column drops to card width, labels wrap; no more 38% cap); drag-bar visibly drags the whole tracker (follows cursor, dimmed, highlight ring) and snaps to the nearest edge on release.
+
+## v2.16.70 — 2026-06-01
+
+Rolled back v2.16.69 (tracker resize used the wrong axis; the PiP reconnect fix did not hold). Tree is back to the v2.16.68 state. Tracker slimming, drag-to-edge follow, and the reconnect loop will be redone individually.
+
+## v2.16.68 — 2026-06-01
+
+Fixes: tracker drags work again (reverted root-level event swallow, replaced with a target-based shouldStart gate in the GM canvas pan handler — so panning is skipped when the pointerdown lands inside the tracker / panels / modals); GM PiP preview window no longer flaps reconnect every ~10s when GM switches focus to the main window (visibility-driven reconnect now suppressed in gmPreview mode since BroadcastChannel handles the local link).
+
+## v2.16.67 — 2026-06-01
+
+Initiative tracker swallows pointer/mouse/touch/wheel events at its root so drags inside the tracker (cards, drag-bar, zones) no longer bubble to the GM canvas and pan the map.
+
+## v2.16.66 — 2026-06-01
+
+Initiative Tracker entry dropped from the hamburger menu — orange "Roll Initiative" in the Players panel opens it, End Combat closes it.
+
+## v2.16.65 — 2026-06-01
+
+Initiative: Sort direction moved to Settings → Player Voice (one-shot, default High → Low); drag-bar grip is now a true drag-to-edge handle (snap-to-closest-edge on release; short clicks still cycle); discarded enemies dragged to bench jump to TOP, discarded players dragged to tray restore there; dragged rail card no longer leaves a ghost copy visible; vertical-rail padding fixed so END ROUND / "!" labels at the bottom edge aren't clipped; slimmer player-view padding in vertical mode.
+
+## v2.16.64 — 2026-06-01
+
+Initiative final-polish pass: tracker now lays controls + cards on the SAME line (single row); sort dropdown removed (one-shot setting, default High → Low); drag-bar grip no longer bubbles events to the GM canvas behind; player-view FLIP animation slides cards smoothly when the deck reorders / advances; when GM ends combat before a player has rolled, their roll-prompt modal closes.
+
+## v2.16.63 — 2026-06-01
+
+Initiative big-sweep: 3-button primary stack (Advance=green / Reroll Initiative=orange / End Combat=red); left-edge drag-bar cycles dock position (top default + remembered); rail opens a visual gap as a card is dragged over so drop lands exactly where the GM aimed; advance now sends card to back of WHOLE deck (END ROUND is a regular placeable card so GM can queue cards behind it for next round); END ROUND sorts to end via comparator score, not a special branch; click Discard pile to fan + drag a card back to revive; Reroll Initiative resets deck/tray/bench preserving discard.
+
+## v2.16.62 — 2026-06-01
+
+Initiative polish round 4: GM rail enemy cards show the typed value (was still showing the threat letter); END ROUND treated as a standard card with yellow/black caution-stripe body; GM fan loosened (~25-30% overlap) so the big value text is readable; transparency-as-state cues removed (no more faded spent/dragging cards); discarded cards desaturate instead of fade; player view round marker matches standard card size.
+
+## v2.16.61 — 2026-06-01
+
+Initiative: hide × removed from the tracker (End Combat is the sole close + wipe); Manual/Freeform dropped from the sort dropdown (drag-reorder is the only way into manual mode).
+
+## v2.16.60 — 2026-06-01
+
+Initiative: GM threats render BLACK body with RED edges (was all-red); manual-mode type-to-inject now follows the last numeric direction the GM chose; corner X removed from rail cards (Discard is the sole removal path); Reroll Initiative is now a HARD reset (wipes deck + tray + discard, reseeds A-Z, re-prompts everyone).
+
+## v2.16.59 — 2026-06-01
+
+Initiative polish: static bench (top + spine depth + "+N"), A-Z, threats red, END ROUND black/yellow on bottom edge, enemy edges upright, big close-up duck on player view, manual-mode type-to-inject sorts correctly, Reroll Initiative when END ROUND tops.
+
+## v2.16.58 — 2026-06-01
+
+### Initiative — GM zone redesign (REALLY leaning into cards)
+
+GM area rebuilt around the card metaphor across the board. Threat
+bench, Unallocated tray, and a new Discard pile are now rendered with
+the SAME card visual as the active rail, not the small chips they
+were before.
+
+- **Threat bench → stacked deck.** A is the top card; B–F (A–Z in
+  theory) peek out behind via a CSS-only cascading offset. Hover
+  splays the stack so the GM can grab a deeper letter. Top card has
+  a value input — type a roll + Enter and the card flies to the
+  correct slot on the rail; B becomes the new top.
+- **Unallocated tray → row of full cards.** Each persistent player
+  who hasn't yet rolled gets a full card (portrait or initial disc,
+  identity colour, name on the edge) with its own value input. Type
+  the roll + Enter to slot them at the right sort position.
+- **New Discard pile** at the right end of the row. Drag ANY card
+  here — from rail, bench, or unallocated — to remove it from THIS
+  combat. Discarded cards render desaturated + dimmed so the GM can
+  read the history. End Combat clears the pile along with everything
+  else.
+- **Drag rules.** Drag a bench/unallocated card onto the rail (or a
+  rail slot) → it injects at the right sort position. Drag a rail
+  card onto another rail slot → it reorders (switches to manual
+  sort, same as before). Drag anything into Discard → it's out.
+  Discard doesn't accept returns (intentional — End Combat is the
+  reset path).
+- **State engine additions.** `InitiativeState.discarded` array;
+  `discardCard(state, id)` pulls from any pile; new
+  `injectFromStagingWithValue` composes inject + patch in one
+  mutation so type-to-inject lands cards at the correct position
+  atomically. End Combat clears discarded.
+- **Same single-edge tab rule applies to staging cards** — the
+  visual idiom is uniform across all zones.
+
+## v2.16.57 — 2026-06-01
+
+### Initiative — lean into cards (player rail single-edge label, big portrait)
+
+- **Single-edge identity label.** Horizontal fans now show the name on
+  the RIGHT edge only (the always-exposed slice when cards stack
+  leftward beneath each other); vertical fans show it on the BOTTOM
+  edge only. Frees three sides for the card art.
+- **Portrait fills the card body** as trading-card art instead of being
+  squeezed into a tiny avatar circle. Square crop with rounded corners
+  + an identity-coloured inner border. Initial-letter disc fallback
+  also grew (~80% body), now rendered as a minted token with radial
+  highlight + bevel.
+- **Card depth.** Paper-card stack feel: identity-tinted gradient
+  background, top-edge highlight, bottom-inset darkening, refined
+  drop shadow. Reads as a card sitting above the table, not a flat
+  rectangle.
+
+Setting up Step 2 in next commit: GM zone redesign (bench as stacked
+deck of full cards, unallocated as full cards, type-to-inject,
+drag-to-rail, drag-to-discard, new discard pile).
+
+## v2.16.56 — 2026-05-31
+
+### Initiative polish round 3 — contrast, portraits, proportional sizing, top default
+
+- **Contrast-keyed edge text.** Tab labels were white-on-coloured — fine
+  for dark identity tints, illegible on light ones (yellow, mint, light
+  blue). Each card now sets `--init-color-fg` to either near-black or
+  white based on a YIQ brightness check of its colour, and the tab text +
+  disc border + disc text inherit it. Light tabs get dark text; dark
+  tabs stay white. Tab text bumped a touch (0.7rem, weight 800,
+  dual-shadow) for a cleaner read.
+- **Player portrait propagates onto the rail.** Player cards on the
+  player view now show the player's chosen token icon (`iconDataUrl`)
+  as a circular portrait in the body, replacing the initial-letter disc
+  when set. Plumbed through `InitiativeTracker.ingestRoll` (new
+  `markerUrl` param) and `seedUnallocatedFromPlayers` (reads
+  `p.iconDataUrl`). Falls back to the initial disc for players without
+  a chosen icon.
+- **Proportional sizing on the player view.** Player-view cards now
+  size as a proportion of the smaller viewport dimension (`vmin`) with
+  clamp floors + ceilings, so the fan scales gracefully from phone to
+  TV/projector without dominating the map. Negative margins scale
+  along too so the overlap stays consistent. Tab text scales with
+  the cards. GM view stays at its fixed in-panel size.
+- **Default edge → top.** The top of both player and GM views is the
+  least-cluttered surface today; tracker now opens there by default
+  instead of bottom. Still repinnable via the edge select.
+
+## v2.16.55 — 2026-05-31
+
+### Panel re-order — Visual Filter below Soundboards, above Transition
+
+GM panel order reshuffled so Visual Filter sits where it logically belongs
+on the "scene look + cut" cluster — directly above Map Transition,
+following the Soundboards / Soundtracks / Projection chain. Was previously
+floating up between Fog and Soundboards.
+
+## v2.16.54 — 2026-05-31
+
+### Initiative polish (round 2) — delete corner + card-styled roll prompt
+
+- **Delete cross moved to the upper-right corner** of every GM card,
+  per spec §5. Hidden by default, reveals on hover/active so it isn't
+  a constant visual distraction. Bottom chrome strip now holds just
+  the value input.
+- **Card-styled player roll prompt.** The generic dialog is gone.
+  When the GM calls for initiative the player view fades to a dark
+  backdrop, an **INITIATIVE** banner pulses overhead, and a single
+  oversized card materialises in the centre — edged in the player's
+  identity colour, with a big numeric-friendly input and a SEND
+  button. Lands as "you're being dealt in" rather than "a dialog
+  popped up". Pushes toward the BG3 cards-on-the-table reference
+  Alex flagged 2026-05-31.
+
+## v2.16.53 — 2026-05-31
+
+### Initiative tracker polish (round 1) — bidirectional tabs, dark duck, prominent Call
+
+Following the audit of the implementation against the fanned-deck spec.
+
+- **Bidirectional identity tabs on every card.** A fanned card only ever
+  exposes ONE edge to the eye; the spec's "name down the exposed slice"
+  was a single left strip — fine for the leftmost active card, unreadable
+  for stacked interior cards. We now paint the identity strip on all four
+  edges and let CSS hide the pair that doesn't apply to the current
+  orientation (horizontal rail shows left+right tabs; vertical rail
+  shows top+bottom). Long names truncate via `overflow: hidden` on the
+  inner span.
+- **Dark Mappadux duck silhouette on player-view enemy cards.**
+  Replaces the spec's "abstract backdrop" asset slot and the placeholder
+  "Opposition" text. Uses the existing `/icons/icon-512.png` brand mark
+  filtered to a 35%-opacity black silhouette. On-brand, atmospheric,
+  dryly funny — and zero new assets. Edge tabs say "!" to match.
+- **"Call for Initiative" surfaced as a prominent orange button in the
+  Players panel**, above "+ Add offline player". Was buried inside the
+  initiative tracker's control bar (i.e. behind the hamburger →
+  Initiative path); now one click from the GM's resting view, and it
+  also auto-opens the tracker overlay so the rail renders for both
+  sides. Warm-orange gradient so it reads as the headline action.
+- **Player rail atmospherics — "cards on the table" framing.** Translucent
+  radial-gradient wash instead of a flat panel, soft drop-shadow under the
+  deck, no chrome border line. Per-card deeper shadow + identity-coloured
+  glow on the active card so it reads as physical cards sitting on a
+  surface, not as UI chrome.
+
+Banked from the audit, not yet implemented: bench/tray click-and-type-value
+flow (Q5/Q6), drag-from-bench-to-rail (Q7), double-click value edit (Q8),
+right-click context menu (Q9), delete-X to upper corner (Q10), card
+movement animations (Q11/Q12 — Alex flagged as critical for selling the
+card vision).
+
+## v2.16.52 — 2026-05-31
+
+### Reply assistant — gated pre-fetch + button rename
+
+- **Auto pre-fetch now gates on `!msg.toPlayerId`.** Only inbound
+  messages addressed to the GM trigger an automatic LLM suggestion
+  call. Player-to-player traffic (which the GM is just monitoring)
+  no longer burns tokens on suggestions the GM may never need.
+- **"Suggest replies" → "↻ Re-roll".** With auto pre-fetch covering
+  the common case, the button's primary job is now to refresh the
+  chips, not to ask for them in the first place. Label reads
+  "↻ Re-roll" on threads that had a pre-fetch and stays as
+  "Suggest replies" on peer-bound threads where the GM is opting in
+  fresh; after the first manual ask the label flips to "↻ Re-roll"
+  for subsequent clicks.
+
+## v2.16.51 — 2026-05-31
+
+### Messaging arrow polish + LLM cleanup
+
+- **Peer-bound "→ ToName" tag** in the message thread now renders the
+  arrow in bright white and the recipient's name bold in their own
+  identity colour. Makes it obvious at a glance that the message
+  wasn't addressed to the GM. `ThreadMessage` gains an optional
+  `toColor`; GMApp's `player_message` handler sets it from the
+  recipient's PlayerRegistry entry.
+- **LLM assistant produces clean prose by default.** The default
+  system prompt is rewritten to ask for plain narrative + skill ask,
+  one option per numbered line — no bold category labels
+  ("The Green Light (Positive)"), no quotation marks around the
+  skill ask. GMs on the old prompt still benefit thanks to
+  `cleanOption` now stripping legacy `The Title (Tag)` heading
+  prefixes and unwrapping straight + curly quote marks.
+
+## v2.16.50 — 2026-05-31
+
+### Gapless looping for Soundboard (MP3 + everything else)
+
+The Soundboard engine is now **hybrid**: one-shots stay on the
+existing `HTMLAudioElement` path (lightweight retrigger story);
+looping slots flow through a new shared `WebAudioLoopPlayer` that
+uses `AudioBufferSourceNode` with `loop = true`. That's the only
+HTML5 path that loops MP3s gaplessly (the codec pads silence at
+each end; HTMLAudio always plays the padding before restarting).
+
+- **`src/audio/WebAudioLoopPlayer.ts`** — shared loop engine. Lazy
+  AudioContext + decoded-buffer cache + per-slot GainNode. Mute
+  silences via gain (preserves loop phase) instead of pausing.
+- **GM `SoundboardEngine`** routes `play(loop=true)` through it.
+  `stop` / `stopAll` / `setVolume` / `setMuteAll` / `isPlaying` /
+  `getProgress` / `unloadAsset` all bridge both engines based on
+  which one owns each slot.
+- **Player-side `_sbPlay`** in `PlayerApp` does the same. Lazy-
+  imports the loop player so a player who never hears a loop pays
+  zero AudioContext cost. `soundboard_stop` / `_volume` / mute /
+  `_stopAllSoundboard` all route through both engines.
+- **Decoded buffers cached** per asset (keyed by `assetId` on the
+  GM, `dataUrl` on the player). One decode per asset; re-plays of
+  the same loop are instant.
+- **Future-proof**: every container that decodes through Web Audio
+  (Opus, Vorbis, WAV, FLAC, AAC, MP3) loops gaplessly, so the
+  format choice for future loop assets no longer matters.
+
+Fixes the `Deep Space Ship Effect.mp3` audible loop gap Alex
+spotted in v2.16.49.
+
+## v2.16.49 — 2026-05-31
+
+### Player Voice patch 2 + Players row pass
+
+- **Player ↔ player messages populate BOTH threads** on the GM side.
+  When Player A messages Player B the same entry lands in A's thread
+  AND B's, both `origin: 'peer-bound'`. The orange (peer-bound) badge
+  on either row now has a real population path.
+- **Always-visible chat bubble** at the far right of every Players row
+  (was gated on history). GM can start a new conversation with any
+  player even when there's no prior thread. Click opens an empty
+  thread + composer ready to send.
+- **Offline (GM-managed) players** show a red chat-bubble-with-slash
+  icon in the same slot so the row stays aligned. Not interactive —
+  no device, no messaging.
+- **Bold = "new since last open"**. Messages whose `at` is newer than
+  the per-thread `lastSeenAt` (snapshotted on panel close) render
+  with weight 600 + white text so the GM spots fresh arrivals at a
+  glance. Drops to normal on next open.
+- **Pre-fetched LLM suggestions are kept** — when a player message
+  arrives, GMApp fires `client.suggest()` in the background; chips
+  appear instantly the moment the panel opens. **"…" placeholder
+  pulses while the LLM is still thinking** so the GM knows chips
+  are on the way.
+- **Players row tidy-up**: delete moved off the action area to a
+  hover-revealed red × at the row's top-right corner. Frees a slot
+  while keeping the destructive action discoverable + harder to
+  click accidentally during play.
+- **Drag a player icon onto the map** as an alternative to clicking
+  the marker pin — the canvas-wrapper accepts the drop, converts CSS
+  px → normalised coords, and lands the token at the cursor. Indigo
+  outline highlights the drop zone while a drag is in flight.
+- **Players panel refreshes on map change** so the placement-pin
+  glyph reflects the new map's placements (was reading stale across
+  map switches).
+
+## v2.16.48 — 2026-05-31
+
+### Player row polish + sidebar above PiP
+
+- **Unread badge moves to the far right** of each Players row
+  (after the delete button). Notification badges read more clearly
+  at the row's terminal edge.
+- **Idle "review thread" icon** appears in the same slot when a
+  player has thread history but no unread messages. Faint chat-
+  bubble glyph, brightens on hover, click opens the same SidePanel
+  so the GM can reread previous conversations at any time.
+- **Sidebar now layers above the PlayerPip overlay.** Stacking
+  rebuilt: sidebar (z-index 100) > side-panel (90) > PiP (50). The
+  side panel stays hidden behind the sidebar in its closed state
+  and slides out above the PiP when opened.
+
+## v2.16.47 — 2026-05-31
+
+### Player Voice messaging restored on the new framework
+
+GM ↔ player messaging is back, rebuilt on the SidePanel framework
+that landed in v2.16.35. The old PlayerVoicePanel sidebar section is
+gone; each Players row now carries an **unread badge** (red for
+GM-bound messages, orange for peer-bound — the latter populates in
+the next patch). Clicking the badge opens a right-edge SidePanel
+with that player's message thread + a reply composer at the bottom.
+
+- **`MessageThreads` store** — per-player thread state + unread
+  counters + change subscription. Players panel re-renders when
+  threads mutate (badge counts update live).
+- **`MessageThreadPanel` body builder** — renders the thread
+  chronologically (GM messages right-aligned with an accent
+  background, player messages left-aligned), composer with Enter-to-
+  send / Shift-Enter for newline, optional LLM "Suggest replies"
+  button (when an assistant is configured in Settings → Player Voice).
+- **Pre-fetched LLM suggestions** preserved from the v2.16.7 design —
+  when a player message arrives, GM-side fires `client.suggest()` in
+  the background; the chips appear instantly the moment the side
+  panel opens for that player.
+- **Removed `src/gm/PlayerVoicePanel.ts`** — fully retired.
+
+Coming in patch 2 (v2.16.48): player ↔ player threads populate the
+orange badges + the GM-monitored peer-bound stream renders inline.
+
+## v2.16.46 — 2026-05-31
+
+### Sidebar panel order reshuffled for play-frequency
+
+New order (top = highest-frequency during play):
+
+1. Map Selection
+2. Players
+3. Markers ── per-map content, frequent during play
+4. Fog of War & MapFX
+5. Visual Filter
+6. Soundboard ── audio, frequent during play
+7. Soundtracks
+8. Scaled View ── per-map setup
+9. Map Transition
+10. Stagecraft
+
+Key changes vs. before:
+- **Markers up 3 places** (was #6 between Stagecraft and Scaled View).
+  Touched almost as often as fog during play.
+- **Map Transition down to #9** (was #3). Picked once per map, plays
+  automatically on swap — low play-time frequency.
+- **Visual Filter and Soundboard up** so the per-map atmosphere
+  controls cluster together where the GM looks for them.
+- **Stagecraft at the bottom** — config-heavy, rarely touched during
+  play.
+
+## v2.16.45 — 2026-05-31
+
+### Minor polish
+
+- **"+" add-new buttons tinted green** so the create-new affordance
+  pops against the neutral row. Same green family as the eye-icon
+  pulse — consistent "positive action" semantic.
+- **Reveal Layer in MapFX dropdown is greyed + unselectable on
+  single-layer maps.** Kind only makes sense for multilayered
+  composites (the same `revealBackingBlob` flag the Map panel's
+  upper-layer-opacity row uses). Tooltip explains how to unlock
+  it (add layers in the Composite Map editor).
+
+## v2.16.44 — 2026-05-31
+
+### Same-browser audio mutual exclusion
+
+No more dual sound when the GM page, a popped-out player window, and
+maybe a projector are all open on the same machine. New
+`AudioCoordinator` (BroadcastChannel-based) elects a single audio
+holder at a time across every Mappadux tab in the browser:
+
+- When a window unmutes, it broadcasts a claim and starts a 3-second
+  heartbeat.
+- Every other Mappadux window hears the claim and silences itself
+  locally (last-claim-wins). The GM's positional / soundboard /
+  tracker engines all mute; players' `sbMuted` flips on.
+- A force-muted window does NOT auto-unmute when the holder
+  eventually goes quiet — the user re-enables explicitly. Auto-
+  unmute would bring audio back unexpectedly later.
+- PiP iframes don't participate (they're silently muted by design;
+  the iframe never carries audio).
+- It's a same-browser concern only — no `positional_mute_all`
+  broadcasts go to remote players. They're on different machines
+  and don't suffer the dual-sound problem.
+
+Net effect: open the GM, pop a player window out, the GM silences
+itself for you. Click the mute icon on the player window to mute,
+the GM stays silent (sticky). Click the GM's mute-all toggle to
+re-enable audio there, the player window mutes.
+
+## v2.16.43 — 2026-05-31
+
+### PiP polish
+
+- **PiP frame is now resizable.** Standard CSS resize handle at the
+  bottom-right; aspect-ratio stays locked at 16:9 (only width
+  changes). Width persists across reloads alongside the position
+  (`dmr_pip_width`).
+- **Pointer events on the PiP no longer leak.** Drag-to-move was
+  pulling the GM camera along with it because the pointerdown
+  bubbled to the canvas-wrapper's pan handlers. Now stopped at the
+  frame + the Show pill.
+- **Fullscreen button suppressed inside the PiP iframe.** The frame
+  itself is bounded; the floating fullscreen button was pointless
+  there.
+- **"GM Player View disconnected" replaces "Player (peerid…)
+  disconnected"** when a PiP iframe or pop-out window closes. PlayerApp
+  sends `gm_preview_hello` on connect when `?gmPreview=1`; GMApp tracks
+  those peer ids and swaps the status text on disconnect.
+- **Pop-out windows from the PiP start unmuted.** The user just
+  clicked pop-out — that user activation lets the new window autoplay.
+  PiP iframes themselves stay silently muted (audio in a 33 %
+  preview is pointless).
+
+### Other
+
+- **Panel name restored to "Scaled View"** (was briefly "Player Views").
+
+## v2.16.42 — 2026-05-31
+
+### Retired the giant "Tap to start audio" prompt
+
+The pre-interaction full-bleed "🔇 Muted — tap anywhere to start
+audio" overlay is gone. It was a workaround for older browser
+autoplay policies — modern browsers accept the connect-button click
+(and pop-out via window.open) as user activation. The small mute
+icon at the top-right is now the single affordance: transparent
+until clicked, click to toggle. Same icon, same place, just no
+giant prompt taking over the screen first.
+
+PiP iframes (`?pip=1`) skip the mute indicator entirely and stay
+silently muted — audio in a 33 %-canvas preview is pointless and
+the indicator was dominating the small frame. Pop-out windows from
+the PiP carry no flag, so they get sound + the small toggle.
+
+## v2.16.41 — 2026-05-31
+
+### GM canvas drops the animated backdrop layer
+
+Backdrop shader (Starfield / Aurora / Embers / etc.) no longer
+renders on the GM canvas. The basic background colour still
+applies. Saves CPU + GPU on the GM workspace and cleans up the
+view — the PiP preview shows what the player + projector
+audiences see, so the GM no longer needs to run the shader twice.
+
+The backdrop config still travels through `state.view.backdrop` so
+the `view_update` broadcast carries it to the audience views
+unchanged.
+
+## v2.16.40 — 2026-05-31
+
+### Inline Player View preview (PiP) on the GM canvas
+
+- **New "Show Player View" pill at the bottom-left of the canvas.** Click
+  to open an inline preview frame — 33 % canvas-width at 16:9, defaults
+  to the bottom-left, draggable anywhere on the canvas with the position
+  persisted across reloads (`dmr_pip_position`).
+- **Header chrome on the inline frame**: minimise back to the pill,
+  pop-out to a standalone window. Pop-out reopens the pill so the GM
+  can spawn another inline preview as many times as wanted — useful when
+  one window is already on a second display and the GM wants a local
+  preview of what's showing there.
+- **"Open Player Window" button retired** from the Player Views panel.
+  Replaced entirely by the PiP overlay's pop-out chrome. One concept,
+  one place.
+- **Iframe loads the player URL with `?gmPreview=1`** so the inline
+  preview is a viewer of the live state — no identify modal, no
+  player-only UI, no token. Same flag the old preview popup used.
+- **Defaults to open on first session** so a new GM immediately sees
+  what their players see. State persists (`dmr_pip_visible`).
+
+## v2.16.39 — 2026-05-31
+
+### Unified side-panel control builders
+
+- **New `src/gm/sideParamRows.ts`** — single canonical implementation
+  of `buildColorRow`, `buildSliderRow`, `buildToggleRow`, and
+  `buildSelectRow`. Lifts the shape, classes, label-column width, and
+  tooltip behaviour from Backdrop / MapFX (where the look was already
+  the way we wanted) so every side panel renders identical markup.
+- **`FilterPanel` + `TransitionPanel` rebuilt on top of it.** The
+  colour pickers, sliders, and toggles in Visual Filter and Map
+  Transition now match Backdrop and MapFX exactly — same row layout,
+  same hover tooltip, same alignment. Filter's collapsible param
+  groups stay (only filters need them); everything inside is uniform.
+- **`GMApp._buildShader*` wrappers now delegate to the shared
+  builders** so the canonical version is the only place the markup
+  lives. Wrappers stay around for the kind-label suffix + the
+  0/1↔boolean conversion for shader toggles — small adapters over
+  the shared core.
+
+Going forward, any new tunable surface uses these builders by
+default. Drift across panels can't accumulate any more — there's
+literally only one row implementation now.
+
+## v2.16.38 — 2026-05-31
+
+### Map Transition joins the kind-row + side-panel pattern
+
+Inline `<select>` for the transition kind picker; sliders icon opens
+the side panel with the transition's params. Matches Backdrop, MapFX
+and Visual Filter — every panel with the "pick a kind + tune its
+params" shape now lives on the same framework.
+
+## v2.16.37 — 2026-05-31
+
+### Visual Filter joins the new design language
+
+- **Visual Filter promoted to the kind-row pattern.** Inline `<select>`
+  for the filter picker on the Visual Filter panel; sliders icon next
+  to it opens the side panel with the "Tint Player Markers" toggle
+  (gated by markers-on-this-map) + all the filter's parameter controls.
+  Matches Backdrop and MapFX exactly.
+- **FilterPanel rebuilds inside the side panel** on each open, so the
+  inline `#filter-params` container is gone. State stays in
+  `state.filter.params` as before — every change writes through live;
+  closing the side panel is the implicit save.
+- **Click-to-close on the canvas now reliably dismisses the side panel.**
+  The outside-click listener switched from bubbling `mousedown` to
+  capture-phase `pointerdown`, matching the rest of the GM's input
+  pipeline. The bubbling path was occasionally getting consumed by
+  the gesture handlers downstream.
+
+## v2.16.36 — 2026-05-31
+
+### Side panel slides from the sidebar; width follows UI scale
+
+- **Reanchored.** The side panel now slides out from BEHIND the
+  sidebar (anchored to its right edge, hidden behind it when closed)
+  rather than appearing from the far-right edge of the screen. Feels
+  like a continuation of the sidebar instead of a disconnected overlay
+  on the other side of the canvas.
+- **UI-scale-aware.** Width is `calc(340px * var(--ui-scale))`, so
+  Settings → UI Scale dials the panel up / down in lock-step with
+  the sidebar. Max-width still respects the available viewport area.
+- **Implicit save-and-close on canvas click.** Already worked by
+  virtue of the outside-click dismiss; the change handlers on every
+  control write through to state live, so closing the panel is the
+  full commit. Explicit X / Escape still close.
+
+## v2.16.35 — 2026-05-31
+
+### Side-panel framework + Backdrop / MapFX first users
+
+- **New right-edge side-panel framework** (`src/gm/SidePanel.ts`,
+  `.side-panel` CSS). Slides in from the right, single panel at a
+  time, header + scrollable body, outside-click / Escape / X button
+  to close. Re-usable foundation that the Visual Filter, Player Voice
+  threads, and any future "configure this thing" surface will hang
+  off.
+- **Backdrop kind picker promoted from popover to inline `<select>`**
+  on the Map panel row. The tune button (sliders) opens the side
+  panel with Background colour + the kind's params; switching the
+  kind from the dropdown auto-refreshes the panel body + title.
+- **MapFX kind picker promoted from popover to inline `<select>`** on
+  the FoW panel row, with the same side-panel treatment. The kind
+  picker no longer needs to live inside the popover — it lives
+  exactly where the GM looks for it.
+- **`FxPopover` kept around as dead code** so anything still depending
+  on the old call shape doesn't break; will be removed in a follow-up
+  once the rest of the sweep (Visual Filter, etc.) settles.
+
+## v2.16.34 — 2026-05-31
+
+### Design language sweep — adjacent "+" + sliders for tune
+
+- **"+" button beside each picker** on Map / Markers / Display rows.
+  The "Add new..." sentinel that used to live at the bottom of the
+  dropdown is gone — easy to miss, slow to discover. The adjacent
+  icon button is the standard pattern (Stripe, Linear, GitHub, Material).
+- **Sparkle → sliders icon** on Backdrop and MapFX (FoW) tune buttons.
+  Sparkle reads as "fancy effect", not "configure parameters". The
+  sliders-horizontal Lucide glyph is the standard "tune parameters"
+  affordance — matches what people are used to in audio plugins,
+  dashboards, and settings dashes.
+
+Next on the design sweep: a generic right-edge side-panel framework
+(v2.16.35), then promote Visual Filter's param controls into it
+(v2.16.36), then the same treatment for Backdrop + FoW tune popovers
+and the Player Voice messaging threads when each lands.
+
+## v2.16.33 — 2026-05-31
+
+### Sidebar simplify — reorg + Player Connection retired
+
+- **Map Selection promoted to the top of the sidebar.**
+- **Player Connection panel deleted.** The QR + URL display, the
+  player-count line, the broker-error notice, and the Open Player
+  Window button all lived there. The hold screen players see when
+  they can't reach the GM picks up the URL responsibility; the
+  per-row green pulse indicators on the Players panel already give
+  the count feedback at a glance; Open Player Window relocated.
+- **Scaled View renamed to Player Views.** The single panel now houses
+  everything broadcast-to-audience: Open Player Window (relocated),
+  Display picker, rotation, Disable Filters, etc.
+- **Two broadcast-bypass switches collapsed into one.** The Player
+  Views header toggle now hides BOTH player and projector audiences
+  simultaneously when off. Was prone to leaving half the audience
+  in the hold screen and the other half live.
+- **Player Voice panel deleted.** Messaging surface returns as a
+  right-edge slide-out triggered by per-row unread badges on the
+  Players panel when we revisit messaging functionality. Until then
+  the existing panel's empty list adds nothing.
+
+## v2.16.32 — 2026-05-31
+
+### Visual Filter — honest label, gated visibility
+
+- **"Affect Player Markers" renamed to "Tint Player Markers".** The CSS
+  approximation only reproduces the colour half of a filter (palette
+  shift / brightness / contrast / blur) — none of the procedural
+  scanlines / grain / animation can be expressed in DOM `filter:` land.
+  The new label says what the toggle actually does so it doesn't
+  oversell.
+- **Toggle only appears when this map has at least one player marker.**
+  Hidden by default in HTML; flipped on alongside marker placement so
+  it doesn't clutter the panel on maps where the option would be a no-op.
+
+## v2.16.31 — 2026-05-31
+
+### Small icons go inline; GM reset leaves a breathing margin
+
+- **SVG-derived icons no longer race over PeerJS.** Player-icon delivery
+  used a chunked binary transport (header + JSON + binary chunks) for
+  every icon regardless of size — and during multi-player identify
+  cycles, back-to-back small-icon broadcasts could intermittently lose
+  a delivery. Icons whose `data:` URL is ≤ 10 KB now ride INLINE on the
+  JSON message (single frame, atomic), which covers the SVG-derived
+  ones that were affected. Bitmap icons larger than 10 KB still use
+  chunked transport as before. The receiver already supported both
+  paths.
+- **GM workspace reset leaves a small breathing margin.** First paint
+  and Reset View now sit at scale 0.95 instead of 1.0, so the map has
+  a few-pixel border around every edge — easier to reach the panel
+  icons that hug the workspace edges. Player + projector views still
+  fill their canvases. 'R' key + Reset View button both honour the new
+  default.
+
+## v2.16.30 — 2026-05-31
+
+### Patch E — optional filter pass over player tokens
+
+Per-map toggle in the Visual Filter panel: **Affect Player Markers**.
+When on, the player + projector views apply a CSS approximation of the
+active filter to the player-marker-layer DOM overlay so tokens visually
+participate in night-vision green, candlelight warmth, thermal, horror,
+mist, etc. — without the GM having to rebuild them as WebGL sprites.
+
+- **Default off.** Remembered per map (stored on `FilterState`).
+- **Mapping table** in `src/filters/cssApproximations.ts` covers the
+  filters where CSS `filter` primitives translate well (tints, blurs,
+  contrast / brightness shifts). Stylisation filters (watercolour, oil,
+  parchment, hand-drawing) have no faithful CSS analogue and return
+  empty — the toggle still flips but produces no visible change for
+  those. Tune individual approximations in that one file as the look
+  evolves.
+- **GM preview included.** The toggle applies the same CSS to the GM's
+  own player-marker layer, so the GM sees the same look the player +
+  projector will render.
+- **Bypass-aware on the projector.** When the projector's per-viewport
+  filter gate is off, the marker-layer filter is cleared too — keeps
+  the table-screen tokens clean if the projector's been put into
+  no-filter mode.
+
+## v2.16.29 — 2026-05-31
+
+### Fix — zoom anchor stays glued off-centre
+
+After v2.16.28 the player view fills the canvas when zoomed in (clip
+pass suppressed), but wheel + pinch + drag-pan were still computing
+world coordinates from the GM-defined viewport's normalised dims —
+so off-centre zooms drifted because the rendered view extended past
+those dims in one axis. Now the gesture handlers anchor on the
+EFFECTIVE viewport (canvas-aspect extension), so the world point under
+the cursor / centroid stays glued through the gesture regardless of
+where on the canvas you anchor. Drag-pan also uses the effective
+viewport, so a full-canvas-wide drag moves by the full canvas width
+of world instead of the smaller GM-viewport width.
+
+## v2.16.28 — 2026-05-31
+
+### Zoom fixes — projector locked; player zoom-in fills the canvas
+
+- **Projector is now scale-locked on touchscreens too.** The projector
+  view is calibrated to the physical table; mouse-wheel zoom was
+  already disabled, but native pinch-zoom + double-tap-zoom +
+  pull-to-refresh were still active on touchscreen-mounted browsers
+  (TV / tablet projectors). Added `touch-action: none` +
+  `overscroll-behavior: none` on `body.projector-view` to lock the
+  scale.
+- **Player zoom-in no longer bars the view to the GM aspect.** The
+  renderer's clip pass blacks out canvas pixels outside the GM-defined
+  viewport's aspect so the player sees the GM's framing at the
+  broadcast view. That's the right behaviour when fully zoomed out —
+  but when the player zooms in, those bars were still cropping the
+  image even though the player had explicitly asked for a closer
+  look. The clip pass is now suppressed whenever the player has a
+  local override active: the camera already draws the full canvas
+  area, so disabling the clip simply exposes the extra map content
+  filling the canvas edge-to-edge. Bars come back when the player
+  hits Reset View.
+
+## v2.16.27 — 2026-05-31
+
+### Fix — pinch-zoom no longer snaps back on release
+
+Touch pinch-zoom on the player view was being silently undone the
+moment a finger lifted. The Gestures helper dispatched
+`onTwoFinger({phase:'end', scale:1, panDx:0, panDy:0})` — a synthetic
+"reset" — which the player handler applied verbatim, restoring the
+override to the gesture-start state. Wheel-zoom and mouse-pan were
+unaffected because they don't go through the two-finger path.
+
+Now the helper remembers the LAST observed scale + pan during move
+and replays them on end, so consumers see the final pinch state and
+the zoom persists. Mouse-wheel + drag-pan behaviour unchanged.
+
+## v2.16.26 — 2026-05-31
+
+### Pointer scales with disc; bounding rect rotates again
+
+- **Pointer size is now relative to disc size.** Square box scaled to
+  50 % of the disc's shortest edge, clamped to [10, 40] px. Keeps the
+  handle in proportion at every zoom — tiny on zoomed-out unscaled
+  maps, generous on big calibrated tokens. No more "arrow larger than
+  the icon" at low zoom.
+- **Non-square bounding rectangle rotates with facing again** (1×2 east
+  → 2×1 wide rect, 2×3 east → 3×2). Only the image inside stays
+  upright — earlier ask preserved. Disc-dim swap snaps at the
+  closer-to-horizontal vs closer-to-vertical boundary so the
+  orientation matches the facing direction.
+
+## v2.16.25 — 2026-05-31
+
+### Fat arrow, upright images, icon self-heal
+
+- **Rotation pointer doubled in width** (16 → 32 px) — much easier to
+  grab on touch. Height unchanged so it doesn't intrude further past
+  the disc edge.
+- **Non-square images stay upright now.** 1×2 / 2×3 tokens no longer
+  flip the image (or swap disc dimensions) when facing changes — only
+  the pointer rotates to indicate facing direction. The "long axis
+  follows facing" affordance was distracting on redraws; matches the
+  square-token behaviour.
+- **Icon self-heal.** Player markers now carry a `hasIcon: true` flag
+  when the GM has an image-form icon stored. Receivers (players and
+  projector) check on every `player_markers` arrival: if the GM says
+  there's an icon but the local cache is empty, they send a
+  `player_icon_request` upstream and the GM resends just that icon.
+  Recovers from dropped chunked-binary deliveries and tokens that
+  arrived before the layer was mounted. Debounced per playerId (5 s
+  cooldown).
+
+## v2.16.24 — 2026-05-31
+
+### Pointer feels grippier; projector icon diagnostics
+
+- **Rotation handle is now a tick + arrowhead** sitting fully outside
+  the disc, attached by a short stalk that overlaps the disc edge by
+  2 px so the join reads as integrated. Bigger hit-target (16×20 box,
+  clip-path includes the stalk), so the handle is much easier to grab
+  on touch — both on the GM and on the player.
+- **Discs shrunk to make room.** Default uncalibrated disc 30 px →
+  26 px. Calibrated tokens: footprint gap widened from 0.25 → 0.35
+  squares (1x1 now fills 65 % of a square, 2x2 = 165 %, 3x3 = 265 %).
+  Same constant-gap rule as before, just a little more breathing room
+  for the protruding pointer.
+- **Projector bitmap icons — diagnostic log added.** A `console.info`
+  on every `player_icon_update` arrival reports which transport
+  delivered (peerjs blob vs BC dataUrl vs clear), and whether the
+  layer + markers are ready to consume it. If the projector is still
+  missing bitmap icons after this drop, the projector console will
+  tell us where the chain breaks.
+
+## v2.16.23 — 2026-05-30
+
+### Polish — pointer feels attached, local previews receive icons
+
+- **Facing pointer is now an integrated triangle.** Replaces the floating
+  coloured dot with a clip-path triangle that straddles the disc edge —
+  base inside the disc, tip just outside — so it reads as a feature of
+  the token rather than a separate UI element. Same drag-to-rotate
+  handle, same 45° snap.
+- **Same-browser preview / projector windows seed Player Voice state
+  on connect.** A freshly-opened GM-side preview or projector pop-up
+  was rendering identified players as initial-letter fallbacks until
+  the next live update, because state-of-record (markers + icons)
+  lived in PlayerRegistry, not in the cached `full_state`. Added a
+  `Host.onLocalRequestState` hook fired alongside the BC `full_state`
+  response; GMApp consumes it by re-broadcasting markers + all per-
+  player icons so the local view catches up on join.
+- **Defensive `touch-action: none` on token disc + pointer.** Prevents
+  the browser from claiming a finger that grazes a token disc for
+  native pinch-zoom during a multi-touch gesture on phones.
+
+## v2.16.22 — 2026-05-30
+
+### Patch D — token facing pointer + rotation handle
+
+Each player token can now have a facing direction, set by dragging a
+small coloured dot at the disc edge.
+
+- **Facing pointer.** A small dot sits on the disc edge in the direction
+  the token is facing. Doubles as the rotation handle — drag it around
+  the disc centre to rotate. Snaps to 45° increments.
+- **Image rotates in 90° steps for non-square footprints.** A 1x2 token
+  facing east becomes 2x1 (image rotated 90°, footprint dims swap) so
+  the image stays upright relative to the rectangle's long axis. Square
+  footprints (1x1, 2x2, 3x3) only rotate the pointer; the image stays
+  put. Matches your earlier note: pointer snaps 45°, image snaps 90°.
+- **Player + GM both have the handle**, gated by the same "Let players
+  move their own token" setting as drag. Live updates flow from player
+  → GM the same way drag updates do, including the cancel-move button
+  on the Players panel row (which now restores both position AND
+  facing).
+
+## v2.16.21 — 2026-05-30
+
+### Fix — projector now receives token icons on connect
+
+`projector_hello` wasn't firing the equivalent of the player-identify
+state-seeding (markers, icons, initiative). A projector window opened
+after the GM had set icons would never receive them and tokens
+displayed the initial-letter fallback. Now mirrors the identify dispatch:
+on `projector_hello`, the GM rebroadcasts current player markers, all
+player icons, and the current initiative state, so a fresh projector
+catches up on the full Player Voice picture.
+
+## v2.16.20 — 2026-05-30
+
+### Fix — remote players see icons; non-square tokens are rounded rectangles
+
+Two related fixes after live testing on a Pixel.
+
+- **Remote players were seeing the initial-letter fallback instead of the
+  picked icon.** Same root cause as the earlier wire-format bug: the icon
+  path I added re-encoded the assembled PNG bytes back into a base64 data
+  URL inside Guest, but maps and soundboard simply hand the assembled
+  bytes to the consumer as a Blob arg (faster, less code, proven). The
+  icon path now follows that pattern — Player / Projector wrap the
+  assembled bytes in `new Blob([…], { type: 'image/png' })` and stash a
+  `URL.createObjectURL` reference in the per-player icon cache.
+- **Removed the 64×64 downscale.** The chunked transport handles
+  arbitrary sizes (it carries map blobs), so artificial shrinking was
+  costing icon quality for no benefit. Icons now rasterise at native
+  resolution capped at 500px longest-side (sized for a 3×3 token at
+  HiDPI). SVGs always render at the cap regardless of intrinsic size.
+- **Non-square tokens are rounded rectangles**, not ovals. The CSS
+  override was being declared before the base `.pm-token-disc` rule and
+  losing the cascade. Moved to after the base + added `overflow: hidden`
+  so icon images are properly clipped to the disc shape rather than
+  bleeding past it.
+- **`object-fit: cover`** on the disc image, so the whole disc is filled
+  cleanly with the icon (was `contain`, which letterboxed non-square
+  footprints in their own background colour).
+
+## v2.16.19 — 2026-05-30
+
+### Player Voice on the Projector + size-badge + corrected sizing math
+
+- **Projector view now renders Player Voice content.** It was missing the
+  v2.17 rendering layers entirely. The Scaled / Projector view now shows
+  player tokens (with their icons), ping pulses, and the atmospheric
+  initiative rail — same set the player view shows. Messaging /
+  identification / roll prompts stay out of the projector by design
+  (it's a read-only table screen, not a participant).
+- **Size dropdown becomes a small badge** at the bottom-left of the icon
+  button, mirroring the colour badge at the bottom-right. The current
+  footprint label (e.g. "1x1") is the only thing visible day-to-day; the
+  native select dropdown opens on click. Frees more space on each row.
+- **Corrected sizing math.** Was a uniform 75% of footprint, which gave
+  a 25%-each-side border at 3x3 that read as wasted space. Now a
+  *constant* 0.25-square gap is shaved off each axis regardless of size:
+  1x1 = 0.75 squares (75%), 2x2 = 1.75 squares (175%), 3x3 = 2.75 squares
+  (275%). Adjacent tokens have the same breathing room at every size.
+
+## v2.16.18 — 2026-05-30
+
+### Patch C — token footprint sizes on calibrated maps
+
+Each player can now have a token footprint set in map squares — 1x1
+(default), 1x2, 2x2, 2x3, or 3x3. A small dropdown on every Players panel
+row picks it.
+
+- **Only honoured on calibrated maps.** When the active map has a pixels-
+  per-square set, the token scales to fit its W×H footprint at 75% of the
+  square area (so adjacent tokens don't visually butt up). Scales live
+  with zoom — the RAF redraw already running for token positions reads
+  the current map-px-per-square each frame.
+- **On uncalibrated maps the token keeps its constant CSS size** so it
+  stays readable regardless of zoom. The size picker still shows the
+  chosen value; it's just dormant until you switch to a calibrated map.
+- **Square footprints render as circles** (1x1, 2x2, 3x3). **Non-square
+  footprints render as rounded rectangles** (1x2, 2x3) so icon images
+  have more room to read.
+- **The same scaling applies to player views**, so what the GM sees and
+  what each player sees match exactly on calibrated maps.
+
+Patch D will add facing / rotation, including the 90°-image rotation for
+non-square footprints so they sit upright relative to their long axis.
+
+## v2.16.17 — 2026-05-30
+
+### Polish — colour propagation + named disconnect status
+
+- **Colour / name changes from the Players panel now refresh tokens
+  immediately.** The previous version only re-broadcast the roster, so the
+  player marker layer (GM AND remote views) kept the old colour until the
+  next event that triggered a marker refresh (a map switch, a token drag,
+  etc.). The same on-the-fly refresh remote players already got when they
+  re-identified is now applied to GM-side edits.
+- **Disconnect status uses the player's real name.** Was "Player
+  disconnected (3572b4e9…)"; now reads "Thorin disconnected" if they've
+  introduced themselves, falling back to the peer hash for connections
+  that never identified (a stale tab, a connection that errored mid-handshake).
+
+## v2.16.16 — 2026-05-30
+
+### Fix + polish — token icons no longer break remote map loads
+
+The v2.16.15 icon picker shipped icons inline inside `player_markers`. With
+multiple raster icons the JSON payload could exceed the PeerJS DataChannel
+~16KB message limit, which silently broke the channel for remote players
+— maps stopped loading on the phone any time a custom icon was assigned.
+
+This patch:
+
+- **Splits icons off** into a dedicated `player_icon_update` message,
+  chunked over the wire the same way soundboard audio and map blobs are.
+  Individual icons can be any size; player views cache by playerId and
+  merge into the marker view as they arrive. Map loading is no longer
+  affected by icon size.
+- **Downscales picked icons to 64×64 PNG** at pick time so the chunked
+  payload stays small (and re-broadcasts on every new joiner stay
+  cheap). Quality is fine at the 30–60px display size of a token disc.
+- **Player identify modal now shows the GM-allocated icon** in the
+  preview disc when one is set, so the player sees the finished look of
+  their token while editing their name / character / colour.
+- **Combined colour + icon control on the Players panel.** The standalone
+  colour picker is gone; the icon button is the main control, with a
+  small colour-input badge attached to its bottom-right edge. Click the
+  icon body to open the asset library, click the badge to change the
+  identity colour. Hover reveals a clear-icon × at the top-right. Frees
+  up panel width and keeps related controls visually together.
+
+## v2.16.15 — 2026-05-30
+
+### Player Voice — token icon picker
+
+Each player can now have an icon on their token instead of the initial
+letter fallback.
+
+- A new icon-pick button on every Players panel row opens the same image
+  asset library marker icons use. Pick a glyph (unicode), a tintable
+  game-icons-style SVG, a custom multi-colour SVG, or a full-colour
+  raster — all four render correctly. Tintable SVGs are baked white at
+  pick time so they contrast with the disc's dark coloured background;
+  raster and multi-colour SVGs render in their own colours.
+- Hover the icon preview to reveal a small × button that clears the
+  selection — the token falls back to the player's initial.
+- The icon travels with the player token (player views render the same
+  image on their atmospheric tokens) and is stored only in the browser
+  players store, never in the .mappadux save file — consistent with the
+  rest of the player marker system.
+
+## v2.16.14 — 2026-05-30
+
+### Identity polish — custom colour, taken-colour badge, mobile resume
+
+Three fixes folded into a single beta push:
+
+- **Custom colour swatch now works on desktop too.** The previous version
+  used a hidden `<input type="color">` triggered by `.click()`, which is
+  reliably broken on desktop Chrome (it silently no-ops). The "+" swatch
+  is now the colour input itself, styled to match the palette tiles with
+  a rainbow gradient. Click it on any device and the system's standard
+  colour picker opens directly — no intermediate menu.
+- **Taken-colour badge.** A small dark dot with the other player's initial
+  appears on palette tiles whose colour is already in use. Picking a
+  taken colour is still allowed (clashing doesn't break anything); the
+  badge is just a friendly heads-up so you can pick a distinct identity
+  without having to memorise everyone else's choice.
+- **Mobile resume reconnects.** When a phone tab is hidden for more than
+  10 seconds (locked screen, background app, OS battery saver), the
+  WebRTC channel often dies silently — PeerJS doesn't always get a close
+  event, so the page silently loses its connection until the user
+  refreshes. The player view now watches `visibilitychange` and on resume
+  after a long hide, proactively tears down + reconnects via the saved
+  room code. A brief "Reconnecting…" status appears; everything's back
+  within a couple of seconds.
+
+## v2.16.13 — 2026-05-30
+
+### Fix — upstream PeerJS messages from remote players were silently dropped
+
+The wire was asymmetric. The Host has always JSON-stringified outgoing
+messages before `conn.send`, but the Guest was sending raw objects.
+PeerJS is configured with `serialization: 'raw'` (so it doesn't repack
+our chunked binary blobs), which means upstream objects went straight
+into `RTCDataChannel.send(object)` — and Chromium throws on that, since
+the channel only accepts strings / ArrayBuffer. The throw was swallowed
+silently inside PeerJS, so `player_identify`, `player_ping`,
+`player_message`, `player_marker_move`, `initiative_roll`, and
+`projector_hello` from any remote (network-only) peer simply never
+arrived. BroadcastChannel (same-browser / localhost) was unaffected,
+which is why every test from the GM's own machine worked.
+
+Guests now JSON.stringify upstream payloads; the Host's `conn.on('data')`
+parses incoming strings and still accepts raw objects for back-compat.
+
+This explains the "phone connects, name shows in the modal, but never
+appears in the Players panel" symptom — identify reached the data
+channel and got rejected before it ever left the device.
+
+## v2.16.12 — 2026-05-30
+
+### Identify hardening + diagnostics
+
+Player identify is now resent on every `full_state` arrival — which fires
+on initial connect, every reconnect, and every map change — so a remote
+player whose on-connect send is lost (flaky network, GM not ready yet)
+gets picked up on the next state push. Cheap; registry.identify is an
+upsert so re-sends are idempotent.
+
+Both sides log to DevTools when identify goes out / comes in
+(`[player] identify sent` / `[gm] player_identify received`) so we can
+tell from the console which leg of the trip is failing if the player
+still doesn't land in the Players panel. The player view also briefly
+shows "Connected as <character>" so it's visible without DevTools.
+
+## v2.16.11 — 2026-05-30
+
+### Fixes — Forget-me button + click-to-unmute in preview
+
+- **"Forget me" button** in the player identify modal (footer, left side, red).
+  Confirms, sends a player_forget_me message asking the GM to drop the
+  registry record + any placed tokens, clears local identity + player id,
+  and reloads. Useful when testing flow gets stuck behind sticky state on
+  the player device, or when you want to swap who's playing on a shared
+  tablet.
+- **Click-to-unmute now works in the GM preview popup.** v2.16.9 gated the
+  first-click handler on preview mode, which also blocked the browser's
+  autoplay-policy unmute path — meaning the preview popup couldn't get its
+  audio pipeline started. Removed the gate; click-to-unmute always works.
+
+## v2.16.10 — 2026-05-30
+
+### Fix — real player tabs incorrectly treated as GM preview
+
+The same-browser BroadcastChannel signal used in v2.16.9 to detect the GM
+preview popup was firing on real phone players in the wild, suppressing
+their UI and (silently) short-circuiting their `player_identify` send so
+they never appeared in the GM Players panel.
+
+Switched to an explicit `?gmPreview=1` URL flag the "Open Player Window"
+launcher appends. Phones / laptops connecting via the QR never carry it,
+so they're always treated as real players regardless of any local state.
+The override setting under Settings → Player Voice still flips preview
+behaviour off when you want the popup to act like a real player view.
+
+## v2.16.9 — 2026-05-30
+
+### Player Voice — identity polish + GM preview mode
+
+A focused polish pass on the identity surface and a new "preview window"
+mode for the GM's own same-browser player popup.
+
+- **Identify modal: live preview disc.** A circular preview next to "Your
+  colour" shows exactly what your token / chat chip / initiative card will
+  look like, updating as you type and pick.
+- **Identify modal: adaptive copy.** First time you connect: "Introduce
+  yourself" + "Join". Re-opening to edit: "Update your details" + "Save".
+- **Identify modal: custom colour as the last swatch.** A rainbow "+" tile
+  at the end of the palette opens the system colour picker — the separate
+  "Custom" row is gone.
+- **Identity pill: pulse pre-identity, dim once set.** When you haven't
+  introduced yourself the pill pulses to draw the eye and stays bright.
+  Once you've set it, the pill matches the existing fullscreen-button
+  fade pattern: dim by default, bright on hover.
+- **Identity pill: character name first.** The pill shows your character
+  name (the in-fiction handle) with the player name as a fallback. The GM
+  Players panel keeps both fields visible — handy when you forget who's
+  playing whom.
+- **GM preview mode.** Your own "Open Player Window" popup is in the same
+  browser as you, so it isn't a real player. By default the popup hides
+  identity prompts, the pill, message toasts, the right-click action
+  menu, and the initiative roll prompt — and disables left-click and pan
+  on the map. Only the fullscreen + reset-view buttons stay live. You
+  still see the map, tokens, pings, and the atmospheric initiative rail
+  exactly as a player would. Real player tabs on phones / laptops /
+  remote browsers are unaffected (BroadcastChannel is the signal —
+  network-only players never trigger it). Settings → Player Voice →
+  "Show full player UI in same-browser preview windows" flips this off
+  when you want the preview to behave as a real player view for testing.
+- **Players panel: bigger pulsing online dot.** 8px → 10px with a soft
+  pulse on connected players so presence reads at a glance.
+- **Action menu: utility entries.** Right-click / long-press now also
+  surfaces "Introduce yourself / Change your name + colour", "Toggle
+  fullscreen", and "Reset view to GM's" (when applicable), so the corner
+  buttons and the menu are two routes to the same things.
+
+## v2.16.8 — 2026-05-29
+
+### Player Voice — fanned-deck initiative tracker
+
+The final v2.17 piece, per the system-agnostic fanned-deck spec plus the
+edge-pinnable dual-axis addendum.
+
+- **Open it from the hamburger menu** ("Initiative Tracker"). The tracker
+  overlays whichever edge of the GM view it's pinned to — bottom/top for a
+  horizontal fan, left/right for a vertical one. Drop-down pickers in the
+  controls bar swap edge and sort mode live.
+- **Three zones, GM-side:** the **active rail** (fanned overlapping cards
+  scaling the active card up + dimming spent ones), the **threat bench**
+  (A–F reserve enemies the GM clicks to drop into the rail), and the
+  **unallocated tray** (ghost cards for players who haven't rolled, kept
+  separate from the live rail).
+- **Sort modes:** numeric high→low (d20 default), numeric low→high
+  (roll-under / speed priority), or manual / freeform. Drag-and-drop
+  reorder flips the mode to manual automatically.
+- **ROUND END anchor card** sits at the rear; advancing past it
+  automatically clears every spent flag and parks the marker at the back
+  for the next round.
+- **Right-click a card** to jump it to the front (sudden reactions, boss
+  phase triggers). **× on a card** returns enemies to the threat bench and
+  drops player cards to the unallocated tray, both cleared and ready to
+  re-place.
+- **Call for Initiative** broadcasts a roll-prompt to every connected
+  player. They type their result (number, "Fast", whatever fits the
+  system) and it slots into the rail in the right place for the current
+  sort mode — colour and name come from their persistent identity.
+- **Split view:** the GM sees mechanical values (big numbers or threat
+  letters); players see an atmospheric face — coloured tabs + names for
+  players, uniform charcoal "???" tabs + "Opposition" for enemies, no
+  numbers anywhere.
+- **State persists in your browser** between refreshes (localStorage); it
+  is not part of the Map Pack save file, matching the rest of Player Voice.
+
+Lots of UI finessing still to do; the functionality is broadly intact.
+
+## v2.16.7 — 2026-05-29
+
+### Player Voice — LLM suggestions pre-fetch on message arrival
+
+When the reply assistant is enabled and reachable, suggestions are now
+generated the moment a player message lands — by the time the GM opens
+the reply box, the chips are usually already sitting there. Silent if the
+endpoint is down; the manual "Suggest replies" button still surfaces
+explicit errors.
+
+## v2.16.6 — 2026-05-29
+
+### Player Voice — LLM connection test + model picker
+
+A quick polish pass on the GM reply assistant's setup. Settings → Player
+Voice → Reply assistant now has:
+
+- **Test connection button.** Hits `/v1/models` on the configured endpoint
+  and shows whether it's reachable + CORS-friendly, so you can confirm LM
+  Studio is running and serving before you actually rely on it during a
+  session.
+- **Auto-populated model dropdown.** A successful test lists every model
+  the endpoint advertises; click one to fill the Model field. The text
+  field stays the source of truth so a model the server hasn't loaded yet
+  doesn't blank your saved choice.
+- **Stale-marker.** Edit the base URL or API key and the dropdown clears
+  so you re-test against the new endpoint rather than picking from a list
+  that no longer applies.
+
+## v2.16.5 — 2026-05-29
+
+### Player Voice — player tokens
+
+Each player can have a token on the map — a circular marker edged in their
+identity colour, showing their initial and name.
+
+- **GM places them, per map.** A pin button on each row of the Players panel
+  drops that player's token on the current map; click again to remove it.
+  Drag it anywhere to position it. Maps aren't linked, so each map shows only
+  the tokens you placed on it.
+- **Browser-only, no setup churn.** Tokens and their positions live in your
+  browser, never in the Map Pack save file — so sharing or re-importing a
+  pack never carries your table's tokens, and you never have to rebuild a
+  player's token from scratch.
+- **Players can move their own.** When enabled (Settings → Player Voice), a
+  player can drag their own token from their view; you see it move live and
+  get a "send it back" button to undo the move. Turn the setting off to keep
+  placement entirely in your hands.
+
+## v2.16.4 — 2026-05-29
+
+### Player Voice — LLM reply assistant
+
+The Player Voice panel can now draft replies for you. On any player message,
+click "Suggest replies" to get a few editable options — use one as-is, tweak
+it, or ignore them and type your own.
+
+- **Bring your own model.** Works with any OpenAI-compatible endpoint: a
+  local LM Studio server (no key needed) or a hosted provider like
+  OpenRouter (key + model). Configure it in Settings → Player Voice. The API
+  key is stored only in your browser and never leaves it (not even in Map
+  Pack exports), and appears in the API Keys list for housekeeping.
+- **Editable prompt.** The assistant ships with a GM-tuned prompt that asks
+  for four distinct response options (a green light, a complication, a hard
+  stop, and a dramatic choice — each ending in a skill-roll cue). The whole
+  prompt is editable so you can tune it to your model and your table, with a
+  one-click reset to the default.
+- **Suggestions are starting points.** Clicking a suggestion drops it into
+  the reply box; nothing is sent until you hit Send.
+
+## v2.16.3 — 2026-05-29
+
+### Player Voice — private messages
+
+Players can now talk to the table without breaking the fiction out loud.
+Right-click / long-press the map and pick who to message.
+
+- **To the GM, or to another player.** Messaging a player is relayed
+  through the GM and always copied to the GM's panel, so nothing happens
+  behind the screen.
+- **GM Player Voice panel.** Incoming messages collect in a new panel with
+  a red unread-count badge on its header (it clears when you open the
+  panel). Each message has an inline reply box so you can answer a player
+  directly.
+- **Player-side toasts.** Messages arriving at a player view (a GM reply,
+  or another player's note) appear as a colour-coded toast that stays until
+  the player dismisses it.
+- **GM toggle.** Settings → Player Voice can switch messaging off; the
+  option then disappears from the players' map menu.
+
+Same-machine player windows are deduped so a message isn't processed twice
+when it arrives over both local and network channels.
+
+## v2.16.2 — 2026-05-29
+
+### Player Voice — pings
+
+Players can now point at the map. Right-click (or long-press on touch) a
+spot on the player view and choose "Ping here".
+
+- **Zeroing-in pulse.** The ping shows as concentric rings converging onto
+  the point in the player's identity colour — a deliberate "look here"
+  gesture rather than a radar blip. Every connected player sees it.
+- **Different lifetimes per side.** On player views the pulse fades after
+  ~10 seconds. On the GM screen it stays put, labelled with the player's
+  name, until the GM dismisses it with its delete button — so a ping during
+  a busy moment isn't missed.
+- **Tracks the map.** Pulses are anchored to map coordinates, so they stay
+  on the right spot as anyone pans or zooms their own view.
+- **GM toggle.** A new Settings → Player Voice section lets the GM switch
+  pings off; player views hide the option when it's disabled.
+
+## v2.16.1 — 2026-05-29
+
+### Player Voice — named & persistent players (foundation)
+
+First slice of the v2.17 Player Voice work, landing on beta. Players who
+join are no longer anonymous: the session now has a roster of persistent
+players that survives map switches and reconnects.
+
+- **Self-identify on connect.** A player who scans the QR is asked once for
+  their name, character name, and an identity colour. Black / near-black is
+  rejected — that range is reserved for the GM and (later) initiative
+  threats. A floating identity button on the player view lets them change
+  any of it and re-announce at any time.
+- **Persistent players.** Identities are keyed by a device-persisted id and
+  stored in a new global `players` store, so the same person keeps the same
+  record across maps and sessions. Re-identifying on reconnect updates the
+  existing record rather than creating a duplicate.
+- **GM Players panel.** A new "Players" panel lists everyone — connected
+  players (with a live online dot) and offline table-mates the GM adds by
+  hand for people without their own device. Each row is inline-editable
+  (name, character, colour) and removable.
+- **Roster sync.** The GM broadcasts the roster to all player views, laying
+  the channel that upcoming patches (pings, private messages, player markers,
+  the initiative tracker) build on.
+
+Security is intentionally absent here, consistent with the rest of the
+LAN-trust P2P model.
+
 ## v2.16.0 — 2026-05-26
 
 ### Soundtracks — pack-level background music

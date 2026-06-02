@@ -173,6 +173,13 @@ export interface FilterState {
   filterId: string;
   /** Current param values keyed by param id, per filter */
   params: Record<string, FilterParamValues>;
+  /** Per-map opt-in: when true, the player + projector views also apply a
+   *  CSS-filter approximation of the active filter to the player-marker
+   *  DOM overlay, so tokens visually participate in the scene's look
+   *  (night-vision green, candlelight warmth, etc.). Default off — the
+   *  GLSL filter never touches the screen-space DOM layer otherwise.
+   *  v2.16.30 Patch E. */
+  affectPlayerMarkers?: boolean;
 }
 
 // ─── Markers ──────────────────────────────────────────────────────────────────
@@ -469,6 +476,10 @@ export interface SessionState {
   /** Projector viewport position + rotation (per-map). Optional — only set
    *  once a projector has connected at least once. */
   projectorViewport?: ProjectorViewport;
+  /** v2.16.84 — per-map annotations (progress clocks, timers, notes,
+   *  whiteboard strokes). Part of the map's saved data: persists in IDB
+   *  and travels in the .mappadux pack. */
+  annotate?: AnnotateState;
 }
 
 export function defaultSessionState(): SessionState {
@@ -484,6 +495,124 @@ export function defaultSessionState(): SessionState {
     },
     motionTracker: defaultMotionTrackerConfig(),
   };
+}
+
+// ─── Players (v2.17 Player Voice) ────────────────────────────────────────────
+
+/**
+ * A persistent player known to the GM. Created when a connected player
+ * self-identifies, or added manually by the GM for offline players (those
+ * at the table without their own device). Lives in the global `players`
+ * IDB store — NOT per-map — so identities + colours + assigned markers
+ * survive map switches and sessions.
+ *
+ * Security is intentionally absent (LAN trust model, same as the rest of
+ * P2P): `id` is a device-persisted token the player hands over on connect.
+ */
+/** Token footprint sizes (width × height in map squares). Square sizes render
+ *  as circles; non-square as rounded rectangles. Patch D adds rotation/facing,
+ *  which will rotate the image by 90° for non-square footprints to keep it
+ *  upright relative to the rectangle's long axis. */
+export type TokenSize = '1x1' | '1x2' | '2x2' | '2x3' | '3x3';
+
+export interface PersistentPlayer {
+  /** Stable id. For device players this is persisted on their machine and
+   *  re-sent on every reconnect; for GM-managed offline players the GM mints it. */
+  id: string;
+  playerName:    string;  // the human's name
+  characterName: string;  // their character's name
+  /** Hex identity colour. Never black / near-black — that range is reserved
+   *  for the GM + initiative threats. */
+  color: string;
+  /** Per-map placements of this player's token, keyed by mapId. The token is a
+   *  circular marker edged in the player's colour. Browser-only — deliberately
+   *  NOT written to the .mappadux save file (maps aren't connected; the GM
+   *  places tokens per map but never has to recreate them). A map id present
+   *  here means the token is on that map at the given normalised position.
+   *  `facing` is degrees clockwise from north (0–359), snap-to-45° at the UI
+   *  layer; absent / undefined = facing north (0). */
+  placements?: Record<string, { x: number; y: number; facing?: number }>;
+  /** Optional icon for the token. Reference to the picked image-library asset
+   *  (kept so the GM can re-tint / re-pick later); the rendered form is
+   *  cached alongside as iconChar (unicode glyph) or iconDataUrl (image).
+   *  Tintable SVGs are recoloured to white at pick-time so they contrast
+   *  with the disc's coloured background; raster assets are stored as-is. */
+  iconAssetId?: string;
+  iconChar?:    string;
+  iconDataUrl?: string;
+  /** Token footprint in map squares (W×H). Only applied on calibrated maps —
+   *  on uncalibrated maps the token stays at its constant CSS pixel size so
+   *  it remains readable independent of zoom. Square footprints render as
+   *  circles; non-square footprints render as rounded rectangles. Defaults
+   *  to '1x1' when absent. */
+  tokenSize?: TokenSize;
+  /** True for GM-managed offline players (no device of their own). They never
+   *  connect; the GM acts on their behalf. */
+  managedByGm?: boolean;
+  createdAt: number;
+  updatedAt: number;
+}
+
+// ─── Initiative Tracker (v2.17 Player Voice) ─────────────────────────────────
+
+export type InitiativeCardType = 'player' | 'enemy' | 'round-marker';
+
+/**
+ * A single card in the initiative deck. The sort metric is intentionally a
+ * polymorphic `value: string` so the same tracker handles d20 integers, speed
+ * priorities, popcorn initiative ("Fast" / "Ace"), and so on without hard-
+ * coded edition math.
+ */
+export interface InitiativeCard {
+  id: string;
+  name: string;
+  type: InitiativeCardType;
+  /** Player identity colour for player cards; charcoal for enemies/threats;
+   *  neutral muted tone for the ROUND END marker. */
+  color: string;
+  /** Player cards: optional token / portrait. */
+  markerUrl?: string;
+  /** Enemy cards: discrete tracking letter (A, B, C…) the GM sees on screen
+   *  and references against physical scratch notes. */
+  threatLetter?: string;
+  /** Optional player id for player cards — lets the GM unallocate / re-place
+   *  the same player without re-typing names. */
+  playerId?: string;
+  /** Sort metric — string so it handles numbers, words, anything. */
+  value: string;
+  /** True once the card has acted this round; faded + dim until ROUND END
+   *  passes through index 0 and resets everyone. */
+  isSpent: boolean;
+}
+
+export type InitiativeSortMode = 'high-to-low' | 'low-to-high' | 'manual';
+
+export type InitiativeEdge = 'top' | 'right' | 'bottom' | 'left';
+
+export interface InitiativeState {
+  /** Active rail — index 0 is the current actor. */
+  activeDeck: InitiativeCard[];
+  /** Player profiles not currently in combat (ghosted; click to enter a roll). */
+  unallocated: InitiativeCard[];
+  /** Reserve threat letters for the GM to inject as enemies appear. */
+  threatBench: InitiativeCard[];
+  /** v2.16.58 — Discard pile. Cards dragged here are out of THIS combat
+   *  entirely (won't return to bench / tray). End Combat clears it along
+   *  with everything else. Player view never renders this zone. */
+  discarded: InitiativeCard[];
+  /** Sort mode — drives where new cards land when they arrive. */
+  sortMode: InitiativeSortMode;
+  /** v2.16.60 — Remembers the last numeric direction (high-to-low or
+   *  low-to-high) the GM chose. When sortMode flips to 'manual' via a
+   *  drag-reorder, this stays put so type-to-inject still knows which
+   *  way the GM was sorting numerically. Always one of the two numeric
+   *  modes — manual is never written here. */
+  lastNumericSortMode: 'high-to-low' | 'low-to-high';
+  /** Which edge of the GM/player view the tracker is pinned to. Horizontal
+   *  fan on top/bottom; vertical fan on left/right. */
+  edge: InitiativeEdge;
+  /** Is the tracker UI visible. */
+  visible: boolean;
 }
 
 // ─── P2P Message Protocol ────────────────────────────────────────────────────
@@ -512,6 +641,12 @@ export interface MsgFullState {
   gridColor?:          string;
   /** v2.14.54 — composite payload. See MsgMapChange.composite. */
   composite?:          CompositeWirePayload;
+  /** v2.16.100 — live YouTube video elements for the active text-map.
+   *  Carried in full_state (not just the discrete textmap_videos message)
+   *  so EVERY new connection — same-browser preview / pop-out included —
+   *  gets them on initial connect, the same way it gets the map. Absent /
+   *  empty on maps with no video. */
+  textMapVideos?:      TextMapVideoElement[];
 }
 
 /** v2.14.54 — wire payload for a composite map. Viewers unpack the
@@ -767,6 +902,18 @@ export interface MsgProjectorHello {
 }
 
 /**
+ * v2.16.43 — PiP iframe / pop-out window → GM identification. PlayerApp
+ * sends this on PeerJS connect when the URL carries `?gmPreview=1`, so
+ * the GM can show "GM Player View disconnected" instead of a generic
+ * "Player (peerid…) disconnected" when the GM minimises / closes the
+ * preview. No payload beyond the type — peer id on the wire is all the
+ * GM needs to track these.
+ */
+export interface MsgGmPreviewHello {
+  type: 'gm_preview_hello';
+}
+
+/**
  * Projector → GM clean disconnect notification. Sent on window unload so the
  * GM can drop the entry from its connection map and re-shuffle monitor roles
  * without waiting for transport-level disconnect (BroadcastChannel never
@@ -902,6 +1049,398 @@ export interface MsgVideoBundle {
   mapBlob: ArrayBuffer;
 }
 
+/**
+ * Player → GM: self-identification, sent on every (re)connect once the
+ * player has chosen / restored an identity. The GM upserts a
+ * PersistentPlayer keyed by playerId and binds this live connection
+ * (clientId) to it.
+ */
+export interface MsgPlayerIdentify {
+  type: 'player_identify';
+  playerId:      string;
+  clientId:      string;
+  playerName:    string;
+  characterName: string;
+  color:         string;
+  /** v2.16.103 — true when this viewer is a touch / mobile device
+   *  (matchMedia '(hover: none) and (pointer: coarse)'). Lets the GM's
+   *  Player connections summary split remote windows into PC vs mobile.
+   *  Absent = treat as desktop. */
+  mobile?:       boolean;
+}
+
+/**
+ * Player → GM: clean disconnect (sent on window unload). Lets the GM drop
+ * the live binding immediately rather than waiting on transport teardown —
+ * BroadcastChannel never signals close, mirroring projector_bye.
+ */
+export interface MsgPlayerBye {
+  type: 'player_bye';
+  clientId: string;
+}
+
+/**
+ * Player → GM: "wipe my record". Used by the Forget-me button on the player
+ * identify modal — removes the PersistentPlayer entry from the GM's registry
+ * along with any placed tokens, so the player can re-introduce themselves
+ * from scratch. The player will follow up by clearing their own localStorage
+ * and reloading.
+ */
+export interface MsgPlayerForgetMe {
+  type: 'player_forget_me';
+  playerId: string;
+  clientId: string;
+}
+
+/**
+ * GM → all players: current roster snapshot so player views know who else
+ * is in the session (drives player→player messaging targets and the
+ * initiative tracker). GM-only fields (markerId, managedByGm) are omitted.
+ */
+export interface MsgPlayerRoster {
+  type: 'player_roster';
+  players: Array<{
+    id:            string;
+    playerName:    string;
+    characterName: string;
+    color:         string;
+    connected:     boolean;
+  }>;
+}
+
+/**
+ * Player → GM: the player pinged a point on their map. Carries normalised map
+ * coords; the GM resolves the player's colour + name from its roster binding
+ * and relays a ping_show to everyone.
+ */
+export interface MsgPlayerPing {
+  type: 'player_ping';
+  /** Client-generated id — lets the GM dedupe the duplicate that same-machine
+   *  players deliver over both BroadcastChannel and PeerJS, and doubles as the
+   *  broadcast ping id. */
+  pingId: string;
+  playerId: string;
+  clientId: string;
+  x: number; // 0..1 normalised map coord
+  y: number;
+}
+
+/**
+ * GM → all players: show a ping pulse. Sent when the GM relays a player ping
+ * (or originates one). Self-contained — carries colour + name so receivers
+ * render without needing the roster.
+ */
+export interface MsgPingShow {
+  type: 'ping_show';
+  pingId: string;
+  x: number;
+  y: number;
+  color: string;
+  name: string;
+}
+
+/**
+ * GM → all players: which Player-Voice interactions are currently enabled, so
+ * player views can hide affordances the GM has switched off. Fields are
+ * optional; an absent field means "unchanged / keep default (enabled)".
+ */
+export interface MsgPlayerFeatures {
+  type: 'player_features';
+  pings?:          boolean;
+  messaging?:      boolean;
+  movableMarkers?: boolean;
+}
+
+/**
+ * Player → GM: a chat message. `toPlayerId` omitted = addressed to the GM;
+ * otherwise addressed to another player (and always copied to the GM).
+ */
+export interface MsgPlayerMessage {
+  type: 'player_message';
+  messageId:    string;
+  fromPlayerId: string;
+  clientId:     string;
+  toPlayerId?:  string; // undefined = to GM
+  text:         string;
+}
+
+/**
+ * GM → players: deliver a message to a player view. Used to relay
+ * player→player messages and to send GM replies. Broadcast — each player
+ * shows only messages whose `toPlayerId` matches their own id. Carries the
+ * sender's display identity so the receiver can render without the roster.
+ */
+export interface MsgMessageDeliver {
+  type: 'message_deliver';
+  messageId:   string;
+  fromKind:    'gm' | 'player';
+  fromName:    string;
+  fromColor:   string;
+  toPlayerId:  string;
+  text:        string;
+}
+
+/**
+ * GM → players: the player tokens on the CURRENTLY ACTIVE map. The GM sends
+ * only the active map's set (it owns per-map placement), so player views just
+ * render whatever arrives. Re-sent on placement change, drag, map change, and
+ * when a new player joins.
+ */
+export interface MsgPlayerMarkers {
+  type: 'player_markers';
+  markers: Array<{
+    playerId: string;
+    name:     string;
+    color:    string;
+    x:        number; // 0..1 normalised map coord
+    y:        number;
+    /** Facing in degrees clockwise from north (0–359), snap-to-45° at the UI
+     *  layer. Drives the edge pointer + 90°-step image rotation for non-square
+     *  tokens. Undefined = facing north. */
+    facing?:  number;
+    /** Optional inline glyph (unicode char). Always small. Image-form icons
+     *  ride a separate `player_icon_update` message keyed by playerId so they
+     *  don't bloat this message past the PeerJS DataChannel size limit. */
+    iconChar?:  string;
+    /** True when the GM has a stored image-form icon for this player. The
+     *  bytes don't ride on player_markers — they come via player_icon_update.
+     *  Receivers use this as a self-heal signal: if hasIcon is set but the
+     *  local cache lacks an entry for this playerId, they send an upstream
+     *  `player_icon_request` so the GM resends the icon. Covers the case
+     *  where a chunked binary icon broadcast was dropped or arrived before
+     *  the receiver was ready. */
+    hasIcon?:   boolean;
+    /** Token footprint W×H in map squares. Only honoured on calibrated maps. */
+    tokenSize?: TokenSize;
+  }>;
+}
+
+/**
+ * GM → players: the icon image (data URL) for a specific player's token.
+ * Sent separately from `player_markers` because raster / SVG data URLs can
+ * easily exceed the PeerJS DataChannel ~16KB message limit — bundling them
+ * inline with the marker list would silently break the whole channel.
+ * Players cache by playerId; absent `dataUrl` = clear (fall back to glyph
+ * or initial). The Host chunks `dataUrl` over the wire like soundboard assets.
+ */
+export interface MsgPlayerIconUpdate {
+  type: 'player_icon_update';
+  playerId: string;
+  /** Optional — omit to clear the cached icon. PNG / WebP data URLs are
+   *  routed through the chunked binary path; small unicode glyphs are
+   *  delivered inline via `player_markers` instead. */
+  dataUrl?: string;
+}
+
+/**
+ * Player / projector → GM: I'm rendering a token whose markers payload says
+ * `hasIcon: true` but I have nothing in my icon cache for this playerId — the
+ * chunked binary delivery for this icon must have been dropped or arrived
+ * before I was ready. Please send it again. Cheap to over-fire; the GM just
+ * re-emits a `player_icon_update` for the requested playerId. v2.16.25.
+ */
+export interface MsgPlayerIconRequest {
+  type: 'player_icon_request';
+  /** The player whose icon we're missing. */
+  playerId: string;
+}
+
+/**
+ * Player → GM: I dragged my own token. The GM validates it's my marker and
+ * that movable markers are enabled, updates the placement, and rebroadcasts.
+ * `done` marks the end of a drag so the GM can finalise (and offer cancel-move).
+ */
+export interface MsgPlayerMarkerMove {
+  type: 'player_marker_move';
+  playerId: string;
+  clientId: string;
+  x: number;
+  y: number;
+  /** Optional facing update — present when the player rotated their token.
+   *  Position can also be unchanged (only facing edited); the GM accepts
+   *  whichever fields are provided. */
+  facing?: number;
+  done: boolean;
+}
+
+/**
+ * GM → players: current initiative tracker state. The whole state ships every
+ * time it changes so the player view is a pure mirror — no client-side state
+ * machine, no drift. Players render an atmospheric face (portraits + colours
+ * for players, "???" + "Opposition" for enemies); the GM renders the
+ * mechanical face (giant numbers + threat letters).
+ */
+export interface MsgInitiativeUpdate {
+  type: 'initiative_update';
+  state: InitiativeState;
+}
+
+/**
+ * GM → all players: roll-call broadcast. Player views pop an input prompt for
+ * the player to type their initiative result and send it back. `message` is
+ * an optional explanatory line (system / situation hint).
+ */
+export interface MsgInitiativeCall {
+  type: 'initiative_call';
+  message?: string;
+}
+
+/**
+ * Player → GM: the player's typed initiative value. The GM creates / updates
+ * the player's card and slots it into the active deck per current sort mode.
+ */
+export interface MsgInitiativeRoll {
+  type: 'initiative_roll';
+  playerId: string;
+  clientId: string;
+  /** Polymorphic — "18", "Fast", "Ace" all OK. Sorted lexically/numerically
+   *  depending on tracker sort mode. */
+  value: string;
+}
+
+// ─── Annotate (v2.16.76) — per-map GM annotations: clocks + whiteboard ───────
+
+/** A Blades-in-the-Dark style progress clock: a segmented circle the GM
+ *  fills as a situation advances (red = danger, green = racing, etc.).
+ *  Tied to a map; shared live to players + projector. */
+export interface ProgressClock {
+  id: string;
+  name: string;
+  /** Total wedges. */
+  segments: number;
+  /** Wedges currently filled, 0..segments. */
+  filled: number;
+  /** Hex colour for filled wedges + accents. */
+  color: string;
+  /** v2.16.82 — anchor + size in normalised MAP coords (0..1), so the clock
+   *  sits at a fixed map location and pans / zooms with the map, 1:1 on GM
+   *  and player. (Was a screen fraction pre-v2.16.82.) */
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  /** Rotation in degrees (v2.16.82). */
+  rot?: number;
+}
+
+/** A real-time timer / countdown overlay (v2.16.78). Running state is
+ *  expressed as absolute epoch anchors so every surface ticks locally
+ *  from the same numbers — no per-second broadcast. */
+export interface AnnotateTimer {
+  id: string;
+  name: string;
+  mode: 'countup' | 'countdown';
+  color: string;
+  /** HUD position as a fraction (0..1) of the view. */
+  x: number;
+  y: number;
+  /** Countdown total in ms (ignored for count-up). */
+  durationMs: number;
+  running: boolean;
+  /** Epoch (ms) the current run segment started; valid while running. */
+  startedAt: number;
+  /** Elapsed ms accumulated from previous run segments (before current). */
+  baseElapsedMs: number;
+  /** v2.16.82 — anchor + size in normalised MAP coords (see ProgressClock). */
+  w: number;
+  h: number;
+  rot?: number;
+}
+
+/** A free text note overlay (v2.16.80). Audience 'gm' shows only on the
+ *  GM view; 'player' shows on player + projector + GM. The text auto-fits
+ *  the box, so shrinking the box shrinks the font. v2.16.82 — position +
+ *  size are now normalised MAP coords (anchored 1:1). */
+export interface AnnotateNote {
+  id: string;
+  text: string;
+  color: string;
+  audience: 'gm' | 'player';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  rot?: number;
+}
+
+/** One freehand whiteboard stroke. Points are normalised map coordinates
+ *  (0..1) so the drawing pans / zooms with the map on every surface. */
+export interface AnnotateStroke {
+  id: string;
+  color: string;
+  width: number;
+  points: Array<{ x: number; y: number }>;
+}
+
+/** Per-map annotation state. Persisted per mapId (localStorage) and
+ *  broadcast to viewers. */
+export interface AnnotateState {
+  clocks: ProgressClock[];
+  strokes: AnnotateStroke[];
+  timers: AnnotateTimer[];
+  notes: AnnotateNote[];
+}
+
+/** GM → viewers: the full clocks list for the active map (small payload,
+ *  sent whole on every change). */
+export interface MsgAnnotateClocks {
+  type: 'annotate_clocks';
+  clocks: ProgressClock[];
+}
+
+/** GM → viewers: append a single whiteboard stroke. Sent one-per-message
+ *  (never the whole board at once) to stay under the DataChannel
+ *  single-frame limit. */
+export interface MsgAnnotateStroke {
+  type: 'annotate_stroke';
+  stroke: AnnotateStroke;
+}
+
+/** GM → viewers: clear the whole whiteboard. Also used as the first step
+ *  of a full resync (clear, then re-send each stroke). */
+export interface MsgAnnotateClear {
+  type: 'annotate_clear';
+}
+
+/** GM → viewers: the full timers list for the active map. Absolute epoch
+ *  anchors let each surface tick locally, so this is only re-sent on a
+ *  GM edit (add / start / pause / reset / move / remove). */
+export interface MsgAnnotateTimers {
+  type: 'annotate_timers';
+  timers: AnnotateTimer[];
+}
+
+/** GM → viewers: the player-visible notes for the active map. GM-only
+ *  notes are never broadcast. */
+export interface MsgAnnotateNotes {
+  type: 'annotate_notes';
+  notes: AnnotateNote[];
+}
+
+/** GM → viewers: the live YouTube video elements for the active text-map
+ *  (geometry + ids), so players + projector render the iframes as a live
+ *  overlay tracking the map. Empty list on non-text-maps / no videos. */
+export interface MsgTextMapVideos {
+  type: 'textmap_videos';
+  videos: TextMapVideoElement[];
+}
+
+/** GM → viewers: playback state for ONE in-map YouTube video. The GM owns
+ *  the controls; viewers have none and reconcile their own iframe to this
+ *  (match play/pause, seek if drift > ~0.5s, set volume). Sent on every YT
+ *  state change plus a periodic tick so late joiners + drift converge.
+ *  `state` is the raw YouTube IFrame player state (1 playing, 2 paused,
+ *  0 ended, 3 buffering, 5 cued); `seconds` is the GM's current position;
+ *  `volume` is 0..100. Not frame-accurate by design. */
+export interface MsgVideoPlayback {
+  type: 'video_playback';
+  id: string;
+  videoId: string;
+  state: number;
+  seconds: number;
+  volume: number;
+}
+
 export type GMMessage =
   | MsgFullState
   | MsgViewUpdate
@@ -926,11 +1465,35 @@ export type GMMessage =
   | MsgTrackerScan
   | MsgTrackerBlob
   | MsgProjectorHello
+  | MsgGmPreviewHello
   | MsgProjectorBye
   | MsgProjectorRole
   | MsgProjectorShutdown
   | MsgProjectorViewportUpdate
-  | MsgMapMetaUpdate;
+  | MsgMapMetaUpdate
+  | MsgPlayerIdentify
+  | MsgPlayerBye
+  | MsgPlayerForgetMe
+  | MsgPlayerRoster
+  | MsgPlayerPing
+  | MsgPingShow
+  | MsgPlayerFeatures
+  | MsgPlayerMessage
+  | MsgMessageDeliver
+  | MsgPlayerMarkers
+  | MsgPlayerIconUpdate
+  | MsgPlayerIconRequest
+  | MsgPlayerMarkerMove
+  | MsgInitiativeUpdate
+  | MsgInitiativeCall
+  | MsgInitiativeRoll
+  | MsgAnnotateClocks
+  | MsgAnnotateStroke
+  | MsgAnnotateClear
+  | MsgAnnotateTimers
+  | MsgAnnotateNotes
+  | MsgTextMapVideos
+  | MsgVideoPlayback;
 
 // ─── Storage types ───────────────────────────────────────────────────────────
 
@@ -1210,7 +1773,7 @@ export interface TextMapConfig {
 }
 
 /** Union of all element kinds that can live on a text-map page. */
-export type TextMapElement = TextMapTextElement | TextMapImageElement;
+export type TextMapElement = TextMapTextElement | TextMapImageElement | TextMapVideoElement;
 
 interface TextMapElementBase {
   /** Stable id — used for selection state and React-style reconciliation. */
@@ -1264,6 +1827,22 @@ export interface TextMapImageElement extends TextMapElementBase {
    *  (matches the Composite Editor's lock-aspect behaviour). Absent
    *  treated as true. Text elements ignore this — handout text
    *  boxes are designed for free reflow at any aspect. */
+  lockAspect?: boolean;
+}
+
+/** v2.16.90 — A live YouTube video embedded on a text-map page. Unlike
+ *  text/image it is NOT rasterised into the page image — it renders as a
+ *  live iframe overlay (GM editor + player + projector) tracking the
+ *  element's geometry. Borderless; uses YT's own player controls when the
+ *  GM interacts with it (after selecting via the move handle). */
+export interface TextMapVideoElement extends TextMapElementBase {
+  type:    'video';
+  /** YouTube video id (parsed from the pasted URL via extractVideoId). */
+  videoId: string;
+  /** v2.16.96 — As TextMapImageElement.lockAspect. ON by default for
+   *  video (clips are almost always 16:9, so keeping the ratio while
+   *  resizing avoids letterboxing). The reset button snaps the box back
+   *  to a true 16:9 at the current width. Toggle off to stretch freely. */
   lockAspect?: boolean;
 }
 

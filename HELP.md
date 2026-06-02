@@ -18,12 +18,17 @@ Pack-level actions live behind the hamburger.
 
 **New Map Pack…** *(red)* — Wipes the current workspace and starts a fresh, empty pack with a name you choose. Save first if you want to keep your current work.
 
-**Settings…** — Five sections:
+**Settings…** — an accordion (opening one section closes the others):
 - **Storage** — How much of your browser's IndexedDB quota Mappadux is using. **Request persistent storage** asks the browser not to evict data under pressure.
-- **Display** — **UI scale** slider (75–150%) shrinks or grows the whole left-hand sidebar in proportion — fonts, padding, icons, popovers all scale together. The map canvas itself is untouched. Useful on very high-DPI screens where the default reads tiny, or on small laptops where shrinking buys back canvas space. Double-click the slider to reset to 100%.
-- **Performance** — **Send only the first frame to local player windows** (for same-machine player popups where a 4K animated map is starving Chrome's decoder budget) and **Cap animated map texture at 1080p** (for remote players whose GPUs struggle with full-resolution video uploads). Both default off.
-- **API Keys (this browser only)** — Lists any external-service credentials stored locally (e.g. Freesound). Keys never travel in Map Pack exports. Bulk delete available.
-- **Danger Zone** — **Delete DB** wipes IndexedDB but keeps API keys + projector calibration. **Delete All Data** wipes everything including local settings — acts like a fresh install.
+- **Display** — **UI scale** slider (75–150%) shrinks or grows the whole left-hand sidebar in proportion — fonts, padding, icons, popovers all scale together. The map canvas itself is untouched. Double-click the slider to reset to 100%.
+- **Scaled View** — toggle map transitions & animations.
+- **Performance** — **Send only the first frame to local player windows** (for same-machine player windows where a 4K animated map is starving Chrome's decoder budget) and **Cap animated map texture at 1080p** (for remote players whose GPUs struggle with full-resolution video uploads). Both default off.
+- **Soundtracks** — enable / configure the YouTube + Spotify soundtrack providers.
+- **Player Permissions** *(v2.17)* — what connected players can do: allow pings, allow messages, let players move their own token, and *Full player UI in the GM preview window* (off by default — the inline preview stays a clean, non-registering preview unless you flip this on).
+- **Game System** *(v2.17)* — initiative order direction: High → Low (d20) or Low → High (roll-under systems).
+- **Reply Assistant (LLM)** *(v2.17)* — optional LLM that drafts replies to player messages. Walks you through it: **Base URL** (pre-filled with the LM Studio local address) → **API key** (blank for LM Studio; required for OpenRouter etc.) → **Test connection & fetch models** → pick the **Model** from the dropdown. Plus an editable system prompt. Everything stays between your browser and the endpoint you choose.
+- **API Keys (this browser only)** — Lists any external-service credentials stored locally (Freesound, Spotify Client ID, LLM key). Keys never travel in Map Pack exports; delete any of them here.
+- **Danger Zone** — **Delete DB** wipes IndexedDB but keeps API keys + projector calibration. **Delete All Data** wipes everything including local settings — acts like a fresh install. Also hides the **Show in-progress features** toggle (reveals the Stagecraft Lighting / Automation UI).
 
 **About…** — Shows the pack's splash content (title, banner, body, creator links) and the always-on Mappadux footer (Discord, Ko-fi, GitHub, mappadux.com, MIT licence). Auto-opens on first run and after any **Load Map Pack** so you land on context.
 
@@ -53,17 +58,56 @@ Use cases this unlocks: floorplan tablet (room A's projector view) + handout tab
 
 ---
 
-## Player Connection *(renamed from Session in v2.11)*
+## Player Views
 
-**QR Code** — Scan to open the player view on a phone or tablet at the table. **Hover** the QR for a tooltip showing the three-word room code; **click** the QR (or the small light bar to its left) to copy the player URL to your clipboard. Any device on the same network with a browser is a fully functional second screen — no app install, no cable.
+*(Consolidates the old Player Connection + Scaled View panels — v2.17.)*
 
-**Players connected** — Live count below the QR. Counts both same-machine browser windows AND remote LAN devices, plus any connected projectors. Hover for a per-peer breakdown.
+One panel for everything player-facing. The header carries the **broadcast toggle** — a visual bypass that swaps both the player and projector views for a friendly "the GM is faffing" placeholder while keeping the underlying state streaming, so flipping back is instant (anyone who connects while it's off lands on the placeholder too). Inside are two collapsible sections:
 
-**Open Player Window** — Opens a local player window on this machine — handy for a second screen, projector, or quick preview.
+### Player connections
 
-**Broadcast toggle** *(panel header)* — visual bypass switch. Off swaps the player view for a friendly "the GM is faffing" placeholder while keeping the underlying state streaming so flipping back is instant.
+**QR code** — Scan to open the player view on any phone, tablet, or laptop on the same network — a fully functional second screen, no app install, no cable. The QR is always a clean, flag-free join URL (it uses your LAN IP when running locally), so a scanning device always lands as a real player. The URL is shown beneath it.
 
-Room codes stay the same across page reloads. If a player's connection drops, their window will automatically try to reconnect. If the public PeerJS broker is unreachable, same-machine browser windows still work via BroadcastChannel; the QR fades and a notice explains why remote devices can't join until the broker recovers (auto-retried every minute).
+**Window summary** — A live count of connected player *windows* by type and capability (not the player roster — that's the **Players** panel): **Local windows** (GM previews + same-machine player windows), **Scaled views** (projector windows), and **Remote** (network devices, split into PC vs mobile).
+
+**Show Player View** *(replaces "Open Player Window")* — an inline preview of the player view, docked on the GM canvas. **Pop it out** to a standalone window (sound + fullscreen) when you want it on a second screen. The inline preview stays a silent, non-registering GM preview; pop-outs and QR-scanned devices register as real players. (Toggle *Settings → Player Permissions → Full player UI in the GM preview window* if you want the inline preview to behave as a real player instead.)
+
+### Scaled view
+
+The true-table-scale battlemap mode — see **Scaled View** below for the full workflow.
+
+Room codes stay the same across page reloads. If a player's connection drops, their window auto-reconnects. If the public PeerJS broker is unreachable, same-machine browser windows still work via BroadcastChannel; the QR fades and a notice explains why remote devices can't join until the broker recovers (auto-retried every minute).
+
+---
+
+## Player Voice *(new in v2.17)*
+
+Players stop being a passive audience. Each interaction has a switch in **Settings → Player Permissions**, so you only enable what suits your table.
+
+**Players panel** — A live roster of everyone who's introduced themselves (name + colour), with a connected / total count in the header. Identities persist across reconnects. **+ Add offline player** lets you create a player for someone at the table with no device — you set their name + colour and act on their behalf; real players appear here automatically when they connect.
+
+**Player tokens** — Place a token for any player from the Players panel and drop it on the map. With **Let players move their own token** on, that player can drag *their* token from their own view — you see it move live and get a **send it back** button to undo it. Off keeps token placement entirely in your hands.
+
+**Pings** — With **Allow player pings** on, a player right-clicks (or long-presses on touch) the map to ping a point. Everyone sees a pulse in that player's colour for a few seconds; on your screen it stays put, labelled with their name, until you dismiss it.
+
+**Messaging** — With **Allow player messages** on, players can message you privately or each other (those are copied to you). Threads arrive in the **Player Voice panel** with an unread count.
+
+**Reply Assistant (LLM)** — Optional. When configured (see **Settings → Reply Assistant**), each incoming message gets a **Suggest replies** action that drafts a few in-character responses via your chosen LLM; click one to drop it into the reply box. Works with a local LM Studio server (no key) or a hosted provider like OpenRouter.
+
+**Initiative tracker** — Opens from **Roll for Initiative** in the Players panel. A fanned-deck rail: broadcast a roll prompt to the table, fill in / drag to reorder the order, advance turns (the current actor parks behind the **ROUND END** marker so it acts next round), and end combat to close it. Sort direction (High → Low for d20, Low → High for roll-under) is set in **Settings → Game System**. The rail is mirrored to players + projector.
+
+---
+
+## Annotations *(new in v2.17)*
+
+GM scene-tracking tools you drop directly on the map. Each is **anchored 1:1 to the map** (it stays glued to the same spot through pan / zoom) and mirrored live to players + projector. Annotations are saved with the map and travel in the pack.
+
+- **Progress clocks** — Blades-style segmented clocks; click to fill / unfill segments. Track a looming threat, a ritual's progress, a chase.
+- **Timers & countdowns** — real-time countdowns or count-up stopwatches with play / pause / reset on the edge controls.
+- **Whiteboard** — a freehand drawing layer over the map.
+- **Notes** — sticky text notes that resize to fit.
+
+Select an object via its move handle first, then use the edge controls (edit, play / pause, reset) — nothing reacts until it's selected. The object's chrome accent picks up the colour you choose for it.
 
 ---
 
@@ -245,7 +289,9 @@ A second map type for letters, posters, journal pages, stat blocks, and in-ficti
 
 **Create** — from **+ Add New Map…** → the **Text Map** option, or from the asset library.
 
-**Edit** — click **Edit this Handout (Text Map)** in Map Selection to open the editor in a full-screen dialog. Each handout is a page sized to your chosen aspect (16:9 / A4 / 4:3 / Square / 2:3 / custom), filled with absolutely-positioned **elements**: text blocks, images, or icons. Elements can be moved (top-left handle), resized (bottom-right handle), and deleted (top-right badge). Type into a selected text element to edit its content; the per-element toolbar adjusts font, size, colour, and alignment.
+**Edit** — click **Edit this Handout (Text Map)** in the Map panel to open the editor in a full-screen dialog. Each handout is a page sized to your chosen aspect (16:9 / A4 / 4:3 / Square / 2:3 / custom), filled with absolutely-positioned **elements**: text blocks, images, icons, or a **live YouTube video** *(v2.17)*. Elements can be moved (top-left handle), resized (bottom-right handle), rotated, and deleted (top-right badge). Type into a selected text element to edit its content; the per-element toolbar adjusts font, size, colour, and alignment.
+
+**Video element** *(v2.17)* — paste a YouTube link via **+ YouTube** in the editor toolbar. The video plays live on the GM, players, and projector (it isn't baked into the page image). It defaults to a locked 16:9 box (toggle the lock / reset to re-snap). In play, **only the GM has controls** — your play / pause / seek / volume drive the player + projector copies, which follow within about half a second. The GM screen is muted so it doesn't echo the room. Active visual filters tint the video on the player view. **Desktop viewers only** — mobile browsers can't composite the video over the map, so it's skipped there (a documented limitation).
 
 **Animated reveal** — text maps support an optional animation that "types" each character of every text element onto the page when triggered. Configure in the editor; trigger from Map Selection with the **▶ Start Animation** button while the handout is broadcast to players / projectors.
 
@@ -291,9 +337,12 @@ When the player's screen has a different aspect ratio from the active map's view
 
 ## Filter
 
-Applies a visual effect to the **player screen only** — the GM always sees the normal map.
+Applies a full-screen visual effect to the **player screen only** — the GM always sees the normal map. Two broad families:
 
-Choose from None, Parchment Fantasy, Retro Sci-Fi Green/Amber, Ballpoint Pen, Hand Drawing, Watercolour, or Oil Painting. Each filter has adjustable sliders that appear below the selector. Settings are saved per map.
+- **Artistic / stylised** — Parchment Fantasy, Retro Sci-Fi Green / Amber (CRT phosphor), Ballpoint Pen, Hand Drawing, Watercolour, Oil Painting.
+- **Atmospheric / lighting** — Night Vision, Thermal, Candlelight, Dawn / Dusk, Horror, Mist, Underwater, Sandstorm, weather looks, and more, for tinting a scene's mood.
+
+Pick the type from the dropdown; the sparkle button opens its tuning sliders plus a per-map **Tint Player Markers** toggle (so tokens, and the in-map video, take on the scene's look too). Settings are saved per map. The header bypass switch turns filtering off entirely.
 
 ---
 
@@ -310,7 +359,7 @@ Choose from None, Parchment Fantasy, Retro Sci-Fi Green/Amber, Ballpoint Pen, Ha
 
 **Pop shortcut** — grabbing the move handle on a rect that already fills the entire map shrinks it to 50% map-dimensions centred. Gives you a sensibly-sized rect to drag/resize on the next gesture without having to fight a maximised view first.
 
-**Broadcast toggle** — the visual-bypass switch in the **Player Connection** panel header. Off swaps the player screen for a friendly "the GM is faffing" placeholder while keeping the underlying state streaming, so flipping back is instant.
+**Broadcast toggle** — the visual-bypass switch in the **Player Views** panel header. Off swaps the player screen for a friendly "the GM is faffing" placeholder while keeping the underlying state streaming, so flipping back is instant (it covers both the player and projector views).
 
 **Background Colour** — set in **Map Selection**. The fill colour shown around the map when the player's screen has a different shape. Auto-sampled from the map's top-left corner on first load.
 
@@ -335,6 +384,8 @@ The workspace is **GM-only** — players and projectors always render at the rec
 
 ## Scaled View
 
+*(Reached via the **Player Views** panel → **Scaled view** section.)*
+
 **Direct manipulation** *(v2.14.3)* — The scaled view's rect on the GM canvas has a green **move handle** at its top-left corner; drag from there to reposition. Top-left also carries the **broadcast eye** (mirrors the panel header's bypass toggle) and a **Show Grid** icon (calibrated maps only). The handle replaces the older Move Projection View button + edit-mode flow.
 
 A second on-table mode that renders the active map at **true table scale** — for use with an under-table screen, a down-projector, or any other surface where a 1″ creature on the map needs to physically project as 1″. Miniatures occupy real-world inches.
@@ -349,7 +400,7 @@ When no projector is active, the panel shows just the dropdown and a brief intro
 
 **Direct manipulation** *(v2.11)* — Same chrome as the Player View rect: click the **move handle** at the top-left of the green rect to select + drag the projection. Selection adds a **maximise / restore** button on the right edge that toggles between calibrated `scaled` mode and `full` map mode. Resize / aspect-lock aren't shown — projector size is locked to your calibration so you can't accidentally rescale at the table.
 
-**Broadcast toggle** — the visual-bypass switch in the **Scaled View** panel header swaps the projector to a "GM is faffing" placeholder while keeping the underlying state streaming. Replaces the older dedicated Blackout button.
+**Broadcast toggle** — the visual-bypass switch in the **Player Views** panel header swaps both the player and projector to a "GM is faffing" placeholder while keeping the underlying state streaming. Replaces the older dedicated Blackout button.
 
 **Full Map** — Show the entire map fit-to-window on the projector, ignoring calibration. Handy for showing scope before zooming into a calibrated battlemap. When the active map isn't calibrated, this is the only available projection mode — Scaled View greys out with a "Scaled View (Unavailable)" label and a warning explaining that calibration unlocks it.
 

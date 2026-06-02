@@ -33,11 +33,41 @@
        of the map's render scale. -->
   <div id="marker-overlay" class="marker-overlay"></div>
 
+  <!-- v2.17 Player Voice — player tokens (circular, edged in each player's colour). -->
+  <div id="player-marker-layer" class="player-marker-layer"></div>
+
+  <!-- v2.17 Player Voice — ping pulses (this player's + others', relayed by the GM). -->
+  <div id="ping-layer" class="ping-layer"></div>
+
+  <!-- v2.17 Player Voice — incoming message toasts (GM replies, other players). -->
+  <div id="player-msg-toasts" class="player-msg-toasts"></div>
+
+  <!-- v2.17 Player Voice — atmospheric initiative rail (the player face). -->
+  <div id="player-initiative" class="player-init" hidden></div>
+
+  <!-- v2.16.77 — read-only whiteboard mirrored from the GM. -->
+  <canvas id="annotate-whiteboard" class="annotate-whiteboard"></canvas>
+  <!-- v2.16.76 — read-only progress clocks mirrored from the GM. -->
+  <div id="annotate-clocks" class="annotate-clocks"></div>
+  <!-- v2.16.78 — read-only timers / countdowns mirrored from the GM. -->
+  <div id="annotate-timers" class="annotate-clocks"></div>
+  <!-- v2.16.80 — read-only player notes mirrored from the GM. -->
+  <!-- v2.16.91 — live YouTube videos on a text-map page. -->
+  <div id="textmap-video-layer" class="textmap-video-layer"></div>
+  <div id="annotate-notes" class="annotate-notes"></div>
+
   <!-- Status overlay — shown while connecting or on errors -->
   <div id="status" hidden></div>
 
   <!-- Floating fullscreen toggle — auto-fades when idle. -->
   <button id="player-fullscreen-btn" class="player-fullscreen-btn" title="Toggle fullscreen">⛶ Fullscreen</button>
+
+  <!-- v2.17 Player Voice — identity button. Shows your colour + name; click to
+       set or change who you are (sent to the GM). -->
+  <button id="player-identity-btn" class="player-identity-btn" title="Set or change your name, character, and colour">
+    <span class="player-identity-dot" aria-hidden="true"></span>
+    <span class="player-identity-label">Set name</span>
+  </button>
 
   <!-- v2.14.18 — player-side zoom + pan reset. Visible only once
        the player has pan/zoomed away from the GM's broadcast view;

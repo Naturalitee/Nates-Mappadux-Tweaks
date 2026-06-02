@@ -1385,7 +1385,7 @@ export class Renderer {
     this.needsRender = true;
   }
 
-  setView(view: ViewState): void {
+  setView(view: ViewState, opts?: { clip?: boolean }): void {
     this.currentView = { ...view };
     this.needsRender = true;
     this.setBackgroundColour(view.backgroundColor ?? '#000000');
@@ -1436,13 +1436,21 @@ export class Renderer {
     // and update the clip pass so pixels outside it are filled with background.
     // sa > va → wide screen, viewport fills full height, bars left/right
     // sa < va → tall screen, viewport fills full width, bars top/bottom
+    //
+    // opts.clip === false: skip the clip pass entirely (uRect = full canvas).
+    // The camera already draws the full canvas area; suppressing the clip
+    // exposes the extra map content the bars would otherwise have hidden,
+    // letting a zoomed-in player view fill the canvas without the GM-defined
+    // aspect-ratio bars.
     let x1 = 0, y1 = 0, x2 = 1, y2 = 1;
-    if (sa > va) {
-      x1 = (1 - va / sa) / 2;
-      x2 = 1 - x1;
-    } else if (sa < va) {
-      y1 = (1 - sa / va) / 2;
-      y2 = 1 - y1;
+    if (opts?.clip !== false) {
+      if (sa > va) {
+        x1 = (1 - va / sa) / 2;
+        x2 = 1 - x1;
+      } else if (sa < va) {
+        y1 = (1 - sa / va) / 2;
+        y2 = 1 - y1;
+      }
     }
     this.clipPass.uniforms['uRect']!.value.set(x1, y1, x2, y2);
   }

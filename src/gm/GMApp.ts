@@ -9,6 +9,7 @@ import { offsetPolyline } from '../mapfx/polylineOffset.ts';
 import { subtractFromAll, cleanRibbonToBlobs } from '../mapfx/polygonOps.ts';
 import { floodFillToPolygon } from '../mapfx/floodFill.ts';
 import { wireSliderTooltip } from '../utils/sliderReadout.ts';
+import { buildColorRow, buildSliderRow, buildToggleRow } from './sideParamRows.ts';
 import { ViewportEditor } from './ViewportEditor.ts';
 import { MarkerEditor } from './MarkerEditor.ts';
 import { MapAssetModal } from './MapAssetModal.ts';
@@ -18,20 +19,38 @@ import { TextMapEditor } from './TextMapEditor.ts';
 import { MapCalibrationModal } from './MapCalibrationModal.ts';
 import { ProjectorViewportEditor } from './ProjectorViewportEditor.ts';
 import { HamburgerMenu } from './HamburgerMenu.ts';
-import { SELECT_ADD_SENTINEL, appendAddOption } from './selectAdd.ts';
+// v2.16.34 — appendAddOption retired (the sentinel option at the bottom
+// of each picker was replaced by an adjacent "+" icon button). The
+// SELECT_ADD_SENTINEL constant is still imported because the change
+// handlers keep a defensive branch in case a cached UI emits it.
+import { SELECT_ADD_SENTINEL } from './selectAdd.ts';
 import { EditableSelect } from './EditableSelect.ts';
 import { getAllSetups, setActiveSetupId, saveSetup } from '../projector/calibrationStorage.ts';
 import { SoundboardPanel, type SoundboardBroadcast } from './SoundboardPanel.ts';
+import { PlayersPanel } from './PlayersPanel.ts';
+import { MessageThreads } from './MessageThreads.ts';
+import { buildMessageThreadPanel } from './MessageThreadPanel.ts';
+import { PlayerRegistry } from '../players/PlayerRegistry.ts';
+import { assetToPlayerIcon } from '../players/playerIcon.ts';
+import { PingLayer } from '../rendering/PingLayer.ts';
+import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
+import { LLMClient } from '../ai/LLMClient.ts';
+import { InitiativeTracker } from './InitiativeTracker.ts';
+import { loadInitiativeState, stripInitiativeForWire } from '../initiative/initiativeState.ts';
+import { AnnotateController } from './AnnotateController.ts';
+import { emptyAnnotateState } from '../annotate/annotateState.ts';
+import { isAnnotateMuted, setAnnotateMuted } from '../storage/localSettings.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { Renderer } from '../rendering/Renderer.ts';
 import { FilterPanel } from '../filters/FilterPanel.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
+import { cssApproxForFilter } from '../filters/cssApproximations.ts';
 import { TransitionPanel } from '../transitions/TransitionPanel.ts';
 import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
 import { Host } from '../p2p/Host.ts';
 import { generateRoomCode, generateInstanceId } from '../p2p/roomCode.ts';
 import { saveSession, loadSession, getAllMaps, getMap, saveMap, deleteMap, clearAssetLibraries, clearEverything, getActiveInstanceId } from '../storage/db.ts';
-import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY } from '../storage/localSettings.ts';
+import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, arePingsEnabled, isMessagingEnabled, arePlayerMarkersMovable, getInitiativeSortDirection } from '../storage/localSettings.ts';
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { seedAudioAssets } from '../storage/seedAudioAssets.ts';
 import { migrateLegacyMaps } from '../storage/seedMapAssets.ts';
@@ -69,6 +88,9 @@ import { CanvasTransform } from '../utils/CanvasTransform.ts';
 import { attachGestures } from '../utils/Gestures.ts';
 import type { SessionState, StoredMap, TransitionConfig, FilterState, Marker, MarkerIconData, AudioAsset, AudioRole, MotionRole, ProjectorConnection, ProjectorViewport, ViewState, GMMessage } from '../types.ts';
 import { defaultProjectorViewport } from '../types.ts';
+// v2.16.103 — QRCode back for the Player Views → Player connections
+// subpanel (scan to open a remote player window over the LAN). The hold
+// screen + player connect UI still do their own QR rendering too.
 import QRCode from 'qrcode';
 
 const REMOTE_AUDIO_KEY = 'dmr_remote_audio';
@@ -172,21 +194,11 @@ function _sniffIsVideo(buffer: ArrayBuffer): boolean {
   return false;
 }
 
-/** Map ASCII letters to their Mathematical Sans-Serif Bold Unicode
- *  equivalents. Used for the dropdown's "Fog of War" entry so it
- *  visually stands out from the MapFX kinds without needing CSS
- *  styling on <option> (which browsers largely ignore). */
-function _toUnicodeBold(s: string): string {
-  let out = '';
-  for (let i = 0; i < s.length; i++) {
-    const c = s.charCodeAt(i);
-    if (c >= 0x41 && c <= 0x5A)       out += String.fromCodePoint(0x1D5D4 + (c - 0x41)); // A-Z
-    else if (c >= 0x61 && c <= 0x7A)  out += String.fromCodePoint(0x1D5EE + (c - 0x61)); // a-z
-    else if (c >= 0x30 && c <= 0x39)  out += String.fromCodePoint(0x1D7EC + (c - 0x30)); // 0-9
-    else                              out += s[i];
-  }
-  return out;
-}
+// v2.16.35 — _toUnicodeBold (Mathematical Sans-Serif Bold via Unicode)
+// previously highlighted the "Fog of War" entry inside the popover's
+// kind picker. With the kind picker promoted to a real <select> on the
+// row, we can leave that style decision to CSS / option-default styling
+// instead of leaning on Unicode tricks. Helper retired.
 
 export class GMApp {
   private state   = new StateManager();
@@ -249,6 +261,12 @@ export class GMApp {
    * ProjectorViewportEditor) or via direct setter (MarkerLayer).
    */
   private gmTransform = new CanvasTransform({ minScale: 0.5, maxScale: 8 });
+  /** v2.16.31 — GM workspace default zoom. Slightly < 1 so the map sits
+   *  inside the canvas with a small breathing margin, making the panel
+   *  icons at the edges easier to reach. GM only — the player + projector
+   *  views still fill their canvases. Used on first paint AND on "Reset
+   *  View". */
+  private static readonly GM_DEFAULT_SCALE = 0.95;
 
   /** Reference to the shared overlay layer so non-marker code paths
    *  (viewport rect chrome, workspace pan, etc.) can push updates. */
@@ -307,8 +325,38 @@ export class GMApp {
   /** Active map's asset metadata, mirrored for projector-role math. Null when no map / no calibration. */
   private _lastMapAssetMeta: { pixelsPerSquare: number; imageWidth: number; imageHeight: number } | null = null;
   private markerEditor!:   MarkerEditor;
-  private filterPanel!:     FilterPanel;
-  private transitionPanel!: TransitionPanel;
+  /** v2.16.37 — FilterPanel instance is now constructed inside the side
+   *  panel each open. Kept as nullable so callers (state sync) can probe
+   *  for "is the side panel currently rendering controls?". */
+  private _filterPanelInstance: FilterPanel | null = null;
+  /** v2.16.37 — handle to the open Visual Filter side panel, or null. */
+  private _filterSidePanel: import('./SidePanel.ts').SidePanelHandle | null = null;
+  /** v2.16.38 — handle to the open Map Transition side panel, or null.
+   *  TransitionPanel itself is constructed inside the body each open;
+   *  refresh() rebuilds from scratch which is cheap for this surface. */
+  private _transitionSidePanel: import('./SidePanel.ts').SidePanelHandle | null = null;
+  /** v2.16.40 — inline Player View PiP overlay (constructed lazily after
+   *  the canvas-wrapper is in the DOM). */
+  private _playerPip: import('./PlayerPip.ts').PlayerPip | null = null;
+  /** v2.16.45 — true iff the active map is a multilayered composite
+   *  (asset.revealBackingBlob present). Drives whether the MapFX kind
+   *  dropdown enables / disables the "Reveal Layer" option — the kind
+   *  has nothing to reveal under a single-layer map. Updated by
+   *  _updateUpperLayerPanel on every map load. */
+  private _activeMapIsLayered = false;
+  /** v2.16.44 — cross-window audio mutual exclusion (BroadcastChannel
+   *  based). When the GM page has audio enabled (default at startup
+   *  until the user mutes everything), this window claims audio and
+   *  any other Mappadux tab on this machine hears that and silences
+   *  itself. When another window claims audio (e.g. a popped-out
+   *  player), the coordinator force-mutes the GM's local engines so
+   *  we don't get dual sound. Does NOT broadcast positional_mute_all
+   *  to remote players — purely a same-browser concern. */
+  private _audioCoord: import('../utils/AudioCoordinator.ts').AudioCoordinator | null = null;
+  /** Fresh per-window id for the audio coordinator. The GM's existing
+   *  identifiers (host.roomCode etc.) shift over the session; a stable
+   *  per-window value keeps the dedupe simple. */
+  private _audioCoordClientId = generateId();
 
   /** Pre-rendered bitmaps for marker icons. Keys follow the marker.icon
    *  string — bare 'libAsset:<id>' for raster, '<libAsset:id>#<color>'
@@ -329,6 +377,44 @@ export class GMApp {
   private _lastMapSelectValue = '';
   private soundboardEngine!: SoundboardEngine;
   private soundboardPanel!:  SoundboardPanel;
+
+  // v2.17 Player Voice — persistent players roster + panel.
+  private playerRegistry = new PlayerRegistry();
+  private playersPanel!: PlayersPanel;
+  /** v2.16.47 — per-player message thread store. Drives the per-row
+   *  unread badges on the Players panel + populates the side panel
+   *  when the GM clicks a badge. */
+  private _messageThreads = new MessageThreads();
+  /** The playerId whose thread side panel is currently open, or null.
+   *  Read by addIncoming to skip unread bumps for the active thread. */
+  private _openThreadPlayerId: string | null = null;
+  /** Handle to the open thread SidePanel (one at a time). */
+  private _threadSidePanel: import('./SidePanel.ts').SidePanelHandle | null = null;
+  /** Ping pulses relayed from players — persist on the GM until dismissed. */
+  private pingLayer: PingLayer | null = null;
+  /** v2.16.91 — live YouTube videos placed on a text-map page. */
+  private textMapVideoLayer: import('../rendering/TextMapVideoLayer.ts').TextMapVideoLayer | null = null;
+  private _currentTextMapVideos: import('../types.ts').TextMapVideoElement[] = [];
+  /** GM sender colour for message replies — a slate that reads clearly on
+   *  player views without straying into the reserved near-black range. */
+  private static readonly GM_MESSAGE_COLOR = '#64748b';
+  /** Recently-seen upstream event ids (pings, messages). Same-machine players
+   *  deliver upstream over BOTH BroadcastChannel and PeerJS, so non-idempotent
+   *  events must be deduped on a client-supplied id. */
+  private _seenUpstreamIds = new Set<string>();
+  /** Player token layer (circular tokens edged in the player's colour). */
+  private playerMarkerLayer: PlayerMarkerLayer | null = null;
+  /** Transient token positions during an in-progress drag (not yet persisted). */
+  private _liveMarkerPos = new Map<string, { x: number; y: number }>();
+  /** Transient token facings during an in-progress rotation (not yet persisted). */
+  private _liveMarkerFacing = new Map<string, number>();
+  /** Pre-move token state, captured when a PLAYER starts changing their own
+   *  token's position OR facing, so the GM's "cancel move" can send it back. */
+  private _markerMoveOrigin = new Map<string, { x: number; y: number; facing?: number }>();
+  /** Initiative tracker (fanned-deck rail, threat bench, unallocated tray). */
+  private initiativeTracker: InitiativeTracker | null = null;
+  /** v2.16.76 — per-map annotations (progress clocks + whiteboard). */
+  private annotate: AnnotateController | null = null;
 
   private interactions   = new MarkerInteractionRegistry();
   private audio          = this.interactions.register(new PositionalAudioInteraction());
@@ -361,12 +447,16 @@ export class GMApp {
    *  so a manual Cancel can clear it before it fires. */
   private _animationDoneTimer: ReturnType<typeof setTimeout> | null = null;
   private packNameInput!:           HTMLInputElement;
+  /** v2.16.88 — the white pack-name shown in the Map Pack panel header. */
+  private packNameDisplay: HTMLElement | null = null;
   /** Debounce timer for the in-panel pack-name input. */
   private _packNameSaveTimer: number | null = null;
   private transitionSelect!:        HTMLSelectElement;
-  private transitionParamsContainer!: HTMLElement;
+  // v2.16.38 — transitionParamsContainer retired alongside the inline
+  // #transition-params div.
   private filterSelect!:            HTMLSelectElement;
-  private filterParamsContainer!:   HTMLElement;
+  // v2.16.37 — filterParamsContainer + filterAffectMarkersToggle moved
+  // into the side panel; both fields retired.
   // viewBgColour swatch removed in v2.12 — bg colour lives in the
   // backdrop popover's Background row now.
   private viewBgFxBtn!:            HTMLButtonElement;
@@ -376,10 +466,10 @@ export class GMApp {
   private mapFxBtn!:               HTMLButtonElement;
   /** Live popover handle (open state) — null when nothing is shown.
    *  See src/gm/FxPopover.ts for the shared component shape. */
-  private _bgFxPopover:    import('./FxPopover.ts').FxPopoverHandle | null = null;
+  private _bgFxPopover:    import('./SidePanel.ts').SidePanelHandle | null = null;
   /** MapFX sparkle popover handle — opened from the FoW panel's
    *  sparkle button. Shares the same FxPopover plumbing. */
-  private _mapfxFxPopover: import('./FxPopover.ts').FxPopoverHandle | null = null;
+  private _mapfxFxPopover: import('./SidePanel.ts').SidePanelHandle | null = null;
   /** Set true by the popover's own onChange handlers while a slider /
    *  swatch / toggle is dispatching state updates. Refresh hooks
    *  consult this and skip the rebuild — otherwise each slider tick
@@ -398,8 +488,8 @@ export class GMApp {
    *  cleared once the bundle has been sent or the GM swaps away. */
   private _pendingVideoBundle: { mapId: string; buffer: ArrayBuffer; mimeType: string } | null = null;
   private roomCodeEl!:             HTMLElement;
-  private qrContainer!:            HTMLElement;
-  private playerCountEl!:          HTMLElement;
+  // v2.16.33 — qrContainer + playerCountEl fields retired alongside the
+  // deleted Player Connection panel.
   private statusEl!:               HTMLElement;
   private markerSelect!:           HTMLSelectElement;
   private markerEditableSelect!:   EditableSelect;
@@ -463,6 +553,16 @@ export class GMApp {
       onPeerDisconnected: (id) => this.onPeerDisconnected(id),
       onError: (err) => this.onP2PError(err),
       onPeerMessage: (peerId, msg) => this.onPeerMessage(peerId, msg),
+      // Same-browser preview / projector windows ask for state via
+      // BroadcastChannel before they're known to the network side. The
+      // cached full_state covers map + soundboard, but Player Voice
+      // markers + per-player icons live in PlayerRegistry — re-broadcast
+      // them here so a fresh local window sees identified tokens
+      // (custom icons + facing) without waiting for the next live edit.
+      onLocalRequestState: () => {
+        this._refreshPlayerMarkers();
+        this._broadcastAllPlayerIcons();
+      },
     });
     // v2.12 — wire the dev-only FX dump helper. Exposes
     // `window.mappaduxDumpFx()` so the GM can capture their tuned
@@ -523,6 +623,14 @@ export class GMApp {
     let mouseDragBase: { scale: number; offsetX: number; offsetY: number; pxPerWorldX: number; pxPerWorldY: number } | null = null;
 
     attachGestures(wrapper, {
+      // v2.16.68 — Don't treat a pointerdown that landed inside the
+      // initiative tracker (or any UI overlay) as the start of a pan.
+      // Lets the GM drag cards / chrome inside the tracker without the
+      // GM canvas grabbing the same gesture and panning the map.
+      shouldStart: (e) => {
+        const target = e.target as HTMLElement | null;
+        return !target?.closest('.init-tracker, .side-panel, .modal-overlay, .modal-dialog, .panel, .hamburger-menu, .a-note, .clock, .a-timer');
+      },
       // Mouse drag = pan the camera. Single-touch drags pass through
       // to the editors (fog draw, marker selection, etc.); we only
       // claim mouse here. The rect chrome's move/resize handles
@@ -630,7 +738,7 @@ export class GMApp {
         case 'ArrowRight': this.gmTransform.panByWorld( step, 0);  break;
         case 'ArrowUp':    this.gmTransform.panByWorld(0,  step);  break;
         case 'ArrowDown':  this.gmTransform.panByWorld(0, -step);  break;
-        case 'r': case 'R': this.gmTransform.reset(); break;
+        case 'r': case 'R': this._resetGmTransform(); break;
         default: handled = false;
       }
       if (handled) {
@@ -801,7 +909,7 @@ export class GMApp {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'reset-view-btn';
-      btn.title = 'Reset workspace view (centred, 100%)';
+      btn.title = 'Reset workspace view';
       btn.innerHTML =
         '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
           '<polyline points="1 4 1 10 7 10"/>' +
@@ -809,14 +917,30 @@ export class GMApp {
         '</svg>' +
         '<span class="reset-view-btn__label">Reset view</span>';
       btn.addEventListener('click', () => {
-        this.gmTransform.reset();
+        this._resetGmTransform();
         this._applyWorkspaceTransform();
       });
       btn.hidden = true;
       wrapper.appendChild(btn);
       this._resetViewBtn = btn;
     }
-    this._resetViewBtn.hidden = this.gmTransform.isIdentity;
+    this._resetViewBtn.hidden = this._isGmTransformAtDefault();
+  }
+
+  /** Apply the GM workspace's "reset" transform — slightly zoomed out
+   *  (GM_DEFAULT_SCALE) so the map sits inside the canvas with a small
+   *  breathing margin, making the side-panel icons easier to reach. */
+  private _resetGmTransform(): void {
+    this.gmTransform.set(GMApp.GM_DEFAULT_SCALE, 0, 0);
+  }
+
+  /** True when the GM workspace transform matches the "reset" state. Used
+   *  to toggle the Reset View button's visibility (hidden at default). */
+  private _isGmTransformAtDefault(): boolean {
+    const eps = 1e-4;
+    return Math.abs(this.gmTransform.scale - GMApp.GM_DEFAULT_SCALE) < eps
+        && Math.abs(this.gmTransform.offsetX) < eps
+        && Math.abs(this.gmTransform.offsetY) < eps;
   }
 
   /**
@@ -938,7 +1062,10 @@ export class GMApp {
     // Player rect — always shown when a map is loaded. Selection-gated
     // chrome (resize / aspect / maximise) shows only while selected.
     const playerBounds = this.viewportEditor?.getRectBounds() ?? null;
-    const playerBroadcastEl = document.querySelector<HTMLInputElement>('#player-broadcast-toggle');
+    // v2.16.33 — single broadcast-bypass toggle (on the Player Views
+    // panel) drives both player AND projector eye icons. Was two toggles
+    // before; collapsed because the panels were really one audience.
+    const sharedBroadcastEl = document.querySelector<HTMLInputElement>('#projection-broadcast-toggle');
     // v2.14.5 — the eye reflects three states: 'on' (broadcasting and
     // someone is connected), 'off' (broadcasting bypassed), 'no-target'
     // (no client connected, so broadcast state is moot — eye dims).
@@ -949,7 +1076,7 @@ export class GMApp {
     const totalPlayers     = remotePlayers + this.host.localPlayerCount;
     const playerBroadcast: 'on' | 'off' | 'no-target' = totalPlayers === 0
       ? 'no-target'
-      : (playerBroadcastEl?.checked === false ? 'off' : 'on');
+      : (sharedBroadcastEl?.checked === false ? 'off' : 'on');
     // v2.14.4 — does the player rect's current W:H match 16:9 in physical
     // (map-aspect-corrected) space? Drives the 16:9 button's colour state.
     // Use a forgiving tolerance because viewNW / viewNH are floats and a
@@ -1001,13 +1128,13 @@ export class GMApp {
     // otherwise per A8.3).
     const projBounds = this.projectorEditor?.getRectBounds() ?? null;
     const projMaxAvailable = projSelected && this._isActiveMapCalibrated();
-    const projBroadcastEl = document.querySelector<HTMLInputElement>('#projection-broadcast-toggle');
     // v2.14.5 — same three-state eye logic; 'no-target' when no
-    // projector window is connected.
+    // projector window is connected. Uses the same shared bypass
+    // toggle as the player rect (v2.16.33).
     const projConnected = this.projectorConnections.size > 0;
     const projBroadcast: 'on' | 'off' | 'no-target' = !projConnected
       ? 'no-target'
-      : (projBroadcastEl?.checked === false ? 'off' : 'on');
+      : (sharedBroadcastEl?.checked === false ? 'off' : 'on');
     // v2.14.3 — Show Grid icon on the Scaled View rect, only on calibrated
     // maps (a 1" grid is meaningless without a known pixels-per-square).
     // v2.14.23 — same selection gate as the player rect: chrome
@@ -1060,29 +1187,23 @@ export class GMApp {
    *  shows which kind is currently active. Called whenever the kind
    *  changes (popover dropdown, polygon selection sync, etc.). */
   private _updateActiveKindDisplay(): void {
-    const el = document.getElementById('mapfx-kind-display');
+    // v2.16.35 — element is now an inline <select> (was a static label
+    // before the kind-picker was promoted out of the popover). Set
+    // .value so the dropdown shows the active kind.
+    const el = document.getElementById('mapfx-kind-display') as HTMLSelectElement | null;
     if (!el) return;
-    el.textContent = overlayKind(this.activeOverlayKind).label;
+    el.value = this.activeOverlayKind;
   }
 
   /** v2.12 — sibling to _updateActiveKindDisplay for the Backdrop
-   *  side. Shows the active backdrop's label on the Map panel so the
-   *  GM can see at a glance whether anything is filling the bars
-   *  without opening the popover. */
+   *  side. Shows the active backdrop in the inline <select> on the Map
+   *  panel so the GM can see + change kind at a glance without opening
+   *  the side panel. v2.16.35 — element is now a <select>. */
   private _updateActiveBgDisplay(): void {
-    const el = document.getElementById('view-bg-display');
+    const el = document.getElementById('view-bg-display') as HTMLSelectElement | null;
     if (!el) return;
     const kind = this.state.getState().view.backdrop?.kind ?? 'none';
-    if (kind === 'none') {
-      el.textContent = 'None';
-      return;
-    }
-    // Lazy-resolve label from the backdrop registry (already loaded
-    // if a backdrop has ever been picked; the import is cached).
-    void import('../rendering/backdrops/backdropRegistry.ts').then(({ BACKDROPS }) => {
-      const entry = BACKDROPS.find((b) => b.id === kind);
-      el.textContent = entry?.label ?? kind;
-    });
+    el.value = kind;
   }
 
   /** v2.14.77 — Map panel upper-layer-opacity row. Shows the GM-only
@@ -1107,6 +1228,26 @@ export class GMApp {
       slider.value = '100';
       this.renderer.setMainMapOpacity(1);
     }
+    // v2.16.45 — same flag also gates the Reveal Layer MapFX kind.
+    this._activeMapIsLayered = hasBacking;
+    this._refreshMapFxKindOptionState();
+  }
+
+  /** v2.16.45 — disable / re-enable the Reveal Layer kind in the MapFX
+   *  dropdown based on whether the active map is a multilayered
+   *  composite. The kind has nothing to reveal under a single-layer
+   *  map, so the option is greyed and unselectable until a layered
+   *  map loads. Called from `_updateUpperLayerPanel` (per map load)
+   *  and `_bindMapFxKindSelect` (initial population). */
+  private _refreshMapFxKindOptionState(): void {
+    const sel = document.getElementById('mapfx-kind-display') as HTMLSelectElement | null;
+    if (!sel) return;
+    const opt = sel.querySelector<HTMLOptionElement>('option[value="reveal_layer"]');
+    if (!opt) return;
+    opt.disabled = !this._activeMapIsLayered;
+    opt.title = this._activeMapIsLayered
+      ? ''
+      : 'Reveal Layer only applies to multilayered composite maps. Add layers in the Composite Map editor to enable.';
   }
 
   /** v2.14.31 — Map panel grid-colour row. Shows a colour swatch when
@@ -1412,15 +1553,16 @@ export class GMApp {
   }
 
   /**
-   * v2.14.3 — eye icon click on a viewport rect. Toggles the same
-   * broadcast bypass that the panel-header switch controls; firing
-   * the checkbox's 'change' event keeps the existing wiring (faff
-   * placeholder broadcast) intact and ensures the panel UI updates
-   * to match.
+   * v2.14.3 — eye icon click on either viewport rect. Toggles the same
+   * (single, post v2.16.33) broadcast bypass that the Player Views
+   * panel-header switch controls; firing the checkbox's 'change' event
+   * keeps the existing wiring (faff placeholder broadcast for both
+   * audiences) intact and ensures the panel UI updates to match.
+   * The `kind` arg is kept for call-site readability but both kinds
+   * resolve to the same single toggle now.
    */
-  private _handleRectViewBroadcast(kind: 'player' | 'projector'): void {
-    const id = kind === 'player' ? '#player-broadcast-toggle' : '#projection-broadcast-toggle';
-    const cb = document.querySelector<HTMLInputElement>(id);
+  private _handleRectViewBroadcast(_kind: 'player' | 'projector'): void {
+    const cb = document.querySelector<HTMLInputElement>('#projection-broadcast-toggle');
     if (!cb) return;
     cb.checked = !cb.checked;
     cb.dispatchEvent(new Event('change'));
@@ -1549,11 +1691,12 @@ export class GMApp {
     this._refreshRectOverlays();
   }
 
-  private _setBrokerErrorVisible(visible: boolean): void {
-    const errBox = document.getElementById('broker-error');
-    const qr     = document.getElementById('qr-container');
-    if (errBox) errBox.hidden = !visible;
-    if (qr)     qr.hidden     =  visible;
+  private _setBrokerErrorVisible(_visible: boolean): void {
+    // v2.16.33 — the broker error notice + QR both lived in the (now
+    // deleted) Player Connection panel. The setStatus call upstream of
+    // every caller already surfaces the failure to the GM via the
+    // status overlay; no panel-specific UI to flip here. Kept as a
+    // no-op stub so callers don't need to know the panel is gone.
   }
 
   async init(): Promise<void> {
@@ -1573,11 +1716,86 @@ export class GMApp {
     this.bindUIControls();
     this.bindMarkerEditor();
     this.bindSoundboardPanel();
+    this.bindPlayersPanel();
+    this.bindMessageThreads();
+    this.bindInitiativeTracker();
+    this.bindAnnotate();
     this.bindHamburgerMenu();
     this._bindWorkspacePanZoom();
     this._bindCanvasUndo();
     this._bindStagecraftPanel();
     this._bindSoundtracksPanel();
+
+    // Seed the workspace transform at the GM default (slightly zoomed out)
+    // so first paint already shows the small breathing margin. Reset View
+    // and 'R' key both return to this same default.
+    this._resetGmTransform();
+    this._applyWorkspaceTransform();
+
+    // v2.16.44 — Audio mutual exclusion across Mappadux windows on
+    // this machine. GM starts with audio enabled (the user mutes via
+    // the marker-mute toggle if they want silence); claim immediately
+    // so any open player tabs / pop-outs hear that and mute themselves.
+    void import('../utils/AudioCoordinator.ts').then(({ AudioCoordinator }) => {
+      this._audioCoord = new AudioCoordinator({
+        clientId: this._audioCoordClientId,
+        onForceMute: () => this._forceLocalAudioMuted(true),
+      });
+      this._audioCoord.claim();
+    });
+
+    // v2.16.49 — Drag-a-player-from-the-Players-row onto the map as an
+    // alternative to clicking the marker pin in the row. PlayersPanel
+    // marks its icon-button draggable + sets a custom MIME type; we
+    // accept the drop here and convert the cursor's canvas-CSS coord
+    // into a normalised map coord for the placement.
+    const wrapper = document.getElementById('canvas-wrapper');
+    if (wrapper) {
+      const MIME = 'application/x-mappadux-player';
+      wrapper.addEventListener('dragover', (e) => {
+        if (!e.dataTransfer?.types.includes(MIME)) return;
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        wrapper.classList.add('player-drop-active');
+      });
+      wrapper.addEventListener('dragleave', (e) => {
+        // Leaving the wrapper itself (not just moving over a child)
+        if (e.target === wrapper) wrapper.classList.remove('player-drop-active');
+      });
+      wrapper.addEventListener('drop', (e) => {
+        wrapper.classList.remove('player-drop-active');
+        const id = e.dataTransfer?.getData(MIME);
+        if (!id) return;
+        e.preventDefault();
+        const canvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
+        if (!canvas) return;
+        const r = canvas.getBoundingClientRect();
+        const norm = this.renderer.canvasCssToMapNorm(e.clientX - r.left, e.clientY - r.top);
+        if (!norm) return;
+        void this._placePlayerAtNorm(id, norm.x, norm.y);
+      });
+    }
+
+    // v2.16.40 — Inline PiP preview of the player view. Lives on the
+    // canvas-wrapper; defaults to open on first session so a new GM
+    // immediately sees what their players see. Pop-out replicates the
+    // old "Open Player Window" flow as many times as wanted.
+    void import('./PlayerPip.ts').then(({ PlayerPip }) => {
+      const wrapper = document.getElementById('canvas-wrapper');
+      if (!wrapper) return;
+      this._playerPip = new PlayerPip({
+        canvasWrapper: wrapper,
+        getPlayerUrl: () => {
+          const code = this.host.roomCode;
+          if (!code) return '';
+          const u = new URL(this._buildPlayerUrl(code));
+          // Preview mode — suppresses the identify modal + player-only
+          // chrome so the GM sees a clean viewer of the live state.
+          u.searchParams.set('gmPreview', '1');
+          return u.toString();
+        },
+      });
+    });
 
     // Resume positional audio context on first user gesture (autoplay policy)
     const resumePA = () => this.audio.tryResume();
@@ -1702,11 +1920,38 @@ export class GMApp {
     this.host.start(peerId);
   }
 
+  /** v2.16.43 — peer ids known to be GM-spawned previews (PiP iframe or
+   *  pop-out window). Identified via `gm_preview_hello`; consulted by
+   *  the disconnect handler to swap the status message. */
+  private _gmPreviewPeers = new Set<string>();
+
+  /** v2.16.103 — per-peer device class (true = touch / mobile) reported on
+   *  player_identify, so the Player connections summary can split remote
+   *  windows into PC vs mobile. Cleared on disconnect. */
+  private _peerIsMobile = new Map<string, boolean>();
+
+  /** v2.16.44 — silence ALL local audio outputs without touching the
+   *  marker-mute toggle UI or broadcasting positional_mute_all to
+   *  players. Triggered by the AudioCoordinator when another window
+   *  claims audio. Engines stay muted until the user explicitly
+   *  re-enables via the marker-mute toggle (which calls claim() and
+   *  un-mutes them all). */
+  private _forceLocalAudioMuted(muted: boolean): void {
+    this.audio.setMuteAll(muted);
+    this.trackerAudio.setMuteAll(muted);
+    this.soundboardEngine?.setMuteAll(muted);
+  }
+
   private async onHostReady(roomCode: string): Promise<void> {
     // Broker just confirmed our peer id — any prior broker-down notice
     // is stale, restore the QR.
     this._setBrokerErrorVisible(false);
     this.roomCodeEl.textContent = roomCode;
+    // v2.16.40 — room code is what the PiP URL needs. If the iframe was
+    // mounted before this fired (host.roomCode returned '' from the
+    // getPlayerUrl callback) refresh it now so the inline preview shows
+    // the live state.
+    this._playerPip?.refresh();
 
     // On localhost, replace with the real LAN IP so QR/URL works for other devices.
     // __DEV_LAN_IP__ is injected at build time by vite.config.ts (null in prod).
@@ -1716,14 +1961,15 @@ export class GMApp {
     }
 
     const playerUrl = this._buildPlayerUrl(roomCode);
-    this.qrContainer.title = `Click to copy player URL — Room code: ${roomCode}`;
-    try {
-      await QRCode.toCanvas(
-        this.qrContainer.querySelector('canvas') as HTMLCanvasElement,
-        playerUrl,
-        { width: 120, color: { dark: '#c8d8e8', light: '#0a0e1a' } }
-      );
-    } catch { /* QR non-critical */ }
+    // v2.16.33 — QR + player-URL display moved out of the sidebar (the
+    // Player Connection panel is gone). The hold-screen players see
+    // when they can't reach the GM is now where they pick the URL up,
+    // and Open Player Window relocated to the Player Views panel. The
+    // _buildPlayerUrl call is preserved so other consumers (clipboard
+    // copy, status messages) still resolve the right URL.
+    void playerUrl;
+    // v2.16.103 — render the Player connections QR now the room code is known.
+    this._renderConnectionsQr();
 
     const existing = await loadSession();
     // Pack name precedence: existing session > bundle-seeded default > none.
@@ -1774,11 +2020,30 @@ export class GMApp {
         this.projectorConnections.delete(clientId);
       }
     }
+    this._peerIsMobile.delete(id); // v2.16.103 — drop device class on leave
     this.projectorEditor?.setConnection(this._primaryProjector() ?? null);
     this.refreshProjectorStatus();
     this._refreshProjectionPanelMode();
+    // v2.16.43 — GM-spawned previews (PiP iframe or pop-out window) get a
+    // friendlier status than the generic "Player (peerid…)…". The
+    // gm_preview_hello tag stays valid for the connection's lifetime
+    // and is consumed here.
+    if (this._gmPreviewPeers.delete(id)) {
+      this._refreshPlayersPanel();
+      this._broadcastRoster();
+      this._updatePlayerCount();
+      this.setStatus('GM Player View disconnected', 'ok');
+      return;
+    }
+    // v2.17 Player Voice — look up the player BEFORE clearing the binding so
+    // we can use their real name in the status rather than the peer hash.
+    const bound = this.playerRegistry.playerForPeer(id);
+    this.playerRegistry.disconnectPeer(id);
+    this._refreshPlayersPanel();
+    this._broadcastRoster();
     this._updatePlayerCount();
-    this.setStatus(`Player disconnected (${id.slice(0, 8)}…)`, 'warn');
+    const who = bound ? (bound.characterName || bound.playerName || 'Player') : `Player (${id.slice(0, 8)}…)`;
+    this.setStatus(`${who} disconnected`, 'warn');
   }
 
   private _updatePlayerCount(): void {
@@ -1792,64 +2057,123 @@ export class GMApp {
     const localPlayers     = this.host.localPlayerCount;
     const totalPlayers     = remotePlayers + localPlayers;
 
-    this.playerCountEl.textContent = String(remotePlayers);
-    const plural = document.querySelector('#player-count-plural');
-    if (plural) plural.textContent = remotePlayers === 1 ? '' : 's';
-
-    // "(N)" — full audience including same-machine players. Shown only when
-    // there's at least one local player so the line stays clean for the
-    // common pure-remote case.
-    const totalSuffix = document.querySelector<HTMLElement>('#player-total-suffix');
-    if (totalSuffix) {
-      totalSuffix.textContent = localPlayers > 0 ? ` (${totalPlayers})` : '';
-    }
-
-    // Projector segment: "+ Projector" once any projector connects, with a
-    // bracketed count of ADDITIONAL monitors (projector #1 is always
-    // primary; closing the primary auto-closes all monitors).
+    // v2.16.33 — the player-count / plural / suffix / projector-suffix
+    // strings + the session-meta tooltip all lived in the deleted
+    // Player Connection panel. The per-row green pulsing indicators on
+    // the Players panel give the same feedback at a glance; no separate
+    // count line needed anymore. Kept the local references commented
+    // so future maintainers can find what was here.
+    //   - this.playerCountEl, #player-count-plural, #player-total-suffix
+    //   - #projector-count-suffix, .session-meta tooltip
+    // Variables stay scoped so the no-connection greying below still
+    // computes the right totals.
     const projTotal = this.projectorConnections.size;
-    const monitors  = Math.max(0, projTotal - 1);
-    const projSuffix = document.querySelector<HTMLElement>('#projector-count-suffix');
-    if (projSuffix) {
-      if (projTotal === 0)      projSuffix.textContent = '';
-      else if (monitors === 0)  projSuffix.textContent = ' + Projector';
-      else                      projSuffix.textContent = ` + Projector (${monitors})`;
-    }
+    void localPlayers; void totalPlayers; void projTotal;
 
-    // Grey out the broadcast toggles on the side-panel headers when nothing
-    // of that type is currently receiving. CSS handles the visual fade; the
-    // toggle stays clickable so the GM can pre-set state before joining
-    // players / projectors arrive. Player toggle (now in the Session
-    // header) uses TOTAL players (a single local player is enough to
-    // undgrey it).
-    document.querySelector('#session-panel .panel-header')
-      ?.classList.toggle('panel-header--no-connection', totalPlayers === 0);
+    // v2.17.0 — the Player Views panel header no longer fades when no
+    // players / scaled views are connected. With the panel now hosting the
+    // join QR + Show Player View (useful before anyone connects), the
+    // "broadcast is moot" fade is redundant — keep it always bright. Clear
+    // the class in case it was applied by an earlier build.
     document.querySelector('#projection-panel .panel-header')
-      ?.classList.toggle('panel-header--no-connection', projTotal === 0);
+      ?.classList.remove('panel-header--no-connection');
 
     // v2.14.5 — refresh the rect chrome so the eye-icon "no-target"
     // greying updates in lock-step with the panel-header fade.
     this._refreshRectOverlays();
 
-    // Hover tooltip on the session-meta line listing what we know about each
-    // connected peer. Players are anonymous PeerJS peers today (real names
-    // arrive in v2.13 with User ID); projectors carry their setup name from
-    // projector_hello, which is more identifiable.
-    const meta = document.querySelector<HTMLElement>('.session-meta');
-    if (meta) {
-      const playerLines: string[] = [];
-      for (const peerId of this.host.connectedPeerIds) {
-        if (projectorPeerIds.has(peerId)) continue;
-        playerLines.push(`• Player ${peerId.slice(0, 8)}…`);
+    // v2.16.103 — keep the Player connections window/capability summary live.
+    this._renderConnectionsSummary();
+  }
+
+  /** v2.16.103 — render the join QR + URL into the Player connections
+   *  subpanel. Uses _buildPlayerUrl (LAN IP in dev / public URL in prod) so a
+   *  phone on the same network can open a remote player window. No-op until
+   *  the room code is known. Renders even while the subpanel is collapsed —
+   *  the canvas keeps its bitmap, ready when the GM expands it. */
+  private _renderConnectionsQr(): void {
+    const canvas = document.getElementById('connections-qr') as HTMLCanvasElement | null;
+    const urlEl  = document.getElementById('connections-url');
+    const code   = this.host.roomCode;
+    if (!code) { if (urlEl) urlEl.textContent = 'Waiting for room code…'; return; }
+    // v2.16.106 — same canonical join URL everywhere: strip the ?instance
+    // query so the QR matches the player/projector hold-screen QR exactly
+    // (external scanners don't use the same-browser instance namespace).
+    let url = this._buildPlayerUrl(code);
+    try { const u = new URL(url); u.search = ''; url = u.toString(); } catch { /* keep as-is */ }
+    // v2.17.0 — both the QR and the URL are click-to-copy. onclick (not
+    // addEventListener) so repeated renders don't stack duplicate handlers.
+    if (urlEl) {
+      urlEl.textContent = url;
+      urlEl.title = 'Click to copy the player URL';
+      urlEl.style.cursor = 'pointer';
+      urlEl.onclick = () => this._copyPlayerUrl(url);
+    }
+    if (canvas) {
+      canvas.title = 'Click to copy the player URL';
+      canvas.style.cursor = 'pointer';
+      canvas.onclick = () => this._copyPlayerUrl(url);
+      void QRCode.toCanvas(canvas, url, { width: 160, margin: 1 }).catch(() => { /* ignore */ });
+    }
+  }
+
+  /** v2.17.0 — copy the canonical player URL to the clipboard with a
+   *  status-bar confirmation. Used by the click-to-copy QR + URL. */
+  private _copyPlayerUrl(url: string): void {
+    void navigator.clipboard?.writeText(url)
+      .then(() => this.setStatus('Player URL copied to clipboard', 'ok'))
+      .catch(() => this.setStatus('Could not copy — select the URL to copy it manually', 'warn'));
+  }
+
+  /** v2.16.103 — window & capability summary for the Player connections
+   *  subpanel: counts of connected player WINDOWS by type, NOT the player
+   *  roster (that's the separate Players panel). Local windows = GM-spawned
+   *  previews (Show Player View / pop-out) + same-machine player windows.
+   *  Scaled views = projector windows. Remote = network player connections,
+   *  split PC / mobile from the device class reported on identify. */
+  private _renderConnectionsSummary(): void {
+    const list = document.getElementById('connections-summary');
+    if (!list) return;
+    const projectorPeerIds = new Set(this._projectorPeerByClientId.values());
+    const remotePeers  = this.host.connectedPeerIds.filter((id) => !projectorPeerIds.has(id));
+    const remote       = remotePeers.length;
+    const remoteMobile = remotePeers.filter((id) => this._peerIsMobile.get(id) === true).length;
+    const remotePc     = remote - remoteMobile;
+    const localWindows = this._gmPreviewPeers.size + this.host.localPlayerCount;
+    const scaled       = this.projectorConnections.size;
+
+    list.replaceChildren();
+    if (localWindows + scaled + remote === 0) {
+      const li = document.createElement('li');
+      li.className = 'conn-empty';
+      li.textContent = 'No player views connected yet';
+      list.appendChild(li);
+      return;
+    }
+
+    const rows: Array<{ label: string; count: number; sub?: string }> = [
+      { label: 'Local windows', count: localWindows },
+      { label: 'Scaled views',  count: scaled },
+      { label: 'Remote',        count: remote,
+        ...(remote > 0 ? { sub: `${remotePc} PC · ${remoteMobile} mobile` } : {}) },
+    ];
+    for (const r of rows) {
+      const li = document.createElement('li');
+      const label = document.createElement('span');
+      label.textContent = r.label;
+      const right = document.createElement('span');
+      const count = document.createElement('span');
+      count.className = 'conn-count';
+      count.textContent = String(r.count);
+      right.appendChild(count);
+      if (r.sub) {
+        const sub = document.createElement('span');
+        sub.className = 'conn-sub';
+        sub.textContent = '  ' + r.sub;
+        right.appendChild(sub);
       }
-      const projLines: string[] = [];
-      for (const conn of this.projectorConnections.values()) {
-        projLines.push(`• ${conn.setupName || '(uncalibrated projector)'}`);
-      }
-      const sections: string[] = [];
-      if (playerLines.length > 0) sections.push('Players:\n' + playerLines.join('\n'));
-      if (projLines.length > 0)   sections.push('Projectors:\n' + projLines.join('\n'));
-      meta.title = sections.length > 0 ? sections.join('\n\n') : 'No peers connected';
+      li.append(label, right);
+      list.appendChild(li);
     }
   }
 
@@ -2160,17 +2484,24 @@ export class GMApp {
       // gets 'none' regardless of what's in state.filter.
       this.renderer.setFilter(this._effectiveFilter());
       const filterId = state.filter.filterId;
+      const def = filterRegistry.getOrFallback(filterId);
+      // v2.16.37 — sync the inline dropdown to match state.
+      if (this.filterSelect.value !== filterId) this.filterSelect.value = filterId;
       if (filterId !== this.activeFilterId) {
-        // Filter switched — rebuild the panel for the new filter
         this.activeFilterId = filterId;
-        this.filterPanel.render(
-          filterRegistry.getOrFallback(filterId),
-          state.filter.params[filterId] ?? {}
-        );
-      } else {
-        // Same filter, params changed — update values in-place (no DOM rebuild)
-        this.filterPanel.setValues(state.filter.params[filterId] ?? {});
+        // Filter switched. If the side panel is open, refresh its body
+        // so the params section reflects the new filter + update title.
+        this._filterSidePanel?.refresh();
+        this._filterSidePanel?.setTitle(`Visual Filter — ${def.name}`);
+      } else if (this._filterPanelInstance) {
+        // Same filter, params changed — update values in-place on the
+        // side-panel-hosted FilterPanel (no DOM rebuild).
+        this._filterPanelInstance.setValues(state.filter.params[filterId] ?? {});
       }
+      // Patch E — re-apply the marker-layer CSS filter on every filter
+      // change (filter switch, params, toggle). Keeps the GM preview in
+      // sync with what the player + projector will render.
+      this._applyMarkerLayerFilter();
       // During a map switch, filter travels atomically inside map_change (below)
       // so a separate filter_update would arrive before the transition starts and
       // corrupt the snapshot.  Only broadcast standalone filter changes.
@@ -2181,7 +2512,16 @@ export class GMApp {
 
     if (changed.includes('view')) {
       this.renderer.setBackgroundColour(state.view.backgroundColor);
-      this.renderer.setBackdrop(state.view.backdrop ?? null);
+      // v2.16.41 — animated backdrop shader suppressed on the GM
+      // canvas. It now renders only on the player + projector views
+      // (where it matters) and inside the PiP preview (so the GM
+      // sees what players see without running a second shader pass
+      // for nothing on the main canvas). The basic background colour
+      // above still applies. Drops CPU / GPU + cleans up the GM
+      // workspace; the backdrop config still travels through
+      // state.view.backdrop so the view_update broadcast below
+      // carries it to the audience views unchanged.
+      this.renderer.setBackdrop(null);
       this._refreshBgFxButtonState();
       this._updateActiveBgDisplay();
       // During a map switch, view travels inside map_change — same reasoning as
@@ -2202,10 +2542,11 @@ export class GMApp {
         this.allTransitionParams[savedTransition.transitionId] = savedTransition.params;
       }
       this.transitionSelect.value = newId;
-      this.transitionPanel.render(
-        transitionRegistry.getOrFallback(newId),
-        this.allTransitionParams[newId] ?? transitionRegistry.defaultParams(newId),
-      );
+      // v2.16.38 — if the side panel is open, refresh its body so the
+      // params section reflects the newly-loaded map's saved transition.
+      const def = transitionRegistry.getOrFallback(newId);
+      this._transitionSidePanel?.setTitle(`Map Transition — ${def.label}`);
+      this._transitionSidePanel?.refresh();
 
       // Map loads bring their markers along, but loadForMap only emits a
       // ['map', 'view', 'filter', 'fog'] notify — no 'markers' — so the
@@ -2224,6 +2565,11 @@ export class GMApp {
       // kind-dropdown in-use markers won't refresh from there —
       // refresh them here instead.
       this._refreshKindSelectorUsage();
+      // v2.16.49 — Players panel rows show per-player "placed-on-this-map"
+      // state via info.placed. Re-render so the marker pin glyph reflects
+      // the NEW map's placements; otherwise the icon read stale across
+      // map switches.
+      this._refreshPlayersPanel();
     }
 
     if (changed.includes('markers')) {
@@ -2324,9 +2670,11 @@ export class GMApp {
       this.mapSelect.appendChild(opt);
     }
 
-    // Trailing "+ Add New Map" sentinel — picking it opens the add-map modal
-    // (handled in the change listener).
-    appendAddOption(this.mapSelect, '+ Add New Map…');
+    // v2.16.34 — sentinel "+ Add New Map" option retired. The
+    // discoverable "+" button beside the dropdown is the affordance now
+    // (bound in bindUIControls → #add-map-btn). The SELECT_ADD_SENTINEL
+    // branch in the change handler stays as a defensive no-op so any
+    // cached UI that still emits it doesn't crash.
 
     if (maps.length > 0) {
       const last = session?.lastMapId ? (maps.find((m) => m.id === session.lastMapId) ?? maps[0]!) : maps[0]!;
@@ -2672,6 +3020,17 @@ export class GMApp {
     const isTextMap = mapAssetForButton?.source === 'text-map';
     const isComposite = mapAssetForButton?.source === 'composite-map';
     const hasReveal = isTextMap && mapAssetForButton?.textMap?.animation?.enabled === true;
+    // v2.16.91 — live YouTube video overlay for this map. Extract the
+    // text-map's video elements (empty for non-text-maps), render them on
+    // the GM, and broadcast to players + projector.
+    this._currentTextMapVideos = (mapAssetForButton?.textMap?.elements ?? [])
+      .filter((e): e is import('../types.ts').TextMapVideoElement => e.type === 'video');
+    this.textMapVideoLayer?.setVideos(this._currentTextMapVideos);
+    // v2.16.100 — cache on the Host so the videos ride in EVERY new
+    // connection's full_state (incl. the BroadcastChannel one a same-browser
+    // preview / pop-out requests on open), not just this live broadcast.
+    this.host.setLastTextMapVideos(this._currentTextMapVideos);
+    this.host.broadcast({ type: 'textmap_videos', videos: this._currentTextMapVideos });
     if (this.editTextMapBtn)   this.editTextMapBtn.hidden   = !isTextMap;
     if (this.editCompositeBtn) this.editCompositeBtn.hidden = !isComposite;
     // Show the Start Animation button only when this handout has a
@@ -2788,6 +3147,9 @@ export class GMApp {
     this.fogEditor.loadState(this.state.getState().fog);
     this.syncView(this.state.getState());
     this.filterSelect.value = this.state.getState().filter.filterId;
+    // v2.16.37 — affect-markers toggle moved to the side panel; nothing
+    // to sync inline. Side panel rebuilds its body each open from state.
+    this._applyMarkerLayerFilter();
     // Transition UI is restored in onStateChange (changed.includes('map')) — synchronous
     // within loadForMap's _notify call, so activeTransitionId is already correct here.
 
@@ -2915,6 +3277,15 @@ export class GMApp {
       transition: this.buildTransitionConfig(),
     });
 
+    // v2.17 Player Voice — refresh the active map's player tokens (maps aren't
+    // connected, so each map shows only the tokens placed on it).
+    this._liveMarkerPos.clear();
+    this._markerMoveOrigin.clear();
+    this._refreshPlayerMarkers();
+    // v2.16.76 — load this map's annotations (clocks + whiteboard) and
+    // broadcast them; annotations are per-map.
+    this.annotate?.setMap(this._activeMapId() ?? null);
+
     // v2.12.x — if this map is a video asset and we have its full
     // bytes queued, send the bundle as a separate follow-up so
     // receivers can swap their static snapshot for the animated
@@ -2965,15 +3336,16 @@ export class GMApp {
     this.revealProgressEl           = q<HTMLElement>('#reveal-progress');
     this.revealProgressBarEl        = q<HTMLElement>('#reveal-progress-bar');
     this.packNameInput              = q<HTMLInputElement>('#pack-name-input');
+    this.packNameDisplay            = document.getElementById('pack-name-display');
     this.transitionSelect           = q<HTMLSelectElement>('#transition-select');
-    this.transitionParamsContainer  = q('#transition-params');
+    // v2.16.38 — #transition-params moved into the side panel; nothing
+    // to bind here. Side panel rebuilds its body each open from state.
     this.filterSelect               = q<HTMLSelectElement>('#filter-select');
-    this.filterParamsContainer = q('#filter-params');
+    // v2.16.37 — #filter-params + #filter-affect-markers-toggle moved
+    // to the side panel. Fields retained for compile compat below.
     this.viewBgFxBtn           = q<HTMLButtonElement>('#view-bg-fx-btn');
     this.mapFxBtn              = q<HTMLButtonElement>('#mapfx-fx-btn');
     this.roomCodeEl            = q('#room-code');
-    this.qrContainer           = q('#qr-container');
-    this.playerCountEl         = q('#player-count');
     this.statusEl              = q('#status');
     this.markerSelect          = q<HTMLSelectElement>('#marker-select');
     this.markerEditableSelect  = new EditableSelect(this.markerSelect, {
@@ -2994,6 +3366,60 @@ export class GMApp {
     this.renderer.setShaderPlanesEnabled(false); // GM sees flat fills for MapFX kinds, not the player's fancy shaders
     this.renderer.enableGMOverlay();
     this.renderer.setFogOpacity(0.35);     // GM sees through fog; players get full opacity
+
+    // v2.17 Player Voice — ping pulses persist on the GM with the player's name
+    // + a dismiss button, tracking the map through workspace pan/zoom.
+    const pingLayerEl = document.getElementById('ping-layer');
+    if (pingLayerEl) {
+      this.pingLayer = new PingLayer(
+        pingLayerEl,
+        (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        { showLabel: true, persistent: true, onDismiss: () => { /* GM-local removal only */ } },
+      );
+    }
+    // v2.16.91 — live text-map video overlay (tracks the map like markers).
+    const videoLayerEl = document.getElementById('textmap-video-layer');
+    if (videoLayerEl) {
+      void import('../rendering/TextMapVideoLayer.ts').then(({ TextMapVideoLayer }) => {
+        this.textMapVideoLayer = new TextMapVideoLayer(
+          videoLayerEl,
+          (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+          {
+            mode: 'gm',
+            // GM owns the controls; relay each play/pause/seek/volume change
+            // to viewers so they follow within ~0.5 s.
+            onPlayback: (ev) => this.host.broadcast({ type: 'video_playback', ...ev }),
+          },
+        );
+        this.textMapVideoLayer.setVideos(this._currentTextMapVideos);
+      });
+    }
+
+    // v2.17 Player Voice — player tokens. The GM can drag any token to place it.
+    const pmEl = document.getElementById('player-marker-layer');
+    if (pmEl) {
+      this.playerMarkerLayer = new PlayerMarkerLayer(pmEl, {
+        project:   (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        unproject: (cx, cy) => {
+          const r = canvas.getBoundingClientRect();
+          return this.renderer.canvasCssToMapNorm(cx - r.left, cy - r.top);
+        },
+        canDrag: () => true,
+        onDragEnd: (pid, x, y) => { void this._onGmMarkerDragEnd(pid, x, y); },
+        onRotateEnd: (pid, facing) => { void this._onGmMarkerRotateEnd(pid, facing); },
+        getPxPerSquare: () => this._tokenPxPerSquare(),
+      });
+    }
+  }
+
+  /** Current screen-pixels-per-map-square on the active map at the active
+   *  zoom, or null when the map isn't calibrated. Drives token footprint
+   *  sizing on the GM's own PlayerMarkerLayer. */
+  private _tokenPxPerSquare(): number | null {
+    const meta = this._lastMapAssetMeta;
+    if (!meta?.pixelsPerSquare || !meta.imageHeight) return null;
+    const scale = this.renderer.worldToScreenScale();
+    return (meta.pixelsPerSquare / meta.imageHeight) * scale.pxPerWorldY;
   }
 
   private bindProjectorEditor(): void {
@@ -3268,7 +3694,9 @@ export class GMApp {
       sel.appendChild(opt);
     }
 
-    appendAddOption(sel, '+ Calibrate New Display…');
+    // v2.16.34 — sentinel "+ Calibrate New Display" retired in favour of
+    // the adjacent "+" button (#add-display-btn). Defensive branch in the
+    // change handler stays for safety.
 
     // Selected option reflects the LIVE state only — when nothing's running,
     // default to "No Projection" so picking the previously-active setup
@@ -3325,6 +3753,194 @@ export class GMApp {
   }
 
   private onPeerMessage(_peerId: string, msg: GMMessage): void {
+    if (msg.type === 'gm_preview_hello') {
+      // v2.16.43 — tag this peer as a GM preview (PiP iframe or pop-out
+      // window). The disconnect handler reads the set to show a sane
+      // status message instead of "Player (peerid…) disconnected".
+      this._gmPreviewPeers.add(_peerId);
+      // v2.16.98 — previews identify via gm_preview_hello (NOT
+      // player_identify), so they skipped the overlay catch-up bundle that
+      // real joiners get: map-anchored state (videos, annotations, tokens)
+      // lives in discrete messages, not the full_state cache. Without this,
+      // a freshly-opened "Show Player View" / popped-out window showed no
+      // video until the next map swap re-broadcast it. Push the same
+      // overlay state here.
+      this.host.broadcast({ type: 'textmap_videos', videos: this._currentTextMapVideos });
+      this.textMapVideoLayer?.reportNow();
+      this.annotate?.rebroadcast();
+      this._refreshPlayerMarkers();
+      return;
+    }
+    if (msg.type === 'player_identify') {
+      // v2.17 Player Voice — a device player introduced themselves. Upsert
+      // the persistent record, bind the live connection, refresh + rebroadcast.
+      console.info('[gm] player_identify received', { from: _peerId, playerId: msg.playerId, name: msg.characterName || msg.playerName });
+      // v2.16.103 — remember the device class for the connections summary.
+      this._peerIsMobile.set(_peerId, !!msg.mobile);
+      void this.playerRegistry.identify(_peerId, msg).then(() => {
+        this._refreshPlayersPanel();
+        this._broadcastRoster();
+        this._broadcastPlayerFeatures();
+        this._refreshPlayerMarkers(); // let the new joiner see existing tokens
+        this._broadcastAllPlayerIcons(); // seed their per-player icon cache
+        // Initiative tracker — fire current state to the new joiner.
+        if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
+        // v2.16.76 — annotations (clocks) for the new joiner.
+        this.annotate?.rebroadcast();
+        // v2.16.91 — text-map videos for the new joiner.
+        this.host.broadcast({ type: 'textmap_videos', videos: this._currentTextMapVideos });
+        // v2.16.97 — catch the new joiner up to the current playback position
+        // (captured as pending until their iframe is ready).
+        this.textMapVideoLayer?.reportNow();
+        const who = msg.playerName || msg.characterName || 'A player';
+        this.setStatus(`${who} joined`, 'ok');
+      });
+      return;
+    }
+    if (msg.type === 'player_bye') {
+      this.playerRegistry.bye(msg.clientId);
+      this._refreshPlayersPanel();
+      this._broadcastRoster();
+      return;
+    }
+    if (msg.type === 'player_forget_me') {
+      // Wipe the registry entry + their tokens. The player will reload with a
+      // fresh playerId so future testing starts from zero. Falls back to the
+      // playerId from the message when there's no live binding yet.
+      const bound = this.playerRegistry.playerForClient(msg.clientId);
+      const id = bound?.id ?? msg.playerId;
+      const who = bound?.playerName || bound?.characterName || 'A player';
+      void this.playerRegistry.remove(id).then(() => {
+        this._liveMarkerPos.delete(id);
+        this._markerMoveOrigin.delete(id);
+        this.playerRegistry.bye(msg.clientId); // clear any live binding too
+        this._refreshPlayersPanel();
+        this._broadcastRoster();
+        this._refreshPlayerMarkers();
+        this.setStatus(`${who} reset their identity`, 'warn');
+      });
+      return;
+    }
+    if (msg.type === 'player_icon_request') {
+      // A receiver (player or projector) is rendering a token whose hasIcon
+      // flag is set but their local icon cache is empty — a chunked-binary
+      // delivery must have been dropped or arrived before they mounted.
+      // Resend just that icon. Cheap to over-fire; the receivers idempotently
+      // re-cache. (We re-broadcast rather than targeting a single conn so
+      // other receivers that were also missing the icon can catch up.)
+      this._broadcastPlayerIcon(msg.playerId);
+      return;
+    }
+    if (msg.type === 'player_ping') {
+      if (!arePingsEnabled()) return; // GM has pings switched off — ignore
+      if (this._seenUpstream(msg.pingId)) return;
+      const player = this.playerRegistry.playerForClient(msg.clientId);
+      const color = player?.color ?? '#3b82f6';
+      const name  = player?.playerName || player?.characterName || 'Player';
+      // Show on the GM (persists until dismissed) and relay to every player.
+      this.pingLayer?.add({ id: msg.pingId, x: msg.x, y: msg.y, color, name });
+      this.host.broadcast({ type: 'ping_show', pingId: msg.pingId, x: msg.x, y: msg.y, color, name });
+      return;
+    }
+    if (msg.type === 'player_message') {
+      if (!isMessagingEnabled()) return; // GM has messaging switched off
+      if (this._seenUpstream(msg.messageId)) return;
+      const sender = this.playerRegistry.playerForClient(msg.clientId);
+      const fromName  = sender?.playerName || sender?.characterName || 'Player';
+      const fromColor = sender?.color ?? '#3b82f6';
+      const recipient = msg.toPlayerId ? this.playerRegistry.get(msg.toPlayerId) : undefined;
+      // v2.16.7 — pre-fetch reply suggestions the moment a message arrives so
+      // they're (usually) ready by the time the GM opens the reply box. Silent
+      // — the panel renders them on open if they resolved; the manual button
+      // still surfaces explicit errors.
+      // v2.16.52 — gate on !msg.toPlayerId. Only to-GM messages get the
+      // auto pre-fetch; peer-bound (player→player) traffic skips it so we
+      // don't burn LLM tokens on conversations the GM may never reply to.
+      // The manual Re-roll/Suggest button stays available on every thread,
+      // so the GM can still opt in to a suggestion on peer-bound chatter.
+      const client = LLMClient.fromSettings();
+      const suggestionsPromise = client && !msg.toPlayerId
+        ? client.suggest(msg.text).catch(() => [] as string[])
+        : undefined;
+      // v2.16.47 — message lands on the per-player thread store. Unread
+      // counters bump unless the side panel for this sender is already
+      // open. The Players panel re-renders via the store's onChange
+      // subscription so the unread badge appears immediately.
+      const senderPlayerId = sender?.id ?? msg.fromPlayerId;
+      const entry: import('./MessageThreads.ts').ThreadMessage = {
+        id: msg.messageId,
+        fromKind: 'player',
+        fromPlayerId: senderPlayerId,
+        fromName, fromColor,
+        toPlayerId: msg.toPlayerId ?? null,
+        ...(msg.toPlayerId && recipient ? { toName: recipient.characterName || recipient.playerName || 'player', toColor: recipient.color } : {}),
+        text: msg.text,
+        at: Date.now(),
+        origin: msg.toPlayerId ? 'peer-bound' : 'gm-bound',
+        ...(suggestionsPromise ? { suggestionsPromise } : {}),
+      };
+      this._messageThreads.addIncoming(senderPlayerId, entry, this._openThreadPlayerId);
+      // v2.16.49 — peer-bound messages also land in the RECIPIENT's
+      // thread so the GM can monitor both sides from either badge.
+      // Orange unread bumps on the recipient row; the message reads
+      // identically in both threads (same id, same content). When the
+      // recipient is the player whose thread is currently open, the
+      // bump is skipped and the body refresh handles the live update.
+      if (msg.toPlayerId) {
+        this._messageThreads.addIncoming(msg.toPlayerId, entry, this._openThreadPlayerId);
+        // Player→player: relay to the addressed player so their PlayerApp
+        // shows the toast.
+        this.host.broadcast({
+          type: 'message_deliver',
+          messageId: msg.messageId,
+          fromKind:  'player',
+          fromName, fromColor,
+          toPlayerId: msg.toPlayerId,
+          text: msg.text,
+        });
+      }
+      return;
+    }
+    if (msg.type === 'initiative_roll') {
+      // A player submitted their initiative value — find them and slot a card in.
+      const player = this.playerRegistry.playerForClient(msg.clientId);
+      if (!player || player.id !== msg.playerId) return;
+      const name = player.characterName || player.playerName || 'Player';
+      this.initiativeTracker?.ingestRoll(player.id, name, player.color, msg.value, player.iconDataUrl);
+      this.setStatus(`${name} rolled ${msg.value}`, 'ok');
+      return;
+    }
+    if (msg.type === 'player_marker_move') {
+      if (!arePlayerMarkersMovable()) return; // GM disabled player-movable tokens
+      const mapId = this._activeMapId();
+      if (!mapId) return;
+      const bound = this.playerRegistry.playerForClient(msg.clientId);
+      if (!bound || bound.id !== msg.playerId) return;          // only your own token
+      if (!this.playerRegistry.isPlacedOn(msg.playerId, mapId)) return;
+      // Capture the pre-move state (position + facing) once so the GM can
+      // cancel the move and restore both.
+      if (!this._markerMoveOrigin.has(msg.playerId)) {
+        const cur = this.playerRegistry.placementOn(msg.playerId, mapId);
+        if (cur) {
+          const origin: { x: number; y: number; facing?: number } = { x: cur.x, y: cur.y };
+          if (cur.facing !== undefined) origin.facing = cur.facing;
+          this._markerMoveOrigin.set(msg.playerId, origin);
+        }
+      }
+      if (msg.done) {
+        void this.playerRegistry.setPlacement(msg.playerId, mapId, msg.x, msg.y, msg.facing).then(() => {
+          this._liveMarkerPos.delete(msg.playerId);
+          this._liveMarkerFacing.delete(msg.playerId);
+          this._refreshPlayerMarkers();
+          this._refreshPlayersPanel(); // surfaces the cancel-move button
+        });
+      } else {
+        this._liveMarkerPos.set(msg.playerId, { x: msg.x, y: msg.y });
+        if (msg.facing !== undefined) this._liveMarkerFacing.set(msg.playerId, msg.facing);
+        this._refreshPlayerMarkers();
+      }
+      return;
+    }
     if (msg.type === 'projector_bye') {
       const wasPrimary = this._primaryProjector()?.clientId === msg.clientId;
       this.projectorConnections.delete(msg.clientId);
@@ -3393,6 +4009,19 @@ export class GMApp {
       // A projector just appeared — its green rect now has bounds, so push
       // the overlay handles in.
       this._refreshRectOverlays();
+
+      // v2.17 Player Voice — seed the new projector with current Player Voice
+      // state (tokens, icons, initiative rail). Players get this on identify;
+      // projectors send projector_hello instead so we mirror the same dispatch
+      // here. Broadcasts to all peers but existing receivers idempotently
+      // re-apply, so it's cheap.
+      this._refreshPlayerMarkers();
+      this._broadcastAllPlayerIcons();
+      if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
+      this.annotate?.rebroadcast();
+      this.host.broadcast({ type: 'textmap_videos', videos: this._currentTextMapVideos });
+      // v2.16.97 — catch the projector up to the current playback position.
+      this.textMapVideoLayer?.reportNow();
     }
   }
 
@@ -3795,17 +4424,17 @@ export class GMApp {
     this._mapfxFxPopover?.refresh();
   }
 
-  /** Open the MapFX sparkle popover. Content: Edge Fade slider at the
-   *  top + the active kind's shader-param rows below. The kind itself
-   *  is still picked from the inline dropdown in the panel; this
-   *  popover is the focused "tune what's selected" surface. */
+  /** Open the MapFX side panel. Content: Edge Fade slider + the active
+   *  kind's shader-param rows. Kind itself is picked from the inline
+   *  <select> on the FoW row (v2.16.35); this panel is the focused
+   *  "tune what's selected" surface. */
   private _openMapFxPopover(): void {
     if (this._mapfxFxPopover) return;
-    void import('./FxPopover.ts').then(({ openFxPopover }) => {
+    void import('./SidePanel.ts').then(({ openSidePanel }) => {
       if (this._mapfxFxPopover) return;
-      this._mapfxFxPopover = openFxPopover({
-        anchor: this.mapFxBtn,
-        populate: (root) => { this._populateMapFxPopover(root); },
+      this._mapfxFxPopover = openSidePanel({
+        title: `MapFX — ${overlayKind(this.activeOverlayKind).label}`,
+        populate: (body) => { this._populateMapFxPopover(body); },
         onClose: () => { this._mapfxFxPopover = null; },
       });
     });
@@ -3829,44 +4458,9 @@ export class GMApp {
     const editingPoly = selectedPoly && selectedPoly.kind === this.activeOverlayKind ? selectedPoly : null;
     const inherit = !editingPoly ? this._pendingPaintInherit : null;
 
-    // ─── Kind picker (compact <select>) ──────────────────────────────
-    // 13 kinds is a lot vertically; a single dropdown reads much
-    // smaller in the popover. Same green '●' prefix for in-use kinds
-    // + bold Unicode for Fog of War (works in <option> text content
-    // even though CSS doesn't reliably style options).
-    const kindSelect = document.createElement('select');
-    kindSelect.className = 'fx-popover-kind-select';
-    const inUse = new Set<string>();
-    for (const p of fog.polygons) inUse.add(p.kind);
-    for (const id of OVERLAY_KIND_ORDER) {
-      const entry = OVERLAY_KIND_REGISTRY[id];
-      const opt = document.createElement('option');
-      opt.value = id;
-      let rendered = id === 'fog' ? _toUnicodeBold(entry.label) : entry.label;
-      if (inUse.has(id)) {
-        rendered = `● ${rendered}`;
-        opt.style.color = '#4ade80';
-      }
-      opt.textContent = rendered;
-      if (id === this.activeOverlayKind) opt.selected = true;
-      kindSelect.appendChild(opt);
-    }
-    kindSelect.addEventListener('change', () => {
-      const newKind = kindSelect.value as OverlayKind;
-      if (this.activeOverlayKind === newKind) return;
-      this.activeOverlayKind = newKind;
-      // Morph any selected polygon to the new kind.
-      const selId = this.fogEditor.getSelectedId();
-      if (selId) this.state.setPolygonKind(selId, newKind);
-      this._applyActiveKindToBrush();
-      this._applyKindToColourSwatch();
-      this._updateActiveKindDisplay();
-      this.fogEditor.setActiveKind(newKind);
-      this.fogEditor.setColor(overlayKind(newKind).defaultColor);
-      // Rebuild the popover so the param section reflects the new kind.
-      this._mapfxFxPopover?.refresh();
-    });
-    root.appendChild(kindSelect);
+    // v2.16.35 — kind picker promoted to the inline row's <select>
+    // (#mapfx-kind-display, wired in _bindMapFxKindSelect). Side panel
+    // body now starts with the contextual header below.
 
     // Small header so the GM knows what they're editing.
     const hdr = document.createElement('div');
@@ -3986,87 +4580,45 @@ export class GMApp {
   /** Helper: build one labelled toggle row for a binary shader param.
    *  Matches the FilterPanel's `.toggle-switch` styling. onChange
    *  fires with 1 (on) or 0 (off). */
+  /** v2.16.39 — shader param row helpers now delegate to the shared
+   *  sideParamRows builders so Backdrop / MapFX / Visual Filter /
+   *  Map Transition all render identical markup. The wrappers stay
+   *  here so existing call sites (kindLabel suffix, 0/1 ⇄ boolean for
+   *  shader toggles) need no churn. */
   private _buildShaderToggleRow(
     p: import('../mapfx/overlayKindRegistry.ts').ToggleParamDef,
     kindLabel: string,
     initial: number,
     onChange: (v: number) => void,
   ): HTMLElement {
-    const row = document.createElement('div');
-    row.className = 'fog-brush-row fog-brush-row--toggle';
-    const labelEl = document.createElement('span');
-    labelEl.textContent = p.label;
-    const switchLabel = document.createElement('label');
-    switchLabel.className = 'toggle-switch';
-    switchLabel.title = `${p.label} — ${kindLabel}`;
-    const input = document.createElement('input');
-    input.type = 'checkbox';
-    input.checked = initial > 0.5;
-    const knob = document.createElement('span');
-    knob.className = 'toggle-slider';
-    switchLabel.appendChild(input);
-    switchLabel.appendChild(knob);
-    input.addEventListener('change', () => {
-      onChange(input.checked ? 1 : 0);
-    });
-    row.appendChild(labelEl);
-    row.appendChild(switchLabel);
-    return row;
+    return buildToggleRow(
+      { label: p.label, checked: initial > 0.5, title: `${p.label} — ${kindLabel}` },
+      (checked) => onChange(checked ? 1 : 0),
+    );
   }
 
-  /** Helper: build one labelled slider row for a shader param. The
-   *  onChange handler is fired on every input event with the parsed
-   *  numeric value. */
   private _buildShaderSliderRow(
     p: import('../mapfx/overlayKindRegistry.ts').SliderParamDef,
     kindLabel: string,
     initial: number,
     onChange: (v: number) => void,
   ): HTMLElement {
-    const row = document.createElement('label');
-    row.className = 'fog-brush-row';
-    const labelEl = document.createElement('span');
-    labelEl.textContent = p.label;
-    const slider = document.createElement('input');
-    slider.type = 'range';
-    slider.min = String(p.min);
-    slider.max = String(p.max);
-    slider.step = String(p.step);
-    slider.value = String(initial);
-    slider.addEventListener('input', () => {
-      const v = parseFloat(slider.value);
-      if (!Number.isFinite(v)) return;
-      onChange(v);
-    });
-    // Live tooltip (title) so the current value is hover-revealable
-    // for shareable setups; no permanent UI footprint for it.
-    wireSliderTooltip(slider, `${p.label} — ${kindLabel}`);
-    row.appendChild(labelEl);
-    row.appendChild(slider);
-    return row;
+    return buildSliderRow(
+      { label: p.label, min: p.min, max: p.max, step: p.step, value: initial, title: `${p.label} — ${kindLabel}` },
+      onChange,
+    );
   }
 
-  /** Helper: build one labelled colour-swatch row for a shader param of
-   *  `type: 'color'`. Native `<input type="color">` so the OS picker
-   *  handles the colour wheel; we just relay the hex string upward. */
   private _buildShaderColorRow(
     p: import('../mapfx/overlayKindRegistry.ts').ColorParamDef,
     kindLabel: string,
     initial: string,
     onChange: (v: string) => void,
   ): HTMLElement {
-    const row = document.createElement('label');
-    row.className = 'fog-brush-row fog-brush-row--color';
-    const labelEl = document.createElement('span');
-    labelEl.textContent = p.label;
-    const input = document.createElement('input');
-    input.type = 'color';
-    input.value = initial;
-    input.title = `${p.label} — ${kindLabel}`;
-    input.addEventListener('input', () => onChange(input.value));
-    row.appendChild(labelEl);
-    row.appendChild(input);
-    return row;
+    return buildColorRow(
+      { label: p.label, value: initial, title: `${p.label} — ${kindLabel}` },
+      onChange,
+    );
   }
 
   /** v2.12 — Edge Fade UI moved into the MapFX FX popover. Legacy
@@ -4438,13 +4990,11 @@ export class GMApp {
   }
 
   private bindFilterPanel(): void {
-    this.filterPanel = new FilterPanel(this.filterParamsContainer, (values) => {
-      const filterId = this.state.getState().filter.filterId;
-      this.state.setFilterParams(filterId, values);
-      this.renderer.updateFilterParams(filterId, values);
-    });
-
-    // Populate filter dropdown
+    // v2.16.37 — params + "Tint Player Markers" toggle moved into the
+    // side panel (the sliders icon next to the picker opens it). The
+    // inline FilterPanel that used to render into #filter-params is
+    // gone; a fresh one is constructed inside the side panel each open.
+    // Populate the inline dropdown + wire its change handler here.
     const filters = filterRegistry.getAll();
     this.filterSelect.innerHTML = '';
     for (const f of filters) {
@@ -4453,22 +5003,103 @@ export class GMApp {
       opt.textContent = f.name;
       this.filterSelect.appendChild(opt);
     }
-
     this.filterSelect.addEventListener('change', () => {
       this.state.setFilter(this.filterSelect.value);
     });
+    // Sliders button → open the side panel.
+    document.querySelector('#filter-fx-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this._filterSidePanel) this._filterSidePanel.close();
+      else this._openFilterSidePanel();
+    });
+  }
+
+  /** v2.16.37 — open the Visual Filter side panel: per-map "Tint Player
+   *  Markers" toggle + the active filter's parameter controls. Same
+   *  framework as the Backdrop / MapFX panels. */
+  private _openFilterSidePanel(): void {
+    if (this._filterSidePanel) return;
+    void import('./SidePanel.ts').then(({ openSidePanel }) => {
+      if (this._filterSidePanel) return;
+      const def = filterRegistry.getOrFallback(this.state.getState().filter.filterId);
+      this._filterSidePanel = openSidePanel({
+        title: `Visual Filter — ${def.name}`,
+        populate: (body) => { this._populateFilterSidePanel(body); },
+        onClose: () => {
+          this._filterSidePanel = null;
+          this._filterPanelInstance = null;
+        },
+      });
+    });
+  }
+
+  /** Build the side panel body: tint toggle (gated by "any player marker
+   *  on the active map") + FilterPanel-rendered controls for the active
+   *  filter's params. */
+  private _populateFilterSidePanel(body: HTMLElement): void {
+    const state = this.state.getState();
+    const filter = state.filter;
+    const def = filterRegistry.getOrFallback(filter.filterId);
+
+    // Tint Player Markers row — only show when this map has at least
+    // one player marker placed (matches the prior inline gate).
+    const mapId = this._activeMapId();
+    const hasMarkers = mapId
+      ? this.playerRegistry.all().some((p) => p.placements?.[mapId])
+      : false;
+    if (hasMarkers) {
+      const row = document.createElement('label');
+      row.className = 'filter-affect-markers';
+      row.title = 'Tint player tokens on the player + projector views to match this filter\'s palette (colour shift only — not the procedural scanlines / grain / animation)';
+      const cb = document.createElement('input');
+      cb.type = 'checkbox';
+      cb.checked = !!filter.affectPlayerMarkers;
+      cb.addEventListener('change', () => {
+        this.state.setFilterAffectPlayerMarkers(cb.checked);
+      });
+      const lbl = document.createElement('span');
+      lbl.textContent = 'Tint Player Markers';
+      row.appendChild(cb);
+      row.appendChild(lbl);
+      body.appendChild(row);
+    }
+
+    // Params via FilterPanel rendered into a body-local container.
+    const paramsWrap = document.createElement('div');
+    paramsWrap.className = 'filter-params-container';
+    body.appendChild(paramsWrap);
+    const fp = new FilterPanel(paramsWrap, (values) => {
+      const fid = this.state.getState().filter.filterId;
+      this.state.setFilterParams(fid, values);
+      this.renderer.updateFilterParams(fid, values);
+    });
+    fp.render(def, filter.params[filter.filterId] ?? {});
+    // Keep a handle so external state changes (filter switched via the
+    // inline dropdown while the panel is open) can update values without
+    // tearing the whole body down.
+    this._filterPanelInstance = fp;
+  }
+
+  /** Patch E — apply the CSS approximation of the active filter to the
+   *  GM-side player-marker DOM overlay when the "Affect Player Markers"
+   *  toggle is on. Mirrors what the player + projector views do, so the
+   *  GM previews the same look. Clears the filter when the toggle is off. */
+  private _applyMarkerLayerFilter(): void {
+    const f = this.state.getState().filter;
+    const layer = document.getElementById('player-marker-layer');
+    if (!layer) return;
+    if (f.affectPlayerMarkers) {
+      const css = cssApproxForFilter(f.filterId);
+      layer.style.filter = css || '';
+    } else {
+      layer.style.filter = '';
+    }
   }
 
   private bindTransitionPanel(): void {
-    this.transitionPanel = new TransitionPanel(
-      this.transitionParamsContainer,
-      (params) => {
-        this.allTransitionParams[this.activeTransitionId] = params;
-        this.state.setTransition(this.buildTransitionConfig());
-      },
-    );
-
-    // Seed default params for all transitions
+    // v2.16.38 — TransitionPanel rebuilds inside the side panel each
+    // open. Inline #transition-params is gone. Match the Backdrop /
+    // MapFX / Visual Filter shape.
     for (const def of transitionRegistry.getAll()) {
       this.allTransitionParams[def.id] = transitionRegistry.defaultParams(def.id);
     }
@@ -4484,17 +5115,49 @@ export class GMApp {
 
     this.transitionSelect.addEventListener('change', () => {
       this.activeTransitionId = this.transitionSelect.value;
-      const def    = transitionRegistry.getOrFallback(this.activeTransitionId);
-      const saved  = this.allTransitionParams[this.activeTransitionId] ?? transitionRegistry.defaultParams(this.activeTransitionId);
-      this.transitionPanel.render(def, saved);
       this.state.setTransition(this.buildTransitionConfig());
+      // Side panel (if open) reflects the new kind + its params.
+      const def = transitionRegistry.getOrFallback(this.activeTransitionId);
+      this._transitionSidePanel?.setTitle(`Map Transition — ${def.label}`);
+      this._transitionSidePanel?.refresh();
     });
 
-    // Render initial panel (none — no params)
-    this.transitionPanel.render(
-      transitionRegistry.getOrFallback('none'),
-      this.allTransitionParams['none'] ?? {},
-    );
+    document.querySelector('#transition-fx-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation();
+      if (this._transitionSidePanel) this._transitionSidePanel.close();
+      else this._openTransitionSidePanel();
+    });
+  }
+
+  /** v2.16.38 — open the Map Transition side panel: per-kind params via
+   *  TransitionPanel rendered into the body. Same framework as
+   *  Backdrop / MapFX / Visual Filter. */
+  private _openTransitionSidePanel(): void {
+    if (this._transitionSidePanel) return;
+    void import('./SidePanel.ts').then(({ openSidePanel }) => {
+      if (this._transitionSidePanel) return;
+      const def = transitionRegistry.getOrFallback(this.activeTransitionId);
+      this._transitionSidePanel = openSidePanel({
+        title: `Map Transition — ${def.label}`,
+        populate: (body) => { this._populateTransitionSidePanel(body); },
+        onClose: () => { this._transitionSidePanel = null; },
+      });
+    });
+  }
+
+  /** Build the side panel body: TransitionPanel-rendered params for the
+   *  active transition. */
+  private _populateTransitionSidePanel(body: HTMLElement): void {
+    const def    = transitionRegistry.getOrFallback(this.activeTransitionId);
+    const saved  = this.allTransitionParams[this.activeTransitionId] ?? transitionRegistry.defaultParams(this.activeTransitionId);
+    const wrap = document.createElement('div');
+    wrap.className = 'transition-params-container';
+    body.appendChild(wrap);
+    const tp = new TransitionPanel(wrap, (params) => {
+      this.allTransitionParams[this.activeTransitionId] = params;
+      this.state.setTransition(this.buildTransitionConfig());
+    });
+    tp.render(def, saved);
   }
 
   /** Returns the current transition config to include in a map_change
@@ -4596,6 +5259,20 @@ export class GMApp {
     // link into Discord / a player chat without leaving the GM screen.
     document.getElementById('gm-brand-icon')?.addEventListener('click', () => {
       void this._copyMappaduxUrl();
+    });
+
+    // v2.16.34 — "+" button beside the Map picker. Wires to the same
+    // openAddMapDialog flow the SELECT_ADD_SENTINEL branch used to call,
+    // so existing flows (modal cancel/restore, post-add dropdown refresh)
+    // keep working identically.
+    document.querySelector('#add-map-btn')?.addEventListener('click', () => {
+      this.openAddMapDialog();
+    });
+    document.querySelector('#add-display-btn')?.addEventListener('click', () => {
+      // Mirror the SELECT_ADD_SENTINEL branch in _onProjectorSelectChange:
+      // calibration runs in its own popup so the user can drag it to the
+      // physical display. Storage event refreshes the dropdown after save.
+      window.open(`/calibrate.html${this._instanceQuery()}`, '_blank', 'noopener,popup,width=1280,height=800');
     });
 
     // Map selection — also handles the "+ Add New Map" sentinel that lives
@@ -4727,6 +5404,16 @@ export class GMApp {
     });
     this.packNameInput.addEventListener('blur', () => {
       this._schedulePackNameSave(this.packNameInput.value, /* immediate */ true);
+      this._endPackNameEdit();
+    });
+    this.packNameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); this.packNameInput.blur(); }
+      if (e.key === 'Escape') { e.preventDefault(); this._endPackNameEdit(); }
+    });
+    // v2.16.88 — pencil in the Map Pack header → inline-edit the name.
+    document.getElementById('pack-name-edit-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation(); // don't toggle the panel collapse
+      this._beginPackNameEdit();
     });
 
     // Map rename — now driven by the EditableSelect's onRename callback;
@@ -4753,55 +5440,39 @@ export class GMApp {
     // here next to the colour picker because backdrop is the same kind of
     // decision ("what do my dead bars look like?") but for the animated
     // case rather than the solid one.
+    // v2.16.35 — sliders button opens the right-edge side panel that
+    // holds the active backdrop's params. Kind picker lives inline on
+    // the row now (was inside the popover before).
     this.viewBgFxBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (this._bgFxPopover) this._bgFxPopover.close();
       else this._openBgFxPopover();
     });
-
-    // MapFX FX button — opens the same sparkle popover style, but for
-    // the active overlay kind's Edge Fade + shader params. The kind
-    // dropdown itself stays inline so the GM can switch what's being
-    // tuned without diving through a menu.
     this.mapFxBtn.addEventListener('click', (e) => {
       e.stopPropagation();
       if (this._mapfxFxPopover) this._mapfxFxPopover.close();
       else this._openMapFxPopover();
     });
+    // Populate the inline kind selects + wire change handlers.
+    this._bindBackdropKindSelect();
+    this._bindMapFxKindSelect();
 
-    // Open local player window as a real popup
-    document.querySelector('#open-player-btn')?.addEventListener('click', () => {
-      const code = this.roomCodeEl.textContent?.trim() ?? '';
-      const w = Math.min(1600, screen.width  - 80);
-      const h = Math.min(1000, screen.height - 80);
-      const l = Math.round((screen.width  - w) / 2);
-      const t = Math.round((screen.height - h) / 2);
-      window.open(
-        this._buildPlayerUrl(code),
-        'dmr-player',
-        `noopener,width=${w},height=${h},left=${l},top=${t}`
-      );
-    });
+    // Open local player window as a real popup. We tag the URL with
+    // ?gmPreview=1 so the popup recognises itself as the GM's preview view and
+    // (by default) suppresses player-only chrome + interaction. Real player
+    // tabs connecting via the QR never carry the flag.
+    // v2.16.40 — Open Player Window button retired. The PlayerPip overlay
+    // on the canvas (Show Player View / pop-out chrome) is the single
+    // affordance now. The handler is removed; the HTML button is gone
+    // too. Pop-out from the PiP frame opens a standalone window with
+    // the same URL the old button used.
 
-    // Copy player URL — both the icon button (top-left of QR) and clicking
-    // the QR itself trigger the copy.
-    const copyPlayerUrl = () => {
-      const code = this.roomCodeEl.textContent?.trim() ?? '';
-      if (!code) return;
-      void navigator.clipboard.writeText(this._buildPlayerUrl(code));
-      this.setStatus('Player URL copied!', 'ok');
-    };
-    document.querySelector('#copy-url-btn')?.addEventListener('click', (e) => {
-      e.stopPropagation(); // prevent the QR container click from also firing
-      copyPlayerUrl();
-    });
-    this.qrContainer.addEventListener('click', copyPlayerUrl);
-    this.qrContainer.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter' || e.key === ' ') {
-        e.preventDefault();
-        copyPlayerUrl();
-      }
-    });
+    // v2.16.33 — Copy-player-URL handlers used to live on the QR + a
+    // dedicated copy button in the Player Connection panel. Both are
+    // gone; players pick up the URL from the hold screen they see when
+    // they aren't connected. If we add a top-of-sidebar / menu-level
+    // "Copy player URL" entry later, the body of the old handler is
+    // straightforward to revive.
 
     // Collapsible panel sections. Use the parent panel's .panel-body
     // child rather than nextElementSibling so panels with a header
@@ -4813,6 +5484,23 @@ export class GMApp {
         btn.setAttribute('aria-expanded', String(!expanded));
         const body = btn.closest('.panel')?.querySelector<HTMLElement>('.panel-body') ?? null;
         if (body) body.hidden = expanded;
+      });
+    });
+
+    // v2.16.103 — Collapsible SUBPANELS (Player Views → Player connections /
+    // Scaled view). Same aria-expanded / hidden mechanism, but scoped to the
+    // subpanel's OWN body so it doesn't toggle the parent panel-body. Opening
+    // the connections subpanel (re)renders the QR + window summary.
+    document.querySelectorAll<HTMLElement>('.subpanel-title[aria-expanded]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const expanded = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', String(!expanded));
+        const body = btn.parentElement?.querySelector<HTMLElement>('.subpanel-body') ?? null;
+        if (body) body.hidden = expanded;
+        if (!expanded && btn.parentElement?.id === 'player-connections-sub') {
+          this._renderConnectionsQr();
+          this._renderConnectionsSummary();
+        }
       });
     });
 
@@ -4851,14 +5539,23 @@ export class GMApp {
         this.audio.setMuteAll(muted);
         this.trackerAudio.setMuteAll(muted);
         this.host.broadcast({ type: 'positional_mute_all', muted });
+        // v2.16.44 — let the audio coordinator know our local audio
+        // state changed so other Mappadux windows can mute / claim
+        // accordingly. Claim wins; release stops heartbeating.
+        if (muted) this._audioCoord?.release();
+        else       this._audioCoord?.claim();
       });
     }
-    // Player View + Projection View bypass switches. Off broadcasts a
-    // full-screen "GM is faffing" placeholder to the downstream view;
+    // v2.16.33 — single broadcast-bypass switch lives on the Player Views
+    // panel header. Off broadcasts a "GM is faffing" placeholder to BOTH
+    // the player views AND the projector / scaled views simultaneously;
     // the underlying map state keeps streaming so flipping back is
-    // instant. A fresh funny message is picked on every off-flip.
-    this._wireBroadcastBypass('#player-broadcast-toggle', 'player');
-    this._wireBroadcastBypass('#projection-broadcast-toggle', 'projector');
+    // instant. A fresh faff message is picked on every off-flip.
+    // (The old per-audience pair (Player Connection panel + Scaled View
+    // panel) collapsed into this one — players + projectors are always
+    // both "audience", and the two-toggle UI was prone to leaving one
+    // half visible while the other was held.)
+    this._wireBroadcastBypass('#projection-broadcast-toggle', ['player', 'projector']);
 
     // Paint initial "no connection" greying so the toggles are correctly
     // faded before any first connect/disconnect event fires.
@@ -4871,17 +5568,24 @@ export class GMApp {
     window.setInterval(() => this._updatePlayerCount(), 5000);
   }
 
-  private _wireBroadcastBypass(selector: string, target: 'player' | 'projector'): void {
+  private _wireBroadcastBypass(selector: string, targets: ('player' | 'projector')[]): void {
     const toggle = document.querySelector<HTMLInputElement>(selector);
     if (!toggle) return;
     toggle.addEventListener('click', (e) => e.stopPropagation());
     toggle.addEventListener('change', () => {
       const show = !toggle.checked;
+      // Share the same faff message across both target audiences for
+      // this flip — feels like one decision, not two.
       const message = show ? randomFaffMessage() : '';
-      this.host.broadcast({ type: 'view_placeholder', target, show, message });
-      // v2.14.3 — refresh the rect overlay so the eye icon mirrors
-      // the new broadcast state (panel-header toggle ↔ rect eye stay
-      // in sync in both directions).
+      for (const target of targets) {
+        this.host.broadcast({ type: 'view_placeholder', target, show, message });
+      }
+      // v2.16.108 — remember it so a viewer that connects WHILE faffing gets
+      // the hold screen on connect (full_state would otherwise show the map).
+      this.host.setFaffState(show, message);
+      // v2.14.3 — refresh the rect overlay so the eye icons on both
+      // viewport rects mirror the new broadcast state (panel-header
+      // toggle ↔ rect eyes stay in sync in both directions).
       this._refreshRectOverlays();
     });
   }
@@ -4977,12 +5681,80 @@ export class GMApp {
   private _openBgFxPopover(): void {
     void import('../rendering/backdrops/backdropRegistry.ts').then(async ({ BACKDROPS }) => {
       if (this._bgFxPopover) return;
-      const { openFxPopover } = await import('./FxPopover.ts');
-      this._bgFxPopover = openFxPopover({
-        anchor: this.viewBgFxBtn,
-        populate: (root) => { this._populateBgFxPopover(root, BACKDROPS); },
+      // v2.16.35 — was an anchored fx-popover; now a right-edge SidePanel.
+      const { openSidePanel } = await import('./SidePanel.ts');
+      const view  = this.state.getState().view;
+      const kind  = view.backdrop?.kind ?? 'none';
+      const entry = BACKDROPS.find((b) => b.id === kind);
+      this._bgFxPopover = openSidePanel({
+        title: `Backdrop — ${entry?.label ?? 'None'}`,
+        populate: (body) => { this._populateBgFxPopover(body, BACKDROPS); },
         onClose: () => { this._bgFxPopover = null; },
       });
+    });
+  }
+
+  /** v2.16.35 — populate the inline Backdrop kind <select> + wire its
+   *  change handler. Was a kind picker inside the popover; promoted to
+   *  the row so the GM can see + change the active kind at a glance. */
+  private _bindBackdropKindSelect(): void {
+    const sel = document.getElementById('view-bg-display') as HTMLSelectElement | null;
+    if (!sel) return;
+    void import('../rendering/backdrops/backdropRegistry.ts').then(({ BACKDROPS }) => {
+      sel.innerHTML = '';
+      for (const b of BACKDROPS) {
+        const opt = document.createElement('option');
+        opt.value = b.id;
+        opt.textContent = b.label;
+        sel.appendChild(opt);
+      }
+      this._updateActiveBgDisplay();
+    });
+    sel.addEventListener('change', () => {
+      this._applyBackdrop(sel.value);
+      // If the side panel is open, refresh its body so the params
+      // section reflects the newly-active kind + sync the header title.
+      void import('../rendering/backdrops/backdropRegistry.ts').then(({ BACKDROPS }) => {
+        const entry = BACKDROPS.find((b) => b.id === sel.value);
+        this._bgFxPopover?.setTitle(`Backdrop — ${entry?.label ?? 'None'}`);
+      });
+      this._bgFxPopover?.refresh();
+    });
+  }
+
+  /** v2.16.35 — populate the inline MapFX kind <select> + wire its
+   *  change handler. Mirror of _bindBackdropKindSelect — same idea, kind
+   *  dropdown promoted from inside the popover to the row. */
+  private _bindMapFxKindSelect(): void {
+    const sel = document.getElementById('mapfx-kind-display') as HTMLSelectElement | null;
+    if (!sel) return;
+    sel.innerHTML = '';
+    for (const id of OVERLAY_KIND_ORDER) {
+      const entry = OVERLAY_KIND_REGISTRY[id];
+      const opt = document.createElement('option');
+      opt.value = id;
+      opt.textContent = entry.label;
+      sel.appendChild(opt);
+    }
+    sel.value = this.activeOverlayKind;
+    // v2.16.45 — Reveal Layer is map-state-dependent; ghost it when
+    // the active map isn't multilayered.
+    this._refreshMapFxKindOptionState();
+    sel.addEventListener('change', () => {
+      const newKind = sel.value as OverlayKind;
+      if (this.activeOverlayKind === newKind) return;
+      this.activeOverlayKind = newKind;
+      // Morph any selected polygon to the new kind.
+      const selId = this.fogEditor.getSelectedId();
+      if (selId) this.state.setPolygonKind(selId, newKind);
+      this._applyActiveKindToBrush();
+      this._applyKindToColourSwatch();
+      this.fogEditor.setActiveKind(newKind);
+      this.fogEditor.setColor(overlayKind(newKind).defaultColor);
+      // Refresh the side panel's body so the per-kind params reflect
+      // the new active kind. setTitle keeps the header in sync.
+      this._mapfxFxPopover?.refresh();
+      this._mapfxFxPopover?.setTitle(`MapFX — ${overlayKind(newKind).label}`);
     });
   }
 
@@ -4997,21 +5769,9 @@ export class GMApp {
     const currentKind = view.backdrop?.kind ?? 'none';
     const entry = BACKDROPS.find((b) => b.id === currentKind);
 
-    // ─── Kind dropdown ───────────────────────────────────────────────
-    const kindSelect = document.createElement('select');
-    kindSelect.className = 'fx-popover-kind-select';
-    for (const b of BACKDROPS) {
-      const opt = document.createElement('option');
-      opt.value = b.id;
-      opt.textContent = b.label;
-      if (b.id === currentKind) opt.selected = true;
-      kindSelect.appendChild(opt);
-    }
-    kindSelect.addEventListener('change', () => {
-      this._applyBackdrop(kindSelect.value);
-      this._bgFxPopover?.refresh();
-    });
-    root.appendChild(kindSelect);
+    // v2.16.35 — kind picker promoted to the inline row's <select>
+    // (#view-bg-display, wired in _bindBackdropKindSelect). The side
+    // panel body starts with the Background Colour row below.
 
     // ─── Background Colour (always available) ────────────────────────
     // The pack-level bg colour fills the bars when no backdrop is
@@ -5347,6 +6107,12 @@ export class GMApp {
       this._deleteMarker(this.selectedMarkerId);
     });
 
+    // v2.16.34 — "+" button beside the Marker picker. Same action the
+    // SELECT_ADD_SENTINEL branch fires: create a new marker at map centre,
+    // select it, let updateMarkerPanel rebuild the dropdown.
+    document.querySelector('#add-marker-btn')?.addEventListener('click', () => {
+      this.markerEditor.addMarker(0.5, 0.5);
+    });
 
     this.markerSelect.addEventListener('change', () => {
       const v = this.markerSelect.value;
@@ -5678,6 +6444,436 @@ export class GMApp {
     }
   }
 
+  // ─── Players (v2.17 Player Voice) ───────────────────────────────────────────
+
+  private bindPlayersPanel(): void {
+    this.playersPanel = new PlayersPanel({
+      onAddManaged: async (name, character, color) => {
+        await this.playerRegistry.addManaged(name, character, color);
+        this._refreshPlayersPanel();
+        this._broadcastRoster();
+      },
+      onUpdate: async (id, patch) => {
+        await this.playerRegistry.update(id, patch);
+        this._refreshPlayersPanel();
+        this._broadcastRoster();
+        // Colour / name changes affect how tokens render on the map — refresh
+        // the marker layer + rebroadcast player_markers immediately rather
+        // than waiting on the next event (placement change, map switch, etc.).
+        this._refreshPlayerMarkers();
+      },
+      onRemove: async (id) => {
+        await this.playerRegistry.remove(id);
+        this._liveMarkerPos.delete(id);
+        this._markerMoveOrigin.delete(id);
+        this._messageThreads.drop(id);
+        if (this._openThreadPlayerId === id) this._threadSidePanel?.close();
+        this._refreshPlayersPanel();
+        this._broadcastRoster();
+        this._refreshPlayerMarkers();
+      },
+      onToggleMarker: (id) => { void this._togglePlayerMarker(id); },
+      onCancelMove:   (id) => { void this._cancelPlayerMarkerMove(id); },
+      onPickIcon:     (id) => { void this._pickPlayerIcon(id); },
+      onClearIcon:    async (id) => {
+        await this.playerRegistry.clearIcon(id);
+        this._refreshPlayersPanel();
+        this._broadcastPlayerIcon(id); // empty dataUrl ⇒ clear the player-side cache
+        this._refreshPlayerMarkers();
+      },
+      onSetTokenSize: async (id, size) => {
+        await this.playerRegistry.update(id, { tokenSize: size });
+        this._refreshPlayersPanel();
+        this._refreshPlayerMarkers();
+      },
+      // v2.16.47 — click a per-row unread badge → open this player's
+      // message thread in a right-edge SidePanel.
+      onOpenThread: (id) => this._openMessageThread(id),
+      // v2.16.53 — surface Call for Initiative right next to the player
+      // roster so the GM doesn't have to dig into the tracker overlay
+      // first. Opens the tracker (if hidden) + broadcasts the prompt.
+      onCallForInitiative: () => {
+        // v2.16.63 — Call for Initiative wipes deck + tray + bench
+        // (preserving discard) BEFORE seeding + broadcasting. Both the
+        // Players-panel orange button and the in-tracker Call route
+        // through this path so behaviour is uniform.
+        this.initiativeTracker?.resetForNewCombat();
+        this.initiativeTracker?.open();
+        this.initiativeTracker?.seedUnallocatedFromPlayers();
+        this.host.broadcast({ type: 'initiative_call' });
+        this.setStatus('Call for Initiative broadcast', 'ok');
+      },
+    });
+    // Load the persisted roster, then render the panel + any placed tokens.
+    void this.playerRegistry.load().then(() => {
+      this._refreshPlayersPanel();
+      this._refreshPlayerMarkers();
+    });
+  }
+
+  private _refreshPlayersPanel(): void {
+    const mapId = this._activeMapId();
+    this.playersPanel?.update(
+      this.playerRegistry.all(),
+      (id) => {
+        const unread = this._messageThreads.unreadFor(id);
+        return {
+          connected:     this.playerRegistry.isConnected(id),
+          placed:        !!mapId && this.playerRegistry.isPlacedOn(id, mapId),
+          canCancelMove: this._markerMoveOrigin.has(id),
+          unreadGm:      unread.gm,
+          unreadPeer:    unread.peer,
+        };
+      },
+    );
+  }
+
+  private _broadcastRoster(): void {
+    this.host.broadcast(this.playerRegistry.rosterMessage());
+  }
+
+  /** Dedupe a non-idempotent upstream event by its client-supplied id.
+   *  Returns true if it was already seen (caller should drop it). */
+  private _seenUpstream(id: string): boolean {
+    if (this._seenUpstreamIds.has(id)) return true;
+    this._seenUpstreamIds.add(id);
+    if (this._seenUpstreamIds.size > 400) {
+      // Trim oldest ~half — insertion order is preserved by Set.
+      const keep = [...this._seenUpstreamIds].slice(-200);
+      this._seenUpstreamIds = new Set(keep);
+    }
+    return false;
+  }
+
+  /** Tell player views which Player-Voice interactions are currently allowed,
+   *  so they can hide disabled affordances. */
+  private _broadcastPlayerFeatures(): void {
+    this.host.broadcast({
+      type: 'player_features',
+      pings: arePingsEnabled(),
+      messaging: isMessagingEnabled(),
+      movableMarkers: arePlayerMarkersMovable(),
+    });
+  }
+
+  // ── Player tokens (v2.16.4 player markers) ─────────────────────────────────
+
+  private _activeMapId(): string | undefined {
+    return this.state.snapshot().map?.id;
+  }
+
+  /** Render the active map's player tokens on the GM AND broadcast them to
+   *  players. Merges any in-progress (un-persisted) drag positions / rotations.
+   *  Icon data URLs are stripped from the broadcast — they travel separately
+   *  via `player_icon_update` (chunked over the wire to avoid DataChannel limits). */
+  private _refreshPlayerMarkers(): void {
+    const mapId = this._activeMapId();
+    const base = mapId ? this.playerRegistry.markersForMap(mapId) : [];
+    const merged = base.map((m) => {
+      const livePos    = this._liveMarkerPos.get(m.playerId);
+      const liveFacing = this._liveMarkerFacing.get(m.playerId);
+      return {
+        ...m,
+        ...(livePos ? { x: livePos.x, y: livePos.y } : {}),
+        ...(liveFacing !== undefined ? { facing: liveFacing } : {}),
+      };
+    });
+    this.playerMarkerLayer?.setMarkers(merged);
+    // Strip iconDataUrl from the wire payload (rides player_icon_update
+    // separately, chunked). KEEP `hasIcon` so receivers can self-heal a
+    // missing icon via player_icon_request — covers the case where a
+    // chunked-binary delivery was dropped or arrived before the receiver
+    // mounted its layer.
+    const broadcastMarkers = merged.map(({ iconDataUrl, ...rest }) => { void iconDataUrl; return rest; });
+    this.host.broadcast({ type: 'player_markers', markers: broadcastMarkers });
+    // v2.16.32 — the "Tint Player Markers" toggle is only meaningful when
+    // there ARE markers on this map, so show / hide it alongside the
+    // marker list. Cheap; fires on every placement / drag / identify /
+    // map switch.
+    this._refreshFilterAffectMarkersVisibility(merged.length > 0);
+  }
+
+  /** Refresh the Visual Filter side panel (if open) so the Tint Player
+   *  Markers row appears / disappears with placement changes. v2.16.37 —
+   *  the row used to live inline and just toggled a `hidden` attribute;
+   *  now it's a side-panel element and a refresh() rebuilds the body. */
+  private _refreshFilterAffectMarkersVisibility(_hasMarkers: boolean): void {
+    this._filterSidePanel?.refresh();
+  }
+
+  /** Broadcast the current icon (or absence) for a specific player. Players
+   *  cache by playerId and re-render any active token for that player. */
+  private _broadcastPlayerIcon(playerId: string): void {
+    const p = this.playerRegistry.get(playerId);
+    this.host.broadcast({
+      type: 'player_icon_update',
+      playerId,
+      ...(p?.iconDataUrl ? { dataUrl: p.iconDataUrl } : {}),
+    });
+  }
+
+  /** Send every current player icon to fresh peers — called when a new player
+   *  identifies so they catch up on the existing roster's tokens. */
+  private _broadcastAllPlayerIcons(): void {
+    for (const p of this.playerRegistry.all()) {
+      if (p.iconDataUrl) this._broadcastPlayerIcon(p.id);
+    }
+  }
+
+  private async _onGmMarkerDragEnd(playerId: string, x: number, y: number): Promise<void> {
+    const mapId = this._activeMapId();
+    if (!mapId) return;
+    await this.playerRegistry.setPlacement(playerId, mapId, x, y);
+    this._liveMarkerPos.delete(playerId);
+    this._markerMoveOrigin.delete(playerId); // GM took control — clear pending cancel
+    this._refreshPlayerMarkers();
+    this._refreshPlayersPanel();
+  }
+
+  /** GM rotated a player's token via the facing-pointer handle. Persists the
+   *  new facing (position unchanged) and rebroadcasts. */
+  private async _onGmMarkerRotateEnd(playerId: string, facing: number): Promise<void> {
+    const mapId = this._activeMapId();
+    if (!mapId) return;
+    const cur = this.playerRegistry.placementOn(playerId, mapId);
+    if (!cur) return;
+    await this.playerRegistry.setPlacement(playerId, mapId, cur.x, cur.y, facing);
+    this._liveMarkerFacing.delete(playerId);
+    this._markerMoveOrigin.delete(playerId); // GM took control — clear pending cancel
+    this._refreshPlayerMarkers();
+    this._refreshPlayersPanel();
+  }
+
+  /** v2.16.49 — place a player's token at a specific normalised map
+   *  coord. Used by the drag-from-Players-row-icon → drop-on-map flow.
+   *  Mirrors _togglePlayerMarker's PLACE branch but lands at the
+   *  drop point rather than the map centre. */
+  private async _placePlayerAtNorm(playerId: string, x: number, y: number): Promise<void> {
+    const mapId = this._activeMapId();
+    if (!mapId) { this.setStatus('Load a map before placing player tokens.', 'warn'); return; }
+    const clampedX = Math.max(0, Math.min(1, x));
+    const clampedY = Math.max(0, Math.min(1, y));
+    await this.playerRegistry.setPlacement(playerId, mapId, clampedX, clampedY);
+    this._markerMoveOrigin.delete(playerId);
+    this._refreshPlayerMarkers();
+    this._refreshPlayersPanel();
+  }
+
+  /** Players-panel toggle: place this player's token on the active map (centre)
+   *  if absent, or remove it if present. */
+  private async _togglePlayerMarker(playerId: string): Promise<void> {
+    const mapId = this._activeMapId();
+    if (!mapId) { this.setStatus('Load a map before placing player tokens.', 'warn'); return; }
+    if (this.playerRegistry.isPlacedOn(playerId, mapId)) {
+      await this.playerRegistry.removePlacement(playerId, mapId);
+    } else {
+      await this.playerRegistry.setPlacement(playerId, mapId, 0.5, 0.5);
+    }
+    this._markerMoveOrigin.delete(playerId);
+    this._refreshPlayerMarkers();
+    this._refreshPlayersPanel();
+  }
+
+  /** Open the image-asset library in pick mode for this player's token icon. */
+  private _pickPlayerIcon(playerId: string): void {
+    void new ImageAssetModal().open({
+      pickMode: true,
+      onPick: async (asset) => {
+        const form = await assetToPlayerIcon(asset);
+        await this.playerRegistry.setIcon(playerId, { assetId: asset.id, ...form });
+        this._refreshPlayersPanel();
+        this._broadcastPlayerIcon(playerId); // ship the icon image to player views
+        this._refreshPlayerMarkers();
+      },
+    });
+  }
+
+  /** GM "cancel move" — send a player-moved/rotated token back to where it was. */
+  private async _cancelPlayerMarkerMove(playerId: string): Promise<void> {
+    const mapId = this._activeMapId();
+    const origin = this._markerMoveOrigin.get(playerId);
+    if (!mapId || !origin) return;
+    await this.playerRegistry.setPlacement(playerId, mapId, origin.x, origin.y, origin.facing);
+    this._liveMarkerPos.delete(playerId);
+    this._liveMarkerFacing.delete(playerId);
+    this._markerMoveOrigin.delete(playerId);
+    this._refreshPlayerMarkers();
+    this._refreshPlayersPanel();
+  }
+
+  // ── Initiative tracker (v2.16.8 fanned-deck rail) ──────────────────────────
+
+  private bindInitiativeTracker(): void {
+    const el = document.getElementById('initiative-tracker');
+    if (!el) return;
+    const initial = loadInitiativeState();
+    this.initiativeTracker = new InitiativeTracker(el, initial, {
+      onChange: (state) => {
+        // Mirror the state to every player view so they render in lock-step.
+        // v2.16.71 — strip per-card markerUrl data URLs so the JSON stays
+        // under the DataChannel single-frame limit (see stripInitiativeForWire).
+        this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(state) });
+      },
+      onCallForInitiative: () => {
+        // v2.16.63 — reset deck + tray + bench (preserving discard),
+        // then seed players and broadcast. The Players-panel orange
+        // button routes through the same path via bindPlayersPanel.
+        this.initiativeTracker?.resetForNewCombat();
+        this.initiativeTracker?.seedUnallocatedFromPlayers();
+        this.host.broadcast({ type: 'initiative_call' });
+        this.setStatus('Call for Initiative broadcast', 'ok');
+      },
+      getPlayers: () => this.playerRegistry.all(),
+    });
+    // v2.16.65 — Initiative direction setting (Settings → Player Voice).
+    // Apply on startup + whenever the GM changes it in the dialog.
+    this.initiativeTracker.setSortDirection(getInitiativeSortDirection());
+    window.addEventListener('mappadux:initiative-direction-changed', (e) => {
+      const dir = (e as CustomEvent).detail as 'high-to-low' | 'low-to-high';
+      this.initiativeTracker?.setSortDirection(dir);
+    });
+    // Broadcast initial state so any already-connected players sync up.
+    this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
+  }
+
+  /** v2.16.76 — per-map Annotate layer (progress clocks; whiteboard next).
+   *  Clocks broadcast to players + projector; the bypass toggle mutes the
+   *  whole layer (default muted on a fresh load). */
+  private bindAnnotate(): void {
+    const clocksEl = document.getElementById('annotate-clocks');
+    const timersEl = document.getElementById('annotate-timers');
+    const notesEl = document.getElementById('annotate-notes');
+    const boardEl = document.getElementById('annotate-whiteboard') as HTMLCanvasElement | null;
+    if (!clocksEl || !timersEl || !notesEl || !boardEl) return;
+    boardEl.hidden = false; // always present; pointer-events gate draw mode
+    this.annotate = new AnnotateController(
+      {
+        clocksRoot: clocksEl,
+        timersRoot: timersEl,
+        notesRoot: notesEl,
+        whiteboardCanvas: boardEl,
+        project:   (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        unproject: (cx, cy) => {
+          const wrap = document.getElementById('canvas-wrapper');
+          if (!wrap) return null;
+          const r = wrap.getBoundingClientRect();
+          return this.renderer.canvasCssToMapNorm(cx - r.left, cy - r.top);
+        },
+        // v2.16.84 — annotations live in SessionState (per-map; saved to IDB
+        // + travels in the .mappadux pack).
+        loadAnnotate: () => this.state.snapshot().annotate ?? emptyAnnotateState(),
+        persist: (st) => this.state.setAnnotate(st),
+      },
+      {
+        broadcastClocks: (clocks) => this.host.broadcast({ type: 'annotate_clocks', clocks }),
+        broadcastTimers: (timers) => this.host.broadcast({ type: 'annotate_timers', timers }),
+        broadcastNotes:  (notes) => this.host.broadcast({ type: 'annotate_notes', notes }),
+        broadcastStroke: (stroke) => this.host.broadcast({ type: 'annotate_stroke', stroke }),
+        broadcastClear:  () => this.host.broadcast({ type: 'annotate_clear' }),
+      },
+    );
+    // Bypass toggle (checked = shown). Default muted, so init unchecked.
+    const toggle = document.getElementById('annotate-bypass-toggle') as HTMLInputElement | null;
+    const muted0 = isAnnotateMuted();
+    if (toggle) {
+      toggle.checked = !muted0;
+      toggle.addEventListener('change', () => {
+        setAnnotateMuted(!toggle.checked);
+        this.annotate?.setMuted(!toggle.checked);
+      });
+    }
+    this.annotate.setMuted(muted0);
+    // Seed with the active map (if one is already loaded).
+    this.annotate.setMap(this._activeMapId() ?? null);
+  }
+
+  /** v2.16.47 — replaces bindPlayerVoicePanel. The thread store fires
+   *  onChange whenever a message lands or unread counts change; we
+   *  re-render the Players panel so badges update. The thread side
+   *  panel itself is opened by clicking a row's badge (Players panel
+   *  onOpenThread callback). */
+  private bindMessageThreads(): void {
+    this._messageThreads.onChange(() => {
+      this._refreshPlayersPanel();
+      // If the open side panel's thread changed, refresh its body so the
+      // new message shows up immediately.
+      this._threadSidePanel?.refresh();
+    });
+  }
+
+  /** Open / refresh the thread SidePanel for a given player. Clears that
+   *  player's unread counters; subsequent incoming messages bump them
+   *  only after the panel closes. */
+  private _openMessageThread(playerId: string): void {
+    const player = this.playerRegistry.get(playerId);
+    if (!player) return;
+    const displayName = player.characterName || player.playerName || 'player';
+    this._openThreadPlayerId = playerId;
+    this._messageThreads.markRead(playerId);
+
+    void import('./SidePanel.ts').then(({ openSidePanel }) => {
+      // Close any previous thread panel (single-panel-at-a-time).
+      this._threadSidePanel?.close();
+      this._threadSidePanel = openSidePanel({
+        title: `Messages — ${displayName}`,
+        populate: (body) => {
+          // v2.16.49 — snapshot includes lastSeenAt so newly-arrived
+          // messages render BOLD until the panel is closed.
+          const { messages, lastSeenAt } = this._messageThreads.snapshotFor(playerId);
+          const lastInbound = [...messages].reverse().find((m) => m.fromKind === 'player');
+          const prefetched  = lastInbound?.suggestionsPromise;
+          buildMessageThreadPanel(body, {
+            messages,
+            lastSeenAt,
+            toName: displayName,
+            ...(prefetched ? { prefetchedSuggestions: prefetched } : {}),
+            onSend: (text) => this._sendGmMessage(playerId, displayName, text),
+            onSuggest: async () => {
+              const client = LLMClient.fromSettings();
+              if (!client) throw new Error('No LLM configured — enable the reply assistant in Settings → Player Voice.');
+              const ref = lastInbound?.text ?? '';
+              return client.suggest(ref);
+            },
+          });
+        },
+        onClose: () => {
+          // Snapshot the "seen up to now" timestamp so the next open
+          // only bolds messages that arrive after this close.
+          this._messageThreads.markSeen(playerId);
+          this._threadSidePanel = null;
+          this._openThreadPlayerId = null;
+        },
+      });
+    });
+  }
+
+  /** Broadcast a GM reply to a specific player + append it to the local
+   *  thread so the GM sees their own message in the running history. */
+  private _sendGmMessage(toPlayerId: string, toName: string, text: string): void {
+    const messageId = generateId();
+    this.host.broadcast({
+      type: 'message_deliver',
+      messageId,
+      fromKind:  'gm',
+      fromName:  'GM',
+      fromColor: GMApp.GM_MESSAGE_COLOR,
+      toPlayerId,
+      text,
+    });
+    this._messageThreads.addOutgoing(toPlayerId, {
+      id: messageId,
+      fromKind: 'gm',
+      fromPlayerId: null,
+      fromName: 'GM',
+      fromColor: GMApp.GM_MESSAGE_COLOR,
+      toPlayerId,
+      toName,
+      text,
+      at: Date.now(),
+      origin: 'gm-bound',
+    });
+  }
+
   private bindHamburgerMenu(): void {
     const btn  = document.querySelector<HTMLButtonElement>('#gm-menu-btn');
     const menu = document.querySelector<HTMLElement>('#gm-menu');
@@ -5709,6 +6905,25 @@ export class GMApp {
       label: 'Save Encrypted Pack…',
       icon: 'lock',
       onSelect: () => { void this.saveBundleEncrypted(); },
+    });
+
+    this.hamburger.addDivider();
+
+    // v2.16.109 — Open New Instance in its OWN section, between the pack-file
+    // group and the asset libraries. Spawns a fresh Mappadux instance in a new
+    // tab with its own IndexedDB (split the party, keep handouts on one tab +
+    // maps on another, or experiment without touching the live pack — no
+    // syncing between instances, each is independent).
+    this.hamburger.addItem({
+      label: 'Open New Instance',
+      icon: 'plus-square',
+      onSelect: () => {
+        const id = generateInstanceId();
+        const url = new URL(window.location.href);
+        url.search = `?instance=${id}`;
+        url.hash = '';
+        window.open(url.toString(), '_blank', 'noopener');
+      },
     });
 
     this.hamburger.addDivider();
@@ -5750,29 +6965,10 @@ export class GMApp {
       icon: 'settings',
       onSelect: () => { void this.openSettings(); },
     });
-
-    // v2.14.90 — Spawn a fresh Mappadux instance in a new tab with
-    // its own IndexedDB. Useful for splitting the party (two
-    // running encounters), keeping handouts on one tab + maps on
-    // another, or just experimenting without touching the live
-    // pack. No syncing between instances — each is independent.
-    this.hamburger.addItem({
-      label: 'Open New Instance',
-      icon: 'plus-square',
-      onSelect: () => {
-        // v2.14.96 — readable word-based id from the same pool the
-        // room codes use ("?instance=arcane" rather than the old
-        // "?instance=8oilob" base36 string). Two GMs spawning at
-        // the same moment have a 1/256 collision chance, which
-        // for personal-tab use is fine; if it ever bites we can
-        // pair-word it.
-        const id = generateInstanceId();
-        const url = new URL(window.location.href);
-        url.search = `?instance=${id}`;
-        url.hash = '';
-        window.open(url.toString(), '_blank', 'noopener');
-      },
-    });
+    // v2.16.66 — Initiative Tracker hamburger entry removed. Roll
+    // Initiative (orange button in the Players panel) opens the
+    // tracker; End Combat closes it. No reason to keep a third path.
+    // v2.16.109 — Open New Instance moved up to its own section (above).
 
     // Footer — About pinned at the very bottom (auto-divider above).
     this.hamburger.addItem({
@@ -5977,6 +7173,30 @@ export class GMApp {
     const session = await loadSession();
     if (!this.packNameInput) return;
     this.packNameInput.value = session?.packName ?? '';
+    this._syncPackNameDisplay();
+  }
+
+  /** v2.16.88 — reflect the pack name in the header display span. */
+  private _syncPackNameDisplay(): void {
+    if (this.packNameDisplay) {
+      this.packNameDisplay.textContent = this.packNameInput?.value.trim() || 'Untitled pack';
+    }
+  }
+
+  /** Reveal the inline rename input over the header (pencil clicked). */
+  private _beginPackNameEdit(): void {
+    if (!this.packNameInput || !this.packNameDisplay) return;
+    this.packNameInput.value = this.packNameDisplay.textContent === 'Untitled pack' ? '' : (this.packNameDisplay.textContent ?? '');
+    this.packNameInput.hidden = false;
+    this.packNameInput.focus();
+    this.packNameInput.select();
+  }
+
+  /** Hide the rename input + update the header display. */
+  private _endPackNameEdit(): void {
+    if (!this.packNameInput) return;
+    this.packNameInput.hidden = true;
+    this._syncPackNameDisplay();
   }
 
   /**
@@ -6132,6 +7352,9 @@ export class GMApp {
     // re-fetches device state to match. Same for Soundtracks.
     if (this.stagecraftPanel) void this.stagecraftPanel.refresh({ force: true });
     if (this.soundtracksPanel) this.soundtracksPanel.refresh();
+    // v2.17 Player Voice — the GM may have toggled pings / messaging; push the
+    // current feature flags so player views update their action menus.
+    this._broadcastPlayerFeatures();
   }
 
   /** Open the About / splash dialog. Reads pack name + splash + theme from
@@ -6366,7 +7589,9 @@ export class GMApp {
       opt.textContent = m.label || '(unnamed)';
       this.markerSelect.appendChild(opt);
     }
-    appendAddOption(this.markerSelect, '+ Add Marker');
+    // v2.16.34 — sentinel "+ Add Marker" retired; #add-marker-btn beside
+    // the dropdown is the affordance now (bound in bindMarkerEditor /
+    // bindUIControls). Defensive branch in the change handler stays.
     if (sel) this.markerSelect.value = sel.id;
 
     const controlsEl = document.querySelector<HTMLElement>('#marker-controls');

@@ -80,6 +80,113 @@ export function setScaledViewTransitionsEnabled(enabled: boolean): void {
   } catch { /* private mode etc. — no-op */ }
 }
 
+/** v2.16.65 — Initiative sort direction. One-shot GM preference; default
+ *  High → Low (D&D / Pathfinder / most d20). Low → High suits roll-under
+ *  systems (Cyberpunk Red, Call of Cthulhu, etc.). Manual mode is still
+ *  reachable via drag-reorder regardless of this setting. */
+export const INITIATIVE_SORT_DIRECTION_KEY = 'mappadux:initiative_sort_direction';
+
+export function getInitiativeSortDirection(): 'high-to-low' | 'low-to-high' {
+  try {
+    const v = localStorage.getItem(INITIATIVE_SORT_DIRECTION_KEY);
+    return v === 'low-to-high' ? 'low-to-high' : 'high-to-low';
+  } catch { return 'high-to-low'; }
+}
+
+export function setInitiativeSortDirection(dir: 'high-to-low' | 'low-to-high'): void {
+  try { localStorage.setItem(INITIATIVE_SORT_DIRECTION_KEY, dir); }
+  catch { /* private mode etc. — no-op */ }
+}
+
+/** v2.16.76 — Annotate mute. When set, clocks + whiteboard + notes are
+ *  hidden on ALL surfaces (GM, player, projector) without deleting the
+ *  per-map data. v2.16.80 — default SHOWN (Alex 2026-06-02) — unlike the
+ *  other bypass toggles' inverse, annotations are on by default. '1'
+ *  muted, '0'/absent = shown. */
+export const ANNOTATE_MUTED_KEY = 'mappadux:annotate_muted';
+
+export function isAnnotateMuted(): boolean {
+  try { return localStorage.getItem(ANNOTATE_MUTED_KEY) === '1'; }
+  catch { return false; }
+}
+
+export function setAnnotateMuted(muted: boolean): void {
+  try { localStorage.setItem(ANNOTATE_MUTED_KEY, muted ? '1' : '0'); }
+  catch { /* private mode — no-op */ }
+}
+
+/** v2.17 Player Voice — GM toggle for player pings. Enabled by default; the
+ *  GM can switch it off if they don't want players highlighting the map.
+ *  Stored as '0' when DISABLED (absence = enabled) so the common case needs
+ *  no key. */
+export const PLAYER_PINGS_DISABLED_KEY = 'mappadux:player_pings_disabled';
+
+export function arePingsEnabled(): boolean {
+  try { return localStorage.getItem(PLAYER_PINGS_DISABLED_KEY) !== '1'; }
+  catch { return true; }
+}
+
+export function setPingsEnabled(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.removeItem(PLAYER_PINGS_DISABLED_KEY);
+    else         localStorage.setItem(PLAYER_PINGS_DISABLED_KEY, '1');
+  } catch { /* private mode etc. — no-op */ }
+}
+
+/** v2.17 Player Voice — GM toggle for player messaging (player↔GM and
+ *  player↔player). Enabled by default; '0' stored when disabled. */
+export const PLAYER_MESSAGING_DISABLED_KEY = 'mappadux:player_messaging_disabled';
+
+export function isMessagingEnabled(): boolean {
+  try { return localStorage.getItem(PLAYER_MESSAGING_DISABLED_KEY) !== '1'; }
+  catch { return true; }
+}
+
+export function setMessagingEnabled(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.removeItem(PLAYER_MESSAGING_DISABLED_KEY);
+    else         localStorage.setItem(PLAYER_MESSAGING_DISABLED_KEY, '1');
+  } catch { /* private mode etc. — no-op */ }
+}
+
+/** v2.17 Player Voice — show the full player chrome in the GM's "Open Player
+ *  Window" preview popup. Default off: the preview popup hides identity pill,
+ *  message toasts, action menu, identity prompts, and the initiative roll
+ *  prompt because the GM isn't a player. Useful to flip on during testing
+ *  when you want the preview to behave exactly like a real player view.
+ *  Detection is the ?gmPreview=1 URL flag the launcher appends — phones /
+ *  laptops connecting via QR never carry it, so real players always show the
+ *  full UI regardless of this setting. */
+export const SHOW_FULL_PLAYER_UI_IN_PREVIEW_KEY = 'mappadux:show_full_player_ui_in_preview';
+
+export function showFullPlayerUiInPreview(): boolean {
+  try { return localStorage.getItem(SHOW_FULL_PLAYER_UI_IN_PREVIEW_KEY) === '1'; }
+  catch { return false; }
+}
+
+export function setShowFullPlayerUiInPreview(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.setItem(SHOW_FULL_PLAYER_UI_IN_PREVIEW_KEY, '1');
+    else         localStorage.removeItem(SHOW_FULL_PLAYER_UI_IN_PREVIEW_KEY);
+  } catch { /* private mode etc. — no-op */ }
+}
+
+/** v2.17 Player Voice — GM toggle for letting players drag their own token.
+ *  Enabled by default; '0' stored when disabled. */
+export const PLAYER_MOVABLE_MARKERS_DISABLED_KEY = 'mappadux:player_movable_markers_disabled';
+
+export function arePlayerMarkersMovable(): boolean {
+  try { return localStorage.getItem(PLAYER_MOVABLE_MARKERS_DISABLED_KEY) !== '1'; }
+  catch { return true; }
+}
+
+export function setPlayerMarkersMovable(enabled: boolean): void {
+  try {
+    if (enabled) localStorage.removeItem(PLAYER_MOVABLE_MARKERS_DISABLED_KEY);
+    else         localStorage.setItem(PLAYER_MOVABLE_MARKERS_DISABLED_KEY, '1');
+  } catch { /* private mode etc. — no-op */ }
+}
+
 /** UI scale for the left sidebar. Stored as a number (1.0 = 100%);
  *  values outside MIN/MAX clamp on read. Applied via CSS `zoom` so the
  *  whole box model scales uniformly — fonts, padding, borders, icon
@@ -180,6 +287,86 @@ export function isBetaHost(): boolean {
   } catch { return false; }
 }
 
+// ─── LLM reply assistant (v2.17 Player Voice) ────────────────────────────────
+
+export const LLM_API_KEY            = 'mappadux:llm_api_key';
+const LLM_ENABLED_KEY               = 'mappadux:llm_enabled';
+const LLM_BASE_URL_KEY              = 'mappadux:llm_base_url';
+const LLM_MODEL_KEY                 = 'mappadux:llm_model';
+const LLM_SYSTEM_PROMPT_KEY         = 'mappadux:llm_system_prompt';
+
+/** The default GM-assistant system prompt. Editable in Settings; "Reset to
+ *  default" restores this. v2.16.51 — rewritten to emit plain prose the
+ *  GM can send verbatim: no category labels, no quote-wrapping around
+ *  the skill ask, no markdown emphasis inside the option body. */
+export const DEFAULT_GM_ASSISTANT_PROMPT =
+`You are a compact, precise GM Assistant for a Tabletop RPG.
+Analyze the incoming player note and produce 4 distinct, short response options the GM will send to the player verbatim.
+Never speak to the player directly. Never roleplay as the characters.
+
+Each option is a single short paragraph of plain prose: a brief narrative beat followed by the skill ask. NO category labels, NO headings, NO quotation marks around the skill ask, NO bold or italic formatting inside the option body.
+
+The 4 options should cover, in order:
+1. Positive outcome — the player gets what they want.
+2. Complication — yes, but with a twist.
+3. Hard stop or warning — they can't, or there's an immediate consequence.
+4. Dramatically interesting GM choice — escalation, twist, or surprise.
+
+Format your output EXACTLY like this (numbered list, one option per line):
+
+1. <narrative beat.> <skill ask.>
+2. <narrative beat.> <skill ask.>
+3. <narrative beat.> <skill ask.>
+4. <narrative beat.> <skill ask.>`;
+
+export interface LLMSettings {
+  enabled:      boolean;
+  baseUrl:      string;  // OpenAI-compatible base, e.g. http://localhost:1234/v1 (LM Studio) or https://openrouter.ai/api/v1
+  model:        string;  // e.g. "local-model" or "anthropic/claude-3.5-sonnet"
+  systemPrompt: string;
+}
+
+export function getLLMSettings(): LLMSettings {
+  const read = (k: string, fallback: string): string => {
+    try { return localStorage.getItem(k) ?? fallback; } catch { return fallback; }
+  };
+  let enabled = false;
+  try { enabled = localStorage.getItem(LLM_ENABLED_KEY) === '1'; } catch { /* no-op */ }
+  return {
+    enabled,
+    baseUrl:      read(LLM_BASE_URL_KEY, 'http://localhost:1234/v1'),
+    model:        read(LLM_MODEL_KEY, ''),
+    systemPrompt: read(LLM_SYSTEM_PROMPT_KEY, DEFAULT_GM_ASSISTANT_PROMPT),
+  };
+}
+
+export function setLLMSettings(s: LLMSettings): void {
+  try {
+    if (s.enabled) localStorage.setItem(LLM_ENABLED_KEY, '1');
+    else           localStorage.removeItem(LLM_ENABLED_KEY);
+    localStorage.setItem(LLM_BASE_URL_KEY, s.baseUrl.trim());
+    localStorage.setItem(LLM_MODEL_KEY, s.model.trim());
+    // Store the prompt only when it differs from the default, so "reset"
+    // (removing the key) naturally falls back to the canonical prompt.
+    if (s.systemPrompt.trim() && s.systemPrompt.trim() !== DEFAULT_GM_ASSISTANT_PROMPT.trim()) {
+      localStorage.setItem(LLM_SYSTEM_PROMPT_KEY, s.systemPrompt);
+    } else {
+      localStorage.removeItem(LLM_SYSTEM_PROMPT_KEY);
+    }
+  } catch { /* private mode etc. — no-op */ }
+}
+
+export function getLLMApiKey(): string {
+  try { return localStorage.getItem(LLM_API_KEY) ?? ''; } catch { return ''; }
+}
+
+export function setLLMApiKey(key: string): void {
+  try {
+    if (key.trim()) localStorage.setItem(LLM_API_KEY, key.trim());
+    else            localStorage.removeItem(LLM_API_KEY);
+  } catch { /* private mode etc. — no-op */ }
+}
+
 /** Known API key entries kept in localStorage. Used by Settings to list +
  *  delete credentials separately from other local state. */
 export const API_KEY_ENTRIES: Array<{ key: string; label: string }> = [
@@ -190,6 +377,9 @@ export const API_KEY_ENTRIES: Array<{ key: string; label: string }> = [
   // here — those are session credentials, not config; they're
   // managed via the Soundtracks Connect / Disconnect flow.
   { key: 'mappadux:spotify_client_id', label: 'Spotify Client ID' },
+  // v2.17 Player Voice — optional LLM key for the GM reply assistant
+  // (OpenRouter etc.). LM Studio runs locally and needs no key.
+  { key: LLM_API_KEY, label: 'LLM API key (OpenRouter etc.)' },
 ];
 
 /** All localStorage entries Mappadux owns. Two prefix conventions

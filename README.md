@@ -28,6 +28,7 @@ Mappadux connects the GM and players over peer-to-peer, so **any phone, tablet, 
 - **Sets up in minutes, not hours.** Add a map, set a scale, drop a few markers — you're ready.
 - **Shows maps on any tablet / phone** for players, or **projects at true 1″ / 25 mm scale** onto an under-table screen or down-projector for in-person play.
 - **Fog of war, painted shader effects, animated backdrops, markers, motion trackers, atmospheric audio, and visual filters** — without hunting through menus mid-scene.
+- **Players join in** *(new in v2.17)* — named players with their own draggable tokens, map pings, two-way messaging, a fanned-deck initiative tracker, shared progress clocks / timers / notes, and optional LLM-assisted reply suggestions. Players stop being a passive audience.
 
 It tries to feel **immersive** too: parchment / hand-drawn / CRT-phosphor filters, smooth map transitions, positional and motion-tracker audio.
 
@@ -78,6 +79,8 @@ Players connect over peer-to-peer (PeerJS); no server infrastructure beyond stat
   | Retro Sci-Fi Green | Classic green-phosphor CRT terminal |
   | Watercolour | Soft watercolour wash |
 
+  Alongside these stylised looks is a set of **atmospheric / lighting filters** — Night Vision, Thermal, Candlelight, Dawn / Dusk, Horror, Mist, Underwater, Sandstorm, weather looks, and more — for tinting a scene's mood. A per-map **Tint Player Markers** toggle extends the active filter onto the tokens (and in-map video) so they share the scene's look.
+
 - **Map transitions** — animated transitions when switching maps on the player view. Select per-map from the GM's Current Map panel:
 
   | Transition | Description |
@@ -111,8 +114,19 @@ Players connect over peer-to-peer (PeerJS); no server infrastructure beyond stat
     - All positional audio is broadcast to connected players via P2P.
   - **Motion Tracker** — periodic radar / sonar / sensor sweep. Pick one marker as **Motion Tracker** and one or more as **Motion Source**. Every few seconds the tracker fires an outgoing ping; an expanding ring sweeps from the tracker, and as it crosses each source it fires a return blob + return ping at that exact moment. Configure range (logarithmic slider, 0.05–4.0 of map height), ping rate (0.25–15 s), scan speed, colour, and per-source blob style (single / multi-few / multi-many). Works for _Aliens_-style motion sensors, submarine sonar, sci-fi sensor sweeps, magical scrying — any "I'm here" pulse mechanic. Two CC0 ping sounds are bundled by default. Works through visual filters on the player view.
 
-- **Player view control** — an orange rectangle on the GM's canvas always shows what players see. Direct-manipulation chrome: a move handle at the top-left, resize handle at the bottom-right, plus **aspect-lock (16:9)** and **maximise / restore** buttons on the right edge when selected. Grabbing the move handle on a full-map rect snaps it to 50% map-dimensions centred so a maximised view becomes draggable in one gesture. The player's screen is strictly clipped to the rectangle; background colour fills any bars caused by aspect-ratio differences. A **broadcast toggle** in the Player Connection panel header swaps the player view for a friendly placeholder ("the GM is faffing") while you reset things mid-scene.
-- **Scaled view (battlemap mode)** — render a calibrated crop of the map at true table scale on an under-table screen or down-projector, so a 1″ creature on the map projects as 1″ on the surface and miniatures occupy real-world inches. Calibrate the map (1″ / 25 mm squares) and the projector device once; thereafter the Scaled View panel runs the whole flow from a single dropdown — pan the rectangle to move, optional 1″ grid overlay, rotation for portrait maps, mirror to additional bezel-framed monitor windows. See [HELP.md](./HELP.md#scaled-view) for the workflow.
+- **Player Voice** *(new in v2.17)* — players stop being a passive audience and get a voice at the table:
+  - **Named, persistent players** — each player introduces themselves once (name + colour); the GM gets a live roster, and identities survive reconnects. The GM can also add an "offline" player to act for someone with no device.
+  - **Player tokens** — the GM places a token for any player; with *Let players move their own token* on, that player drags their own token from their device (GM sees it move live, with a one-click "send it back").
+  - **Pings** — a player right-clicks / long-presses the map to ping a point; everyone sees a pulse in that player's colour, labelled with their name on the GM screen.
+  - **Messaging** — players message the GM privately, or each other (copied to the GM). Threads live in the Player Voice panel with an unread count.
+  - **Reply Assistant (optional LLM)** — point Mappadux at a local LM Studio server (no key) or a hosted provider like OpenRouter (key + model) and it drafts in-character reply suggestions; click *Suggest replies*, pick one to send. Stays between your browser and the endpoint you choose.
+  - **Initiative tracker** — a fanned-deck initiative rail: roll for the table, drag to reorder, advance turns, ROUND END marker between rounds. Sort high→low (d20) or low→high (roll-under systems).
+- **GM annotations** *(new in v2.17)* — drop **progress clocks** (Blades-style), **countdown timers / stopwatches**, a freehand **whiteboard**, and sticky **notes** onto the map. Each is anchored 1:1 to the map and mirrored live to players + projector; saved with the map and travels in the pack.
+- **Player Views panel** *(was "Scaled View", v2.17)* — one panel for everything player-facing, with two collapsible sections:
+  - **Player connections** — a join QR (uses your LAN IP so any device on the network can open the player view) plus a summary of connected windows: local / scaled / remote, split PC vs mobile.
+  - **Scaled view (battlemap mode)** — render a calibrated crop of the map at true table scale on an under-table screen or down-projector, so a 1″ creature projects as 1″ and miniatures occupy real-world inches. Calibrate the map (1″ / 25 mm squares) and the projector device once; the whole flow then runs from a single dropdown — pan to move, optional 1″ grid overlay, rotation for portrait maps, mirror to bezel-framed monitor windows. See [HELP.md](./HELP.md#player-views) for the workflow.
+  - A **broadcast toggle** in the panel header swaps the player + projector views for a friendly "the GM is faffing" placeholder while you reset mid-scene (late joiners see it too).
+- **Player view control** — an orange rectangle on the GM's canvas always shows what players see. Direct-manipulation chrome: a move handle at the top-left, resize handle at the bottom-right, plus **aspect-lock (16:9)** and **maximise / restore** buttons on the right edge when selected. The player's screen is strictly clipped to the rectangle; background colour fills any bars from aspect-ratio differences. **Show Player View** *(replaces "Open Player Window")* puts an inline preview of the player view right on the GM canvas — pop it out to a full standalone window when you want it on a second screen.
 - **Background colour** — set the letterbox colour; auto-sampled from the map on first load.
 - **Real-time sync** — all GM changes (map, fog, filter, view, markers, audio, transition) push to connected players instantly.
 - **Room code** — three-word memorable code persists across reloads so players can reconnect. If the connection drops, the player window auto-reconnects with exponential back-off.
@@ -144,7 +158,7 @@ Players connect over peer-to-peer (PeerJS); no server infrastructure beyond stat
   - **External transport awareness** — pausing via a Bluetooth remote, OS media keys, or lock-screen flips the panel's pause icon so the GM can resume from either side.
   - Track URLs travel with `.mappadux` bundles; Spotify tokens and YouTube state stay on this machine.
 
-- **Text Maps (handouts)** *(new in v2.11)* — a second map type for letters, posters, journal pages, stat blocks, in-fiction documents. Rich element editor with text + image elements, font picker, multiple aspect presets, per-element move/resize, and an optional animated reveal so the handout types itself out for the players.
+- **Text Maps (handouts)** *(new in v2.11)* — a second map type for letters, posters, journal pages, stat blocks, in-fiction documents. Rich element editor with text, image, **and live YouTube video** *(v2.17)* elements, font picker, multiple aspect presets, per-element move / resize / rotate, and an optional animated reveal so the handout types itself out for the players. **In-map video** is borderless and GM-controlled: the GM's play / pause / seek / volume drives the player + projector copies (which follow within ~½ s), and active visual filters tint it. Desktop viewers only — mobile video is a documented limitation.
 
 - **Image Assets Library** *(new in v2.11)* — a third first-class asset library alongside Maps and Sounds. Marker icons + handout images live here with the same Library / Web Links / Upload taxonomy as audio, plus built-in connectors for **Lucide** (~1500 MIT-licensed icons) and **game-icons.net** (~4000 CC-BY 3.0 fantasy / sci-fi / abstract icons). Attribution flows through the unified credits modal.
 
@@ -202,21 +216,21 @@ The `vercel.json` rewrites `/player` to `player.html`. For other hosts, ensure `
 ## Usage
 
 1. **GM view** — open the root URL (e.g. `https://your-deployment.vercel.app/`).
-   - Upload maps with **Upload New Map**.
-   - Share the room code or QR code with players, or click **Open Player Window** for a local second screen.
+   - Add maps via **+ Add New Map…** (Library / Web Links / Upload).
+   - Share the room code or scan the join QR in **Player Views → Player connections**, or use **Show Player View** for an inline preview you can pop out to a local second screen.
    - Draw fog polygons, choose a filter, set a transition, and adjust the player view.
    - Add markers via the Markers panel or by right-clicking the map; drag to reposition.
    - Use the Soundboard panel to play ambient sound and effects to players.
-   - Use **Save to File** to back up your map library (including custom icons and uploaded audio); **Load Maps File** to restore it.
+   - Use **☰ → Save Map Pack…** to back up your whole pack (maps, audio, custom icons, fog, markers, splash, theme) as a single `.mappadux` file; **☰ → Load Map Pack** to restore it.
 
 2. **Player view** — open `<your URL>/player`, enter the room code, and connect.
-   - The player sees whatever the GM is showing, filtered, cropped, and transitioned as the GM sets it.
+   - The player sees whatever the GM is showing — filtered, cropped, and transitioned as the GM sets it — and can ping, message, move their own token, and roll initiative if the GM allows it.
 
-3. **Scaled view (battlemap mode, optional)** — for in-person play. From the **Scaled View** panel: calibrate the projector once (modal opens in its own window — drag onto the projector display and ruler it in), then pick the saved calibration to launch a true-table-scale projector window. Full walkthrough in [HELP.md](./HELP.md#scaled-view).
+3. **Scaled view (battlemap mode, optional)** — for in-person play. From **Player Views → Scaled view**: calibrate the projector once (modal opens in its own window — drag onto the projector display and ruler it in), then pick the saved calibration to launch a true-table-scale projector window. Full walkthrough in [HELP.md](./HELP.md#player-views).
 
 ## Default Maps
 
-To pre-load maps for first-time users, export your map library from the GM view (**Save to File**) and save the resulting file as:
+To pre-load maps for first-time users, export your pack from the GM view (**☰ → Save Map Pack…**) and save the resulting file as:
 
 ```
 public/default-bundle.json
@@ -234,9 +248,15 @@ src/
                               ProjectorViewportEditor)
   player/       Player interface (PlayerApp)
   projector/    Projector interface (ProjectorApp, calibrationStorage)
+  viewers/      Shared viewer chrome (lifecycle, fullscreen, hold-screen) for player + projector
+  annotate/     v2.17 GM annotations — progress clocks, timers, whiteboard, sticky notes (map-anchored)
+  initiative/   v2.17 fanned-deck initiative tracker state + sorting
+  ai/           v2.17 LLM reply-assistant client (LM Studio / OpenAI-compatible)
+  stagecraft/   YouTube IFrame helper + (in-progress) lighting / automation
   audio/        Soundboard engine, asset store, and Freesound API client
                 (SoundboardEngine, AudioAssetStore, FreesoundClient)
-  rendering/    Three.js renderer + EffectComposer pipeline (Renderer, MarkerLayer, MarkerTexture)
+  rendering/    Three.js renderer + EffectComposer pipeline (Renderer, MarkerLayer,
+                MarkerTexture, TextMapVideoLayer, PlayerMarkerLayer, ping layer)
   filters/      Filter registry, panel UI, and per-filter definitions
     definitions/
       none/

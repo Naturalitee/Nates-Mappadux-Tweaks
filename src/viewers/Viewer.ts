@@ -118,10 +118,8 @@ export class Viewer {
    *  timer drives the post-interaction 5s "fully visible" window
    *  before fading to 0.25 (no fade pre-interaction). */
   private _muteFadeTimer: ReturnType<typeof setTimeout> | null = null;
-  /** True once the player has interacted (first click anywhere) and
-   *  audio playback is live. Pre-interaction the indicator is a big
-   *  non-interactive prompt; post-interaction it's a small button. */
-  private _muteInteractive = false;
+  // v2.16.42 — _muteInteractive removed alongside the pre-interaction
+  // big-prompt state.
   /** Latest known mute state — needed so markMuteInteractive can
    *  re-render the button without the caller having to re-pass it. */
   private _muteState = true;
@@ -227,26 +225,19 @@ export class Viewer {
   /** Render the mute-indicator (player-only). Profiles where the
    *  flag is false get a no-op so call sites stay branchless.
    *
-   *  Two visual states:
-   *   • Pre-interaction (initial) — large "🔇 Muted — tap to start
-   *     audio" prompt. Non-interactive (pointer-events: none); the
-   *     canvas-tap handles the first unmute so any click anywhere
-   *     satisfies autoplay policy.
-   *   • Post-interaction — small icon-only button anchored top-right.
-   *     Fully visible for 5s after each state change, then fades to
-   *     0.25 opacity (matches the fullscreen button). Clicking
-   *     toggles mute via the onMuteToggle opt callback. */
+   *  v2.16.42 — only one visual state now. Small icon-only button
+   *  anchored top-right. Mostly-transparent until clicked; clicking
+   *  toggles mute via the onMuteToggle opt callback. The big
+   *  "tap anywhere to start audio" pre-interaction prompt was a
+   *  trick to satisfy older autoplay policies and is gone. */
   showMuteIndicator(muted: boolean): void {
     if (!this.profile.chrome.muteIndicator) return;
     this._muteState = muted;
     if (!this._muteIndicatorEl) {
       const el = document.createElement('button');
       el.type = 'button';
-      el.className = 'mute-indicator';
+      el.className = 'mute-indicator mute-indicator--interactive';
       el.addEventListener('click', (e) => {
-        // Only the post-interaction button is the toggle source.
-        // Pre-interaction the canvas-tap handles it.
-        if (!this._muteInteractive) return;
         e.stopPropagation();
         this.opts.onMuteToggle?.();
       });
@@ -256,45 +247,30 @@ export class Viewer {
     this._renderMuteIndicator();
   }
 
-  /** v2.14.20 — flip the indicator to its interactive state. Called
-   *  by PlayerApp after the first canvas-tap unmute. Re-renders
-   *  using the cached `_muteState` so the caller doesn't have to
-   *  re-pass it. */
-  markMuteInteractive(): void {
-    if (this._muteInteractive) return;
-    this._muteInteractive = true;
-    this._renderMuteIndicator();
-  }
+  /** v2.14.20 → v2.16.42 stub — the pre/post-interaction split is gone;
+   *  the indicator is always interactive. Kept so existing callers
+   *  compile without churn; safe to remove next sweep. */
+  markMuteInteractive(): void { /* no-op */ }
 
   private _renderMuteIndicator(): void {
     const el = this._muteIndicatorEl;
     if (!el) return;
     const muted = this._muteState;
-    el.classList.toggle('mute-indicator--initial',     !this._muteInteractive);
-    el.classList.toggle('mute-indicator--interactive',  this._muteInteractive);
     el.classList.toggle('mute-indicator--muted',  muted);
     el.classList.toggle('mute-indicator--audible', !muted);
-    if (this._muteInteractive) {
-      // Icon-only post-interaction. Speaker / muted speaker glyph.
-      el.textContent = muted ? '🔇' : '🔊';
-      el.title = muted ? 'Audio muted — click to unmute' : 'Audio on — click to mute';
-    } else {
-      // Pre-interaction prompt — large, encourages first tap.
-      el.textContent = muted ? '🔇 Muted — tap anywhere to start audio' : '🔊 Audio on';
-      el.title = '';
-    }
-    // Reset the 5s "fully visible" window on every state change.
+    el.textContent = muted ? '🔇' : '🔊';
+    el.title = muted ? 'Audio muted — click to unmute' : 'Audio on — click to mute';
+    // Reset the 5s "fully visible" window on every state change so the
+    // user sees the icon clearly when state flips, then it fades back.
     el.classList.remove('mute-indicator--idle');
     if (this._muteFadeTimer !== null) {
       clearTimeout(this._muteFadeTimer);
       this._muteFadeTimer = null;
     }
-    if (this._muteInteractive) {
-      this._muteFadeTimer = setTimeout(() => {
-        this._muteIndicatorEl?.classList.add('mute-indicator--idle');
-        this._muteFadeTimer = null;
-      }, 5000);
-    }
+    this._muteFadeTimer = setTimeout(() => {
+      this._muteIndicatorEl?.classList.add('mute-indicator--idle');
+      this._muteFadeTimer = null;
+    }, 5000);
   }
 
   // ─── Internals ──────────────────────────────────────────────────────
@@ -388,22 +364,16 @@ export class Viewer {
 
   private _qrUrl(): string | null {
     if (this.opts.qrUrl) return this.opts.qrUrl;
-    if (this.profile.chrome.qrTarget === 'self') {
-      return typeof window !== 'undefined' ? window.location.href : null;
-    }
-    // 'player' target — derive the PLAYER URL from this window's
-    // room code. Works whether we're a scaled-primary or
-    // scaled-monitor; the URL points at where late-joiners land as
-    // players, not back at this projector window.
     if (typeof window === 'undefined') return null;
+    // v2.16.106 — ONE canonical join URL everywhere, no options. This QR is
+    // only ever used by EXTERNAL scanners landing as players, so it must never
+    // carry window-specific flags: gmPreview / pip mark a GM preview (a scanner
+    // opening that would get a muted, non-registering, no-fullscreen view), and
+    // ?instance only namespaces same-browser BroadcastChannel (irrelevant to a
+    // separate device). Just origin + /player.html + the room hash — identical
+    // whether rendered by a player view, a projector, or a scaled monitor.
+    // (qrTarget self/player no longer differs: both resolve to the player URL.)
     const room = window.location.hash.replace(/^#/, '');
-    // v2.14.92 — Carry forward ?instance=NAME so the QR-pointed
-    // late-joiner lands on the same namespaced BroadcastChannel as
-    // the current viewer (matters for same-browser opens; external
-    // devices ignore the param harmlessly).
-    // v2.14.95 — /player.html directly, same reasoning as the GM
-    // player-URL builder (avoid the rewrite-with-query-string trap).
-    const search = window.location.search;
-    return `${window.location.origin}/player.html${search}${room ? '#' + room : ''}`;
+    return `${window.location.origin}/player.html${room ? '#' + room : ''}`;
   }
 }

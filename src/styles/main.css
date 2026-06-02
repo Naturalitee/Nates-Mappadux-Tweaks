@@ -111,6 +111,14 @@ body.gm-view {
   gap: 1px;
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
+  /* v2.16.36 — explicit stacking context so .side-panel can slide out
+     from BEHIND the sidebar (left edge of the canvas area) without the
+     hidden portion peeking through. v2.16.48 — bumped to 100 so the
+     sidebar also sits above the PlayerPip overlay (z-index 50) when
+     the PiP is dragged near the sidebar edge. Hierarchy now:
+     sidebar (100) > side-panel (90) > PiP (50). */
+  position: relative;
+  z-index: 100;
 }
 
 #main-area {
@@ -129,6 +137,99 @@ body.gm-view {
      this cursor via their own CSS so the affordance only shows on
      bare canvas. */
   cursor: grab;
+}
+
+/* v2.16.40 — Picture-in-Picture inline preview of the player view.
+   Internal class names use "pip"; user-facing terminology is
+   consistently "Player View". Frame is positioned absolutely within
+   #canvas-wrapper so it floats over the map; drag handle is the header. */
+.player-pip-frame {
+  position: absolute;
+  width: 33%;
+  min-width: 240px;
+  max-width: 80%;
+  aspect-ratio: 16 / 9;
+  background: var(--bg-panel, #11151f);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 8px;
+  box-shadow: 0 6px 22px rgba(0, 0, 0, 0.55);
+  z-index: 50;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  /* v2.16.43 — standard browser resize handle at bottom-right. Only
+     width changes; aspect-ratio above keeps the height in 16:9 lock. */
+  resize: horizontal;
+}
+.player-pip-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 8px;
+  background: var(--bg-card, #1a1f2e);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  cursor: move;
+  user-select: none;
+  touch-action: none;
+}
+.player-pip-title {
+  flex: 1;
+  font-size: 0.78rem;
+  color: var(--text-secondary, #9aa3b2);
+  letter-spacing: 0.02em;
+}
+.player-pip-chrome-btn {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  color: var(--text-secondary, #9aa3b2);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.player-pip-chrome-btn:hover {
+  color: var(--text-primary, #e4e8f0);
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.05);
+}
+.player-pip-iframe {
+  flex: 1;
+  width: 100%;
+  border: none;
+  display: block;
+  background: #000;
+}
+
+/* Minimised state — pill button at bottom-left of the canvas. Same
+   "Player View" wording as the iframe title so there's only one term
+   to learn. */
+.player-pip-show-btn {
+  position: absolute;
+  bottom: 12px;
+  left: 12px;
+  z-index: 50;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  font-size: 0.82rem;
+  color: var(--text-secondary, #9aa3b2);
+  background: var(--bg-card, #1a1f2e);
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 999px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.45);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.player-pip-show-btn:hover {
+  color: var(--text-primary, #e4e8f0);
+  border-color: rgba(255, 255, 255, 0.22);
+  background: var(--bg-panel, #11151f);
 }
 
 /* v2.14.108 — GM-canvas undo / redo bar. Floats top-centre over
@@ -1054,12 +1155,165 @@ body.player-view #renderer-canvas {
   transform: translateY(-50%) rotate(90deg);
 }
 
+/* v2.16.88 — Map Pack header: the pack name reads as the NAME (white,
+   not-uppercased, bold) sitting after the "Map Pack:" label; a pencil on
+   the right edits it inline. */
+/* Keep "Map Pack:" + the name together on the left (the default header
+   space-between would push the name to the right edge). */
+#map-panel .panel-title { padding-right: 56px; justify-content: flex-start; gap: 0; }
+.pack-name-display {
+  color: #fff;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+.panel-edit-btn {
+  position: absolute;
+  right: calc(var(--space-md) + 16px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.panel-edit-btn:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.08); }
+.pack-name-edit-input {
+  position: absolute;
+  left: var(--space-md);
+  right: calc(var(--space-md) + 44px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-focus, var(--accent));
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  outline: none;
+}
+
+/* v2.16.75 — Players panel header count badge. Sits in the right margin
+   where other panels carry their vision/ear toggle icon; the "#" reads
+   as "player count". Shows connected / total (total includes offline). */
+.panel-count-badge {
+  position: absolute;
+  right: 30px;
+  top: 50%;
+  transform: translateY(-50%);
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  line-height: 1;
+  color: var(--text-secondary);
+  background: rgba(0, 0, 0, 0.28);
+  border: 1px solid var(--border);
+  border-radius: 9px;
+  padding: 2px 7px;
+  pointer-events: none;
+  white-space: nowrap;
+}
+
 .panel-body {
   display: flex;
   flex-direction: column;
   gap: var(--space-sm);
   padding: var(--space-sm) var(--space-md) var(--space-md);
 }
+
+/* v2.16.103 — Collapsible SUBPANELS inside a panel body (Player Views →
+   Player connections / Scaled view). Lighter than a full panel header so
+   the nesting reads clearly. Toggle uses the same aria-expanded / hidden
+   mechanism, wired separately for .subpanel-title. */
+.subpanel {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.12);
+}
+.subpanel-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: rgba(30, 58, 95, 0.25);
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  position: relative;
+}
+.subpanel-title:hover { color: var(--text-primary); background: rgba(30, 58, 95, 0.45); }
+.subpanel-title::after {
+  content: '▸';
+  font-size: 0.6rem;
+  position: absolute;
+  right: var(--space-md);
+  top: 50%;
+  transform: translateY(-50%);
+  transition: transform 0.18s;
+}
+.subpanel-title[aria-expanded="true"]::after { transform: translateY(-50%) rotate(90deg); }
+.subpanel-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+}
+
+/* Player connections — QR to join + a window / capability summary. */
+.connections-join { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.connections-qr {
+  width: 160px;
+  height: 160px;
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px;
+  box-sizing: border-box;
+}
+.connections-url {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+  text-align: center;
+  margin: 0;
+}
+.connections-summary {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.connections-summary li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.connections-summary li .conn-count { font-weight: 700; color: var(--text-primary); }
+.connections-summary li .conn-sub { font-size: 0.68rem; opacity: 0.75; font-weight: 400; }
+.connections-summary li.conn-empty { justify-content: center; font-style: italic; opacity: 0.6; }
 
 /* ── Session panel ─────────────────────────────────────────────────────── */
 /* QR + copy bar — a horizontal pair: tall white "Copy" bar on the left,
@@ -1380,6 +1634,59 @@ option.select-option--add {
   padding: var(--space-sm);
 }
 
+/* v2.16.34 — Standard "picker + adjacent + button" pattern. Replaces
+   the buried "+ Add new" sentinel that used to sit at the bottom of
+   the dropdown list, where it was easy to miss. Used by Map / Marker
+   / Display pickers (and likely others as the sweep continues). */
+.picker-row {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-xs);
+  width: 100%;
+}
+.picker-row__select {
+  flex: 1 1 auto;
+  min-width: 0; /* let the select shrink instead of forcing the button off */
+}
+.picker-row__add {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  /* v2.16.45 — tinted green so the "+ create new" affordance pops
+     against the neutral row. Matches the established "green = add /
+     positive action" semantic the eye-icon pulse already uses. */
+  background: rgba(34, 197, 94, 0.08);
+  border: 1px solid rgba(34, 197, 94, 0.45);
+  border-radius: var(--radius-sm);
+  color: #4ade80;
+  cursor: pointer;
+  padding: 0 var(--space-sm);
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.picker-row__add:hover {
+  color: #86efac;
+  border-color: rgba(74, 222, 128, 0.85);
+  background: rgba(34, 197, 94, 0.16);
+}
+.picker-row__add:active {
+  background: rgba(34, 197, 94, 0.25);
+}
+
+/* Patch E — per-map "Affect Player Markers" toggle row. Compact strip
+   between the filter picker and the param controls. */
+.filter-affect-markers {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  padding: var(--space-xs) 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+}
+.filter-affect-markers input[type="checkbox"] { margin: 0; cursor: pointer; }
+
 /* Group sections */
 .filter-group {
   border-top: 1px solid var(--border);
@@ -1546,6 +1853,95 @@ option.select-option--add {
   display: flex;
   flex-direction: column;
   gap: 2px;
+}
+
+/* v2.16.35 — Side-panel framework. v2.16.36 — slides out FROM the
+   sidebar (anchored to its right edge, hidden behind it when closed)
+   so the panel feels like an extension of the sidebar it was opened
+   from rather than a separate UI off the opposite edge of the screen.
+   The sidebar (z-index:10) covers the hidden / sliding portion; the
+   panel (z-index:5) sits beneath it. Clicking the canvas (or the
+   panel's own X / Escape) closes — state changes already wrote
+   through live, so "close" implies "save and dismiss". */
+.side-panel {
+  position: fixed;
+  top: 0;
+  left: var(--sidebar-width);
+  height: 100vh;
+  /* v2.16.36 — width scales with the same --ui-scale as the sidebar
+     (see Settings → UI Scale) so the panel stays in proportion when the
+     GM dials the chrome up / down. Same factor the sidebar already uses
+     for its own width. */
+  width: calc(340px * var(--ui-scale));
+  max-width: calc(100vw - var(--sidebar-width));
+  background: var(--bg-card, #1a1f2e);
+  border-right: 1px solid rgba(255, 255, 255, 0.12);
+  box-shadow: 4px 0 18px rgba(0, 0, 0, 0.45);
+  display: flex;
+  flex-direction: column;
+  transform: translateX(-100%);
+  transition: transform 220ms cubic-bezier(0.4, 0, 0.2, 1);
+  /* v2.16.48 — below #sidebar (100) so the off-screen portion stays
+     hidden behind it, ABOVE the PiP (50) so opening a side panel
+     covers the inline preview during config sessions. */
+  z-index: 90;
+}
+.side-panel.is-open { transform: translateX(0); }
+
+.side-panel__header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+.side-panel__title {
+  flex: 1;
+  margin: 0;
+  font-size: var(--font-size-md, 0.95rem);
+  font-weight: 600;
+  color: var(--text-primary, #e4e8f0);
+  letter-spacing: 0.02em;
+}
+.side-panel__close {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease, border-color 120ms ease;
+}
+.side-panel__close:hover {
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.12);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.side-panel__body {
+  flex: 1;
+  overflow-y: auto;
+  padding: var(--space-md);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+}
+
+/* Narrow screens — full-bleed so the controls don't get cramped on
+   phones / tight viewports. Triggered by JS adding `--mobile`. Overrides
+   the desktop "left: sidebar-width" anchor so the panel covers the
+   full viewport on touch. */
+.side-panel--mobile {
+  left: 0;
+  width: 100vw;
+  max-width: 100vw;
+  border-right: none;
 }
 .fx-popover-option {
   text-align: left;
@@ -1871,10 +2267,16 @@ option.select-option--add {
   width: 90px;
   flex: 0 0 auto;
 }
-/* Kind row in v2.12: [active-kind label] [sparkle FX button]. Colour
- * + kind picker + params all live in the popover the sparkle opens. */
+/* Kind row in v2.16.35: [Label] [kind <select>] [sliders FX button].
+   The picker is now inline (was a static text label opening a popover
+   that hosted the picker); params live in a right-edge side panel
+   the sliders button opens. */
 .fog-row--kind > .fog-row-label { width: auto; }
 .fog-row--kind > .bg-fx-btn { flex: 0 0 28px; }
+.fog-row-select {
+  flex: 1 1 auto;
+  min-width: 0;
+}
 
 /* Drawing Mode — Polygon / Brush sticky toggle. Active button gets a fill;
    the inactive partner is outline only. Visually similar to Paint/Erase
@@ -3169,6 +3571,12 @@ option.select-option--add {
   padding: 0;
   cursor: grab;
 }
+/* v2.16.90 — live YouTube video element: borderless iframe filling the box.
+   The iframe is click-through until the element is selected, so move /
+   drag work normally; once selected, YT's own controls become interactive. */
+.txt-map-el-body--video { display: block; padding: 0; overflow: hidden; background: #000; cursor: grab; }
+.txt-map-el-video-frame { width: 100%; height: 100%; display: block; border: 0; pointer-events: none; }
+.txt-map-el--selected .txt-map-el-video-frame { pointer-events: auto; }
 /* The image body's children (wrapper span + inline SVG + raw <img> for
    raster uploads) must FILL the body, not size to their intrinsic
    dimensions. renderAssetToInlineHtml returns a bare <img> for raster
@@ -3855,12 +4263,23 @@ option.select-option--add {
      means the body grew to fit everything and pushed the footer off-
      screen instead of overflowing inside its own scroll region. */
   min-height: 0;
+  /* v2.16.110 — explicit cap alongside flex:1 so the body ALWAYS scrolls
+     once the open sections exceed it, even if the dialog's flex height
+     chain is defeated by a browser quirk. Sits just under the dialog's
+     85vh max, leaving room for the header + footer. */
+  max-height: 75vh;
   overflow-y: auto;
   padding: var(--space-md);
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  /* v2.16.109 — visible scroll affordance once enough sections are open. */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
+.settings-body::-webkit-scrollbar { width: 10px; }
+.settings-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+.settings-body::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
 /* v2.12.20 — Settings sections are native <details> elements now so the
    browser owns the open/close state. The grid stays the same when open;
    the summary stays compact and clickable when closed. */
@@ -5610,15 +6029,8 @@ option.select-option--add {
 /* v2.14.31 — Map-panel grid colour swatch. Sits in the fog-row--kind
    layout next to Backdrop. The native colour input is small so we
    give it a sensible fixed size rather than letting it stretch. */
-.map-grid-colour {
-  width: 38px;
-  height: 28px;
-  padding: 0;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: transparent;
-  cursor: pointer;
-}
+/* v2.16.89 — grid colour now uses the standard .fog-brush-row--color
+   full-width bar (same as the Backdrop colour picker); no bespoke swatch. */
 
 /* v2.14.77 — Upper-layer-opacity slider. Sits in the fog-row--kind
    layout next to Backdrop / Grid colour. Native range input given a
@@ -5650,7 +6062,18 @@ option.select-option--add {
 .player-reset-view-btn:hover { opacity: 1; }
 
 /* Projector view standalone styles */
-.projector-view { background: #000; color: var(--text); margin: 0; overflow: hidden; }
+.projector-view {
+  background: #000;
+  color: var(--text);
+  margin: 0;
+  overflow: hidden;
+  /* The projector is scale-locked to the physical table calibration.
+     Disable native pinch-zoom + double-tap-zoom + pull-to-refresh on
+     touchscreen-mounted projector/TV browsers so the user can't
+     accidentally rescale the table image. */
+  touch-action: none;
+  overscroll-behavior: none;
+}
 .projector-view #renderer-canvas { position: fixed; inset: 0; width: 100vw; height: 100vh; display: block; }
 
 /* Rotation — primary projector only. The canvas (and grid overlay) are sized
@@ -6313,3 +6736,2162 @@ option.select-option--add {
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--border); border-radius: 3px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--border-focus); }
+
+/* ════════════════════════════════════════════════════════════════════════
+   Player Voice (v2.17) — players roster panel, identity modal/button
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* ── GM "Players" roster panel ──────────────────────────────────────────── */
+.players-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  margin-bottom: var(--space-sm);
+}
+.players-empty {
+  margin: 0;
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+  line-height: 1.4;
+}
+.player-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.player-status-dot {
+  flex: 0 0 auto;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: var(--text-dim);
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.4) inset;
+}
+.player-status-dot.is-online {
+  background: var(--ok);
+  animation: player-status-pulse 2.2s ease-in-out infinite;
+}
+@keyframes player-status-pulse {
+  0%, 100% { box-shadow: 0 0 0 0  rgba(34, 197, 94, 0.55), 0 0 4px var(--ok); }
+  60%      { box-shadow: 0 0 0 6px rgba(34, 197, 94, 0),    0 0 4px var(--ok); }
+}
+
+/* v2.16.47 — per-player unread message badge on each Players row.
+   Red = unread messages addressed to the GM (gm-bound channel).
+   Orange = unread messages between this player and another player
+   that the GM is monitoring (peer-bound channel). When both are
+   non-zero, red wins (the more direct attention demand). Click
+   opens the message thread in a SidePanel. */
+.player-row-unread {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 22px;
+  height: 20px;
+  padding: 0 6px;
+  border-radius: 999px;
+  color: #fff;
+  font-size: 0.72rem;
+  font-weight: 700;
+  background: rgba(220, 38, 38, 0.85);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  cursor: pointer;
+  transition: background 120ms ease, transform 120ms ease;
+}
+.player-row-unread:hover { background: rgba(220, 38, 38, 1); transform: scale(1.05); }
+.player-row-unread--peer { background: rgba(245, 158, 11, 0.85); }
+.player-row-unread--peer:hover { background: rgba(245, 158, 11, 1); }
+
+/* v2.16.48 — idle "review previous conversation" icon, shown at the
+   far right of the row when there's thread history but no unread
+   messages. Faint so it doesn't compete with active controls; brightens
+   on hover. */
+.player-row-thread-idle {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 20px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  opacity: 0.55;
+  cursor: pointer;
+  transition: opacity 120ms ease, color 120ms ease, background 120ms ease, border-color 120ms ease;
+}
+.player-row-thread-idle:hover {
+  opacity: 1;
+  color: var(--text-primary);
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.12);
+}
+/* Offline (GM-managed) — same slot as the chat affordance, red
+   chat-bubble with a slash, NOT interactive. Title explains. */
+.player-row-thread-offline {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 20px;
+  color: rgba(220, 38, 38, 0.7);
+  cursor: default;
+}
+
+/* v2.16.49 — hover-revealed delete X at the row's top-right corner.
+   Replaces the old always-visible delete button to free up slot
+   space. Hidden by default; appears on row hover or button focus. */
+.player-row { position: relative; }
+.player-row-delete-corner {
+  position: absolute;
+  top: -6px;
+  right: -6px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  background: rgba(220, 38, 38, 0.9);
+  border: 1px solid var(--bg-panel, #11151f);
+  border-radius: 50%;
+  color: #fff;
+  cursor: pointer;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 120ms ease, transform 120ms ease;
+  z-index: 2;
+}
+.player-row:hover .player-row-delete-corner,
+.player-row-delete-corner:focus-visible {
+  opacity: 1;
+  pointer-events: auto;
+}
+.player-row-delete-corner:hover { transform: scale(1.1); background: rgba(220, 38, 38, 1); }
+
+/* v2.16.49 — drop-target highlight on the canvas-wrapper while a
+   player row icon is being dragged over it. Subtle blue glow so the
+   GM knows the drop will land. */
+#canvas-wrapper.is-pip-drop-target { /* reserved for future */ }
+#canvas-wrapper.player-drop-active::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  box-shadow: inset 0 0 0 3px rgba(99, 102, 241, 0.55);
+  z-index: 40;
+}
+
+/* v2.16.47 — message thread side panel. Body is a vertical stack:
+   thread above (scrollable, fills available height), composer below
+   (fixed at the bottom of the panel). */
+.mt-panel {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  padding: 0;
+}
+.mt-thread {
+  flex: 1 1 auto;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-md) var(--space-sm);
+}
+.mt-empty {
+  margin: auto;
+  font-size: var(--font-size-sm);
+  color: var(--text-dim);
+  text-align: center;
+}
+.mt-msg {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  padding: 6px 10px;
+  border-radius: 10px;
+  max-width: 95%;
+}
+.mt-msg--player { background: rgba(255, 255, 255, 0.04); align-self: flex-start; }
+.mt-msg--gm     { background: rgba(99,  102, 241, 0.18); align-self: flex-end; }
+/* v2.16.49 — bold treatment for messages that arrived since the GM
+   last closed this thread. Drops back to normal weight on next open
+   (via lastSeenAt timestamp update in MessageThreads.markSeen). */
+.mt-msg--new .mt-msg-from { font-weight: 800; }
+.mt-msg--new .mt-msg-text { font-weight: 600; color: #fff; }
+.mt-msg-head {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  font-size: 0.72rem;
+}
+.mt-msg-from { font-weight: 600; }
+/* v2.16.51 — peer-bound arrow + recipient. Arrow is bright white so the
+   direction reads at a glance; name is bold + inline-styled to the
+   recipient's identity colour so it stands out as "not for me". */
+.mt-msg-arrow { color: #fff; padding: 0 2px; font-weight: 700; }
+.mt-msg-to    { font-weight: 700; }
+.mt-msg-time { margin-left: auto; color: var(--text-dim); }
+.mt-msg-text {
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+.mt-composer {
+  flex: 0 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  padding: var(--space-sm);
+  border-top: 1px solid rgba(255, 255, 255, 0.08);
+  background: rgba(255, 255, 255, 0.02);
+}
+.mt-chips { display: flex; flex-wrap: wrap; gap: 4px; }
+.mt-chip {
+  font-size: 0.72rem;
+  padding: 3px 8px;
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.12);
+  border-radius: 999px;
+  color: var(--text-secondary);
+  cursor: pointer;
+  transition: background 120ms ease, color 120ms ease;
+}
+.mt-chip:hover { background: rgba(255, 255, 255, 0.12); color: var(--text-primary); }
+/* v2.16.49 — "..." placeholder shown while pre-fetched LLM
+   suggestions are still in flight. Pulses subtly so the GM knows
+   chips are on the way. */
+.mt-chips-waiting {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.9rem;
+  color: var(--text-dim);
+  padding: 0 6px;
+  animation: mt-chips-waiting-pulse 1.2s ease-in-out infinite;
+}
+@keyframes mt-chips-waiting-pulse {
+  0%, 100% { opacity: 0.35; }
+  50%      { opacity: 0.95; }
+}
+.mt-input {
+  width: 100%;
+  resize: vertical;
+  min-height: 44px;
+  font-family: inherit;
+  font-size: var(--font-size-sm);
+  background: var(--bg-input);
+  color: var(--text-primary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: 6px 8px;
+}
+.mt-actions { display: flex; justify-content: flex-end; gap: var(--space-xs); }
+.player-row-colour {
+  flex: 0 0 auto;
+  width: 22px;
+  height: 22px;
+  padding: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: transparent;
+  cursor: pointer;
+}
+.player-row-colour::-webkit-color-swatch-wrapper { padding: 2px; }
+.player-row-colour::-webkit-color-swatch { border: none; border-radius: 2px; }
+.player-row-colour.flash-invalid {
+  outline: 2px solid var(--danger);
+  outline-offset: 1px;
+}
+.player-row-names {
+  flex: 1 1 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+.player-row-name,
+.player-row-char {
+  width: 100%;
+  box-sizing: border-box;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+  padding: 1px 4px;
+}
+.player-row-char {
+  font-size: var(--font-size-sm);
+  color: var(--text-secondary);
+}
+.player-row-name:hover,
+.player-row-char:hover { border-color: var(--border); }
+.player-row-name:focus,
+.player-row-char:focus {
+  outline: none;
+  border-color: var(--border-focus);
+  background: var(--bg-base);
+}
+.player-row-delete {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.player-row-delete:hover { color: var(--danger); background: var(--bg-hover); }
+.player-row-marker,
+.player-row-cancelmove {
+  flex: 0 0 auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.player-row-marker:hover,
+.player-row-cancelmove:hover { color: var(--text-primary); background: var(--bg-hover); }
+.player-row-marker.is-placed { color: var(--accent); }
+.player-row-cancelmove { color: var(--warn); }
+/* Token footprint badge — small <select> docked to the icon button's
+   bottom-left, mirroring the colour badge at bottom-right. Native select
+   dropdown surfaces on click; the badge shows just the current footprint. */
+.player-row-tokensize {
+  appearance: none;
+  -webkit-appearance: none;
+  position: absolute;
+  bottom: -3px;
+  left: -3px;
+  height: 14px;
+  padding: 0 3px;
+  background: var(--bg-base);
+  border: 1.5px solid var(--bg-panel);
+  border-radius: 7px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 0.55rem;
+  font-weight: 700;
+  line-height: 12px;
+  cursor: pointer;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+}
+.player-row-tokensize:hover { border-color: var(--accent); }
+
+/* Combined icon + colour control. The icon button shows the picked token
+   image / glyph / initial, with a small colour-input badge attached to its
+   bottom-right edge for editing the player's identity colour. Hover reveals
+   a clear-icon × at the top-right when an icon is set. */
+.player-row-icon-wrap {
+  position: relative;
+  flex: 0 0 auto;
+  width: 34px;
+  height: 34px;
+}
+.player-row-icon {
+  width: 34px;
+  height: 34px;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: color-mix(in srgb, var(--row-icon-color, var(--accent)), black 55%);
+  border: 2px solid var(--row-icon-color, var(--border));
+  border-radius: 50%;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 0.95rem;
+  cursor: pointer;
+  overflow: hidden;
+}
+.player-row-icon img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  pointer-events: none;
+}
+.player-row-icon--empty {
+  border-style: dashed;
+  opacity: 0.85;
+}
+/* Colour badge — small native colour input perched on the icon's bottom-right. */
+.player-row-colour-badge {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  appearance: none;
+  -webkit-appearance: none;
+  border: 1.5px solid var(--bg-panel);
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 2px rgba(0, 0, 0, 0.6);
+}
+.player-row-colour-badge::-webkit-color-swatch-wrapper { padding: 0; }
+.player-row-colour-badge::-webkit-color-swatch { border: none; border-radius: 50%; }
+.player-row-colour-badge::-moz-color-swatch { border: none; border-radius: 50%; }
+.player-row-colour-badge.flash-invalid {
+  outline: 2px solid var(--danger);
+  outline-offset: 1px;
+}
+.player-row-icon-clear {
+  position: absolute;
+  top: -4px;
+  right: -4px;
+  width: 14px;
+  height: 14px;
+  padding: 0;
+  display: none;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  line-height: 1;
+  color: #fff;
+  background: var(--danger);
+  border: 1px solid #fff;
+  border-radius: 50%;
+  cursor: pointer;
+  z-index: 1;
+}
+.player-row-icon-wrap:hover .player-row-icon-clear { display: inline-flex; }
+
+/* Modal preview disc — image variant when the GM has assigned an icon. */
+.modal-identity-preview-img {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  border-radius: 50%;
+  pointer-events: none;
+}
+
+/* (Token-disc image / glyph / rect / scaled variants are defined below,
+   AFTER the base .pm-token-disc rule, so they actually win the cascade.) */
+
+/* ── Player tokens (on the map, GM + player views) ──────────────────────── */
+.player-marker-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 5;
+  overflow: hidden;
+}
+.pm-token {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  pointer-events: none;
+  --pm-color: #3b82f6;
+}
+.pm-token-disc {
+  width: 26px;
+  height: 26px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  background: color-mix(in srgb, var(--pm-color), black 55%);
+  border: 3px solid var(--pm-color);
+  box-shadow: 0 0 6px rgba(0, 0, 0, 0.6), 0 0 0 1px rgba(255, 255, 255, 0.25) inset;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.9);
+  pointer-events: auto;
+  /* Crop icon images to the rounded disc shape so they don't bleed past the
+     coloured border on rect (1x2 / 2x3) footprints. */
+  overflow: hidden;
+  /* Mobile: prevent the browser from claiming a finger that lands on the
+     disc for native pan / pinch. Without this an in-flight two-finger
+     pinch whose first touch grazes a token disc could fall back to
+     native page-zoom on some Android Chrome versions. */
+  touch-action: none;
+}
+.pm-token--draggable .pm-token-disc { cursor: grab; }
+.pm-token.is-dragging .pm-token-disc { cursor: grabbing; box-shadow: 0 0 12px var(--pm-color); }
+
+/* Token disc — variants for image / glyph / rect / scaled. These come AFTER
+   the base .pm-token-disc rule so the rect override wins over border-radius:50%. */
+.pm-token-disc--has-image,
+.pm-token-disc--has-glyph { padding: 0; font-size: 1.05rem; }
+.pm-token-disc img {
+  width: 100%;
+  height: 100%;
+  /* cover, not contain — disc clips with overflow:hidden, so cover fills the
+     full footprint cleanly. Slight crop on non-square footprints, but no
+     letterbox showing the disc background through the image. */
+  object-fit: cover;
+  pointer-events: none;
+  transition: transform 150ms ease;
+}
+/* Non-square footprints (1x2, 2x3) are ROUNDED RECTANGLES, not ovals. */
+.pm-token-disc--rect {
+  border-radius: 12%;
+}
+/* Scale the initial-letter fallback with disc size on calibrated maps. */
+.pm-token-disc--scaled {
+  font-size: clamp(0.85rem, 28%, 2rem);
+}
+
+/* Facing pointer — a clip-path "tick + arrowhead" handle that sits FULLY
+   outside the disc, attached to it by a short stalk so it reads as an
+   integrated feature of the token rather than a floating button. The
+   stalk overlaps the disc edge by a couple of pixels so the join is
+   seamless. Doubles as the rotation handle: drag the visible shape
+   around the disc centre to rotate (snap-to-45°). Sits OUTSIDE the
+   disc (sibling of pm-token-disc) so it isn't clipped by the disc's
+   overflow:hidden. Anchored to the disc's vertical centre via
+   --pm-disc-half-h rather than the .pm-token midpoint — the .pm-token
+   also contains the name label below the disc, so a 50% anchor would
+   drift the pointer down into the label space. */
+.pm-token-pointer {
+  position: absolute;
+  top: var(--pm-disc-half-h, 13px);
+  left: 50%;
+  /* Box scales with the disc's shortest edge — JS sets --pm-arrow-size to
+     50 % of that, clamped to [10, 40] px (2026-05-31). Keeps the
+     pointer in proportion at every zoom: shrinks with the disc on
+     zoom-out, grows on zoom-in, never dwarfs the icon. */
+  width:  var(--pm-arrow-size, 14px);
+  height: var(--pm-arrow-size, 14px);
+  margin-left: calc(var(--pm-arrow-size, 14px) / -2);
+  margin-top:  calc(var(--pm-arrow-size, 14px) / -2);
+  background: var(--pm-color);
+  /* Square box — arrowhead in the top 70 %, stalk in the bottom 30 %.
+     Stalk is 30 % wide and centred. Stalk overlaps the disc edge by
+     2 px (set in JS via --pm-pointer-offset) so the join looks attached. */
+  clip-path: polygon(
+    50% 0%,
+    100% 70%,
+    65% 70%,
+    65% 100%,
+    35% 100%,
+    35% 70%,
+    0% 70%
+  );
+  filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.55));
+  pointer-events: none;
+  /* Live-driven by JS via CSS custom properties on the token wrapper.
+     Default offset matches the default 26 px disc — bottom of the stalk
+     sits 2 px inside the disc edge for a clean attached look. */
+  transform: rotate(var(--pm-facing, 0deg)) translateY(var(--pm-pointer-offset, -21px));
+  transition: transform 150ms ease;
+  touch-action: none;
+}
+.pm-token--draggable .pm-token-pointer { pointer-events: auto; cursor: grab; }
+.pm-token.is-rotating .pm-token-pointer { cursor: grabbing; transition: none; }
+.pm-token.is-rotating .pm-token-disc img { transition: none; }
+.pm-token-label {
+  margin-top: 2px;
+  max-width: 96px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: 0.7rem;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Annotate (v2.16.76) — progress clocks HUD + whiteboard + panel form
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* v2.16.82 — Map-anchored annotation objects (clocks / timers / notes).
+   Containers are full-screen + click-through; the projected object boxes
+   opt back in. Each box is a CSS size-container so its content scales with
+   the box (container-query units). */
+.annotate-notes,
+.annotate-clocks {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+}
+.anchored-obj {
+  position: absolute;
+  box-sizing: border-box;
+  container-type: size;
+  transform-origin: center center;
+  /* v2.16.86 — the box itself never blocks the map. Only the chrome
+     handles (always) and the content (ONLY once selected) opt back in,
+     so you must select via the move handle before any interaction. */
+  pointer-events: none;
+  user-select: none;
+}
+.anchored-content { width: 100%; height: 100%; box-sizing: border-box; pointer-events: none; }
+.anchored-obj.is-selected > .anchored-content { pointer-events: auto; }
+/* v2.16.84 — selection + chrome key off the OBJECT's colour (the green/
+   orange are view-identity only). Handles reuse the established
+   .marker-handle look (26px fixed, dark/white, translate-centred on the
+   box corners) so the design language is consistent; the resize grip is
+   the rounded-square in the object's colour. */
+.anchored-obj.is-selected { outline: 2px dashed var(--obj-color, var(--accent)); outline-offset: 2px; }
+.anchored-handle--move   { top: 0;    left: 0;    cursor: move; z-index: 6; }
+.anchored-handle--del    { top: 100%; left: 0;    z-index: 6; }
+.anchored-handle--resize {
+  top: 100%; left: 100%;
+  cursor: nwse-resize;
+  border-radius: 6px;
+  border-width: 2px;
+  border-color: var(--obj-color, rgba(255, 255, 255, 0.85));
+  z-index: 6;
+}
+.anchored-handle--rotate { top: -32px; left: 50%; cursor: grab; z-index: 6; }
+.anchored-rotate-stem {
+  position: absolute;
+  top: -20px; left: 50%;
+  width: 0; height: 20px;
+  transform: translateX(-50%);
+  border-left: 2px solid var(--obj-color, rgba(255, 255, 255, 0.6));
+  pointer-events: none;
+  z-index: 1;
+}
+
+/* Notes content — text box; the font is auto-fit by JS to fill the box. */
+.a-note > .anchored-content {
+  padding: 6%;
+  background: rgba(8, 11, 20, 0.66);
+  border: 1px solid color-mix(in srgb, var(--note-color, #888), black 25%);
+  border-left: 4px solid var(--note-color, #888);
+  border-radius: 8px;
+  backdrop-filter: blur(3px);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.a-note-text {
+  width: 100%;
+  height: 100%;
+  color: color-mix(in srgb, var(--note-color, #fff), white 35%);
+  font-family: var(--font-ui);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: pre-wrap;
+  overflow: hidden;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+.a-note-edit {
+  width: 100%; height: 100%;
+  box-sizing: border-box;
+  resize: none;
+  background: rgba(0, 0, 0, 0.6);
+  border: 1px solid var(--note-color, #fff);
+  border-radius: 4px;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  padding: 4px;
+  outline: none;
+}
+
+/* v2.16.91 — live text-map video overlay. Container is click-through; the
+   video hosts opt back in so the viewer uses YouTube's own controls. */
+.textmap-video-layer { position: absolute; inset: 0; z-index: 6; pointer-events: none; }
+.textmap-video {
+  position: absolute;
+  transform-origin: center center;
+  pointer-events: auto;
+  overflow: hidden;
+  border-radius: 2px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
+}
+.textmap-video iframe { width: 100%; height: 100%; border: 0; display: block; }
+
+/* Whiteboard canvas overlays the map exactly. pointer-events:none by
+   default so the map gets pan/zoom; the GM's draw toggle flips it to auto. */
+.annotate-whiteboard {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 7;
+  pointer-events: none;
+  touch-action: none;
+}
+
+/* Clock content — name / dial / count, all scaled to the box via
+   container-query units so the clock grows + shrinks with the map zoom
+   and resize. v2.16.82. */
+.a-clock > .anchored-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2cqh;
+  padding: 6cqmin;
+  background: rgba(8, 11, 20, 0.62);
+  border: 1px solid color-mix(in srgb, var(--clock-color, #888), black 30%);
+  border-radius: 10cqmin;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.clock-name {
+  font-weight: 700;
+  font-size: 13cqh;
+  color: color-mix(in srgb, var(--clock-color, #fff), white 25%);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.clock-dial { display: block; height: 60cqh; width: auto; aspect-ratio: 1; }
+.clock-wedge {
+  fill: rgba(255, 255, 255, 0.06);
+  stroke: color-mix(in srgb, var(--clock-color, #888), black 10%);
+  stroke-width: 1.5;
+  cursor: pointer;
+  transition: fill 120ms ease;
+}
+.clock-wedge.is-filled { fill: var(--clock-color, #888); }
+.clock-wedge:hover { fill: color-mix(in srgb, var(--clock-color, #888), white 20%); }
+.clock-count {
+  font-weight: 800;
+  font-size: 13cqh;
+  color: color-mix(in srgb, var(--clock-color, #ccc), white 25%);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+
+/* Timer content — name / big time / controls, all box-scaled. */
+.a-timer > .anchored-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 1cqh;
+  padding: 5cqmin 8cqmin;
+  background: rgba(8, 11, 20, 0.66);
+  border: 1px solid var(--timer-color, #888);
+  border-radius: 10cqmin;
+  backdrop-filter: blur(4px);
+  box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.a-timer-name {
+  font-weight: 700;
+  font-size: 14cqh;
+  color: color-mix(in srgb, var(--timer-color, #fff), white 25%);
+  max-width: 100%;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+}
+.a-timer-time {
+  font-family: var(--font-ui);
+  font-weight: 800;
+  font-size: 42cqh;
+  letter-spacing: 0.02em;
+  color: var(--timer-color, #fff);
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.a-timer.is-done .a-timer-time { color: var(--danger); animation: a-timer-flash 1s ease-in-out infinite; }
+@keyframes a-timer-flash { 50% { opacity: 0.35; } }
+
+/* v2.16.85 — type-specific controls sit on the bottom edge (below the box,
+   centred), shown only when selected. Fixed-size marker-style handles, so
+   they don't shrink on zoom and never crowd the box content. */
+.anchored-controls {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translate(-50%, 16px);
+  display: flex;
+  gap: 6px;
+  z-index: 6;
+}
+.anchored-ctrl { position: relative; transform: none; }
+.anchored-ctrl:active { transform: scale(0.94); }
+
+/* Panel form */
+.annotate-section-label {
+  margin: var(--space-sm) 0 2px 0;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+}
+.annotate-clock-form { display: flex; flex-direction: column; gap: 6px; }
+.annotate-clock-row { display: flex; align-items: center; gap: 8px; }
+.annotate-seg-label { font-size: var(--font-size-sm); color: var(--text-secondary); }
+#annotate-clock-segments { width: 52px; padding: 4px 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); }
+.annotate-timer-mode { padding: 4px 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: var(--font-size-sm); }
+#annotate-timer-duration { width: 60px; padding: 4px 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); text-align: center; }
+#annotate-timer-duration:disabled { opacity: 0.4; }
+.annotate-color-row { display: flex; gap: 5px; flex-wrap: wrap; }
+.annotate-swatch {
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border-radius: 50%;
+  border: 2px solid transparent;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+}
+.annotate-swatch.is-selected { border-color: #fff; box-shadow: 0 0 6px rgba(255, 255, 255, 0.5); }
+.annotate-wb-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+#annotate-draw-toggle.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* v2.16.80 — collapsible sub-sections (clocks / timers / notes) so the
+   panel stays calm; whiteboard stays always-visible above them. */
+.annotate-sub { margin-top: 6px; border-top: 1px solid var(--border); }
+.annotate-sub > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 0 4px 16px;
+  position: relative;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  user-select: none;
+}
+.annotate-sub > summary::-webkit-details-marker { display: none; }
+.annotate-sub > summary::before {
+  content: '▸';
+  position: absolute;
+  left: 2px;
+  font-size: 0.6rem;
+  transition: transform 0.15s;
+}
+.annotate-sub[open] > summary::before { transform: rotate(90deg); }
+.annotate-sub > summary:hover { color: var(--text-primary); }
+.annotate-note-input {
+  width: 100%;
+  resize: vertical;
+  padding: 6px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+}
+
+/* ════════════════════════════════════════════════════════════════════════
+   Initiative tracker (v2.16.8) — fanned deck, edge-pinnable both axes
+   ════════════════════════════════════════════════════════════════════════ */
+
+.init-tracker {
+  position: absolute;
+  z-index: 8;
+  pointer-events: auto;
+  display: flex;
+  gap: var(--space-sm);
+  padding: var(--space-sm);
+  background: rgba(10, 14, 26, 0.94);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+}
+.init-tracker.is-edge-bottom { left: 0; right: 0; bottom: 0; border-radius: 8px 8px 0 0; max-height: 55%; }
+.init-tracker.is-edge-top    { left: 0; right: 0; top: 0;    border-radius: 0 0 8px 8px; max-height: 55%; }
+/* v2.16.72 — docked to a SIDE, the tracker spans full height and is only
+   as wide as one card column. An explicit slim width (NOT max-content,
+   which would expand the flex-wrap unallocated row to a single line and
+   blow the width out). */
+.init-tracker.is-edge-left   { top: 0; bottom: 0; left: 0;   border-radius: 0 8px 8px 0; width: 116px; }
+.init-tracker.is-edge-right  { top: 0; bottom: 0; right: 0;  border-radius: 8px 0 0 8px; width: 116px; }
+/* The vertical rail / zones fit inside the slim column. */
+.init-tracker.is-vertical .init-zone--unallocated { max-width: none; }
+.init-tracker.is-vertical .init-rail.is-vertical { min-width: 0; }
+/* v2.16.71 — visible dock-drag: tracker follows the cursor, dimmed, with
+   a highlight ring so it clearly reads as being moved. */
+.init-tracker.is-dock-dragging {
+  transition: none;
+  box-shadow: 0 0 0 2px var(--accent), 0 12px 40px rgba(0, 0, 0, 0.6);
+  cursor: grabbing;
+}
+/* v2.16.72 — snap-target outline shown while dragging the dock grip so
+   the GM sees where the tracker will land before releasing. */
+.init-edge-hint {
+  position: fixed;
+  /* v2.16.73 — above the GM side panels so the left/right outline isn't
+     hidden under the docked control UI (was z-index 7, under the panels). */
+  z-index: 900;
+  pointer-events: none;
+  display: none;
+  border: 2px dashed var(--accent);
+  background: color-mix(in srgb, var(--accent), transparent 88%);
+  box-sizing: border-box;
+}
+.init-edge-hint.is-visible { display: block; }
+/* v2.16.73 — pointer-drag ghost: a clone of the card that follows the
+   cursor while dragging. Fixed-positioned, above everything, click-through
+   so elementFromPoint hit-tests the zone underneath, not the ghost. */
+.init-card-ghost {
+  position: fixed !important;
+  z-index: 2000;
+  margin: 0 !important;
+  pointer-events: none;
+  opacity: 0.92;
+  transform: rotate(-3deg) scale(1.04);
+  box-shadow: 0 12px 30px rgba(0, 0, 0, 0.6);
+  transition: none !important;
+}
+/* v2.16.72 — double-click-to-edit input overlaid on a rail card. */
+.init-card-edit {
+  position: absolute;
+  left: 16px; right: 4px;
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 20;
+  width: auto;
+  padding: 2px 4px;
+  background: rgba(0, 0, 0, 0.82);
+  border: 1px solid var(--accent);
+  border-radius: 4px;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 1.1rem;
+  font-weight: 800;
+  text-align: center;
+  outline: none;
+}
+
+/* v2.16.64 — both orientations now lay out controls + zones on the
+   SAME line. In horizontal-rail mode (tracker pinned to top/bottom)
+   the controls column sits to the LEFT of the zones row. In vertical-
+   rail mode (left/right edge) the controls column sits to the LEFT
+   of a vertical zones column (the tracker is tall and narrow). */
+.init-tracker.is-horizontal { flex-direction: row; align-items: stretch; }
+.init-tracker.is-vertical   { flex-direction: column; overflow-y: auto; }
+
+/* v2.16.63 — three-button primary stack (Advance / Roll Initiative /
+   End Combat) anchored to the left of the controls bar. Drag-bar grip
+   sits on the far left so the GM can cycle the dock position. The
+   tracker root flips between horizontal (top/bottom edge) and vertical
+   (left/right edge) — the inner layout follows. */
+.init-controls {
+  display: flex;
+  gap: var(--space-sm);
+  align-items: stretch;
+}
+.init-controls-primary {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  flex-shrink: 0;
+  min-width: 130px;
+}
+.init-tracker.is-horizontal .init-controls { flex-direction: row; align-items: stretch; }
+.init-tracker.is-vertical   .init-controls { flex-direction: column; align-items: stretch; }
+/* v2.16.71 — when docked to a side, the button column drops to card width
+   (~84px) and the labels wrap, so the whole tracker is no wider than a
+   single card. This is the slim-down the GM asked for. */
+.init-tracker.is-vertical .init-controls-primary { min-width: 0; width: 84px; }
+.init-tracker.is-vertical .init-btn {
+  white-space: normal;
+  line-height: 1.1;
+  padding: 5px 4px;
+  font-size: 0.72rem;
+  text-align: center;
+}
+
+/* Drag-bar grip — click cycles dock position. Vertical strip in
+   horizontal-rail mode, horizontal strip in vertical-rail mode. */
+.init-drag-bar {
+  flex-shrink: 0;
+  width: 10px;
+  align-self: stretch;
+  background: rgba(255, 255, 255, 0.08);
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  border-radius: 5px;
+  cursor: grab;
+  padding: 0;
+  position: relative;
+}
+.init-drag-bar::before {
+  content: '';
+  position: absolute;
+  inset: 4px;
+  background: repeating-linear-gradient(0deg, transparent 0, transparent 4px, rgba(255, 255, 255, 0.35) 4px, rgba(255, 255, 255, 0.35) 6px);
+  border-radius: 3px;
+}
+.init-drag-bar:hover { background: rgba(255, 255, 255, 0.18); }
+.init-tracker.is-vertical .init-drag-bar {
+  width: auto;
+  height: 10px;
+}
+.init-tracker.is-vertical .init-drag-bar::before {
+  background: repeating-linear-gradient(90deg, transparent 0, transparent 4px, rgba(255, 255, 255, 0.35) 4px, rgba(255, 255, 255, 0.35) 6px);
+}
+.init-btn {
+  padding: 6px 10px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  cursor: pointer;
+}
+.init-btn:hover { border-color: var(--border-focus); background: var(--bg-hover); }
+.init-btn--primary { background: var(--accent-dim); border-color: var(--accent); color: var(--accent-hover); }
+.init-btn--primary:hover { background: var(--accent); color: #fff; }
+.init-btn--danger { color: var(--danger); }
+.init-btn--danger:hover { background: var(--danger); color: #fff; border-color: var(--danger); }
+/* v2.16.63 — primary action colours. Advance = green (proceed), Reroll
+   Initiative = warm orange (matches the Players-panel main button),
+   End Combat = inherits .init-btn--danger (red/black). */
+.init-btn--advance {
+  background: linear-gradient(135deg, #22c55e 0%, #16a34a 100%);
+  border: 1px solid #15803d;
+  color: #06140b;
+  font-weight: 700;
+  text-shadow: none;
+}
+.init-btn--advance:hover {
+  background: linear-gradient(135deg, #4ade80 0%, #22c55e 100%);
+  color: #06140b;
+}
+.init-btn--roll {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border: 1px solid #b45309;
+  color: #1c1208;
+  font-weight: 700;
+  text-shadow: none;
+}
+.init-btn--roll:hover {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  color: #1c1208;
+}
+.init-sort, .init-edge {
+  padding: 6px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+}
+.init-close {
+  margin-left: auto;
+  width: 28px;
+  height: 28px;
+  padding: 0;
+  font-size: 18px;
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.init-close:hover { color: var(--text-primary); }
+
+.init-zones {
+  display: flex;
+  gap: var(--space-md);
+  flex: 1;
+  min-height: 0;
+  min-width: 0;
+  align-items: flex-start;
+}
+.init-tracker.is-vertical .init-zones { flex-direction: column; }
+.init-zone { display: flex; flex-direction: column; gap: 4px; min-width: 0; }
+.init-zone--bench    { flex: 0 0 auto; }
+.init-zone--unallocated { flex: 0 1 auto; min-width: 0; max-width: 40%; }
+.init-zone--rail     { flex: 1 1 auto; min-width: 0; }
+.init-zone--discard  { flex: 0 0 auto; }
+.init-rail-zone { flex: 1; min-width: 0; }
+
+/* v2.16.58 — Staging stacks (bench + discard). Cards rendered with
+   cascading offset via --stack-pos so the top card sits clean and
+   subsequent cards peek out behind it. z-index uses stack-size minus
+   pos so the FIRST array entry visually overlays the rest. */
+.init-stack {
+  position: relative;
+  width: 84px;
+  height: 116px;
+  flex-shrink: 0;
+}
+.init-stack--discard { width: 84px; height: 116px; }
+.init-stack .init-card--staging {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 76px;
+  height: 100px;
+  margin: 0;
+  transform: translate(calc(var(--stack-pos, 0) * 5px), calc(var(--stack-pos, 0) * 5px));
+  z-index: calc(var(--stack-size, 1) - var(--stack-pos, 0));
+  transition: transform 200ms ease, box-shadow 200ms ease, opacity 200ms ease;
+}
+/* v2.16.59 — bench is now a STATIC deck (top card only + thin spines
+   behind suggesting depth + "+N" count badge). No splay-on-hover; the
+   GM works the top of the stack and B becomes top when A is taken. */
+.init-stack--bench.is-drop-target,
+.init-stack--discard.is-drop-target {
+  outline: 2px dashed var(--accent);
+  outline-offset: 4px;
+  border-radius: 10px;
+}
+
+/* Decorative card-edge spines behind the top of the bench stack. Pure
+   visual depth — non-interactive, no card details, just a hint that
+   there's more underneath. */
+.init-stack-spine {
+  position: absolute;
+  top: calc(var(--depth, 1) * 3px);
+  left: calc(var(--depth, 1) * 3px);
+  width: 76px;
+  height: 100px;
+  background: linear-gradient(155deg, #0a0a0a 0%, #1a0606 100%);
+  border: 1px solid #b91c1c;
+  border-radius: 8px;
+  z-index: calc(5 - var(--depth, 1));
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.35);
+}
+
+/* Small "+N more" badge on the bench stack so the GM sees deck depth
+   without splaying. Yellow on charcoal-red for at-a-glance read. */
+.init-stack-count {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  min-width: 22px;
+  height: 22px;
+  padding: 0 5px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: #fbbf24;
+  border: 2px solid #1a0606;
+  border-radius: 11px;
+  font-size: 0.65rem;
+  font-weight: 900;
+  color: #1a1006;
+  z-index: 200;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.5);
+}
+
+/* v2.16.59 — Player-view enemy cards keep the charcoal palette
+   regardless of the GM-side red. Player view stays atmospheric, not
+   aggressive — the duck silhouette is the threat cue. */
+.player-init .init-card--enemy {
+  --init-color: #1f2937;
+  --init-color-fg: #fff;
+  background: linear-gradient(155deg, #1f2937 0%, #0a0d14 100%);
+  border-color: #334155;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+/* Unallocated row — full cards in a single rank, gap between. */
+.init-row--unallocated {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  align-items: flex-start;
+  padding: 4px 2px;
+}
+
+/* Staged card baseline — slightly smaller than rail cards and with a
+   little extra margin for the value input that sits below the body. */
+.init-card--staging {
+  width: 76px;
+  height: 100px;
+  cursor: grab;
+}
+.init-card--bench { /* coloured by --init-color (charcoal) */ }
+.init-card--unallocated { /* coloured by player --init-color */
+  opacity: 0.96;
+}
+/* Discard — desaturated so the GM reads it as "out" without making it
+   transparent. v2.16.62 — opacity dropped; the grayscale + brightness
+   filter is the cue. */
+.init-card--discard, .init-card.is-discarded {
+  filter: grayscale(0.6) brightness(0.7);
+  cursor: default;
+}
+
+/* Value input on staging cards — type a roll value + Enter to slot the
+   card into the rail at the correct sort position. Sits at the bottom
+   of the card, mostly transparent until focused. */
+.init-card-stage-value {
+  position: absolute;
+  bottom: 4px;
+  left: 4px;
+  right: 4px;
+  width: auto;
+  padding: 2px 4px;
+  background: rgba(0, 0, 0, 0.45);
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  border-radius: 4px;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  font-weight: 700;
+  text-align: center;
+  outline: none;
+  text-shadow: none;
+  z-index: 5;
+  /* Pull above the right-edge tab strip so the input always shows the
+     full value. */
+}
+.init-card-stage-value:focus {
+  background: rgba(0, 0, 0, 0.75);
+  border-color: var(--init-color, var(--accent));
+  box-shadow: 0 0 0 2px color-mix(in srgb, var(--init-color, var(--accent)), transparent 60%);
+}
+.init-card-stage-value::placeholder { color: rgba(255, 255, 255, 0.45); }
+/* When the input is the only thing in the unallocated card and the
+   GM is typing, the body's portrait should NOT swallow click events
+   meant for the input. */
+.init-card--staging .init-card-portrait,
+.init-card--staging .init-card-disc { pointer-events: none; }
+.init-zone-label {
+  font-size: var(--font-size-sm);
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  letter-spacing: 0.05em;
+}
+.init-zone-list { display: flex; flex-wrap: wrap; gap: var(--space-xs); align-items: center; min-height: 30px; }
+.init-zone-empty { color: var(--text-dim); font-size: var(--font-size-sm); font-style: italic; }
+
+.init-chip {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 30px;
+  height: 30px;
+  padding: 0 8px;
+  background: var(--bg-input);
+  border: 2px solid var(--init-color, var(--border));
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+.init-chip:hover { background: var(--bg-hover); }
+.init-chip--enemy { background: color-mix(in srgb, var(--init-color), black 30%); color: #fff; }
+.init-chip--player {
+  padding: 0 12px;
+  background: color-mix(in srgb, var(--init-color), black 60%);
+  color: #fff;
+}
+.init-chip--ghost { opacity: 0.7; border-style: dashed; }
+
+/* Rail + cards */
+.init-rail {
+  display: flex;
+  align-items: center;
+  min-height: 110px;
+}
+.init-rail.is-horizontal {
+  flex-direction: row;
+  padding: var(--space-sm) 60px var(--space-md) var(--space-sm);
+  overflow-x: auto;
+  overflow-y: visible;
+}
+.init-rail.is-vertical {
+  flex-direction: column;
+  padding: var(--space-sm) var(--space-md) 60px var(--space-sm);
+  overflow-x: visible;
+  overflow-y: auto;
+  min-height: 0;
+  min-width: 100px;
+}
+
+.init-card {
+  position: relative;
+  width: 76px;
+  height: 100px;
+  flex-shrink: 0;
+  background:
+    linear-gradient(155deg, color-mix(in srgb, var(--init-color, #475569), black 45%) 0%, color-mix(in srgb, var(--init-color, #1f2937), black 75%) 100%);
+  border: 1px solid color-mix(in srgb, var(--init-color, #475569), white 10%);
+  border-radius: 8px;
+  /* v2.16.57 — paper-card depth: outer drop shadow + a thin highlight at
+     the top edge selling the "card is sitting above the table" feel,
+     plus a subtle inset darkening at the bottom for the lift. */
+  box-shadow:
+    0 3px 6px rgba(0, 0, 0, 0.45),
+    0 1px 0 rgba(255, 255, 255, 0.08) inset,
+    0 -1px 0 rgba(0, 0, 0, 0.3) inset;
+  transition: transform 200ms ease, opacity 200ms ease, box-shadow 200ms ease;
+  cursor: grab;
+}
+/* v2.16.62 — loosened the GM fan so the value text on each card is
+   readable. Was -38px / -55px (~50% overlap → only the right tab
+   visible); now ~25-30% overlap leaves the body content showing.
+   Player-view margins are overridden separately below in .player-init. */
+.init-rail.is-horizontal .init-card { margin-right: -20px; }
+.init-rail.is-vertical   .init-card { margin-bottom: -32px; }
+.init-card.is-active { transform: scale(1.12); z-index: 200 !important; box-shadow: 0 0 12px rgba(255, 255, 255, 0.18); }
+/* v2.16.62 — no transparency-as-state cues. is-spent used to fade to
+   55% opacity ("everyone goes ghosted at end of round") — confusing.
+   The position cue (spent cards sit behind END ROUND) is enough; if a
+   stronger cue ever comes back it should NOT be opacity. */
+/* v2.16.65 — hide the original card while it's being dragged so the
+   browser's drag image is the only one visible (was showing both the
+   ghost AND the original outlined card, which read as duplicate). The
+   slot is preserved via visibility (vs display:none) so the layout
+   doesn't collapse during the drag. */
+.init-card.is-dragging { visibility: hidden; }
+.init-card.is-drop-target { outline: 2px dashed var(--accent); outline-offset: 2px; }
+/* v2.16.63 — rail gap on drag-hover. As the GM drags a card over the
+   rail, cards at and after the insertion point shift away to open a
+   slot the dragged card will land in on drop. transform composes with
+   the active-card scale so the leading card stays scaled. */
+.init-card.is-gap-shift                  { transform: translateX(90px); }
+.init-card.is-active.is-gap-shift        { transform: translateX(90px) scale(1.12); }
+.init-rail.is-vertical .init-card.is-gap-shift           { transform: translateY(110px); }
+.init-rail.is-vertical .init-card.is-active.is-gap-shift { transform: translateY(110px) scale(1.12); }
+
+.init-card--player {
+  background: linear-gradient(135deg, color-mix(in srgb, var(--init-color), black 60%) 0%, color-mix(in srgb, var(--init-color), black 80%) 100%);
+  border-color: var(--init-color);
+}
+/* v2.16.60 — GM threats are BLACK with RED edges. Black is the GM-
+   reserved colour for monster identity; the red edge is the scary cue.
+   Player-view enemies override back to charcoal in .player-init below. */
+.init-card--enemy {
+  --init-color: #b91c1c;
+  --init-color-fg: #fff;
+  background: linear-gradient(155deg, #0a0a0a 0%, #1a0606 100%);
+  border-color: #b91c1c;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.6), 0 0 10px rgba(185, 28, 28, 0.2);
+}
+/* Round marker — yellow + black caution stripes like a highway barrier
+   so everyone at the table reads "stop / end" at a glance. The yellow
+   tab on the visible edge keeps the "END ROUND" label legible against
+   the busy striped body. v2.16.62. */
+.init-card--round-marker {
+  --init-color: #fbbf24;
+  --init-color-fg: #1a1006;
+  background: repeating-linear-gradient(
+    -45deg,
+    #fbbf24 0,
+    #fbbf24 11px,
+    #000    11px,
+    #000    22px
+  );
+  border: 2px solid #fbbf24;
+  cursor: default;
+  box-shadow: 0 3px 6px rgba(0, 0, 0, 0.5), 0 0 14px rgba(251, 191, 36, 0.35);
+}
+
+/* v2.16.53 — bidirectional name tabs. A card in a fanned deck only exposes
+   ONE edge of its body to the eye (the previous card sits on top, hiding
+   the rest), so a single-edge label was unreadable for stacked cards. We
+   render all four edges and let the rail orientation decide which two are
+   visible — horizontal shows left+right, vertical shows top+bottom. Long
+   names truncate via overflow on the inner span. */
+.init-card-tab {
+  position: absolute;
+  background: var(--init-color);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  pointer-events: none;
+}
+.init-card-tab--left   { left: 0;  top: 0; bottom: 0; width: 16px; border-radius: 6px 0 0 6px; }
+.init-card-tab--right  { right: 0; top: 0; bottom: 0; width: 16px; border-radius: 0 6px 6px 0; }
+.init-card-tab--top    { left: 0; right: 0; top: 0;    height: 16px; border-radius: 6px 6px 0 0; }
+.init-card-tab--bottom { left: 0; right: 0; bottom: 0; height: 16px; border-radius: 0 0 6px 6px; }
+/* v2.16.57 — only the always-visible edge of the fan carries the name.
+   For a horizontal fan each card's RIGHT edge is the slice always exposed
+   to the eye (every card's left is tucked under the one above it); the
+   reverse holds for a vertical fan. Hiding the other three edges frees
+   the card body for a bigger portrait/icon. v2.16.58 — staging cards
+   (bench / unallocated / discard) inherit the same rule via the tracker
+   root's orientation class so the visual idiom is uniform. */
+.init-rail.is-horizontal .init-card-tab--left,
+.init-rail.is-horizontal .init-card-tab--top,
+.init-rail.is-horizontal .init-card-tab--bottom,
+.init-tracker.is-horizontal .init-card--staging .init-card-tab--left,
+.init-tracker.is-horizontal .init-card--staging .init-card-tab--top,
+.init-tracker.is-horizontal .init-card--staging .init-card-tab--bottom { display: none; }
+.init-rail.is-vertical   .init-card-tab--left,
+.init-rail.is-vertical   .init-card-tab--right,
+.init-rail.is-vertical   .init-card-tab--top,
+.init-tracker.is-vertical .init-card--staging .init-card-tab--left,
+.init-tracker.is-vertical .init-card--staging .init-card-tab--right,
+.init-tracker.is-vertical .init-card--staging .init-card-tab--top    { display: none; }
+
+.init-card-tab-text {
+  font-size: 0.7rem;
+  font-weight: 800;
+  /* v2.16.56 — colour driven by per-card --init-color-fg so light
+     identity tints get dark text and dark tints stay white. Dual shadow
+     gives readable contrast against the coloured strip on either side. */
+  color: var(--init-color-fg, #fff);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.7), 0 0 2px rgba(0, 0, 0, 0.4);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: clip;
+  letter-spacing: 0.04em;
+}
+/* v2.16.59 — enemy edge labels (A-Z) and player-view enemy "!" read
+   UPRIGHT in the narrow side tab rather than vertically rotated. A
+   single character fits easily and reads at-a-glance. */
+.init-card--enemy .init-card-tab--left .init-card-tab-text,
+.init-card--enemy .init-card-tab--right .init-card-tab-text {
+  writing-mode: horizontal-tb;
+  transform: none;
+  font-size: 1rem;
+  font-weight: 900;
+  letter-spacing: 0;
+  max-height: none;
+}
+/* Vertical strips read along the strip; rotation depends on side so each
+   reads outward (left strip reads bottom-up, right strip reads top-down). */
+.init-card-tab--left  .init-card-tab-text { writing-mode: vertical-rl; transform: rotate(180deg); max-height: 88px; }
+.init-card-tab--right .init-card-tab-text { writing-mode: vertical-rl;                            max-height: 88px; }
+/* Horizontal strips read left-to-right, truncated by card width. */
+.init-card-tab--top    .init-card-tab-text,
+.init-card-tab--bottom .init-card-tab-text { max-width: calc(100% - 8px); }
+
+.init-card-body {
+  /* v2.16.57 — body margin only on the side with the visible tab so the
+     portrait gets every pixel of the other three sides for max card-art
+     feel. */
+  margin: 0 16px 0 0;       /* horizontal fan → right tab */
+  height: 100%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-weight: 700;
+  color: #fff;
+  text-align: center;
+  padding: 4px;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.85);
+}
+.init-rail.is-vertical .init-card-body { margin: 0 0 16px 0; }   /* vertical fan → bottom tab */
+/* Staging cards mirror rail body margins. */
+.init-tracker.is-horizontal .init-card--staging .init-card-body { margin: 0 16px 0 0; }
+.init-tracker.is-vertical   .init-card--staging .init-card-body { margin: 0 0 16px 0; }
+.init-card-body--marker {
+  margin: 0;
+  font-size: 0.6rem;
+  letter-spacing: 0.1em;
+  color: var(--text-secondary);
+  writing-mode: vertical-rl;
+  transform: rotate(180deg);
+  white-space: nowrap;
+}
+.init-rail.is-vertical .init-card-body--marker { writing-mode: horizontal-tb; transform: none; margin: 0; }
+.init-card-body--enemy { font-size: 0.75rem; letter-spacing: 0.04em; }
+.init-card-big { font-size: 1.6rem; font-weight: 800; }
+.init-card-disc {
+  /* v2.16.57 — grew to nearly fill the body now that there's only one
+     side tab. Reads as a centred "minted token" rather than a small dot. */
+  width: 80%;
+  aspect-ratio: 1 / 1;
+  min-width: 38px;
+  max-width: 86px;
+  border-radius: 50%;
+  background: radial-gradient(circle at 30% 25%, color-mix(in srgb, var(--init-color), white 25%) 0%, var(--init-color) 50%, color-mix(in srgb, var(--init-color), black 25%) 100%);
+  border: 2px solid var(--init-color-fg, #fff);
+  color: var(--init-color-fg, #fff);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.6rem;
+  font-weight: 900;
+  letter-spacing: 0.02em;
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.55), inset 0 1px 3px rgba(255, 255, 255, 0.3), inset 0 -1px 3px rgba(0, 0, 0, 0.3);
+}
+/* Player portrait — square card-art crop of the player's chosen token icon
+   with rounded corners and an inset border in their identity colour.
+   v2.16.57 — REALLY leaning into cards: portrait fills the body like a
+   trading card illustration, not a tiny avatar dot. */
+.init-card-portrait {
+  width: 92%;
+  height: 92%;
+  border-radius: 8px;
+  object-fit: cover;
+  border: 1.5px solid color-mix(in srgb, var(--init-color), white 15%);
+  box-shadow: 0 3px 8px rgba(0, 0, 0, 0.6), inset 0 0 0 1px rgba(0, 0, 0, 0.2);
+  user-select: none;
+}
+/* Dark duck silhouette on player-view enemy cards. v2.16.59 — close-up
+   fills the body, brighter (was nearly invisible at opacity 0.35). */
+.init-card-duck {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  filter: brightness(0.35) contrast(1.1);
+  pointer-events: none;
+  user-select: none;
+}
+.init-card-chrome {
+  position: absolute;
+  left: 14px;
+  right: 14px;
+  bottom: -28px;
+  display: flex;
+  gap: 2px;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 150ms ease;
+  pointer-events: none;
+}
+.init-rail.is-vertical .init-card-chrome { left: 0; right: 0; bottom: 0; top: auto; transform: translateY(100%); }
+.init-card:hover .init-card-chrome,
+.init-card.is-active .init-card-chrome { opacity: 1; pointer-events: auto; }
+.init-card-value {
+  width: 44px;
+  padding: 2px 3px;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: 3px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 0.75rem;
+  text-align: center;
+}
+/* v2.16.54 — delete X lives in the upper-right corner of every card,
+   per spec §5. Hidden by default; reveals on hover/active so it's
+   not a constant visual distraction. */
+.init-card-delete {
+  position: absolute;
+  top: -8px;
+  right: -8px;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  font-size: 13px;
+  line-height: 16px;
+  background: var(--bg-base);
+  border: 1px solid var(--danger);
+  border-radius: 50%;
+  color: var(--danger);
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 150ms ease, transform 100ms ease;
+  z-index: 10;
+}
+.init-card:hover .init-card-delete,
+.init-card.is-active .init-card-delete { opacity: 1; }
+.init-card-delete:hover { background: var(--danger); color: #fff; transform: scale(1.1); }
+
+/* Player-side container — atmospheric "cards on the table" framing rather
+   than a chrome strip. Translucent dark wash, soft shadow underneath the
+   deck so the cards feel like they're sitting on something, no border
+   line. v2.16.53 — tightened toward Alex's "just one fan beautifully
+   rendered" brief; controls live exclusively on the GM side. */
+/* v2.16.75 — minimal player chrome: cards sit directly on the map with
+   just a faint tint hugging the fan. No heavy wash, no blur, content-
+   width so it never spans more than the cards need, overflow visible so
+   no stray scrollbar from the scaled active card. */
+.player-init {
+  position: fixed;
+  z-index: 8;
+  pointer-events: auto;
+  padding: 5px;
+  width: max-content;
+  max-width: 100vw;
+  max-height: 100vh;
+  overflow: visible;
+  background: rgba(8, 11, 20, 0.30);
+  border-radius: 12px;
+}
+.player-init.is-edge-bottom { left: 50%; transform: translateX(-50%); bottom: 0; border-radius: 12px 12px 0 0; }
+.player-init.is-edge-top    { left: 50%; transform: translateX(-50%); top: 0;    border-radius: 0 0 12px 12px; }
+.player-init.is-edge-left   { top: 50%; transform: translateY(-50%); left: 0;   border-radius: 0 12px 12px 0; }
+.player-init.is-edge-right  { top: 50%; transform: translateY(-50%); right: 0;  border-radius: 12px 0 0 12px; }
+/* v2.16.75 — slim, scroll-free rail. overflow:visible lets the scaled
+   active card spill onto the map instead of triggering a scrollbar; a
+   touch of trailing padding keeps the last card's exposed edge clear. */
+.player-init .init-rail.is-horizontal { padding: 4px 24px 4px 4px; min-height: 0; overflow: visible; }
+.player-init .init-rail.is-vertical   { padding: 4px 4px 24px 4px; min-height: 0; overflow: visible; }
+/* Player cards on the player view get a slightly richer felt — deeper
+   shadow and a subtle inner highlight to read as physical cards, not chrome.
+   v2.16.56 — sized as a proportion of the smaller viewport dimension so
+   cards scale gracefully from phone to projector without dominating the
+   map. clamp() floors keep them readable on tiny screens; ceilings stop
+   them swallowing the 4K projector view. */
+.player-init .init-card {
+  width:  clamp(60px,  8vmin,  104px);
+  height: clamp(82px, 11vmin,  140px);
+  box-shadow: 0 4px 10px rgba(0, 0, 0, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border-color: color-mix(in srgb, var(--init-color), black 40%);
+}
+.player-init .init-card.is-active {
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.6), 0 0 18px color-mix(in srgb, var(--init-color), transparent 35%);
+}
+/* v2.16.63 — bigger active card on the player view too. GM view already
+   has scale(1.12); player view bumps to 1.22 so the current actor reads
+   from across the table. */
+.player-init .init-card.is-active { transform: scale(1.22); transform-origin: center; }
+/* v2.16.62 — player-view round marker is the same size as every other
+   card; no margin break-out. It's just the last card in the fan. */
+.player-init .init-card--round-marker {
+  width:  clamp(60px,  8vmin, 104px);
+  height: clamp(82px, 11vmin, 140px);
+}
+/* Negative margin scales with card size so overlap stays consistent.
+   ~half the card dimension into the next. */
+.player-init .init-rail.is-horizontal .init-card { margin-right:  clamp(-52px, -4vmin, -28px); }
+.player-init .init-rail.is-vertical   .init-card { margin-bottom: clamp(-72px, -5.5vmin, -38px); }
+/* Tab text scales a touch on the player view so names stay readable when
+   cards size up on a TV / projector. */
+.player-init .init-card-tab-text { font-size: clamp(0.6rem, 1vmin, 0.9rem); }
+
+/* v2.16.54 — Card-styled roll prompt on the player view. Generic modal
+   replaced with an atmospheric "INITIATIVE" banner + a single oversized
+   card edged in the player's identity colour. Pushes toward the BG3 /
+   cards-on-the-table direction Alex referenced 2026-05-31. */
+.init-roll-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 1500;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 32px;
+  background: radial-gradient(ellipse at center, rgba(0, 0, 0, 0.7) 0%, rgba(0, 0, 0, 0.92) 80%);
+  backdrop-filter: blur(4px);
+  animation: init-roll-fade-in 240ms ease-out;
+}
+@keyframes init-roll-fade-in { from { opacity: 0; } to { opacity: 1; } }
+.init-roll-banner {
+  font-family: var(--font-ui);
+  font-size: 2.6rem;
+  font-weight: 800;
+  letter-spacing: 0.4em;
+  color: #fef3c7;
+  text-shadow: 0 0 24px rgba(249, 115, 22, 0.65), 0 2px 8px rgba(0, 0, 0, 0.9);
+  animation: init-roll-banner-pulse 1.6s ease-in-out infinite alternate;
+  user-select: none;
+}
+@keyframes init-roll-banner-pulse {
+  from { transform: scale(1);    text-shadow: 0 0 24px rgba(249, 115, 22, 0.55), 0 2px 8px rgba(0, 0, 0, 0.9); }
+  to   { transform: scale(1.04); text-shadow: 0 0 36px rgba(249, 115, 22, 0.85), 0 2px 8px rgba(0, 0, 0, 0.9); }
+}
+.init-roll-card {
+  position: relative;
+  width: min(360px, 86vw);
+  padding: 36px 28px 24px 28px;
+  background: linear-gradient(160deg, color-mix(in srgb, var(--init-color, #1e293b), black 55%) 0%, color-mix(in srgb, var(--init-color, #0f172a), black 80%) 100%);
+  border: 1px solid color-mix(in srgb, var(--init-color, #475569), black 30%);
+  border-radius: 14px;
+  box-shadow:
+    0 24px 60px rgba(0, 0, 0, 0.7),
+    0 0 32px color-mix(in srgb, var(--init-color, #475569), transparent 50%),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  color: #fff;
+  text-align: center;
+  animation: init-roll-card-in 360ms cubic-bezier(0.2, 0.7, 0.2, 1.2);
+}
+@keyframes init-roll-card-in {
+  from { opacity: 0; transform: translateY(20px) scale(0.92); }
+  to   { opacity: 1; transform: translateY(0)     scale(1); }
+}
+.init-roll-card-tab {
+  position: absolute;
+  left: 0;
+  right: 0;
+  height: 8px;
+  background: var(--init-color, #475569);
+}
+.init-roll-card-tab--top    { top: 0;    border-radius: 14px 14px 0 0; }
+.init-roll-card-tab--bottom { bottom: 0; border-radius: 0 0 14px 14px; }
+.init-roll-title {
+  font-family: var(--font-ui);
+  font-size: 1.1rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.18em;
+  margin-bottom: var(--space-sm);
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.8);
+}
+.init-roll-note,
+.init-roll-intro {
+  margin: 0 0 var(--space-sm) 0;
+  font-size: 0.85rem;
+  color: rgba(255, 255, 255, 0.72);
+  line-height: 1.45;
+}
+.init-roll-input {
+  width: 100%;
+  padding: 14px 16px;
+  margin: var(--space-sm) 0 var(--space-md) 0;
+  background: rgba(0, 0, 0, 0.45);
+  border: 2px solid var(--init-color, #475569);
+  border-radius: 8px;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 2rem;
+  font-weight: 800;
+  text-align: center;
+  letter-spacing: 0.06em;
+  outline: none;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.55);
+}
+.init-roll-input:focus {
+  border-color: #fef3c7;
+  box-shadow: inset 0 2px 8px rgba(0, 0, 0, 0.55), 0 0 0 3px rgba(254, 243, 199, 0.18);
+}
+.init-roll-actions {
+  display: flex;
+  gap: var(--space-sm);
+  justify-content: center;
+}
+.init-roll-skip,
+.init-roll-send {
+  flex: 1;
+  padding: 10px 16px;
+  border-radius: 8px;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 0.85rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+.init-roll-skip {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  color: rgba(255, 255, 255, 0.7);
+}
+.init-roll-skip:hover { background: rgba(255, 255, 255, 0.08); color: #fff; }
+.init-roll-send {
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border: 1px solid #b45309;
+  color: #1c1208;
+  box-shadow: 0 2px 8px rgba(217, 119, 6, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+}
+.init-roll-send:hover {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  box-shadow: 0 4px 12px rgba(217, 119, 6, 0.6);
+}
+
+/* v2.16.53 — Call for Initiative is the headline action in the Players
+   panel. Warm orange so the GM can find it without thinking; it's the
+   moment that kicks combat off and breaks narrative momentum if buried.
+   Sits above "+ Add offline player". */
+.call-initiative-btn {
+  margin: var(--space-sm) 0 var(--space-xs) 0;
+  padding: 10px 14px;
+  background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%);
+  border: 1px solid #b45309;
+  color: #1c1208;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  font-size: 0.78rem;
+  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.35), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  cursor: pointer;
+}
+.call-initiative-btn:hover {
+  background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
+  box-shadow: 0 3px 10px rgba(217, 119, 6, 0.55), inset 0 1px 0 rgba(255, 255, 255, 0.3);
+}
+.call-initiative-btn:active {
+  transform: translateY(1px);
+  box-shadow: 0 1px 3px rgba(217, 119, 6, 0.3);
+}
+
+/* ── Player-side identity colour swatches (in the identify modal) ───────── */
+.player-colour-swatches {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-sm);
+}
+.player-colour-swatch {
+  position: relative;
+  width: 26px;
+  height: 26px;
+  padding: 0;
+  border: 2px solid transparent;
+  border-radius: 50%;
+  cursor: pointer;
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.35) inset;
+}
+.player-colour-swatch-taken {
+  position: absolute;
+  top: -3px;
+  right: -3px;
+  width: 13px;
+  height: 13px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-base);
+  color: var(--text-primary);
+  border: 1.5px solid #fff;
+  border-radius: 50%;
+  font-family: var(--font-ui);
+  font-size: 0.55rem;
+  font-weight: 700;
+  pointer-events: none;
+  text-transform: uppercase;
+}
+.player-colour-swatch.is-selected {
+  border-color: var(--text-primary);
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.45);
+}
+/* Custom-colour swatch — the actual <input type="color"> styled to match the
+   palette tiles. Clicking it opens the OS standard colour picker directly. */
+input.player-colour-swatch--custom {
+  appearance: none;
+  -webkit-appearance: none;
+  padding: 0;
+  background: conic-gradient(from 0deg, #ef4444, #f59e0b, #eab308, #22c55e, #14b8a6, #3b82f6, #7c5cff, #c44dd6, #ef4444);
+  cursor: pointer;
+}
+/* Hide the platform's inner colour swatch so our gradient shows through. */
+input.player-colour-swatch--custom::-webkit-color-swatch-wrapper { padding: 0; border: none; }
+input.player-colour-swatch--custom::-webkit-color-swatch { border: none; border-radius: 50%; background: transparent; }
+input.player-colour-swatch--custom::-moz-color-swatch { border: none; border-radius: 50%; background: transparent; }
+input.player-colour-swatch--custom:hover {
+  box-shadow: 0 0 6px rgba(255, 255, 255, 0.35);
+}
+
+/* Live preview disc in the identify modal — shows what your token looks like. */
+.modal-identity-preview {
+  width: 40px;
+  height: 40px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent);
+  border: 2px solid #fff;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-weight: 700;
+  font-size: 1.05rem;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.55);
+  flex-shrink: 0;
+}
+
+/* GM same-browser preview mode — kill all player interaction, keep just the
+   window-size buttons (fullscreen, reset view). The pill + toasts are hidden
+   by JS via the `hidden` attribute; this CSS handles canvas + tokens + menu. */
+body.is-gm-preview #renderer-canvas,
+body.is-gm-preview .pm-token-disc { pointer-events: none !important; }
+body.is-gm-preview .player-action-menu { display: none !important; }
+body.is-gm-preview .player-init { pointer-events: none; }
+
+/* ── Player-side floating identity button ───────────────────────────────── */
+.player-identity-btn {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 20;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  padding: 6px 12px 6px 8px;
+  background: rgba(10, 14, 26, 0.7);
+  border: 1px solid var(--border);
+  border-radius: 999px;
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+  opacity: 0.55;
+  transition: opacity 0.25s, background 0.25s;
+}
+.player-identity-btn:hover { background: rgba(10, 14, 26, 0.9); opacity: 1; }
+/* Pre-identity state — pulse to draw the eye, stay fully visible. */
+.player-identity-btn--prompting {
+  opacity: 1;
+  animation: pill-pulse 1.7s ease-in-out infinite;
+}
+.player-identity-btn--prompting:hover { opacity: 1; }
+@keyframes pill-pulse {
+  0%, 100% { box-shadow: 0 0 0 0   rgba(13, 154, 219, 0.55); }
+  60%      { box-shadow: 0 0 0 10px rgba(13, 154, 219, 0);    }
+}
+.player-identity-dot {
+  width: 12px;
+  height: 12px;
+  border-radius: 50%;
+  background: transparent;
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.5) inset;
+}
+.player-identity-label { white-space: nowrap; max-width: 40vw; overflow: hidden; text-overflow: ellipsis; }
+
+/* ── Ping layer + pulses ────────────────────────────────────────────────── */
+.ping-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 6;
+  overflow: hidden;
+}
+.ping {
+  position: absolute;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  --ping-color: #3b82f6;
+}
+.ping-dot {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 12px;
+  height: 12px;
+  transform: translate(-50%, -50%);
+  border-radius: 50%;
+  background: var(--ping-color);
+  box-shadow: 0 0 8px var(--ping-color), 0 0 0 1.5px rgba(255, 255, 255, 0.85);
+}
+.ping-ring {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  width: 28px;
+  height: 28px;
+  margin: -14px 0 0 -14px;
+  border-radius: 50%;
+  border: 2.5px solid var(--ping-color);
+  /* Concentric circles converging inward onto the point. */
+  animation: ping-zero-in 1.35s linear infinite;
+}
+@keyframes ping-zero-in {
+  0%   { transform: scale(3.0); opacity: 0; }
+  25%  { opacity: 0.95; }
+  100% { transform: scale(0.45); opacity: 0; }
+}
+.ping-label {
+  position: absolute;
+  top: 16px;
+  left: 50%;
+  transform: translateX(-50%);
+  white-space: nowrap;
+  font-family: var(--font-ui);
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #fff;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9);
+  padding: 1px 6px;
+  background: rgba(10, 14, 26, 0.6);
+  border-radius: 999px;
+}
+.ping-dismiss {
+  position: absolute;
+  top: -10px;
+  left: 12px;
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 14px;
+  line-height: 1;
+  color: #fff;
+  background: var(--danger);
+  border: 1.5px solid rgba(255, 255, 255, 0.7);
+  border-radius: 50%;
+  cursor: pointer;
+  pointer-events: auto;
+}
+.ping-dismiss:hover { background: var(--danger-hover); }
+
+/* ── Player action menu (right-click / long-press) ──────────────────────── */
+.player-action-menu {
+  position: fixed;
+  z-index: 40;
+  min-width: 150px;
+  padding: 4px;
+  background: rgba(10, 14, 26, 0.96);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 24px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+}
+.player-action-menu-item {
+  display: block;
+  width: 100%;
+  text-align: left;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: 0.9rem;
+  cursor: pointer;
+}
+.player-action-menu-item:hover:not(:disabled) { background: var(--bg-hover); }
+.player-action-menu-item:disabled { color: var(--text-dim); cursor: default; }
+
+/* ── GM Player Voice panel ──────────────────────────────────────────────── */
+.pv-badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 18px;
+  height: 18px;
+  margin-left: 6px;
+  padding: 0 5px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  color: #fff;
+  background: var(--danger);
+  border-radius: 999px;
+  vertical-align: middle;
+}
+.pv-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  max-height: 320px;
+  overflow-y: auto;
+}
+.pv-msg {
+  padding: 6px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+}
+.pv-msg-head {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  margin-bottom: 2px;
+}
+.pv-msg-from { font-weight: 700; font-size: var(--font-size-sm); }
+.pv-msg-to   { font-size: var(--font-size-sm); color: var(--text-secondary); }
+.pv-msg-time { margin-left: auto; font-size: 0.68rem; color: var(--text-dim); }
+.pv-msg-text { font-size: var(--font-size-base); color: var(--text-primary); white-space: pre-wrap; word-break: break-word; }
+.pv-msg-reply-btn { margin-top: 4px; }
+.pv-reply-box {
+  margin-top: 6px;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.pv-reply-suggestions {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.pv-suggestion {
+  text-align: left;
+  padding: 5px 8px;
+  font-size: var(--font-size-sm);
+  color: var(--text-primary);
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  cursor: pointer;
+}
+.pv-suggestion:hover { border-color: var(--border-focus); background: var(--bg-hover); }
+.pv-reply-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  background: var(--bg-base);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+  padding: 5px 7px;
+}
+.pv-reply-actions { display: flex; justify-content: flex-end; gap: var(--space-sm); }
+
+/* ── Player message composer + incoming toasts ──────────────────────────── */
+.player-message-input {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-base);
+  padding: 8px;
+}
+.player-msg-toasts {
+  position: fixed;
+  top: 56px;
+  right: 12px;
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: min(80vw, 320px);
+  pointer-events: none;
+}
+.player-msg-toast {
+  pointer-events: auto;
+  background: rgba(10, 14, 26, 0.94);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--from-color, var(--accent));
+  border-radius: var(--radius-md);
+  box-shadow: 0 6px 20px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+  overflow: hidden;
+}
+.player-msg-toast-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 8px 2px;
+}
+.player-msg-toast-from {
+  font-weight: 700;
+  font-size: 0.8rem;
+  color: var(--from-color, var(--accent));
+}
+.player-msg-toast-close {
+  margin-left: auto;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  font-size: 16px;
+  line-height: 1;
+  color: var(--text-secondary);
+  background: transparent;
+  border: none;
+  cursor: pointer;
+}
+.player-msg-toast-close:hover { color: var(--text-primary); }
+.player-msg-toast-body {
+  padding: 0 8px 8px;
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  white-space: pre-wrap;
+  word-break: break-word;
+}

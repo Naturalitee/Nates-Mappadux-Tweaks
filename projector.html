@@ -26,6 +26,23 @@
        of the map's render scale. -->
   <div id="marker-overlay" class="marker-overlay"></div>
 
+  <!-- v2.17 Player Voice — player tokens, pings, and the atmospheric
+       initiative rail. Same containers as the player view so the projector
+       (the table screen) shows the same Player Voice content. -->
+  <div id="player-marker-layer" class="player-marker-layer"></div>
+  <div id="ping-layer" class="ping-layer"></div>
+  <div id="player-initiative" class="player-init" hidden></div>
+  <!-- v2.16.77 — read-only whiteboard mirrored from the GM. -->
+  <canvas id="annotate-whiteboard" class="annotate-whiteboard"></canvas>
+  <!-- v2.16.76 — read-only progress clocks mirrored from the GM. -->
+  <div id="annotate-clocks" class="annotate-clocks"></div>
+  <!-- v2.16.78 — read-only timers / countdowns mirrored from the GM. -->
+  <div id="annotate-timers" class="annotate-clocks"></div>
+  <!-- v2.16.80 — read-only player notes mirrored from the GM. -->
+  <!-- v2.16.91 — live YouTube videos on a text-map page. -->
+  <div id="textmap-video-layer" class="textmap-video-layer"></div>
+  <div id="annotate-notes" class="annotate-notes"></div>
+
   <!-- Status overlay — shown while connecting or on errors -->
   <div id="status" hidden></div>
 

@@ -47,6 +47,11 @@ export class Guest {
 
   isSameMachineSession(): boolean { return this._isSameMachineSession; }
 
+  /** True when the PeerJS DataConnection is currently up. False if it never
+   *  opened, was torn down, or hasn't been created yet. Used by PlayerApp's
+   *  visibility-resume watchdog to decide whether to force a reconnect. */
+  isConnectionOpen(): boolean { return !!this.conn?.open; }
+
   constructor(events: GuestEvents) {
     this.events = events;
     this.local = new LocalChannel();
@@ -83,10 +88,22 @@ export class Guest {
    * (instant for same-browser windows) and the PeerJS connection (for
    * remote players). Cheap to double-send: GM dedups by message identity
    * via inbound type discrimination on its own state.
+   *
+   * Important: we JSON.stringify before conn.send. PeerJS is configured with
+   * serialization: 'raw' (so it doesn't second-guess our packing of map
+   * blobs), which means it passes whatever we give it straight to
+   * RTCDataChannel.send — and that only accepts strings / ArrayBuffer.
+   * Without stringifying, a plain JS object hits the data channel as an
+   * unsupported type and throws silently, so the GM never sees upstream
+   * messages from remote (network-only) players. Matches the Host's
+   * symmetric sendTo, which stringifies on the way out too.
    */
   send(msg: GMMessage): void {
     this.local.sendUpstream(msg);
-    if (this.conn?.open) this.conn.send(msg);
+    if (this.conn?.open) {
+      try { this.conn.send(JSON.stringify(msg)); }
+      catch (err) { console.warn('[guest] upstream send failed', err); }
+    }
   }
 
   destroy(): void {
@@ -199,6 +216,11 @@ export class Guest {
         this.blobChunks = [];
         this.blobTotal = 0;
         this.pendingMsg = null;
+        // Same pattern as full_state / map_change / soundboard_*: hand the
+        // assembled bytes to PlayerApp via the blob arg, which then wraps
+        // it (URL.createObjectURL etc.) in whatever form fits the consumer.
+        // Re-encoding to a base64 data URL here would mirror the GM's input
+        // but is needlessly slow on phone CPUs.
         if (msg) this.events.onMessage(msg, assembled);
       }
       return;
@@ -224,6 +246,7 @@ export class Guest {
     // If a blob follows, hold until assembled.
     // map blobs: full_state / map_change / handout_reveal / video_bundle
     // audio blobs: soundboard_play / soundboard_asset / positional_play
+    // icon blobs: player_icon_update (PNG bytes for the player's token image)
     if (
       (msg.type === 'full_state'
        || msg.type === 'map_change'
@@ -231,7 +254,8 @@ export class Guest {
        || msg.type === 'video_bundle'
        || msg.type === 'soundboard_play'
        || msg.type === 'soundboard_asset'
-       || msg.type === 'positional_play')
+       || msg.type === 'positional_play'
+       || msg.type === 'player_icon_update')
       && this.blobTotal > 0
     ) {
       this.pendingMsg = msg;
@@ -252,3 +276,4 @@ export class Guest {
     return buffer.buffer;
   }
 }
+

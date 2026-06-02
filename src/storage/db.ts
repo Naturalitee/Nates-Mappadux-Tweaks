@@ -1,5 +1,5 @@
 import { openDB, type DBSchema, type IDBPDatabase } from 'idb';
-import type { SessionState, StoredMap, StoredSession, AudioAsset, MapAsset, ImageAsset, ImageCategory } from '../types.ts';
+import type { SessionState, StoredMap, StoredSession, AudioAsset, MapAsset, ImageAsset, ImageCategory, PersistentPlayer } from '../types.ts';
 
 export type StoredAsset = { id: string; name: string; type: string; blob: Blob; addedAt: number };
 
@@ -53,6 +53,13 @@ interface DMRSchema extends DBSchema {
     key: string; // URL
     value: { url: string; svg?: string; status: 'ok' | 'not-found'; fetchedAt: number };
   };
+  players: {
+    // v2.17 Player Voice — global persistent players (names, colours,
+    // assigned markers). NOT per-map: identities survive map switches and
+    // sessions. Keyed by PersistentPlayer.id.
+    key: string; // PersistentPlayer.id
+    value: PersistentPlayer;
+  };
 }
 
 /** v2.14.90 — Optional per-tab DB namespace. The URL query
@@ -80,7 +87,7 @@ const INSTANCE_ID = _instanceFromQuery();
 const DB_NAME = INSTANCE_ID
   ? `dynamic-map-renderer:${INSTANCE_ID}`
   : 'dynamic-map-renderer';
-const DB_VERSION = 6;
+const DB_VERSION = 7;
 
 /** Exposed for diagnostics + UI ("you're on instance X"). Empty
  *  string = default / legacy instance. */
@@ -128,6 +135,9 @@ async function getDB(): Promise<IDBPDatabase<DMRSchema>> {
       }
       if (!db.objectStoreNames.contains('connectorCache')) {
         db.createObjectStore('connectorCache', { keyPath: 'url' });
+      }
+      if (!db.objectStoreNames.contains('players')) {
+        db.createObjectStore('players', { keyPath: 'id' });
       }
     },
     blocked() {
@@ -351,6 +361,32 @@ export async function putConnectorCacheEntry(
   await db.put('connectorCache', entry);
 }
 
+// ─── Players (v2.17 Player Voice — global persistent players) ────────────────
+
+export async function savePlayer(player: PersistentPlayer): Promise<void> {
+  const db = await getDB();
+  if (!db.objectStoreNames.contains('players')) return;
+  await db.put('players', player);
+}
+
+export async function getPlayer(id: string): Promise<PersistentPlayer | undefined> {
+  const db = await getDB();
+  if (!db.objectStoreNames.contains('players')) return undefined;
+  return db.get('players', id);
+}
+
+export async function getAllPlayers(): Promise<PersistentPlayer[]> {
+  const db = await getDB();
+  if (!db.objectStoreNames.contains('players')) return [];
+  return db.getAll('players');
+}
+
+export async function deletePlayer(id: string): Promise<void> {
+  const db = await getDB();
+  if (!db.objectStoreNames.contains('players')) return;
+  await db.delete('players', id);
+}
+
 /** Wipe every asset-library store. Used by bundle import to replace the workspace. */
 export async function clearAssetLibraries(): Promise<void> {
   const db = await getDB();
@@ -377,5 +413,6 @@ export async function clearEverything(): Promise<void> {
     db.clear('maps'),
     db.clear('configs'),
     db.clear('session'),
+    db.objectStoreNames.contains('players') ? db.clear('players') : Promise.resolve(),
   ]);
 }

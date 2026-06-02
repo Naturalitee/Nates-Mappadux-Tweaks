@@ -83,6 +83,11 @@ export function attachGestures(
   let dragStart = { x: 0, y: 0, type: 'mouse' };
   let twoStartMid = { x: 0, y: 0 };
   let twoStartDist = 1;
+  /** Last computed two-finger state — replayed verbatim on the 'end'
+   *  event so consumers see the FINAL pinch state, not a synthetic
+   *  scale=1 / pan=0 reset. Without this the pinch was being undone
+   *  on release (touch-only). 2026-05-31. */
+  let twoLast = { midX: 0, midY: 0, panDx: 0, panDy: 0, scale: 1 };
 
   const dispatchDragEnd = (clientX: number, clientY: number) => {
     handlers.onDrag?.({
@@ -98,6 +103,7 @@ export function attachGestures(
     const [p1, p2] = [...pointers.values()];
     twoStartMid  = { x: (p1.x + p2.x) / 2, y: (p1.y + p2.y) / 2 };
     twoStartDist = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1;
+    twoLast = { midX: twoStartMid.x, midY: twoStartMid.y, panDx: 0, panDy: 0, scale: 1 };
     handlers.onTwoFinger?.({
       midX: twoStartMid.x, midY: twoStartMid.y,
       panDx: 0, panDy: 0, scale: 1,
@@ -143,13 +149,13 @@ export function attachGestures(
       const midX = (p1.x + p2.x) / 2;
       const midY = (p1.y + p2.y) / 2;
       const dist = Math.hypot(p2.x - p1.x, p2.y - p1.y) || 1;
-      handlers.onTwoFinger?.({
+      twoLast = {
         midX, midY,
         panDx: midX - twoStartMid.x,
         panDy: midY - twoStartMid.y,
         scale: dist / twoStartDist,
-        phase: 'move',
-      });
+      };
+      handlers.onTwoFinger?.({ ...twoLast, phase: 'move' });
     }
   };
 
@@ -162,11 +168,11 @@ export function attachGestures(
       dispatchDragEnd(e.clientX, e.clientY);
       mode = 'idle';
     } else if (mode === 'two-finger') {
-      handlers.onTwoFinger?.({
-        midX: e.clientX, midY: e.clientY,
-        panDx: 0, panDy: 0, scale: 1,
-        phase: 'end',
-      });
+      // Replay the LAST observed two-finger state on end so consumers
+      // see the final pinch + pan rather than a synthetic scale=1
+      // reset (which would silently undo the whole gesture). 2026-05-31:
+      // this was the touch-pinch snap-back on player view.
+      handlers.onTwoFinger?.({ ...twoLast, phase: 'end' });
       // A finger came off but one remains — convert back into a single-finger drag
       // so the user can keep panning without re-lifting.
       if (pointers.size === 1) {

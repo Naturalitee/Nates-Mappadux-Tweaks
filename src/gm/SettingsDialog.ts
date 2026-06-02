@@ -14,6 +14,22 @@ import {
   UI_SCALE_MIN,
   UI_SCALE_MAX,
   UI_SCALE_DEFAULT,
+  arePingsEnabled,
+  setPingsEnabled,
+  getInitiativeSortDirection,
+  setInitiativeSortDirection,
+  isMessagingEnabled,
+  setMessagingEnabled,
+  arePlayerMarkersMovable,
+  setPlayerMarkersMovable,
+  showFullPlayerUiInPreview,
+  setShowFullPlayerUiInPreview,
+  getLLMSettings,
+  setLLMSettings,
+  getLLMApiKey,
+  setLLMApiKey,
+  DEFAULT_GM_ASSISTANT_PROMPT,
+  type LLMSettings,
   type StoredApiKey,
 } from '../storage/localSettings.ts';
 import {
@@ -47,6 +63,7 @@ import {
   inProgressFlagOrigin,
 } from '../storage/featureFlags.ts';
 import { generateId } from '../utils/id.ts';
+import { LLMClient } from '../ai/LLMClient.ts';
 
 /**
  * Settings dialog. Houses:
@@ -137,6 +154,12 @@ export class SettingsDialog {
     if (isInProgressEnabled()) {
       body.appendChild(this._buildStagecraftSection());
     }
+    // ── Player Permissions / Game System / Reply Assistant ───────────────
+    // v2.16.109 — split the old "Player Voice" section into three focused
+    // ones so each reads on its own.
+    body.appendChild(this._buildPlayerPermissionsSection());
+    body.appendChild(this._buildGameSystemSection());
+    body.appendChild(this._buildReplyAssistantSection());
     // ── API Keys section ─────────────────────────────────────────────────
     body.appendChild(this._buildApiKeysSection());
     // ── Danger Zone ──────────────────────────────────────────────────────
@@ -387,15 +410,13 @@ export class SettingsDialog {
   private _buildPerformanceSection(): HTMLElement {
     const sec = mkSection(
       'Performance',
-      'Trade-offs for animated-map playback. Default values work fine on capable hardware (modern GPUs, decent-resolution sources); flip these on if you hit stalls or stutter.',
+      'Animated-map playback trade-offs. Defaults are fine on capable hardware — reach for these if you hit stalls or stutter.',
     );
 
     sec.appendChild(this._buildPerfToggle({
       title: 'Send only the first frame to local player windows',
       help:
-        'When the GM\'s own PC is also running a player window (the "Open Player Window" popup) or a same-machine projector window, both compete with the GM canvas for Chrome\'s per-window video decoder budget. With this on, the GM doesn\'t send the full video bytes to same-browser peers — they show the first frame as a static map. ' +
-        'The projector window keeps trying to animate regardless. Remote players (phones, separate laptops on the LAN) always get full animation; their browser has its own decode budget.<br><br>' +
-        '<em>When to enable:</em> 4K (or larger) animated maps + GM popup-player on the same machine + visible stalling. <em>Leave off for:</em> lower-resolution animated maps that play fine in popups, or when no local player windows are open.',
+        'If your GM PC also runs a player or projector window, both fight the GM canvas for Chrome’s video-decode budget. On: same-browser windows show a static first frame instead of animating (phones / LAN players always get full animation). <em>Turn on if</em> local windows stutter on big animated maps.',
       get: isLocalPlayerStaticOnly,
       set: setLocalPlayerStaticOnly,
     }));
@@ -403,9 +424,7 @@ export class SettingsDialog {
     sec.appendChild(this._buildPerfToggle({
       title: 'Cap animated map texture at 1080p',
       help:
-        'Animated-map texture uploads are sized to the WebGL canvas by default — so a fullscreen 4K player on a 4K display uploads 4K every frame. On lower-end GPUs that saturates the upload budget and playback stalls. ' +
-        'Tick this to cap the texture at 1920 px on the longest side regardless of window size: looks slightly softer when zoomed in, plays smoothly even on modest hardware.<br><br>' +
-        '<em>When to enable:</em> remote players reporting stutter on animated maps even when fullscreen. <em>Leave off for:</em> capable GPUs where the difference is noticeable.',
+        'Animated maps upload at the player’s window size, so a 4K fullscreen player uploads 4K every frame — which stalls modest GPUs. On: caps the texture at 1920 px (slightly softer when zoomed, much smoother). <em>Turn on if</em> players report stutter on animated maps.',
       get: isVideoCap1080Enabled,
       set: setVideoCap1080Enabled,
     }));
@@ -439,6 +458,312 @@ export class SettingsDialog {
     toggle.append(input, slider);
     row.append(label, toggle);
     return row;
+  }
+
+  // ─── Player Voice ─────────────────────────────────────────────────────────
+
+  private _buildPlayerPermissionsSection(): HTMLElement {
+    const sec = mkSection(
+      'Player Permissions',
+      'What connected players can do beyond watching. Switch off anything that doesn’t suit your table.',
+    );
+
+    sec.appendChild(this._buildPerfToggle({
+      title: 'Allow player pings',
+      help:
+        'Players right-click (long-press on touch) the map to ping a point. Everyone sees a pulse in that player’s colour; on your screen it stays, labelled, until you dismiss it.',
+      get: arePingsEnabled,
+      set: setPingsEnabled,
+    }));
+
+    sec.appendChild(this._buildPerfToggle({
+      title: 'Allow player messages',
+      help:
+        'Players message you privately, or each other (copied to you). Messages arrive in the Player Voice panel with an unread count.',
+      get: isMessagingEnabled,
+      set: setMessagingEnabled,
+    }));
+
+    sec.appendChild(this._buildPerfToggle({
+      title: 'Let players move their own token',
+      help:
+        'Lets a player drag their placed token from their own view — you see it move live, with a “send it back” undo. Off keeps token placement in your hands.',
+      get: arePlayerMarkersMovable,
+      set: setPlayerMarkersMovable,
+    }));
+
+    sec.appendChild(this._buildPerfToggle({
+      title: 'Full player UI in the GM preview window',
+      help:
+        'Off (default): the inline Show Player View / pop-out preview hides identity prompts, the identity pill, toasts, the right-click menu and the roll prompt — handy for previewing what players see. On: the preview behaves as a real player. Only affects GM preview windows (?gmPreview flag); real players joining via the QR are never gated by this.',
+      get: showFullPlayerUiInPreview,
+      set: setShowFullPlayerUiInPreview,
+    }));
+
+    return sec;
+  }
+
+  /** v2.16.109 — Game-system rules that shape the table tools (currently the
+   *  initiative tracker's sort direction; room here for more later). */
+  private _buildGameSystemSection(): HTMLElement {
+    const sec = mkSection(
+      'Game System',
+      'Rules that shape the table tools for your system.',
+    );
+    sec.appendChild(this._buildInitiativeOrderBlock());
+    return sec;
+  }
+
+  /** v2.16.109 — the LLM reply assistant, promoted to its own section. */
+  private _buildReplyAssistantSection(): HTMLElement {
+    const sec = mkSection(
+      'Reply Assistant (LLM)',
+      'Optional LLM that drafts replies to player messages — click “Suggest replies” on a message in the Player Voice panel. Use a local LM Studio server (URL pre-filled — no API key needed) or a hosted provider like OpenRouter (new URL & API key required). Everything stays between your browser and the endpoint you choose.',
+    );
+    sec.appendChild(this._buildLlmAssistantBlock());
+    return sec;
+  }
+
+  /** v2.16.65 — Initiative sort direction. One-shot GM preference; the
+   *  in-tracker dropdown has been removed in favour of this single
+   *  control. Default High → Low. */
+  private _buildInitiativeOrderBlock(): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'settings-danger-row';
+    row.style.alignItems = 'center';
+    row.style.justifyContent = 'space-between';
+    const label = document.createElement('div');
+    label.innerHTML =
+      '<strong>Initiative order</strong><br>' +
+      '<span class="settings-stat-sub">Numeric direction for the initiative rail. Default High → Low (d20 systems). Switch to Low → High for roll-under systems (Cyberpunk Red, Call of Cthulhu).</span>';
+    row.appendChild(label);
+    const select = document.createElement('select');
+    select.className = 'select-full';
+    select.style.maxWidth = '180px';
+    for (const [val, txt] of [
+      ['high-to-low', 'High → Low'],
+      ['low-to-high', 'Low → High'],
+    ] as Array<['high-to-low' | 'low-to-high', string]>) {
+      const opt = document.createElement('option');
+      opt.value = val;
+      opt.textContent = txt;
+      if (getInitiativeSortDirection() === val) opt.selected = true;
+      select.appendChild(opt);
+    }
+    select.addEventListener('change', () => {
+      const dir = select.value as 'high-to-low' | 'low-to-high';
+      setInitiativeSortDirection(dir);
+      window.dispatchEvent(new CustomEvent('mappadux:initiative-direction-changed', { detail: dir }));
+    });
+    row.appendChild(select);
+    return row;
+  }
+
+  /** GM reply assistant — optional LLM that suggests replies to player
+   *  messages. Works with a local LM Studio server or a hosted OpenAI-compatible
+   *  provider (OpenRouter etc.). The system prompt is fully editable. */
+  private _buildLlmAssistantBlock(): HTMLElement {
+    const cfg: LLMSettings = getLLMSettings();
+
+    const wrap = document.createElement('div');
+    wrap.className = 'settings-danger-row';
+    wrap.style.flexDirection = 'column';
+    wrap.style.alignItems = 'stretch';
+    wrap.style.gap = 'var(--space-sm)';
+
+    // v2.16.109 — header removed; the section title + intro now cover it.
+    const enableLabel = document.createElement('label');
+    enableLabel.className = 'toggle-switch';
+    enableLabel.style.alignSelf = 'flex-start';
+    const enableInput = document.createElement('input');
+    enableInput.type = 'checkbox';
+    enableInput.checked = cfg.enabled;
+    const enableSlider = document.createElement('span');
+    enableSlider.className = 'toggle-slider';
+    enableLabel.append(enableInput, enableSlider);
+    const enableRow = document.createElement('div');
+    enableRow.style.display = 'flex';
+    enableRow.style.alignItems = 'center';
+    enableRow.style.gap = 'var(--space-sm)';
+    const enableText = document.createElement('span');
+    enableText.className = 'settings-stat-sub';
+    enableText.textContent = 'Enable reply assistant';
+    enableRow.append(enableLabel, enableText);
+    wrap.appendChild(enableRow);
+
+    const persist = () => setLLMSettings({
+      enabled:      enableInput.checked,
+      baseUrl:      baseInput.value,
+      model:        modelsSelect.value,
+      systemPrompt: promptArea.value,
+    });
+
+    const mkInput = (labelText: string, placeholder: string, value: string): HTMLInputElement => {
+      const lab = document.createElement('label');
+      lab.style.display = 'flex';
+      lab.style.flexDirection = 'column';
+      lab.style.gap = '3px';
+      lab.className = 'settings-stat-sub';
+      lab.textContent = labelText;
+      const inp = document.createElement('input');
+      inp.type = 'text';
+      inp.className = 'select-full';
+      inp.placeholder = placeholder;
+      inp.value = value;
+      inp.autocomplete = 'off';
+      lab.appendChild(inp);
+      wrap.appendChild(lab);
+      return inp;
+    };
+
+    // v2.16.111 — default to the LM Studio local URL so the common path
+    // works out of the box; a hosted-provider user overwrites it.
+    const baseInput  = mkInput('Base URL', 'http://localhost:1234/v1', cfg.baseUrl || 'http://localhost:1234/v1');
+
+    const keyLab = document.createElement('label');
+    keyLab.style.display = 'flex';
+    keyLab.style.flexDirection = 'column';
+    keyLab.style.gap = '3px';
+    keyLab.className = 'settings-stat-sub';
+    keyLab.textContent = 'API key (leave blank for LM Studio / local)';
+    const keyInput = document.createElement('input');
+    keyInput.type = 'password';
+    keyInput.className = 'select-full';
+    keyInput.placeholder = 'sk-… (OpenRouter etc.)';
+    keyInput.value = getLLMApiKey();
+    keyInput.autocomplete = 'off';
+    keyInput.addEventListener('change', () => setLLMApiKey(keyInput.value));
+    keyLab.appendChild(keyInput);
+    wrap.appendChild(keyLab);
+
+    // Model dropdown — populated by Test connection. Picking an option fills
+    // the model input above; the input stays the source of truth so a model
+    // unloaded on the server doesn't blank the user's saved choice.
+    const modelsLab = document.createElement('label');
+    modelsLab.style.display = 'flex';
+    modelsLab.style.flexDirection = 'column';
+    modelsLab.style.gap = '3px';
+    modelsLab.className = 'settings-stat-sub';
+    modelsLab.textContent = 'Model';
+    const modelsSelect = document.createElement('select');
+    modelsSelect.className = 'select-full';
+    // v2.16.110 — the dropdown IS the model source of truth (no manual field —
+    // you rarely know an LLM's full path, so picking is friendlier). Seed it
+    // with the saved model so it shows before any fetch; the button below
+    // replaces it with the endpoint's list, keeping the saved pick selected
+    // (listed as "(saved)" if the endpoint doesn't advertise it).
+    const seedModels = (saved: string): void => {
+      modelsSelect.replaceChildren();
+      const o = document.createElement('option');
+      if (saved) { o.value = saved; o.textContent = saved; o.selected = true; }
+      else       { o.value = ''; o.textContent = 'Test connection & fetch models…'; }
+      modelsSelect.appendChild(o);
+    };
+    seedModels(cfg.model);
+    modelsSelect.addEventListener('change', persist);
+    modelsLab.appendChild(modelsSelect);
+    // v2.16.111 — modelsLab is appended AFTER the Test button below, so the
+    // section reads as a guided flow: URL -> key -> Test & fetch -> Model.
+
+    const testRow = document.createElement('div');
+    testRow.style.display = 'flex';
+    testRow.style.alignItems = 'center';
+    testRow.style.gap = 'var(--space-sm)';
+    const testBtn = document.createElement('button');
+    testBtn.type = 'button';
+    testBtn.className = 'btn btn--ghost btn--sm';
+    testBtn.textContent = 'Test connection & fetch models';
+    const testStatus = document.createElement('span');
+    testStatus.className = 'settings-stat-sub';
+    testStatus.style.minHeight = '1.2em';
+    testRow.append(testBtn, testStatus);
+    wrap.appendChild(testRow);
+
+    const runTest = async (): Promise<void> => {
+      const saved = modelsSelect.value; // preserve the current pick across the fetch
+      testBtn.disabled = true;
+      testStatus.style.color = 'var(--text-secondary)';
+      testStatus.textContent = 'Connecting…';
+      try {
+        const ids = await LLMClient.listModels(baseInput.value, keyInput.value);
+        if (ids.length === 0) {
+          testStatus.style.color = 'var(--warn)';
+          testStatus.textContent = 'Connected, but no models are loaded on the server.';
+          seedModels(saved);
+          return;
+        }
+        testStatus.style.color = 'var(--ok)';
+        testStatus.textContent = `Connected — ${ids.length} model${ids.length === 1 ? '' : 's'} available.`;
+        modelsSelect.replaceChildren();
+        let matched = false;
+        for (const id of ids) {
+          const opt = document.createElement('option');
+          opt.value = id;
+          opt.textContent = id;
+          if (id === saved) { opt.selected = true; matched = true; }
+          modelsSelect.appendChild(opt);
+        }
+        if (saved && !matched) {
+          const opt = document.createElement('option');
+          opt.value = saved;
+          opt.textContent = `${saved} (saved — not on this endpoint)`;
+          opt.selected = true;
+          modelsSelect.insertBefore(opt, modelsSelect.firstChild);
+        }
+        persist(); // selection may have shifted to the first model
+      } catch (err) {
+        testStatus.style.color = 'var(--danger)';
+        testStatus.textContent = (err as Error).message;
+        seedModels(saved);
+      } finally {
+        testBtn.disabled = false;
+      }
+    };
+    testBtn.addEventListener('click', () => { void runTest(); });
+
+    // If the endpoint changes after a fetch, the listed models are stale —
+    // collapse back to just the saved pick + prompt a re-fetch.
+    const markStale = () => {
+      if (modelsSelect.options.length <= 1) return;
+      seedModels(modelsSelect.value);
+      testStatus.textContent = 'Endpoint changed — fetch models again.';
+    };
+    baseInput.addEventListener('input', markStale);
+    keyInput.addEventListener('input', markStale);
+
+    // v2.16.111 — Model box goes here, directly under Test connection & fetch
+    // models, completing the URL -> key -> Test -> Model walkthrough.
+    wrap.appendChild(modelsLab);
+
+    const promptLab = document.createElement('label');
+    promptLab.style.display = 'flex';
+    promptLab.style.flexDirection = 'column';
+    promptLab.style.gap = '3px';
+    promptLab.className = 'settings-stat-sub';
+    promptLab.textContent = 'System prompt (tune it to your LLM + GMing style)';
+    const promptArea = document.createElement('textarea');
+    promptArea.className = 'select-full';
+    promptArea.rows = 8;
+    promptArea.style.resize = 'vertical';
+    promptArea.style.fontFamily = 'var(--font-mono)';
+    promptArea.style.fontSize = 'var(--font-size-sm)';
+    promptArea.value = cfg.systemPrompt;
+    promptLab.appendChild(promptArea);
+    wrap.appendChild(promptLab);
+
+    const resetBtn = document.createElement('button');
+    resetBtn.type = 'button';
+    resetBtn.className = 'btn btn--ghost btn--sm';
+    resetBtn.style.alignSelf = 'flex-start';
+    resetBtn.textContent = 'Reset prompt to default';
+    resetBtn.addEventListener('click', () => { promptArea.value = DEFAULT_GM_ASSISTANT_PROMPT; persist(); });
+    wrap.appendChild(resetBtn);
+
+    for (const el of [enableInput, baseInput, promptArea]) {
+      el.addEventListener('change', persist);
+    }
+
+    return wrap;
   }
 
   // ─── Danger Zone ────────────────────────────────────────────────────────
@@ -1006,6 +1331,11 @@ function mkSection(title: string, intro: string, opts?: { open?: boolean }): HTM
   // body where the browser hides them when closed.
   const sec = document.createElement('details');
   sec.className = 'settings-section';
+  // v2.16.111 — shared name makes the sections an exclusive accordion:
+  // opening one closes the others (native HTML, no JS). Keeps the dialog
+  // short so there's nothing to scroll through. Older browsers ignore the
+  // attribute and fall back to the previous multi-open behaviour.
+  sec.setAttribute('name', 'settings-accordion');
   if (opts?.open) sec.open = true;
 
   const summary = document.createElement('summary');

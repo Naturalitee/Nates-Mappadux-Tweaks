@@ -365,6 +365,9 @@ async function renderElementsForRaster(
 ): Promise<string> {
   const parts: string[] = [];
   for (const el of elements) {
+    // v2.16.90 — video elements are NOT baked into the page image; they
+    // render as live iframe overlays on the GM / player / projector.
+    if (el.type === 'video') continue;
     // v2.14.101 — rotation lives on the outer box; flip wraps the
     // content in a nested div so rotation isn't also mirrored.
     const rotStyle = el.rotation

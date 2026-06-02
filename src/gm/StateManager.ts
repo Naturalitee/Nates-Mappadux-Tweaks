@@ -111,10 +111,31 @@ export class StateManager {
     this._notify(['filter']);
   }
 
+  /** Patch E v2.16.30 — per-map opt-in for applying a CSS approximation of
+   *  the active filter to the player-marker DOM overlay on the player +
+   *  projector views. The map's GLSL filter is unaffected. */
+  setFilterAffectPlayerMarkers(enabled: boolean): void {
+    const current = this.state.filter;
+    if (!!current.affectPlayerMarkers === enabled) return;
+    this.state = {
+      ...this.state,
+      filter: { ...current, affectPlayerMarkers: enabled },
+    };
+    this._notify(['filter']);
+  }
+
   setFog(fog: FogState): void {
     this.undoHook?.('fog');
     this.state = { ...this.state, fog };
     this._notify(['fog']);
+  }
+
+  /** v2.16.84 — store the per-map annotation state (clocks/timers/notes/
+   *  whiteboard). Part of SessionState, so it auto-persists (debounced) to
+   *  IDB and travels in the .mappadux pack. */
+  setAnnotate(annotate: import('../types.ts').AnnotateState): void {
+    this.state = { ...this.state, annotate };
+    this._notify(['annotate']);
   }
 
   setUndoHook(hook: ((kind: 'fog' | 'markers') => void) | null): void {

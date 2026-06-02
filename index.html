@@ -27,80 +27,53 @@
       <div class="gm-menu" id="gm-menu" role="menu" hidden></div>
     </div>
 
-    <section class="panel" id="session-panel">
-      <div class="panel-header">
-        <button type="button" class="panel-title" aria-expanded="true">Player Connection</button>
-        <span class="panel-toggle-icon" aria-hidden="true" title="Visual bypass"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
-        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Broadcast to players. Off = show placeholder (the GM is faffing)">
-          <input type="checkbox" id="player-broadcast-toggle" checked />
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
-      <div class="panel-body">
-        <!-- Hidden source-of-truth for the room code; rendered as a tooltip on the QR. -->
-        <span id="room-code" hidden>…</span>
-
-        <div id="qr-container" role="button" tabindex="0" title="QR code for the player URL. Players scan this with a phone camera to join your session via their browser — no app install needed. Click anywhere on the QR to copy the URL to your clipboard so you can text / DM it to someone instead.">
-          <button id="copy-url-btn" class="qr-copy-btn" type="button"
-                  title="Copy the player URL to your clipboard. Same as clicking the QR itself; here for muscle memory if you'd rather aim at a button than the code." aria-label="Copy player URL">
-            <svg viewBox="0 0 16 16" width="16" height="16" aria-hidden="true" focusable="false">
-              <rect x="4.25" y="4.25" width="8.5" height="9.5" rx="1.5"
-                    fill="none" stroke="currentColor" stroke-width="1.5"/>
-              <path d="M2.75 11V3.75A1.5 1.5 0 0 1 4.25 2.25H10"
-                    fill="none" stroke="currentColor" stroke-width="1.5"/>
-            </svg>
-          </button>
-          <canvas></canvas>
-        </div>
-
-        <!-- Shown in place of the QR when the PeerJS broker is unreachable.
-             Same-machine (BroadcastChannel) players keep working; remote
-             players can't join until the broker recovers. -->
-        <div id="broker-error" class="broker-error" hidden>
-          <svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor"
-               stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-            <path d="M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z"/>
-            <line x1="12" y1="9" x2="12" y2="13"/>
-            <line x1="12" y1="17" x2="12.01" y2="17"/>
-          </svg>
-          <strong>Network broker unreachable</strong>
-          <p>The public PeerJS signaling server isn't responding. Remote players (phones, other devices) can't join right now &mdash; but same-machine browser windows still work fine. Auto-retrying every minute; will restore the QR as soon as the broker comes back.</p>
-        </div>
-
-        <div class="session-meta" id="session-meta" title="The leading number is players reaching you over the network. The bracketed number (when shown) adds same-machine browser windows so you see the full audience. '+ Projector' means the primary projector window is live; its bracketed count is additional monitor projectors (Projector #1 is always the primary; #2+ are monitors and close automatically if the primary closes).">
-          <strong id="player-count">0</strong> player<span id="player-count-plural">s</span> connected<span id="player-total-suffix"></span><span id="projector-count-suffix"></span>
-        </div>
-
-        <div class="session-actions">
-          <button id="open-player-btn" class="btn btn--primary" title="Open a player view as a popup window on this machine. Useful for previewing what players see, or as a secondary screen on the same PC. Note: same-machine player windows can struggle with animated map playback because of browser-level per-window decode throttling — use the projector window or a separate device for table-side animation.">Open Player Window</button>
-        </div>
-      </div>
-    </section>
+    <!-- v2.16.33 — Player Connection panel removed (QR moved to the hold
+         screen players see when they can't connect; Open Player Window
+         relocated under Scaled View below). Hidden room-code holder
+         kept so existing GMApp wiring that reads it can keep working. -->
+    <span id="room-code" hidden>…</span>
 
     <section class="panel" id="map-panel">
-      <button type="button" class="panel-title" aria-expanded="true">Map Selection</button>
+      <!-- v2.16.88 — the pack name lives in the panel header (brighter,
+           to read as the name); the pencil on the right edits it inline,
+           replacing the old in-body rename row. -->
+      <div class="panel-header">
+        <button type="button" class="panel-title" aria-expanded="true">Map Pack:&nbsp;<span id="pack-name-display" class="pack-name-display">Untitled pack</span></button>
+        <button type="button" id="pack-name-edit-btn" class="panel-edit-btn" title="Rename this map pack" aria-label="Rename map pack">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+        </button>
+        <input type="text" id="pack-name-input" class="pack-name-edit-input" placeholder="Untitled pack" hidden />
+      </div>
       <div class="panel-body">
-        <div class="param-row">
-          <label for="pack-name-input">Map Pack</label>
-          <input type="text" id="pack-name-input" class="marker-text-input" placeholder="Untitled pack" />
+        <!-- v2.16.34 — discoverable "+ new" instead of an "Add new" entry
+             buried at the bottom of the dropdown list. -->
+        <div class="picker-row">
+          <select id="map-select" class="select-full picker-row__select"></select>
+          <button type="button" id="add-map-btn" class="picker-row__add" title="Add a new map">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
         </div>
-        <select id="map-select" class="select-full"></select>
-        <button id="edit-textmap-btn" class="btn btn--ghost btn--sm btn--full" hidden title="Open the Text Map editor for this handout">Edit this Handout (Text Map)</button>
-        <!-- v2.14.42 — Composite Map editor entry, mirrors the
-             Text Map edit button. Visible only when the active map
-             is a composite. -->
-        <button id="edit-composite-btn" class="btn btn--ghost btn--sm btn--full" hidden title="Open the Composite Map editor — view, add, position, and remove tiles that make up this composite map.">Edit this Composite Map</button>
         <button id="start-animation-btn" class="btn btn--primary btn--sm btn--full" hidden title="Trigger the handout reveal animation on the player + projector">▶ Start Animation</button>
         <div id="reveal-progress" class="reveal-progress" hidden>
           <div id="reveal-progress-bar" class="reveal-progress-bar"></div>
         </div>
         <button id="fix-missing-map-btn" class="btn btn--danger btn--sm btn--full" hidden>⚠ Fix Missing Map</button>
+        <!-- v2.16.35 — Kind picker promoted from inside the popover to an
+             inline <select> on the row. Side-panel-on-right (opened by the
+             sliders button) only holds the kind-specific params now. -->
         <div class="fog-row fog-row--kind">
           <span class="fog-row-label">Backdrop</span>
-          <span class="mapfx-kind-label" id="view-bg-display" title="Active backdrop — click the sparkle button to pick + tune backdrop, background colour, and any backdrop-specific params.">None</span>
-          <button type="button" id="view-bg-fx-btn" class="icon-btn bg-fx-btn" title="Pick + tune the backdrop: which animated effect fills the letterbox / pillarbox bars (Starfield, Aurora, Embers, etc.), the solid background colour, and the backdrop's own params (colour, intensity, speed, etc.)." aria-label="Backdrop effect" aria-haspopup="true" aria-expanded="false">
+          <select class="fog-row-select" id="view-bg-display" title="Pick the active backdrop — fills the letterbox / pillarbox bars (Starfield, Aurora, Embers, etc.)."></select>
+          <!-- v2.16.34 — sparkle swapped for sliders-horizontal (Lucide),
+               the standard "tune parameters" affordance. v2.16.35 — opens
+               a right-edge side panel instead of an anchored popover. -->
+          <button type="button" id="view-bg-fx-btn" class="icon-btn bg-fx-btn" title="Tune this backdrop — adjust the bars colour and the backdrop's own params (colour, intensity, speed, etc.)." aria-label="Tune backdrop" aria-haspopup="true" aria-expanded="false">
             <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 3 L13.5 10.5 L21 12 L13.5 13.5 L12 21 L10.5 13.5 L3 12 L10.5 10.5 Z" />
+              <line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/>
+              <line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/>
+              <line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/>
+              <line x1="14" y1="2" x2="14" y2="6"/><line x1="8" y1="10" x2="8" y2="14"/>
+              <line x1="16" y1="18" x2="16" y2="22"/>
             </svg>
           </button>
         </div>
@@ -110,10 +83,10 @@
              the colour itself is map-scoped. When the map isn't
              calibrated, this row swaps to a "Calibrate map" button
              since the grid can't render without a pps value. -->
-        <div class="fog-row fog-row--kind" id="map-grid-row" hidden>
-          <span class="fog-row-label">Grid colour</span>
-          <input type="color" id="map-grid-colour" class="map-grid-colour" value="#ffffff" title="Grid line colour used by both the Player View and the Scaled View when their Show Grid icon is on. Stored per-map — different maps can use different colours." />
-        </div>
+        <label class="fog-brush-row fog-brush-row--color" id="map-grid-row" hidden>
+          <span>Grid colour</span>
+          <input type="color" id="map-grid-colour" value="#ffffff" title="Grid line colour used by both the Player View and the Scaled View when their Show Grid icon is on. Stored per-map — different maps can use different colours." />
+        </label>
         <!-- v2.14.77 — GM-only fade for the topmost tile of a layered
              composite. Lets the GM preview the layer beneath without
              painting reveal_layer polygons. Shown only when the active
@@ -123,6 +96,11 @@
           <input type="range" id="map-upper-layer-opacity" min="0" max="100" value="100" title="Fade the topmost tile so the layer beneath shows through on the GM canvas. Preview-only — never affects what the players see." />
         </div>
         <button id="map-grid-calibrate-btn" class="btn btn--ghost btn--sm btn--full" hidden title="The 1″ grid needs a calibrated pixels-per-inch. Click to calibrate this map first; then the grid colour swatch will appear here.">No Grid — calibrate map&hellip;</button>
+        <!-- v2.16.93 — Edit-this-map buttons moved here (below backdrop /
+             grid colour, above the asset actions). Only one shows, gated
+             on the active map's type. -->
+        <button id="edit-textmap-btn" class="btn btn--ghost btn--sm btn--full" hidden title="Open the Text Map editor for this handout">Edit this Handout (Text Map)</button>
+        <button id="edit-composite-btn" class="btn btn--ghost btn--sm btn--full" hidden title="Open the Composite Map editor — view, add, position, and remove tiles that make up this composite map.">Edit this Composite Map</button>
         <div class="btn-row">
           <button id="swap-map-asset-btn" class="btn btn--ghost  btn--sm" title="Replace this map's underlying image with a different asset from your library. Fog, markers, and audio all stay attached to the map — only the image changes. Useful when you've redrawn the same map at higher resolution or want to switch between line-art and final-render versions.">Swap Asset&hellip;</button>
           <button id="clone-map-btn"      class="btn btn--ghost  btn--sm">Clone Map</button>
@@ -132,110 +110,22 @@
       </div>
     </section>
 
-    <section class="panel" id="transition-panel">
-      <div class="panel-header">
-        <button type="button" class="panel-title" aria-expanded="false">Map Transition</button>
-        <span class="panel-toggle-icon" aria-hidden="true" title="Visual bypass"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
-        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Enable map transition. Off = bypass (equivalent to None)">
-          <input type="checkbox" id="transition-bypass-toggle" checked />
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
+    <section class="panel" id="players-panel">
+      <!-- v2.16.92 — defaults closed; PlayersPanel opens it on first load
+           if any players already exist (e.g. saved offline players). -->
+      <button type="button" class="panel-title" aria-expanded="false">Players<span id="players-count-badge" class="panel-count-badge" title="Players connected / total"></span></button>
       <div class="panel-body" hidden>
-        <select id="transition-select" class="select-full"></select>
-        <div id="transition-params" class="transition-params-container"></div>
+        <div id="players-list" class="players-list"></div>
+        <button id="call-initiative-btn" class="btn btn--full call-initiative-btn" title="Open the initiative tracker and broadcast a roll prompt to every connected player.">Call for Initiative</button>
+        <button id="add-player-btn" class="btn btn--ghost btn--sm btn--full" title="Add someone at the table who doesn't have their own device. You set their name + colour and act on their behalf; connected players appear here automatically when they introduce themselves.">+ Add offline player</button>
       </div>
     </section>
 
-    <section class="panel" id="fog-panel">
-      <button type="button" class="panel-title" aria-expanded="false" title="Pick a Kind, then Drawing Mode (sticky). Click Paint to add one shape or Erase to carve one out. Polygon: click vertices, click near first to close. Brush: drag. Click a polygon to select it; trashcan or Del to remove.">Fog of War &amp; MapFX</button>
-      <div class="panel-body" hidden>
-        <!-- Active-kind label + per-poly colour swatch + FX sparkle.
-             The label is read-only at a glance — populated by JS from
-             the active OverlayKind. Sparkle opens the popover that
-             contains a kind-picker dropdown AND that kind's params,
-             matching the Backdrop FX pattern but compact via a
-             <select> rather than a vertical button list. -->
-        <div class="fog-row fog-row--kind">
-          <span class="fog-row-label">Type</span>
-          <span class="mapfx-kind-label" id="mapfx-kind-display" title="Active MapFX kind — click the sparkle button to change kind, colour, edge fade, and per-shader params.">Fog of War</span>
-          <button type="button" id="mapfx-fx-btn" class="icon-btn bg-fx-btn" title="Pick + tune the MapFX effect: kind (Fog of War, Coloured Flames, Aurora, etc.), Colour, Edge Fade, and the kind's own params (intensity, scale, speed, etc.)." aria-label="MapFX tuning" aria-haspopup="true" aria-expanded="false">
-            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
-              <path d="M12 3 L13.5 10.5 L21 12 L13.5 13.5 L12 21 L10.5 13.5 L3 12 L10.5 10.5 Z" />
-            </svg>
-          </button>
-        </div>
+    <!-- v2.16.33 — Player Voice panel removed. Per-player messaging
+         threads will return as a slide-out right-edge panel triggered
+         by unread badges on each Players row (red = GM-bound, orange
+         = player↔player). Wire-up comes with the messaging revisit. -->
 
-        <!-- Drawing Mode — sticky toggle, persists in localStorage. -->
-        <div class="fog-row fog-row--mode">
-          <span class="fog-row-label">Drawing Mode</span>
-          <div class="fog-mode-toggle">
-            <button id="fog-mode-poly-btn"  class="btn btn--sm fog-mode-btn is-active" title="Polygon mode — click on the map to add vertices in order; double-click or press Enter to close the shape. Best for precise outlines (room boundaries, rivers with bends, etc.).">Polygon</button>
-            <button id="fog-mode-brush-btn" class="btn btn--sm fog-mode-btn"           title="Brush mode — click and drag to paint a freeform shape. Each stroke becomes one polygon. Size adjustable below; zoom the canvas in for finer detail.">Brush</button>
-            <button id="fog-mode-fill-btn"  class="btn btn--sm fog-mode-btn"           title="Magic Wand mode — click a region on the map and the flood-fill algorithm captures everything within the colour Tolerance below. After clicking, drag Tolerance to widen / narrow the catch. Click somewhere else to start a fresh fill.">Fill</button>
-          </div>
-        </div>
-
-        <!-- Brush size — only visible when Drawing Mode = Brush. -->
-        <div class="fog-brush-controls" hidden>
-          <label class="fog-brush-row">
-            <span>Size</span>
-            <input id="fog-brush-radius" type="range" min="2" max="80" step="1" value="20" title="Brush size in screen pixels (NOT map pixels). Zoom in on the canvas to get finer detail at the same screen-pixel size; zoom out to paint big shapes quickly." />
-          </label>
-        </div>
-
-        <!-- Fill (magic wand) tolerance — only visible when Drawing Mode = Fill.
-             Drag after a fill click to widen / narrow the matched area; the
-             most-recent fill polygon updates live. -->
-        <div class="fog-fill-controls" hidden>
-          <label class="fog-brush-row">
-            <span>Tolerance</span>
-            <input id="fog-fill-tolerance" type="range" min="0.01" max="0.6" step="0.01" value="0.1" title="How permissive the colour-match is for the magic-wand flood-fill. Low values catch only near-identical colours; high values bleed across subtle gradients. Click a region first to start a fill, then drag this slider — the captured area re-runs live so you can dial in the exact patch you wanted." />
-          </label>
-        </div>
-
-        <!-- Action buttons — Paint (green) + Erase (red). Each is a
-             single-shot: click → draw one polygon/stroke under the current
-             Drawing Mode → auto-exit. -->
-        <div class="fog-row fog-row--actions">
-          <button id="fog-paint-btn" class="btn btn--sm fog-action fog-action--paint" title="Single-shot Paint — commits one shape using the current drawing mode (Polygon / Brush / Fill) and the active kind from the dropdown above. If a polygon was selected when you clicked Paint, the new shape inherits its colour + shader-param tuning (paint-another-like-this).">Paint</button>
-          <button id="fog-erase-btn" class="btn btn--sm fog-action fog-action--erase" title="Single-shot Erase — carves one shape out of every existing polygon it overlaps, regardless of kind. The carving polygon itself isn't added to the map; it's just used as a cookie-cutter.">Erase</button>
-        </div>
-
-        <!-- Per-kind shader tuning + Edge Fade now live in the popover
-             opened by the sparkle button (#mapfx-fx-btn) at the top of
-             the panel. Keeps the panel compact and matches the
-             Backdrop FX pattern. -->
-
-        <!-- Clear-this-kind always available. Delete button gone — use the
-             trashcan handle on a selected polygon or the Del key instead. -->
-        <button id="fog-brush-clear" class="btn btn--sm btn--ghost btn--block">Clear all of this Kind</button>
-        <button id="fog-delete-btn" class="btn btn--sm btn--danger" hidden>Delete</button>
-      </div>
-    </section>
-
-    <!-- v2.16 — Stagecraft panel. Hidden by default; StagecraftPanel
-         flips hidden=false once at least one WLED endpoint or HA
-         connection is configured in Settings. -->
-    <section class="panel" id="stagecraft-panel" hidden>
-      <div class="panel-header">
-        <button type="button" class="panel-title" aria-expanded="false">Lighting / Automation</button>
-      </div>
-      <div class="panel-body" hidden>
-        <p class="panel-intro" id="stagecraft-intro">
-          <strong>Per-map.</strong> Pick a WLED preset, Home Assistant
-          scene, or QLC+ Function to fire whenever this map loads.
-          Set the presets up in those tools first; this panel just
-          references and triggers them.
-        </p>
-        <div id="stagecraft-assignments"></div>
-        <div class="settings-btn-row" style="margin-top:6px">
-          <button type="button" class="btn btn--ghost btn--sm" id="stagecraft-refresh-btn">Refresh devices</button>
-          <button type="button" class="btn btn--ghost btn--sm" id="stagecraft-test-btn">Fire now (test)</button>
-        </div>
-        <p class="settings-stat-sub" id="stagecraft-status" style="margin-top:6px"></p>
-      </div>
-    </section>
 
     <section class="panel" id="markers-panel">
       <div class="panel-header">
@@ -247,9 +137,16 @@
         </label>
       </div>
       <div class="panel-body" hidden>
-        <select id="marker-select" class="select-full">
-          <option value="">— No marker selected —</option>
-        </select>
+        <!-- v2.16.34 — "+" button beside picker; no more "Add" sentinel
+             buried at the bottom of the dropdown. -->
+        <div class="picker-row">
+          <select id="marker-select" class="select-full picker-row__select">
+            <option value="">— No marker selected —</option>
+          </select>
+          <button type="button" id="add-marker-btn" class="picker-row__add" title="Add a new marker on the current map">
+            <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+          </button>
+        </div>
 
         <div id="marker-controls" hidden>
           <div class="param-row param-row--toggle">
@@ -430,84 +327,145 @@
       </div>
     </section>
 
-    <section class="panel" id="projection-panel">
-      <div class="panel-header">
-        <button type="button" class="panel-title" aria-expanded="false">Scaled View</button>
-        <span class="panel-toggle-icon" aria-hidden="true" title="Visual bypass"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
-        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Broadcast to projector. Off = show placeholder (the GM is faffing)">
-          <input type="checkbox" id="projection-broadcast-toggle" checked />
-          <span class="toggle-slider"></span>
-        </label>
-      </div>
+    <section class="panel" id="fog-panel">
+      <button type="button" class="panel-title" aria-expanded="false" title="Pick a Kind, then Drawing Mode (sticky). Click Paint to add one shape or Erase to carve one out. Polygon: click vertices, click near first to close. Brush: drag. Click a polygon to select it; trashcan or Del to remove.">Fog of War &amp; MapFX</button>
       <div class="panel-body" hidden>
-
-        <!-- Always-visible projector picker. Off / setup / + add new. -->
-        <div class="param-row">
-          <label for="projection-projector-select">Display</label>
-          <select id="projection-projector-select" class="select-full" title="Pick a calibrated display (TV / monitor / projector), or add a new one"></select>
+        <!-- Active-kind label + per-poly colour swatch + FX sparkle.
+             The label is read-only at a glance — populated by JS from
+             the active OverlayKind. Sparkle opens the popover that
+             contains a kind-picker dropdown AND that kind's params,
+             matching the Backdrop FX pattern but compact via a
+             <select> rather than a vertical button list. -->
+        <!-- v2.16.35 — Kind picker promoted from inside the popover to an
+             inline <select> on the row. Side-panel-on-right (opened by
+             the sliders button) only holds kind-specific params now. -->
+        <div class="fog-row fog-row--kind">
+          <span class="fog-row-label">Type</span>
+          <select class="fog-row-select" id="mapfx-kind-display" title="Pick the MapFX kind (Fog of War, Coloured Flames, Aurora, etc.)."></select>
+          <!-- v2.16.34 — sliders-horizontal (Lucide). v2.16.35 — opens a
+               right-edge side panel instead of an anchored popover. -->
+          <button type="button" id="mapfx-fx-btn" class="icon-btn bg-fx-btn" title="Tune this MapFX kind — adjust colour, edge fade, and the kind's own params (intensity, scale, speed, etc.)." aria-label="Tune MapFX" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/>
+              <line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/>
+              <line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/>
+              <line x1="14" y1="2" x2="14" y2="6"/><line x1="8" y1="10" x2="8" y2="14"/>
+              <line x1="16" y1="18" x2="16" y2="22"/>
+            </svg>
+          </button>
         </div>
 
-        <!-- Default-state intro: shown when no projector is connected. -->
-        <p id="projection-intro" class="view-hint view-hint--gap">
-          Scaled view is for on-table battlemaps using an under-table screen, TV, or down projector. It scales calibrated maps to 1&Prime;/25&nbsp;mm squares so miniatures occupy real inches on the surface. Pick a calibrated display above to begin, or add a new one.
-        </p>
-
-        <!-- Active controls — shown only when a primary projector is connected. -->
-        <div id="projection-active-controls" hidden>
-
-          <p id="projection-map-cal-warning" class="view-warn" hidden>⚠ Active map is not calibrated — Full Map view enabled &mdash; calibrate map to change.</p>
-
-          <div id="projection-default-actions" class="viewport-actions">
-            <!-- v2.14.3 — Move Projection View button retired. The
-                 scaled view rect now has a green move handle at its
-                 top-left corner on the GM canvas; drag from there to
-                 reposition. The Open Scaled View Monitor button takes
-                 the prominent slot — spawning an extra mirror window
-                 is the common follow-up action. -->
-            <button id="projection-monitor-btn" class="btn btn--primary btn--full view-hint--gap" title="Open an additional projector window that mirrors the primary's crop with a bezel frame. Use when you want a second screen showing the same calibrated view (e.g. a tablet on the same LAN that's not the main table screen).">+ Open Scaled View Monitor&hellip;</button>
-            <button id="projection-fullmap-btn" class="btn btn--ghost btn--sm btn--full" title="Project the entire map fit-to-window, ignoring calibration. Useful for handouts, world maps, or any image you want everyone to see at once instead of at table-scale.">Full Map</button>
-            <div class="param-row param-row--toggle">
-              <label for="projection-filter-toggle" title="When on, the GM's visual filter (parchment, hand-drawn, CRT, etc.) does NOT apply to the projector — useful when projecting battlemaps that should stay unfiltered at the table while players still see the filtered view on their own screens.">Disable Filters</label>
-              <label class="toggle-switch">
-                <input type="checkbox" id="projection-filter-toggle" />
-                <span class="toggle-slider"></span>
-              </label>
-            </div>
+        <!-- Drawing Mode — sticky toggle, persists in localStorage. -->
+        <div class="fog-row fog-row--mode">
+          <span class="fog-row-label">Drawing Mode</span>
+          <div class="fog-mode-toggle">
+            <button id="fog-mode-poly-btn"  class="btn btn--sm fog-mode-btn is-active" title="Polygon mode — click on the map to add vertices in order; double-click or press Enter to close the shape. Best for precise outlines (room boundaries, rivers with bends, etc.).">Polygon</button>
+            <button id="fog-mode-brush-btn" class="btn btn--sm fog-mode-btn"           title="Brush mode — click and drag to paint a freeform shape. Each stroke becomes one polygon. Size adjustable below; zoom the canvas in for finer detail.">Brush</button>
+            <button id="fog-mode-fill-btn"  class="btn btn--sm fog-mode-btn"           title="Magic Wand mode — click a region on the map and the flood-fill algorithm captures everything within the colour Tolerance below. After clicking, drag Tolerance to widen / narrow the catch. Click somewhere else to start a fresh fill.">Fill</button>
           </div>
-
-          <p class="view-hint view-hint--gap" title="Rotate the projected image at the projector end. Useful when the table screen is mounted upside-down, sideways, or you want to flip the orientation for players sitting opposite each other.">Rotation</p>
-          <div class="btn-row" id="projection-rotation-row">
-            <button class="btn btn--ghost btn--sm" data-rotation="0"   title="No rotation — projector renders the map as the GM canvas does.">0&deg;</button>
-            <button class="btn btn--ghost btn--sm" data-rotation="90"  title="Quarter-turn clockwise. Use when the projector / TV is mounted on its side (portrait orientation).">90&deg;</button>
-            <button class="btn btn--ghost btn--sm" data-rotation="180" title="Half-turn. Use when the table screen is mounted upside-down or to flip for opposite-facing players.">180&deg;</button>
-            <button class="btn btn--ghost btn--sm" data-rotation="270" title="Three-quarter turn clockwise. Use for portrait mounts in the opposite orientation to 90°.">270&deg;</button>
-          </div>
-
-          <!-- v2.14.31 — 1" Grid Overlay section removed. The Show
-               Grid toggle now lives on the Scaled View rect's chrome
-               icon (set from the GM canvas) and the colour swatch
-               moved to the Map panel (under Backdrop) where it's
-               shared with the Player View. -->
-
-          <button id="projection-recal-map-btn" class="btn btn--ghost btn--sm btn--full view-hint--gap" title="Re-run the calibration flow for the active map — adjust pixels-per-square if the projected scale looks off compared to physical miniatures.">Recalibrate this Map&hellip;</button>
-
-          <p id="projector-status" class="projector-status">No projector connected.</p>
         </div>
+
+        <!-- Brush size — only visible when Drawing Mode = Brush. -->
+        <div class="fog-brush-controls" hidden>
+          <label class="fog-brush-row">
+            <span>Size</span>
+            <input id="fog-brush-radius" type="range" min="2" max="80" step="1" value="20" title="Brush size in screen pixels (NOT map pixels). Zoom in on the canvas to get finer detail at the same screen-pixel size; zoom out to paint big shapes quickly." />
+          </label>
+        </div>
+
+        <!-- Fill (magic wand) tolerance — only visible when Drawing Mode = Fill.
+             Drag after a fill click to widen / narrow the matched area; the
+             most-recent fill polygon updates live. -->
+        <div class="fog-fill-controls" hidden>
+          <label class="fog-brush-row">
+            <span>Tolerance</span>
+            <input id="fog-fill-tolerance" type="range" min="0.01" max="0.6" step="0.01" value="0.1" title="How permissive the colour-match is for the magic-wand flood-fill. Low values catch only near-identical colours; high values bleed across subtle gradients. Click a region first to start a fill, then drag this slider — the captured area re-runs live so you can dial in the exact patch you wanted." />
+          </label>
+        </div>
+
+        <!-- Action buttons — Paint (green) + Erase (red). Each is a
+             single-shot: click → draw one polygon/stroke under the current
+             Drawing Mode → auto-exit. -->
+        <div class="fog-row fog-row--actions">
+          <button id="fog-paint-btn" class="btn btn--sm fog-action fog-action--paint" title="Single-shot Paint — commits one shape using the current drawing mode (Polygon / Brush / Fill) and the active kind from the dropdown above. If a polygon was selected when you clicked Paint, the new shape inherits its colour + shader-param tuning (paint-another-like-this).">Paint</button>
+          <button id="fog-erase-btn" class="btn btn--sm fog-action fog-action--erase" title="Single-shot Erase — carves one shape out of every existing polygon it overlaps, regardless of kind. The carving polygon itself isn't added to the map; it's just used as a cookie-cutter.">Erase</button>
+        </div>
+
+        <!-- Per-kind shader tuning + Edge Fade now live in the popover
+             opened by the sparkle button (#mapfx-fx-btn) at the top of
+             the panel. Keeps the panel compact and matches the
+             Backdrop FX pattern. -->
+
+        <!-- Clear-this-kind always available. Delete button gone — use the
+             trashcan handle on a selected polygon or the Del key instead. -->
+        <button id="fog-brush-clear" class="btn btn--sm btn--ghost btn--block">Clear all of this Kind</button>
+        <button id="fog-delete-btn" class="btn btn--sm btn--danger" hidden>Delete</button>
       </div>
     </section>
 
-    <section class="panel" id="filter-panel-section">
+    <!-- v2.16.76 — Annotate: per-map progress clocks + freehand whiteboard,
+         shared live to players + projector. The bypass toggle visually
+         mutes them on the player/projector views (GM still sees them). -->
+    <section class="panel" id="annotate-panel">
       <div class="panel-header">
-        <button type="button" class="panel-title" aria-expanded="false">Visual Filter</button>
-        <span class="panel-toggle-icon" aria-hidden="true" title="Visual bypass"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
-        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Enable visual filter. Off = bypass (no filter applied)">
-          <input type="checkbox" id="filter-bypass-toggle" checked />
+        <button type="button" class="panel-title" aria-expanded="false">Annotate</button>
+        <span class="panel-toggle-icon" aria-hidden="true" title="Show to players"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Show annotations (whiteboard + clocks + timers + notes) on all views. Off = hidden everywhere, GM included (the per-map data is kept).">
+          <input type="checkbox" id="annotate-bypass-toggle" checked />
           <span class="toggle-slider"></span>
         </label>
       </div>
       <div class="panel-body" hidden>
-        <select id="filter-select" class="select-full"></select>
-        <div id="filter-params" class="filter-params-container"></div>
+        <!-- Whiteboard always visible (the common case). The rest are
+             collapsible sub-sections, closed by default, to keep the
+             panel calm (v2.16.80). -->
+        <p class="annotate-section-label">Whiteboard</p>
+        <div class="annotate-wb-row">
+          <button id="annotate-draw-toggle" class="btn btn--sm" title="Toggle freehand drawing on the map">Draw</button>
+          <div id="annotate-pen-colors" class="annotate-color-row"></div>
+          <button id="annotate-wb-clear" class="btn btn--sm btn--danger" title="Erase the whole whiteboard for this map">Clear</button>
+        </div>
+        <details class="annotate-sub">
+          <summary>Notes</summary>
+          <div class="annotate-clock-form">
+            <textarea id="annotate-note-text" class="annotate-note-input" rows="2" placeholder="Type a note…"></textarea>
+            <div class="annotate-clock-row">
+              <select id="annotate-note-audience" class="annotate-timer-mode" title="Who sees this note">
+                <option value="player">Player + GM</option>
+                <option value="gm">GM only</option>
+              </select>
+              <div id="annotate-note-colors" class="annotate-color-row"></div>
+            </div>
+            <button id="annotate-add-note" class="btn btn--sm btn--full">+ Add note</button>
+          </div>
+        </details>
+        <details class="annotate-sub">
+          <summary>Progress clocks</summary>
+          <div class="annotate-clock-form">
+            <input id="annotate-clock-name" class="select-full" type="text" autocomplete="off" placeholder="Name (e.g. Alarm raised)" />
+            <div class="annotate-clock-row">
+              <label for="annotate-clock-segments" class="annotate-seg-label">Segments</label>
+              <input id="annotate-clock-segments" type="number" min="2" max="24" value="4" />
+              <div id="annotate-clock-colors" class="annotate-color-row"></div>
+            </div>
+            <button id="annotate-add-clock" class="btn btn--sm btn--full">+ Add clock</button>
+          </div>
+        </details>
+        <details class="annotate-sub">
+          <summary>Timer / countdown</summary>
+          <div class="annotate-clock-form">
+            <input id="annotate-timer-name" class="select-full" type="text" autocomplete="off" placeholder="Name (e.g. Bomb)" />
+            <div class="annotate-clock-row">
+              <select id="annotate-timer-mode" class="annotate-timer-mode">
+                <option value="countdown">Countdown</option>
+                <option value="countup">Count up</option>
+              </select>
+              <input id="annotate-timer-duration" type="text" autocomplete="off" value="5:00" title="Countdown length — mm:ss" />
+              <div id="annotate-timer-colors" class="annotate-color-row"></div>
+            </div>
+            <button id="annotate-add-timer" class="btn btn--sm btn--full">+ Add timer</button>
+          </div>
+        </details>
       </div>
     </section>
 
@@ -556,6 +514,188 @@
       </div>
     </section>
 
+    <section class="panel" id="projection-panel">
+      <div class="panel-header">
+        <button type="button" class="panel-title" aria-expanded="false">Player Views</button>
+        <span class="panel-toggle-icon" aria-hidden="true" title="Visual bypass"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Broadcast to player + projector views. Off = both audiences see the hold screen (the GM is faffing)">
+          <input type="checkbox" id="projection-broadcast-toggle" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="panel-body" hidden>
+
+        <!-- v2.16.103 — Player connections: QR to join + a summary of
+             connected player WINDOWS by type / capability (local windows,
+             scaled views, remote PC / mobile). Deliberately NOT the player
+             roster — that lives in the separate Players panel. -->
+        <div class="subpanel" id="player-connections-sub">
+          <button type="button" class="subpanel-title" aria-expanded="false">Player connections</button>
+          <div class="subpanel-body" hidden>
+            <div class="connections-join">
+              <canvas id="connections-qr" class="connections-qr" width="160" height="160" title="Scan to open the player view on a phone or tablet on the same network"></canvas>
+              <p class="connections-url" id="connections-url" title="Player view URL — open on any device on the same network"></p>
+            </div>
+            <ul class="connections-summary" id="connections-summary"></ul>
+          </div>
+        </div>
+
+        <!-- Scaled view — projector / under-table screen controls. -->
+        <div class="subpanel" id="scaled-view-sub">
+          <button type="button" class="subpanel-title" aria-expanded="true">Scaled view</button>
+          <div class="subpanel-body">
+
+        <!-- v2.16.40 — Open Player Window button retired. The inline
+             Player View PiP on the GM canvas (Show Player View pill +
+             draggable preview frame) is the single affordance now;
+             pop-out replicates the standalone-window flow as many
+             times as the GM needs. -->
+
+        <!-- Always-visible projector picker. v2.16.34 — "+" button moved
+             out of the dropdown as a sentinel entry into a discoverable
+             adjacent button. -->
+        <div class="param-row">
+          <label for="projection-projector-select">Display</label>
+          <div class="picker-row">
+            <select id="projection-projector-select" class="select-full picker-row__select" title="Pick a calibrated display (TV / monitor / projector)"></select>
+            <button type="button" id="add-display-btn" class="picker-row__add" title="Calibrate a new display">
+              <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+            </button>
+          </div>
+        </div>
+
+        <!-- Default-state intro: shown when no projector is connected. -->
+        <p id="projection-intro" class="view-hint view-hint--gap">
+          Scaled view is for on-table battlemaps using an under-table screen, TV, or down projector. It scales calibrated maps to 1&Prime;/25&nbsp;mm squares so miniatures occupy real inches on the surface. Pick a calibrated display above to begin, or add a new one.
+        </p>
+
+        <!-- Active controls — shown only when a primary projector is connected. -->
+        <div id="projection-active-controls" hidden>
+
+          <p id="projection-map-cal-warning" class="view-warn" hidden>⚠ Active map is not calibrated — Full Map view enabled &mdash; calibrate map to change.</p>
+
+          <div id="projection-default-actions" class="viewport-actions">
+            <!-- v2.14.3 — Move Projection View button retired. The
+                 scaled view rect now has a green move handle at its
+                 top-left corner on the GM canvas; drag from there to
+                 reposition. The Open Scaled View Monitor button takes
+                 the prominent slot — spawning an extra mirror window
+                 is the common follow-up action. -->
+            <button id="projection-monitor-btn" class="btn btn--primary btn--full view-hint--gap" title="Open an additional projector window that mirrors the primary's crop with a bezel frame. Use when you want a second screen showing the same calibrated view (e.g. a tablet on the same LAN that's not the main table screen).">+ Open Scaled View Monitor&hellip;</button>
+            <button id="projection-fullmap-btn" class="btn btn--ghost btn--sm btn--full" title="Project the entire map fit-to-window, ignoring calibration. Useful for handouts, world maps, or any image you want everyone to see at once instead of at table-scale.">Full Map</button>
+            <div class="param-row param-row--toggle">
+              <label for="projection-filter-toggle" title="When on, the GM's visual filter (parchment, hand-drawn, CRT, etc.) does NOT apply to the projector — useful when projecting battlemaps that should stay unfiltered at the table while players still see the filtered view on their own screens.">Disable Filters</label>
+              <label class="toggle-switch">
+                <input type="checkbox" id="projection-filter-toggle" />
+                <span class="toggle-slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <p class="view-hint view-hint--gap" title="Rotate the projected image at the projector end. Useful when the table screen is mounted upside-down, sideways, or you want to flip the orientation for players sitting opposite each other.">Rotation</p>
+          <div class="btn-row" id="projection-rotation-row">
+            <button class="btn btn--ghost btn--sm" data-rotation="0"   title="No rotation — projector renders the map as the GM canvas does.">0&deg;</button>
+            <button class="btn btn--ghost btn--sm" data-rotation="90"  title="Quarter-turn clockwise. Use when the projector / TV is mounted on its side (portrait orientation).">90&deg;</button>
+            <button class="btn btn--ghost btn--sm" data-rotation="180" title="Half-turn. Use when the table screen is mounted upside-down or to flip for opposite-facing players.">180&deg;</button>
+            <button class="btn btn--ghost btn--sm" data-rotation="270" title="Three-quarter turn clockwise. Use for portrait mounts in the opposite orientation to 90°.">270&deg;</button>
+          </div>
+
+          <!-- v2.14.31 — 1" Grid Overlay section removed. The Show
+               Grid toggle now lives on the Scaled View rect's chrome
+               icon (set from the GM canvas) and the colour swatch
+               moved to the Map panel (under Backdrop) where it's
+               shared with the Player View. -->
+
+          <button id="projection-recal-map-btn" class="btn btn--ghost btn--sm btn--full view-hint--gap" title="Re-run the calibration flow for the active map — adjust pixels-per-square if the projected scale looks off compared to physical miniatures.">Recalibrate this Map&hellip;</button>
+
+          <p id="projector-status" class="projector-status">No projector connected.</p>
+        </div>
+          </div>
+        </div>
+      </div>
+    </section>
+    <section class="panel" id="filter-panel-section">
+      <div class="panel-header">
+        <button type="button" class="panel-title" aria-expanded="false">Visual Filter</button>
+        <span class="panel-toggle-icon" aria-hidden="true" title="Visual bypass"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Enable visual filter. Off = bypass (no filter applied)">
+          <input type="checkbox" id="filter-bypass-toggle" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="panel-body" hidden>
+        <!-- v2.16.37 — promoted to the standard kind-row pattern: inline
+             <select> for the kind picker + sliders button to open the
+             side panel with tint toggle and per-filter params. Matches
+             Backdrop and MapFX. -->
+        <div class="fog-row fog-row--kind">
+          <span class="fog-row-label">Type</span>
+          <select class="fog-row-select" id="filter-select" title="Pick the active visual filter (Night Vision, Thermal, Candlelight, etc.)."></select>
+          <button type="button" id="filter-fx-btn" class="icon-btn bg-fx-btn" title="Tune this filter — its parameters + the per-map Tint Player Markers toggle." aria-label="Tune Visual Filter" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/>
+              <line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/>
+              <line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/>
+              <line x1="14" y1="2" x2="14" y2="6"/><line x1="8" y1="10" x2="8" y2="14"/>
+              <line x1="16" y1="18" x2="16" y2="22"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </section>
+    <section class="panel" id="transition-panel">
+      <div class="panel-header">
+        <button type="button" class="panel-title" aria-expanded="false">Map Transition</button>
+        <span class="panel-toggle-icon" aria-hidden="true" title="Visual bypass"><svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7Z"/><circle cx="12" cy="12" r="3"/></svg></span>
+        <label class="toggle-switch toggle-switch--bypass panel-toggle" title="Enable map transition. Off = bypass (equivalent to None)">
+          <input type="checkbox" id="transition-bypass-toggle" checked />
+          <span class="toggle-slider"></span>
+        </label>
+      </div>
+      <div class="panel-body" hidden>
+        <!-- v2.16.38 — promoted to the standard kind-row pattern: inline
+             <select> for the kind picker + sliders button to open the
+             side panel with this transition's params. Matches Backdrop,
+             MapFX and Visual Filter. -->
+        <div class="fog-row fog-row--kind">
+          <span class="fog-row-label">Type</span>
+          <select class="fog-row-select" id="transition-select" title="Pick the active map-transition (Fade, Iris, Curtain, etc.)."></select>
+          <button type="button" id="transition-fx-btn" class="icon-btn bg-fx-btn" title="Tune this transition — its parameters (duration, easing, direction, etc.)." aria-label="Tune Map Transition" aria-haspopup="true" aria-expanded="false">
+            <svg viewBox="0 0 24 24" width="18" height="18" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+              <line x1="21" y1="4" x2="14" y2="4"/><line x1="10" y1="4" x2="3" y2="4"/>
+              <line x1="21" y1="12" x2="12" y2="12"/><line x1="8" y1="12" x2="3" y2="12"/>
+              <line x1="21" y1="20" x2="16" y2="20"/><line x1="12" y1="20" x2="3" y2="20"/>
+              <line x1="14" y1="2" x2="14" y2="6"/><line x1="8" y1="10" x2="8" y2="14"/>
+              <line x1="16" y1="18" x2="16" y2="22"/>
+            </svg>
+          </button>
+        </div>
+      </div>
+    </section>
+
+    <!-- v2.16 — Stagecraft panel. Hidden by default; StagecraftPanel
+         flips hidden=false once at least one WLED endpoint or HA
+         connection is configured in Settings. -->
+    <section class="panel" id="stagecraft-panel" hidden>
+      <div class="panel-header">
+        <button type="button" class="panel-title" aria-expanded="false">Lighting / Automation</button>
+      </div>
+      <div class="panel-body" hidden>
+        <p class="panel-intro" id="stagecraft-intro">
+          <strong>Per-map.</strong> Pick a WLED preset, Home Assistant
+          scene, or QLC+ Function to fire whenever this map loads.
+          Set the presets up in those tools first; this panel just
+          references and triggers them.
+        </p>
+        <div id="stagecraft-assignments"></div>
+        <div class="settings-btn-row" style="margin-top:6px">
+          <button type="button" class="btn btn--ghost btn--sm" id="stagecraft-refresh-btn">Refresh devices</button>
+          <button type="button" class="btn btn--ghost btn--sm" id="stagecraft-test-btn">Fire now (test)</button>
+        </div>
+        <p class="settings-stat-sub" id="stagecraft-status" style="margin-top:6px"></p>
+      </div>
+    </section>
+
     <div id="status" class="status-bar" data-level="ok">Ready</div>
     <div class="app-footer-row">
       <span id="storage-gauge" class="storage-gauge" title="Local storage used by this app"></span>
@@ -575,6 +715,22 @@
            Sits on top of every canvas; pointer-events:none by default so
            clicks pass through to the editors below. -->
       <div id="marker-overlay" class="marker-overlay"></div>
+      <!-- v2.17 Player Voice — player tokens (circular, edged in each player's colour). -->
+      <div id="player-marker-layer" class="player-marker-layer"></div>
+      <!-- v2.17 Player Voice — ping pulses (player highlights relayed by the GM).
+           pointer-events:none so it never blocks the editors; dismiss buttons opt back in. -->
+      <div id="ping-layer" class="ping-layer"></div>
+      <!-- v2.17 Player Voice — fanned-deck initiative tracker (GM face).
+           Edge-pinnable; shows the rail, threat bench, and unallocated tray. -->
+      <div id="initiative-tracker" class="init-tracker" hidden></div>
+      <!-- v2.16.76 — Annotate layers. Whiteboard canvas sits over the map;
+           clocks float as a draggable HUD above it. -->
+      <!-- v2.16.91 — live YouTube videos placed on a text-map page. -->
+      <div id="textmap-video-layer" class="textmap-video-layer"></div>
+      <canvas id="annotate-whiteboard" class="annotate-whiteboard" hidden></canvas>
+      <div id="annotate-notes" class="annotate-notes"></div>
+      <div id="annotate-clocks" class="annotate-clocks"></div>
+      <div id="annotate-timers" class="annotate-clocks"></div>
     </div>
 
     <div id="marker-context-menu" class="context-menu" hidden>
