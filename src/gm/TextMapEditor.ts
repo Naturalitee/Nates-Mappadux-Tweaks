@@ -7,8 +7,10 @@ import {
   ensureTextMapElements,
   newTextElement,
   newImageElement,
+  newVideoElement,
   clampElementGeometry,
 } from '../maps/textMapElements.ts';
+import { extractVideoId } from '../stagecraft/youtubePlayer.ts';
 import { ImageAssetStore } from '../images/ImageAssetStore.ts';
 import { ImageAssetModal } from '../images/ImageAssetModal.ts';
 import { ensureFontsLoaded, registerLocalFontsFromAssets, BUNDLED_FONTS } from '../images/fontCatalog.ts';
@@ -586,6 +588,14 @@ export class TextMapEditor {
     addImg.addEventListener('click', () => void this._addNewImage());
     row.appendChild(addImg);
 
+    const addVid = document.createElement('button');
+    addVid.type = 'button';
+    addVid.className = 'btn btn--ghost btn--sm';
+    addVid.textContent = '+ YouTube';
+    addVid.title = 'Embed a live YouTube video — paste a YouTube link';
+    addVid.addEventListener('click', () => this._addNewVideo());
+    row.appendChild(addVid);
+
     const uploadBtn = document.createElement('button');
     uploadBtn.type = 'button';
     uploadBtn.className = 'btn btn--ghost btn--sm';
@@ -1142,6 +1152,20 @@ export class TextMapEditor {
       // Apply persisted tint so currentColor inside the SVG resolves
       // correctly on mount, not just on edit.
       if (el.tint) host.style.color = el.tint;
+    } else if (el.type === 'video') {
+      // v2.16.90 — live YouTube preview. The iframe is pointer-events:none
+      // (CSS) until the element is selected, so the move handle / body drag
+      // work normally; once selected, the GM interacts with YT's controls.
+      body.classList.add('txt-map-el-body--video');
+      const frame = document.createElement('iframe');
+      frame.className = 'txt-map-el-video-frame';
+      frame.src = `https://www.youtube.com/embed/${el.videoId}?rel=0`;
+      frame.allow = 'autoplay; encrypted-media; picture-in-picture';
+      frame.setAttribute('frameborder', '0');
+      frame.allowFullscreen = true;
+      body.appendChild(frame);
+      // Drag the video from anywhere on its frame (when not selected).
+      body.addEventListener('pointerdown', (e) => this._startDrag(e, el.id, 'move'));
     }
     host.appendChild(body);
 
@@ -1843,6 +1867,20 @@ export class TextMapEditor {
         if (!picked) resolve();
       };
     });
+  }
+
+  /** v2.16.90 — prompt for a YouTube link, parse the id, drop a live
+   *  video element on the page. */
+  private _addNewVideo(): void {
+    const raw = window.prompt('Paste a YouTube link (or video id):', '');
+    if (raw === null) return;
+    const id = extractVideoId(raw.trim());
+    if (!id) { window.alert('That doesn’t look like a YouTube link.'); return; }
+    const el = newVideoElement(id);
+    this._pushUndo();
+    this.elements.push(el);
+    this._mountElement(el);
+    this._select(el.id);
   }
 
   private _deleteSelected(): void {

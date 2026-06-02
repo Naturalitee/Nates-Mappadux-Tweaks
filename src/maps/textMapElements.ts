@@ -61,6 +61,16 @@ export function newImageElement(assetId: string): TextMapElement {
   };
 }
 
+/** v2.16.90 — a live YouTube video element (16:9 by default). */
+export function newVideoElement(videoId: string): TextMapElement {
+  return {
+    id:   'vid-' + generateId(),
+    type: 'video',
+    x: 25, y: 28, w: 50, h: 28, // ~16:9 on a 4:3-ish page
+    videoId,
+  };
+}
+
 /** Clamp an element's geometry to the page bounds. Used during drag /
  *  resize so a box can't be dragged off-page or shrunk to nothing. */
 export function clampElementGeometry(el: { x: number; y: number; w: number; h: number }): void {

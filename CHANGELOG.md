@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.90 — 2026-06-02
+
+Text Maps: new **+ YouTube** element (slice 1) — paste a YouTube link to drop a live, borderless, resizable + rotatable video onto a handout page, using the same editor chrome as text/image. The iframe is click-through until selected (so move/drag work), then YT's own controls take over. Video elements are NOT baked into the rasterised page image (they'll render as live overlays on the map next slice).
+
 ## v2.16.89 — 2026-06-02
 
 Map panel: pack name now sits left-aligned right after "Map Pack:" in the header (was pushed to the far right by the header's space-between). Grid-colour now uses the standard full-width colour bar (same control as the Backdrop colour picker) instead of a bespoke small swatch.

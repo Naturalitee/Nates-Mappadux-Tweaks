@@ -1736,7 +1736,7 @@ export interface TextMapConfig {
 }
 
 /** Union of all element kinds that can live on a text-map page. */
-export type TextMapElement = TextMapTextElement | TextMapImageElement;
+export type TextMapElement = TextMapTextElement | TextMapImageElement | TextMapVideoElement;
 
 interface TextMapElementBase {
   /** Stable id — used for selection state and React-style reconciliation. */
@@ -1791,6 +1791,17 @@ export interface TextMapImageElement extends TextMapElementBase {
    *  treated as true. Text elements ignore this — handout text
    *  boxes are designed for free reflow at any aspect. */
   lockAspect?: boolean;
+}
+
+/** v2.16.90 — A live YouTube video embedded on a text-map page. Unlike
+ *  text/image it is NOT rasterised into the page image — it renders as a
+ *  live iframe overlay (GM editor + player + projector) tracking the
+ *  element's geometry. Borderless; uses YT's own player controls when the
+ *  GM interacts with it (after selecting via the move handle). */
+export interface TextMapVideoElement extends TextMapElementBase {
+  type:    'video';
+  /** YouTube video id (parsed from the pasted URL via extractVideoId). */
+  videoId: string;
 }
 
 export interface TextMapAnimation {
