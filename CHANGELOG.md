@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.106 — 2026-06-02
+
+The join QR now encodes one canonical player URL everywhere, with no window-specific options. Previously the QR shown inside the inline player preview carried its gmPreview / pip flags, so scanning it would have opened a muted, non-registering preview instead of a normal player view. The QR (player view, projector, scaled monitor, and the GM Player connections panel) is now just the clean player URL plus the room code.
+
 ## v2.16.105 — 2026-06-02
 
 The popped-out player window now also gets the fullscreen button and sound: it was carrying the inline-preview pip flag, which suppresses fullscreen and mutes. Pop-outs now strip both preview flags so they behave as a normal standalone player view.

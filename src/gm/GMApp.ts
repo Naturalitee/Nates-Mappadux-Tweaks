@@ -2095,7 +2095,11 @@ export class GMApp {
     const urlEl  = document.getElementById('connections-url');
     const code   = this.host.roomCode;
     if (!code) { if (urlEl) urlEl.textContent = 'Waiting for room code…'; return; }
-    const url = this._buildPlayerUrl(code);
+    // v2.16.106 — same canonical join URL everywhere: strip the ?instance
+    // query so the QR matches the player/projector hold-screen QR exactly
+    // (external scanners don't use the same-browser instance namespace).
+    let url = this._buildPlayerUrl(code);
+    try { const u = new URL(url); u.search = ''; url = u.toString(); } catch { /* keep as-is */ }
     if (urlEl) urlEl.textContent = url;
     if (canvas) void QRCode.toCanvas(canvas, url, { width: 160, margin: 1 }).catch(() => { /* ignore */ });
   }

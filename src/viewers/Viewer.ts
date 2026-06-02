@@ -364,22 +364,16 @@ export class Viewer {
 
   private _qrUrl(): string | null {
     if (this.opts.qrUrl) return this.opts.qrUrl;
-    if (this.profile.chrome.qrTarget === 'self') {
-      return typeof window !== 'undefined' ? window.location.href : null;
-    }
-    // 'player' target — derive the PLAYER URL from this window's
-    // room code. Works whether we're a scaled-primary or
-    // scaled-monitor; the URL points at where late-joiners land as
-    // players, not back at this projector window.
     if (typeof window === 'undefined') return null;
+    // v2.16.106 — ONE canonical join URL everywhere, no options. This QR is
+    // only ever used by EXTERNAL scanners landing as players, so it must never
+    // carry window-specific flags: gmPreview / pip mark a GM preview (a scanner
+    // opening that would get a muted, non-registering, no-fullscreen view), and
+    // ?instance only namespaces same-browser BroadcastChannel (irrelevant to a
+    // separate device). Just origin + /player.html + the room hash — identical
+    // whether rendered by a player view, a projector, or a scaled monitor.
+    // (qrTarget self/player no longer differs: both resolve to the player URL.)
     const room = window.location.hash.replace(/^#/, '');
-    // v2.14.92 — Carry forward ?instance=NAME so the QR-pointed
-    // late-joiner lands on the same namespaced BroadcastChannel as
-    // the current viewer (matters for same-browser opens; external
-    // devices ignore the param harmlessly).
-    // v2.14.95 — /player.html directly, same reasoning as the GM
-    // player-URL builder (avoid the rewrite-with-query-string trap).
-    const search = window.location.search;
-    return `${window.location.origin}/player.html${search}${room ? '#' + room : ''}`;
+    return `${window.location.origin}/player.html${room ? '#' + room : ''}`;
   }
 }
