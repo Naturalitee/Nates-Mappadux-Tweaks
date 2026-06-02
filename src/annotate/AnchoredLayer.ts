@@ -71,6 +71,9 @@ export abstract class AnchoredLayer<T extends AnchoredObject> {
   protected abstract renderContent(obj: T, content: HTMLElement): void;
   /** Optional hook after a live resize (e.g. refit note text). */
   protected onResized?(obj: T, content: HTMLElement): void;
+  /** Optional type-specific controls (play/pause, edit, …) shown on the
+   *  bottom EDGE when the object is selected — never inside the box. */
+  protected edgeControls?(obj: T, content: HTMLElement): HTMLElement[];
   /** Extra class on the object box (e.g. 'a-note' / 'clock' for styling). */
   protected abstract objClass(obj: T): string;
   /** The object's chosen colour — drives the selection outline + chrome
@@ -137,6 +140,15 @@ export abstract class AnchoredLayer<T extends AnchoredObject> {
       const rot = mkHandle('marker-handle anchored-handle--rotate', 'Rotate', ICON_ROTATE);
       box.appendChild(rot);
       this._rotate(rot, box, o);
+
+      // Type-specific controls live on the bottom edge (never in the box).
+      const controls = this.edgeControls?.(o, content) ?? [];
+      if (controls.length) {
+        const bar = document.createElement('div');
+        bar.className = 'anchored-controls';
+        for (const c of controls) bar.appendChild(c);
+        box.appendChild(bar);
+      }
     }
   }
 
@@ -214,15 +226,17 @@ export abstract class AnchoredLayer<T extends AnchoredObject> {
 
 // ── Editor-chrome icons (match the established marker handles) ───────────────
 
-const _SVG = (paths: string) =>
+/** Build a 24×24 stroked SVG (matches the editor-chrome icon style). */
+export const svgIcon = (paths: string): string =>
   `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
 
-const ICON_MOVE = _SVG('<polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/>');
-const ICON_RESIZE = _SVG('<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>');
-const ICON_TRASH = _SVG('<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>');
-const ICON_ROTATE = _SVG('<path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/>');
+const ICON_MOVE = svgIcon('<polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/>');
+const ICON_RESIZE = svgIcon('<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>');
+const ICON_TRASH = svgIcon('<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>');
+const ICON_ROTATE = svgIcon('<path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/>');
 
-function mkHandle(className: string, title: string, iconSvg: string): HTMLDivElement {
+/** Build a chrome handle (marker-handle look) with an SVG icon. */
+export function mkHandle(className: string, title: string, iconSvg: string): HTMLDivElement {
   const el = document.createElement('div');
   el.className = className;
   el.title = title;

@@ -1,5 +1,7 @@
 import type { AnnotateNote } from '../types.ts';
-import { AnchoredLayer, type AnchoredOpts } from './AnchoredLayer.ts';
+import { AnchoredLayer, type AnchoredOpts, mkHandle, svgIcon } from './AnchoredLayer.ts';
+
+const ICON_EDIT = svgIcon('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/>');
 
 export interface NotesLayerCallbacks {
   onMove?: (id: string, x: number, y: number) => void;
@@ -62,6 +64,15 @@ export class NotesLayer extends AnchoredLayer<AnnotateNote> {
   protected override onResized(_n: AnnotateNote, content: HTMLElement): void {
     const text = content.querySelector<HTMLElement>('.a-note-text');
     if (text) fitText(content, text);
+  }
+
+  /** Edit control on the bottom edge (shown when selected). Double-click
+   *  still works too. */
+  protected override edgeControls(n: AnnotateNote, content: HTMLElement): HTMLElement[] {
+    const edit = mkHandle('marker-handle anchored-ctrl', 'Edit text', ICON_EDIT);
+    edit.addEventListener('pointerdown', (e) => e.stopPropagation());
+    edit.addEventListener('click', (e) => { e.stopPropagation(); this._editNote(content, n); });
+    return [edit];
   }
 
   private _editNote(content: HTMLElement, n: AnnotateNote): void {

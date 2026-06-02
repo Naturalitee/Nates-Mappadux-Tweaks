@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.85 — 2026-06-02
+
+Annotate: type-specific controls moved OUT of the object box onto a bottom-edge control bar that appears only when the object is selected — timers get play/pause + reset, notes get an edit button, all as fixed-size SVG handle-icons (no more text glyphs or in-box buttons crowding the content). Double-click still edits a note.
+
 ## v2.16.84 — 2026-06-02
 
 Annotate: now **part of the map data** — annotations live in the per-map SessionState, so they save to IndexedDB and travel inside the `.mappadux` pack (no more separate localStorage key). Editor chrome rebuilt to reuse our **established handle design** (fixed 26px marker-style handles with the standard move / trashcan-delete / rounded-square resize / rotate icons — they no longer shrink on zoom). Chrome accents (selection outline, resize grip, rotate stem) now key off the **object's own colour** rather than the green/orange view-identity colours.

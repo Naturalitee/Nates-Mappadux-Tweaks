@@ -7361,17 +7361,21 @@ option.select-option--add {
 }
 .a-timer.is-done .a-timer-time { color: var(--danger); animation: a-timer-flash 1s ease-in-out infinite; }
 @keyframes a-timer-flash { 50% { opacity: 0.35; } }
-.a-timer-ctrls { display: flex; gap: 4cqmin; }
-.a-timer-btn {
-  min-width: 16cqh; height: 18cqh;
-  padding: 0 4cqmin; font-size: 11cqh; line-height: 1;
-  background: rgba(255, 255, 255, 0.1);
-  border: 1px solid rgba(255, 255, 255, 0.2);
-  border-radius: 4px;
-  color: #fff;
-  cursor: pointer;
+
+/* v2.16.85 — type-specific controls sit on the bottom edge (below the box,
+   centred), shown only when selected. Fixed-size marker-style handles, so
+   they don't shrink on zoom and never crowd the box content. */
+.anchored-controls {
+  position: absolute;
+  top: 100%;
+  left: 50%;
+  transform: translate(-50%, 16px);
+  display: flex;
+  gap: 6px;
+  z-index: 6;
 }
-.a-timer-btn:hover { background: rgba(255, 255, 255, 0.22); }
+.anchored-ctrl { position: relative; transform: none; }
+.anchored-ctrl:active { transform: scale(0.94); }
 
 /* Panel form */
 .annotate-section-label {

@@ -1,5 +1,9 @@
 import type { AnnotateTimer } from '../types.ts';
-import { AnchoredLayer, type AnchoredOpts } from './AnchoredLayer.ts';
+import { AnchoredLayer, type AnchoredOpts, mkHandle, svgIcon } from './AnchoredLayer.ts';
+
+const ICON_PLAY  = svgIcon('<polygon points="6 4 20 12 6 20 6 4"/>');
+const ICON_PAUSE = svgIcon('<line x1="8" y1="5" x2="8" y2="19"/><line x1="16" y1="5" x2="16" y2="19"/>');
+const ICON_RESET = svgIcon('<path d="M3 12a9 9 0 1 0 9-9 9 9 0 0 0-6.7 3"/><polyline points="3 3 3 8 8 8"/>');
 
 export interface TimersLayerCallbacks {
   onToggle?: (id: string) => void;
@@ -83,26 +87,16 @@ export class TimersLayer extends AnchoredLayer<AnnotateTimer> {
     time.textContent = fmt(timerDisplayMs(t));
     content.appendChild(time);
     this.timeEls.set(t.id, time);
+  }
 
-    if (this.interactive) {
-      const ctrls = document.createElement('div');
-      ctrls.className = 'a-timer-ctrls';
-      const toggle = document.createElement('button');
-      toggle.type = 'button';
-      toggle.className = 'a-timer-btn';
-      toggle.textContent = t.running ? '❚❚' : '▶';
-      toggle.title = t.running ? 'Pause' : 'Start';
-      toggle.addEventListener('pointerdown', (e) => e.stopPropagation());
-      toggle.addEventListener('click', (e) => { e.stopPropagation(); this._onToggle?.(t.id); });
-      const reset = document.createElement('button');
-      reset.type = 'button';
-      reset.className = 'a-timer-btn';
-      reset.textContent = '↺';
-      reset.title = 'Reset';
-      reset.addEventListener('pointerdown', (e) => e.stopPropagation());
-      reset.addEventListener('click', (e) => { e.stopPropagation(); this._onReset?.(t.id); });
-      ctrls.append(toggle, reset);
-      content.appendChild(ctrls);
-    }
+  /** Play/pause + reset live on the bottom edge (shown when selected). */
+  protected override edgeControls(t: AnnotateTimer): HTMLElement[] {
+    const toggle = mkHandle('marker-handle anchored-ctrl', t.running ? 'Pause' : 'Start', t.running ? ICON_PAUSE : ICON_PLAY);
+    toggle.addEventListener('pointerdown', (e) => e.stopPropagation());
+    toggle.addEventListener('click', (e) => { e.stopPropagation(); this._onToggle?.(t.id); });
+    const reset = mkHandle('marker-handle anchored-ctrl', 'Reset', ICON_RESET);
+    reset.addEventListener('pointerdown', (e) => e.stopPropagation());
+    reset.addEventListener('click', (e) => { e.stopPropagation(); this._onReset?.(t.id); });
+    return [toggle, reset];
   }
 }
