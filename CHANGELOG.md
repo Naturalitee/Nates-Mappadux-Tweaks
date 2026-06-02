@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.80 — 2026-06-02
+
+Annotate: **Notes** added — free text boxes with the established editor chrome (select handle top-left to move, delete bottom-left, resize bottom-right) and text that **auto-fits the box** (shrink the box → smaller font, reflowing as needed). Double-click to edit. **GM-only** notes show on the GM view; **Player** notes show on player + projector too. Panel tidied: Whiteboard stays always-visible at the top; Notes / Clocks / Timers are collapsible sub-sections that start closed. Annotate bypass now defaults **ON** (annotations shown by default).
+
 ## v2.16.79 — 2026-06-02
 
 Annotate quick polish: Whiteboard section moved to the top of the panel (most used); picking a pen colour now auto-arms Draw; clock + timer name/value text render in the element's own colour; dragging a clock/timer no longer pans the GM map underneath. (Larger rebuild — map-anchored 1:1 clocks/timers with the select/move/resize editor chrome, plus GM/Player Notes — in progress.)

@@ -9,6 +9,7 @@ import { PingLayer } from '../rendering/PingLayer.ts';
 import { PlayerInitiativeRail } from '../player/PlayerInitiativeRail.ts';
 import { ClocksLayer } from '../annotate/ClocksLayer.ts';
 import { TimersLayer } from '../annotate/TimersLayer.ts';
+import { NotesLayer } from '../annotate/NotesLayer.ts';
 import { WhiteboardLayer } from '../annotate/WhiteboardLayer.ts';
 import {
   type ProjectorSetup,
@@ -121,6 +122,7 @@ export class ProjectorApp {
   private initiativeRail:    PlayerInitiativeRail | null = null;
   private _annotateClocks:   ClocksLayer | null = null;
   private _annotateTimers:   TimersLayer | null = null;
+  private _annotateNotes:    NotesLayer | null = null;
   private _annotateBoard:    WhiteboardLayer | null = null;
   private _playerIcons   = new Map<string, string>();
   private _lastPlayerMarkers: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; hasIcon?: boolean; tokenSize?: import('../types.ts').TokenSize }> = [];
@@ -282,6 +284,8 @@ export class ProjectorApp {
     if (clocksEl) this._annotateClocks = new ClocksLayer(clocksEl, false);
     const timersEl = document.getElementById('annotate-timers');
     if (timersEl) this._annotateTimers = new TimersLayer(timersEl, false);
+    const notesEl = document.getElementById('annotate-notes');
+    if (notesEl) this._annotateNotes = new NotesLayer(notesEl, false);
     // v2.16.77 — read-only whiteboard mirrored from the GM.
     const boardEl = document.getElementById('annotate-whiteboard') as HTMLCanvasElement | null;
     if (boardEl) this._annotateBoard = new WhiteboardLayer(boardEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));
@@ -835,6 +839,10 @@ export class ProjectorApp {
       }
       case 'annotate_timers': {
         this._annotateTimers?.setTimers(msg.timers);
+        break;
+      }
+      case 'annotate_notes': {
+        this._annotateNotes?.setNotes(msg.notes);
         break;
       }
       // player_features, player_roster, player_marker_move, message_deliver,

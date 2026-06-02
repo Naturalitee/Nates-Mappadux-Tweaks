@@ -98,17 +98,16 @@ export function setInitiativeSortDirection(dir: 'high-to-low' | 'low-to-high'): 
   catch { /* private mode etc. — no-op */ }
 }
 
-/** v2.16.76 — Annotate mute. When set, clocks + whiteboard are hidden on
- *  ALL surfaces (GM, player, projector) without deleting the per-map data.
- *  Default MUTED on a fresh load (Alex 2026-06-01) — the GM reveals
- *  annotations deliberately. '1' muted, '0' shown; absent = muted. */
+/** v2.16.76 — Annotate mute. When set, clocks + whiteboard + notes are
+ *  hidden on ALL surfaces (GM, player, projector) without deleting the
+ *  per-map data. v2.16.80 — default SHOWN (Alex 2026-06-02) — unlike the
+ *  other bypass toggles' inverse, annotations are on by default. '1'
+ *  muted, '0'/absent = shown. */
 export const ANNOTATE_MUTED_KEY = 'mappadux:annotate_muted';
 
 export function isAnnotateMuted(): boolean {
-  try {
-    const v = localStorage.getItem(ANNOTATE_MUTED_KEY);
-    return v === null ? true : v === '1';
-  } catch { return true; }
+  try { return localStorage.getItem(ANNOTATE_MUTED_KEY) === '1'; }
+  catch { return false; }
 }
 
 export function setAnnotateMuted(muted: boolean): void {

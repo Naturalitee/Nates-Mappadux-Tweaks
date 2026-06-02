@@ -1,4 +1,4 @@
-import type { AnnotateState, ProgressClock, AnnotateTimer } from '../types.ts';
+import type { AnnotateState, ProgressClock, AnnotateTimer, AnnotateNote } from '../types.ts';
 import { generateId } from '../utils/id.ts';
 
 /**
@@ -11,7 +11,7 @@ import { generateId } from '../utils/id.ts';
 const KEY_PREFIX = 'mappadux:annotate:';
 
 export function emptyAnnotateState(): AnnotateState {
-  return { clocks: [], strokes: [], timers: [] };
+  return { clocks: [], strokes: [], timers: [], notes: [] };
 }
 
 export function loadAnnotateState(mapId: string): AnnotateState {
@@ -23,6 +23,7 @@ export function loadAnnotateState(mapId: string): AnnotateState {
       clocks:  Array.isArray(p.clocks)  ? p.clocks  : [],
       strokes: Array.isArray(p.strokes) ? p.strokes : [],
       timers:  Array.isArray(p.timers)  ? p.timers  : [],
+      notes:   Array.isArray(p.notes)   ? p.notes   : [],
     };
   } catch { return emptyAnnotateState(); }
 }
@@ -43,6 +44,20 @@ export function makeClock(name: string, segments: number, color: string): Progre
     color,
     x: 0.5,
     y: 0.18,
+  };
+}
+
+/** Build a fresh note centred-ish in the view at a default size. */
+export function makeNote(text: string, audience: 'gm' | 'player', color: string): AnnotateNote {
+  return {
+    id: generateId(),
+    text: text.trim(),
+    color,
+    audience,
+    x: 0.40,
+    y: 0.40,
+    w: 0.20,
+    h: 0.10,
   };
 }
 

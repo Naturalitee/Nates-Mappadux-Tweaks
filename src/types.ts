@@ -1323,6 +1323,21 @@ export interface AnnotateTimer {
   baseElapsedMs: number;
 }
 
+/** A free text note overlay (v2.16.80). Audience 'gm' shows only on the
+ *  GM view; 'player' shows on player + projector + GM. The text auto-fits
+ *  the box, so shrinking the box shrinks the font. Position + size are
+ *  fractions (0..1) of the view. */
+export interface AnnotateNote {
+  id: string;
+  text: string;
+  color: string;
+  audience: 'gm' | 'player';
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
 /** One freehand whiteboard stroke. Points are normalised map coordinates
  *  (0..1) so the drawing pans / zooms with the map on every surface. */
 export interface AnnotateStroke {
@@ -1338,6 +1353,7 @@ export interface AnnotateState {
   clocks: ProgressClock[];
   strokes: AnnotateStroke[];
   timers: AnnotateTimer[];
+  notes: AnnotateNote[];
 }
 
 /** GM → viewers: the full clocks list for the active map (small payload,
@@ -1367,6 +1383,13 @@ export interface MsgAnnotateClear {
 export interface MsgAnnotateTimers {
   type: 'annotate_timers';
   timers: AnnotateTimer[];
+}
+
+/** GM → viewers: the player-visible notes for the active map. GM-only
+ *  notes are never broadcast. */
+export interface MsgAnnotateNotes {
+  type: 'annotate_notes';
+  notes: AnnotateNote[];
 }
 
 export type GMMessage =
@@ -1418,7 +1441,8 @@ export type GMMessage =
   | MsgAnnotateClocks
   | MsgAnnotateStroke
   | MsgAnnotateClear
-  | MsgAnnotateTimers;
+  | MsgAnnotateTimers
+  | MsgAnnotateNotes;
 
 // ─── Storage types ───────────────────────────────────────────────────────────
 

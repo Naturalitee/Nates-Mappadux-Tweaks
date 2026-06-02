@@ -1,8 +1,9 @@
-import type { AnnotateState, AnnotateStroke, ProgressClock, AnnotateTimer } from '../types.ts';
+import type { AnnotateState, AnnotateStroke, ProgressClock, AnnotateTimer, AnnotateNote } from '../types.ts';
 import { ClocksLayer } from '../annotate/ClocksLayer.ts';
 import { WhiteboardLayer } from '../annotate/WhiteboardLayer.ts';
 import { TimersLayer } from '../annotate/TimersLayer.ts';
-import { emptyAnnotateState, loadAnnotateState, saveAnnotateState, makeClock, makeTimer } from '../annotate/annotateState.ts';
+import { NotesLayer } from '../annotate/NotesLayer.ts';
+import { emptyAnnotateState, loadAnnotateState, saveAnnotateState, makeClock, makeTimer, makeNote } from '../annotate/annotateState.ts';
 import { generateId } from '../utils/id.ts';
 
 export interface AnnotateControllerCallbacks {
@@ -10,6 +11,8 @@ export interface AnnotateControllerCallbacks {
   broadcastClocks: (clocks: ProgressClock[]) => void;
   /** Push the current timers to viewers (empty list when muted). */
   broadcastTimers: (timers: AnnotateTimer[]) => void;
+  /** Push the player-visible notes to viewers (empty when muted). */
+  broadcastNotes: (notes: AnnotateNote[]) => void;
   /** Append one whiteboard stroke to viewers. */
   broadcastStroke: (stroke: AnnotateStroke) => void;
   /** Clear the whiteboard on viewers (also the first step of a resync). */
@@ -19,6 +22,7 @@ export interface AnnotateControllerCallbacks {
 export interface AnnotateControllerOpts {
   clocksRoot: HTMLElement;
   timersRoot: HTMLElement;
+  notesRoot: HTMLElement;
   whiteboardCanvas: HTMLCanvasElement;
   project: (x: number, y: number) => { x: number; y: number } | null;
   unproject: (clientX: number, clientY: number) => { x: number; y: number } | null;
@@ -45,9 +49,11 @@ export class AnnotateController {
   private muted = false;
   private clocksLayer: ClocksLayer;
   private timersLayer: TimersLayer;
+  private notesLayer: NotesLayer;
   private board: WhiteboardLayer;
   private _clockColor = CLOCK_COLORS[0]!;
   private _timerColor = CLOCK_COLORS[1]!;
+  private _noteColor = PEN_COLORS[0]!;
   private _penColor = PEN_COLORS[0]!;
   private _drawing = false;
   private canvas: HTMLCanvasElement;
@@ -67,6 +73,12 @@ export class AnnotateController {
       onReset:  (id) => this._mutate((s) => ({ ...s, timers: s.timers.map((t) => t.id === id ? { ...t, running: false, startedAt: 0, baseElapsedMs: 0 } : t) })),
       onMove:   (id, x, y) => this._mutate((s) => ({ ...s, timers: s.timers.map((t) => t.id === id ? { ...t, x, y } : t) })),
       onRemove: (id) => this._mutate((s) => ({ ...s, timers: s.timers.filter((t) => t.id !== id) })),
+    });
+    this.notesLayer = new NotesLayer(opts.notesRoot, true, {
+      onMove:   (id, x, y) => this._mutate((s) => ({ ...s, notes: s.notes.map((nn) => nn.id === id ? { ...nn, x, y } : nn) })),
+      onResize: (id, w, h) => this._mutate((s) => ({ ...s, notes: s.notes.map((nn) => nn.id === id ? { ...nn, w, h } : nn) })),
+      onRemove: (id) => this._mutate((s) => ({ ...s, notes: s.notes.filter((nn) => nn.id !== id) })),
+      onEditText: (id, text) => this._mutate((s) => ({ ...s, notes: s.notes.map((nn) => nn.id === id ? { ...nn, text } : nn) })),
     });
     this.board = new WhiteboardLayer(this.canvas, opts.project);
     this._bindPanel();
@@ -112,6 +124,19 @@ export class AnnotateController {
   private _bindPanel(): void {
     this._buildSwatches('annotate-clock-colors', CLOCK_COLORS, this._clockColor, (hex) => { this._clockColor = hex; });
     this._buildSwatches('annotate-timer-colors', CLOCK_COLORS, this._timerColor, (hex) => { this._timerColor = hex; });
+    this._buildSwatches('annotate-note-colors', PEN_COLORS, this._noteColor, (hex) => { this._noteColor = hex; });
+
+    // Notes.
+    const noteEl = document.getElementById('annotate-note-text') as HTMLTextAreaElement | null;
+    const audEl  = document.getElementById('annotate-note-audience') as HTMLSelectElement | null;
+    const addNote = () => {
+      const text = noteEl?.value.trim() || '';
+      if (!text) { noteEl?.focus(); return; }
+      const audience = (audEl?.value === 'gm' ? 'gm' : 'player') as 'gm' | 'player';
+      this._mutate((s) => ({ ...s, notes: [...s.notes, makeNote(text, audience, this._noteColor)] }));
+      if (noteEl) noteEl.value = '';
+    };
+    document.getElementById('annotate-add-note')?.addEventListener('click', addNote);
     // v2.16.79 — picking a pen colour auto-arms Draw mode (it's the most
     // common next action after choosing a colour).
     this._buildSwatches('annotate-pen-colors', PEN_COLORS, this._penColor, (hex) => { this._penColor = hex; this._setDrawing(true); });
@@ -220,24 +245,33 @@ export class AnnotateController {
     this.state = fn(this.state);
     if (this.mapId) saveAnnotateState(this.mapId, this.state);
     this._renderLocal();
-    // Re-broadcast the small HUD lists (clocks + timers). Strokes broadcast
-    // individually at their own call sites.
+    // Re-broadcast the small HUD lists (clocks + timers + player notes).
+    // Strokes broadcast individually at their own call sites.
     this.cb.broadcastClocks(this.muted ? [] : this.state.clocks);
     this.cb.broadcastTimers(this.muted ? [] : this.state.timers);
+    this.cb.broadcastNotes(this._playerNotes());
   }
 
-  /** Render all layers on the GM (respecting mute). */
+  /** Player-visible notes only (GM-only notes never leave the GM). */
+  private _playerNotes(): AnnotateNote[] {
+    return this.muted ? [] : this.state.notes.filter((n) => n.audience === 'player');
+  }
+
+  /** Render all layers on the GM (respecting mute). The GM sees ALL notes
+   *  (both audiences). */
   private _renderLocal(): void {
     this.clocksLayer.setClocks(this.muted ? [] : this.state.clocks);
     this.timersLayer.setTimers(this.muted ? [] : this.state.timers);
+    this.notesLayer.setNotes(this.muted ? [] : this.state.notes);
     this.board.setStrokes(this.state.strokes);
     this.board.setHidden(this.muted);
   }
 
-  /** Full resync to viewers: clocks + timers + clear-then-resend every stroke. */
+  /** Full resync to viewers: clocks + timers + notes + clear-then-resend strokes. */
   private _broadcastAll(): void {
     this.cb.broadcastClocks(this.muted ? [] : this.state.clocks);
     this.cb.broadcastTimers(this.muted ? [] : this.state.timers);
+    this.cb.broadcastNotes(this._playerNotes());
     this.cb.broadcastClear();
     if (!this.muted) for (const st of this.state.strokes) this.cb.broadcastStroke(st);
   }

@@ -7184,6 +7184,62 @@ option.select-option--add {
    Annotate (v2.16.76) — progress clocks HUD + whiteboard + panel form
    ════════════════════════════════════════════════════════════════════════ */
 
+/* Notes overlay — text boxes positioned by fraction of the view. The
+   container is click-through; each note opts back in. v2.16.80. */
+.annotate-notes {
+  position: absolute;
+  inset: 0;
+  z-index: 9;
+  pointer-events: none;
+}
+.annotate-notes .a-note {
+  position: absolute;
+  pointer-events: auto;
+  box-sizing: border-box;
+  padding: 6px 8px;
+  background: rgba(8, 11, 20, 0.66);
+  border: 1px solid color-mix(in srgb, var(--note-color, #888), black 25%);
+  border-left: 3px solid var(--note-color, #888);
+  border-radius: 8px;
+  backdrop-filter: blur(3px);
+  box-shadow: 0 3px 12px rgba(0, 0, 0, 0.5);
+  overflow: hidden;
+}
+.annotate-notes:not(.is-interactive) .a-note,
+#annotate-notes:not(.is-interactive) .a-note { pointer-events: none; }
+.a-note-text {
+  width: 100%;
+  height: 100%;
+  color: color-mix(in srgb, var(--note-color, #fff), white 35%);
+  font-family: var(--font-ui);
+  font-weight: 600;
+  line-height: 1.2;
+  white-space: pre-wrap;
+  overflow: hidden;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.85);
+}
+.a-note.is-selected { outline: 2px dashed var(--note-color, #fff); outline-offset: 1px; }
+/* Editor-chrome handles reuse the marker-handle visual language but are
+   pinned to the note box corners. */
+.a-note-handle { position: absolute; }
+.a-note-handle--move   { top: -11px;    left: -11px; }
+.a-note-handle--del    { bottom: -11px; left: -11px; }
+.a-note-handle--resize { bottom: -9px;  right: -9px; width: 18px; height: 18px; cursor: nwse-resize; }
+.a-note-edit {
+  width: 100%;
+  height: 100%;
+  box-sizing: border-box;
+  resize: none;
+  background: rgba(0, 0, 0, 0.55);
+  border: 1px solid var(--note-color, #fff);
+  border-radius: 4px;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 0.85rem;
+  padding: 4px;
+  outline: none;
+}
+
 /* Whiteboard canvas overlays the map exactly. pointer-events:none by
    default so the map gets pan/zoom; the GM's draw toggle flips it to auto. */
 .annotate-whiteboard {
@@ -7363,6 +7419,43 @@ option.select-option--add {
 .annotate-swatch.is-selected { border-color: #fff; box-shadow: 0 0 6px rgba(255, 255, 255, 0.5); }
 .annotate-wb-row { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 #annotate-draw-toggle.is-active { background: var(--accent); border-color: var(--accent); color: #fff; }
+
+/* v2.16.80 — collapsible sub-sections (clocks / timers / notes) so the
+   panel stays calm; whiteboard stays always-visible above them. */
+.annotate-sub { margin-top: 6px; border-top: 1px solid var(--border); }
+.annotate-sub > summary {
+  cursor: pointer;
+  list-style: none;
+  padding: 6px 0 4px 16px;
+  position: relative;
+  font-size: 0.7rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-secondary);
+  user-select: none;
+}
+.annotate-sub > summary::-webkit-details-marker { display: none; }
+.annotate-sub > summary::before {
+  content: '▸';
+  position: absolute;
+  left: 2px;
+  font-size: 0.6rem;
+  transition: transform 0.15s;
+}
+.annotate-sub[open] > summary::before { transform: rotate(90deg); }
+.annotate-sub > summary:hover { color: var(--text-primary); }
+.annotate-note-input {
+  width: 100%;
+  resize: vertical;
+  padding: 6px 8px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+}
 
 /* ════════════════════════════════════════════════════════════════════════
    Initiative tracker (v2.16.8) — fanned deck, edge-pinnable both axes

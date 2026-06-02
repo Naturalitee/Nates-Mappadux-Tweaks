@@ -624,7 +624,7 @@ export class GMApp {
       // GM canvas grabbing the same gesture and panning the map.
       shouldStart: (e) => {
         const target = e.target as HTMLElement | null;
-        return !target?.closest('.init-tracker, .side-panel, .modal-overlay, .modal-dialog, .panel, .hamburger-menu');
+        return !target?.closest('.init-tracker, .side-panel, .modal-overlay, .modal-dialog, .panel, .hamburger-menu, .a-note, .clock, .a-timer');
       },
       // Mouse drag = pan the camera. Single-touch drags pass through
       // to the editors (fog draw, marker selection, etc.); we only
@@ -6554,13 +6554,15 @@ export class GMApp {
   private bindAnnotate(): void {
     const clocksEl = document.getElementById('annotate-clocks');
     const timersEl = document.getElementById('annotate-timers');
+    const notesEl = document.getElementById('annotate-notes');
     const boardEl = document.getElementById('annotate-whiteboard') as HTMLCanvasElement | null;
-    if (!clocksEl || !timersEl || !boardEl) return;
+    if (!clocksEl || !timersEl || !notesEl || !boardEl) return;
     boardEl.hidden = false; // always present; pointer-events gate draw mode
     this.annotate = new AnnotateController(
       {
         clocksRoot: clocksEl,
         timersRoot: timersEl,
+        notesRoot: notesEl,
         whiteboardCanvas: boardEl,
         project:   (x, y) => this.renderer.mapNormToCanvasCss(x, y),
         unproject: (cx, cy) => {
@@ -6573,6 +6575,7 @@ export class GMApp {
       {
         broadcastClocks: (clocks) => this.host.broadcast({ type: 'annotate_clocks', clocks }),
         broadcastTimers: (timers) => this.host.broadcast({ type: 'annotate_timers', timers }),
+        broadcastNotes:  (notes) => this.host.broadcast({ type: 'annotate_notes', notes }),
         broadcastStroke: (stroke) => this.host.broadcast({ type: 'annotate_stroke', stroke }),
         broadcastClear:  () => this.host.broadcast({ type: 'annotate_clear' }),
       },
