@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.91 — 2026-06-02
+
+Text Map YouTube videos go live (slice 2): a video placed on a handout now renders as a live, map-anchored iframe overlay on the GM canvas, players, and projector — tracking pan/zoom 1:1 like markers, with each viewer using YouTube's own controls (so players can watch on their own viewer). Broadcast via a new textmap_videos message; re-sent to new joiners. Videos render as DOM overlays above the map, so (like annotations) they're not affected by the GL visual filters.
+
 ## v2.16.90 — 2026-06-02
 
 Text Maps: new **+ YouTube** element (slice 1) — paste a YouTube link to drop a live, borderless, resizable + rotatable video onto a handout page, using the same editor chrome as text/image. The iframe is click-through until selected (so move/drag work), then YT's own controls take over. Video elements are NOT baked into the rasterised page image (they'll render as live overlays on the map next slice).

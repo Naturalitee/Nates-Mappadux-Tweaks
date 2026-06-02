@@ -393,6 +393,9 @@ export class GMApp {
   private _threadSidePanel: import('./SidePanel.ts').SidePanelHandle | null = null;
   /** Ping pulses relayed from players — persist on the GM until dismissed. */
   private pingLayer: PingLayer | null = null;
+  /** v2.16.91 — live YouTube videos placed on a text-map page. */
+  private textMapVideoLayer: import('../rendering/TextMapVideoLayer.ts').TextMapVideoLayer | null = null;
+  private _currentTextMapVideos: import('../types.ts').TextMapVideoElement[] = [];
   /** GM sender colour for message replies — a slate that reads clearly on
    *  player views without straying into the reserved near-black range. */
   private static readonly GM_MESSAGE_COLOR = '#64748b';
@@ -2915,6 +2918,13 @@ export class GMApp {
     const isTextMap = mapAssetForButton?.source === 'text-map';
     const isComposite = mapAssetForButton?.source === 'composite-map';
     const hasReveal = isTextMap && mapAssetForButton?.textMap?.animation?.enabled === true;
+    // v2.16.91 — live YouTube video overlay for this map. Extract the
+    // text-map's video elements (empty for non-text-maps), render them on
+    // the GM, and broadcast to players + projector.
+    this._currentTextMapVideos = (mapAssetForButton?.textMap?.elements ?? [])
+      .filter((e): e is import('../types.ts').TextMapVideoElement => e.type === 'video');
+    this.textMapVideoLayer?.setVideos(this._currentTextMapVideos);
+    this.host.broadcast({ type: 'textmap_videos', videos: this._currentTextMapVideos });
     if (this.editTextMapBtn)   this.editTextMapBtn.hidden   = !isTextMap;
     if (this.editCompositeBtn) this.editCompositeBtn.hidden = !isComposite;
     // Show the Start Animation button only when this handout has a
@@ -3260,6 +3270,14 @@ export class GMApp {
         (x, y) => this.renderer.mapNormToCanvasCss(x, y),
         { showLabel: true, persistent: true, onDismiss: () => { /* GM-local removal only */ } },
       );
+    }
+    // v2.16.91 — live text-map video overlay (tracks the map like markers).
+    const videoLayerEl = document.getElementById('textmap-video-layer');
+    if (videoLayerEl) {
+      void import('../rendering/TextMapVideoLayer.ts').then(({ TextMapVideoLayer }) => {
+        this.textMapVideoLayer = new TextMapVideoLayer(videoLayerEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));
+        this.textMapVideoLayer.setVideos(this._currentTextMapVideos);
+      });
     }
 
     // v2.17 Player Voice — player tokens. The GM can drag any token to place it.
@@ -3641,6 +3659,8 @@ export class GMApp {
         if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
         // v2.16.76 — annotations (clocks) for the new joiner.
         this.annotate?.rebroadcast();
+        // v2.16.91 — text-map videos for the new joiner.
+        this.host.broadcast({ type: 'textmap_videos', videos: this._currentTextMapVideos });
         const who = msg.playerName || msg.characterName || 'A player';
         this.setStatus(`${who} joined`, 'ok');
       });
@@ -3868,6 +3888,7 @@ export class GMApp {
       this._broadcastAllPlayerIcons();
       if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
       this.annotate?.rebroadcast();
+      this.host.broadcast({ type: 'textmap_videos', videos: this._currentTextMapVideos });
     }
   }
 

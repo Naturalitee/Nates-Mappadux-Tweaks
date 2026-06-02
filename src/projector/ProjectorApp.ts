@@ -11,6 +11,7 @@ import { ClocksLayer } from '../annotate/ClocksLayer.ts';
 import { TimersLayer } from '../annotate/TimersLayer.ts';
 import { NotesLayer } from '../annotate/NotesLayer.ts';
 import { WhiteboardLayer } from '../annotate/WhiteboardLayer.ts';
+import { TextMapVideoLayer } from '../rendering/TextMapVideoLayer.ts';
 import {
   type ProjectorSetup,
   getActiveSetup,
@@ -124,6 +125,7 @@ export class ProjectorApp {
   private _annotateTimers:   TimersLayer | null = null;
   private _annotateNotes:    NotesLayer | null = null;
   private _annotateBoard:    WhiteboardLayer | null = null;
+  private _textMapVideos:    TextMapVideoLayer | null = null;
   private _playerIcons   = new Map<string, string>();
   private _lastPlayerMarkers: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; hasIcon?: boolean; tokenSize?: import('../types.ts').TokenSize }> = [];
   /** Icons currently being requested via `player_icon_request` — debounce so a
@@ -287,6 +289,8 @@ export class ProjectorApp {
     if (timersEl) this._annotateTimers = new TimersLayer(timersEl, false, anchor);
     const notesEl = document.getElementById('annotate-notes');
     if (notesEl) this._annotateNotes = new NotesLayer(notesEl, false, anchor);
+    const videoLayerEl = document.getElementById('textmap-video-layer');
+    if (videoLayerEl) this._textMapVideos = new TextMapVideoLayer(videoLayerEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));
     // v2.16.77 — read-only whiteboard mirrored from the GM.
     const boardEl = document.getElementById('annotate-whiteboard') as HTMLCanvasElement | null;
     if (boardEl) this._annotateBoard = new WhiteboardLayer(boardEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));
@@ -844,6 +848,10 @@ export class ProjectorApp {
       }
       case 'annotate_notes': {
         this._annotateNotes?.setNotes(msg.notes);
+        break;
+      }
+      case 'textmap_videos': {
+        this._textMapVideos?.setVideos(msg.videos);
         break;
       }
       // player_features, player_roster, player_marker_move, message_deliver,

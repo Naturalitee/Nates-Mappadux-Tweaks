@@ -11,6 +11,7 @@ import { ClocksLayer } from '../annotate/ClocksLayer.ts';
 import { TimersLayer } from '../annotate/TimersLayer.ts';
 import { NotesLayer } from '../annotate/NotesLayer.ts';
 import { WhiteboardLayer } from '../annotate/WhiteboardLayer.ts';
+import { TextMapVideoLayer } from '../rendering/TextMapVideoLayer.ts';
 import { PlayerInitiativeRollModal } from './PlayerInitiativeRollModal.ts';
 import { showFullPlayerUiInPreview } from '../storage/localSettings.ts';
 import { Viewer } from '../viewers/Viewer.ts';
@@ -235,6 +236,8 @@ export class PlayerApp {
   private _annotateTimers: TimersLayer | null = null;
   /** v2.16.80 — read-only player notes mirrored from the GM. */
   private _annotateNotes: NotesLayer | null = null;
+  /** v2.16.91 — live YouTube videos on a text-map page. */
+  private _textMapVideos: TextMapVideoLayer | null = null;
   private _initiativeRollModal = new PlayerInitiativeRollModal();
   /** Roster broadcast by the GM — used to list other players as message targets. */
   private roster: Array<{ id: string; playerName: string; characterName: string; color: string; connected: boolean }> = [];
@@ -317,6 +320,8 @@ export class PlayerApp {
     if (timersEl) this._annotateTimers = new TimersLayer(timersEl, false, anchor);
     const notesEl = document.getElementById('annotate-notes');
     if (notesEl) this._annotateNotes = new NotesLayer(notesEl, false, anchor);
+    const videoLayerEl = document.getElementById('textmap-video-layer');
+    if (videoLayerEl) this._textMapVideos = new TextMapVideoLayer(videoLayerEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));
     // v2.16.77 — read-only whiteboard mirrored from the GM.
     const boardEl = document.getElementById('annotate-whiteboard') as HTMLCanvasElement | null;
     if (boardEl) this._annotateBoard = new WhiteboardLayer(boardEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));
@@ -1741,6 +1746,11 @@ export class PlayerApp {
       case 'annotate_notes': {
         // v2.16.80 — mirror the GM's player-visible notes (read-only).
         this._annotateNotes?.setNotes(msg.notes);
+        break;
+      }
+      case 'textmap_videos': {
+        // v2.16.91 — live YouTube videos for the active text-map.
+        this._textMapVideos?.setVideos(msg.videos);
         break;
       }
 

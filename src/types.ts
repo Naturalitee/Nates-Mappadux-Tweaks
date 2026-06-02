@@ -1406,6 +1406,14 @@ export interface MsgAnnotateNotes {
   notes: AnnotateNote[];
 }
 
+/** GM → viewers: the live YouTube video elements for the active text-map
+ *  (geometry + ids), so players + projector render the iframes as a live
+ *  overlay tracking the map. Empty list on non-text-maps / no videos. */
+export interface MsgTextMapVideos {
+  type: 'textmap_videos';
+  videos: TextMapVideoElement[];
+}
+
 export type GMMessage =
   | MsgFullState
   | MsgViewUpdate
@@ -1456,7 +1464,8 @@ export type GMMessage =
   | MsgAnnotateStroke
   | MsgAnnotateClear
   | MsgAnnotateTimers
-  | MsgAnnotateNotes;
+  | MsgAnnotateNotes
+  | MsgTextMapVideos;
 
 // ─── Storage types ───────────────────────────────────────────────────────────
 
