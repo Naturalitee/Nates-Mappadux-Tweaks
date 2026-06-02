@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.92 — 2026-06-02
+
+Players panel defaults closed on an empty table; opens automatically on first load if there are already players (e.g. saved offline players). The GM's manual toggling is respected after that.
+
 ## v2.16.91 — 2026-06-02
 
 Text Map YouTube videos go live (slice 2): a video placed on a handout now renders as a live, map-anchored iframe overlay on the GM canvas, players, and projector — tracking pan/zoom 1:1 like markers, with each viewer using YouTube's own controls (so players can watch on their own viewer). Broadcast via a new textmap_videos message; re-sent to new joiners. Videos render as DOM overlays above the map, so (like annotations) they're not affected by the GL visual filters.

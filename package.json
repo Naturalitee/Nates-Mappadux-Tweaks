@@ -1,7 +1,7 @@
 {
   "name": "dynamic-map-renderer-v2",
   "private": true,
-  "version": "2.16.91",
+  "version": "2.16.92",
   "type": "module",
   "scripts": {
     "dev": "vite",

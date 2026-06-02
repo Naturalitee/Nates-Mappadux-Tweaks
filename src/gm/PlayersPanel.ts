@@ -54,6 +54,8 @@ export class PlayersPanel {
   private countBadge: HTMLElement | null;
   private cb: PlayersPanelCallbacks;
   private lastPlayers: PersistentPlayer[] = [];
+  /** v2.16.92 — one-shot: open the panel on first load if players exist. */
+  private _initialCollapseDone = false;
 
   constructor(cb: PlayersPanelCallbacks) {
     this.cb = cb;
@@ -70,6 +72,19 @@ export class PlayersPanel {
 
   update(players: PersistentPlayer[], info: (id: string) => PlayerRowInfo): void {
     this.lastPlayers = players;
+
+    // v2.16.92 — the panel defaults closed (empty table); open it on the
+    // first load if there are already players (e.g. saved offline ones).
+    // After that the GM's manual toggling is respected.
+    if (!this._initialCollapseDone) {
+      this._initialCollapseDone = true;
+      if (players.length > 0) {
+        const title = document.querySelector<HTMLElement>('#players-panel .panel-title');
+        const body  = document.querySelector<HTMLElement>('#players-panel .panel-body');
+        title?.setAttribute('aria-expanded', 'true');
+        if (body) body.hidden = false;
+      }
+    }
 
     // v2.16.75 — header badge: connected / total (total counts offline,
     // GM-managed players too). Sits where other panels carry their toggle.

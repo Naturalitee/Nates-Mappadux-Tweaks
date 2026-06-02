@@ -111,8 +111,10 @@
     </section>
 
     <section class="panel" id="players-panel">
-      <button type="button" class="panel-title" aria-expanded="true">Players<span id="players-count-badge" class="panel-count-badge" title="Players connected / total"></span></button>
-      <div class="panel-body">
+      <!-- v2.16.92 — defaults closed; PlayersPanel opens it on first load
+           if any players already exist (e.g. saved offline players). -->
+      <button type="button" class="panel-title" aria-expanded="false">Players<span id="players-count-badge" class="panel-count-badge" title="Players connected / total"></span></button>
+      <div class="panel-body" hidden>
         <div id="players-list" class="players-list"></div>
         <button id="call-initiative-btn" class="btn btn--full call-initiative-btn" title="Open the initiative tracker and broadcast a roll prompt to every connected player.">Call for Initiative</button>
         <button id="add-player-btn" class="btn btn--ghost btn--sm btn--full" title="Add someone at the table who doesn't have their own device. You set their name + colour and act on their behalf; connected players appear here automatically when they introduce themselves.">+ Add offline player</button>
