@@ -133,7 +133,7 @@ export class AnnotateController {
       const text = noteEl?.value.trim() || '';
       if (!text) { noteEl?.focus(); return; }
       const audience = (audEl?.value === 'gm' ? 'gm' : 'player') as 'gm' | 'player';
-      this._mutate((s) => ({ ...s, notes: [...s.notes, makeNote(text, audience, this._noteColor)] }));
+      this._mutate((s) => ({ ...s, notes: [...s.notes, stagger(makeNote(text, audience, this._noteColor), s.notes.length)] }));
       if (noteEl) noteEl.value = '';
     };
     document.getElementById('annotate-add-note')?.addEventListener('click', addNote);
@@ -147,7 +147,7 @@ export class AnnotateController {
       const name = nameEl?.value.trim() || '';
       const segs = parseInt(segEl?.value || '4', 10);
       if (!name) { nameEl?.focus(); return; }
-      this._mutate((s) => ({ ...s, clocks: [...s.clocks, makeClock(name, segs, this._clockColor)] }));
+      this._mutate((s) => ({ ...s, clocks: [...s.clocks, stagger(makeClock(name, segs, this._clockColor), s.clocks.length)] }));
       if (nameEl) nameEl.value = '';
     };
     document.getElementById('annotate-add-clock')?.addEventListener('click', add);
@@ -162,7 +162,7 @@ export class AnnotateController {
       const mode = (tModeEl?.value === 'countup' ? 'countup' : 'countdown') as 'countup' | 'countdown';
       const durMs = parseDuration(tDurEl?.value || '5:00');
       if (!name) { tNameEl?.focus(); return; }
-      this._mutate((s) => ({ ...s, timers: [...s.timers, makeTimer(name, mode, durMs, this._timerColor)] }));
+      this._mutate((s) => ({ ...s, timers: [...s.timers, stagger(makeTimer(name, mode, durMs, this._timerColor), s.timers.length)] }));
       if (tNameEl) tNameEl.value = '';
     };
     document.getElementById('annotate-add-timer')?.addEventListener('click', addTimer);
@@ -275,6 +275,15 @@ export class AnnotateController {
     this.cb.broadcastClear();
     if (!this.muted) for (const st of this.state.strokes) this.cb.broadcastStroke(st);
   }
+}
+
+/** v2.16.81 — offset each new object by its index so a second item doesn't
+ *  land exactly on top of the first (they all share a default position).
+ *  Steps right then wraps down. */
+function stagger<T extends { x: number; y: number }>(o: T, n: number): T {
+  o.x = Math.min(0.92, o.x + (n % 5) * 0.05);
+  o.y = Math.min(0.88, o.y + Math.floor(n / 5) * 0.07);
+  return o;
 }
 
 /** Parse "mm:ss" / "h:mm:ss" / plain seconds → milliseconds. */
