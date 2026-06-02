@@ -3652,6 +3652,17 @@ export class GMApp {
       // window). The disconnect handler reads the set to show a sane
       // status message instead of "Player (peerid…) disconnected".
       this._gmPreviewPeers.add(_peerId);
+      // v2.16.98 — previews identify via gm_preview_hello (NOT
+      // player_identify), so they skipped the overlay catch-up bundle that
+      // real joiners get: map-anchored state (videos, annotations, tokens)
+      // lives in discrete messages, not the full_state cache. Without this,
+      // a freshly-opened "Show Player View" / popped-out window showed no
+      // video until the next map swap re-broadcast it. Push the same
+      // overlay state here.
+      this.host.broadcast({ type: 'textmap_videos', videos: this._currentTextMapVideos });
+      this.textMapVideoLayer?.reportNow();
+      this.annotate?.rebroadcast();
+      this._refreshPlayerMarkers();
       return;
     }
     if (msg.type === 'player_identify') {

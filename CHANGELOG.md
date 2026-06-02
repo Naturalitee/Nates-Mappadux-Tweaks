@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.98 — 2026-06-02
+
+Fixed the in-map video not appearing in a freshly opened Show Player View / popped-out window (it only showed up after a map swap). Those preview surfaces announce themselves with a different handshake than real players and were skipping the overlay catch-up, so they now receive the current videos (and annotations + tokens) on connect, caught up to the GM's playback position.
+
 ## v2.16.97 — 2026-06-02
 
 Video element fixes: removed the (non-functional) flip controls from video in the editor; the in-map video now rebuilds itself after a fullscreen toggle on the player / projector (a cross-origin iframe goes blank when an ancestor enters fullscreen) and re-syncs within about a second-and-a-half; a freshly opened viewer now gets the video and is caught up to the GM's current playback position.
