@@ -7200,11 +7200,14 @@ option.select-option--add {
   box-sizing: border-box;
   container-type: size;
   transform-origin: center center;
-  pointer-events: auto;
+  /* v2.16.86 — the box itself never blocks the map. Only the chrome
+     handles (always) and the content (ONLY once selected) opt back in,
+     so you must select via the move handle before any interaction. */
+  pointer-events: none;
   user-select: none;
 }
-:not(.is-interactive) > .anchored-obj { pointer-events: none; }
-.anchored-content { width: 100%; height: 100%; box-sizing: border-box; }
+.anchored-content { width: 100%; height: 100%; box-sizing: border-box; pointer-events: none; }
+.anchored-obj.is-selected > .anchored-content { pointer-events: auto; }
 /* v2.16.84 — selection + chrome key off the OBJECT's colour (the green/
    orange are view-identity only). Handles reuse the established
    .marker-handle look (26px fixed, dark/white, translate-centred on the

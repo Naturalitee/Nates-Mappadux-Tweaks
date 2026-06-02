@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.86 — 2026-06-02
+
+Annotate: nothing in an object is interactive until it is selected via the move handle — content (clock wedges, note text) is click-through until then, so you select first, then act. Removed the note double-click-to-edit (the edge edit control is the single way in). Fixed note text being clipped at the bottom by the border: auto-fit now measures the text element's own box (inside the padding + border) instead of the padded content.
+
 ## v2.16.85 — 2026-06-02
 
 Annotate: type-specific controls moved OUT of the object box onto a bottom-edge control bar that appears only when the object is selected — timers get play/pause + reset, notes get an edit button, all as fixed-size SVG handle-icons (no more text glyphs or in-box buttons crowding the content). Double-click still edits a note.

@@ -24,9 +24,8 @@ export class NotesLayer extends AnchoredLayer<AnnotateNote> {
    *  always fills the frame at any zoom. */
   private ro = new ResizeObserver((entries) => {
     for (const e of entries) {
-      const box = e.target as HTMLElement;
-      const text = box.querySelector<HTMLElement>('.a-note-text');
-      if (text) fitText(box, text);
+      const text = (e.target as HTMLElement).querySelector<HTMLElement>('.a-note-text');
+      if (text) fitText(text);
     }
   });
 
@@ -53,17 +52,15 @@ export class NotesLayer extends AnchoredLayer<AnnotateNote> {
     text.className = 'a-note-text';
     text.textContent = n.text;
     content.appendChild(text);
-    requestAnimationFrame(() => fitText(content, text));
+    requestAnimationFrame(() => fitText(text));
     this.ro.observe(content); // re-fit on every box size change (zoom, resize)
-
-    if (this.interactive) {
-      content.addEventListener('dblclick', (e) => { e.stopPropagation(); this._editNote(content, n); });
-    }
+    // v2.16.86 — no double-click-to-edit; the edge edit control is the
+    // single, deliberate way in (and only once selected).
   }
 
   protected override onResized(_n: AnnotateNote, content: HTMLElement): void {
     const text = content.querySelector<HTMLElement>('.a-note-text');
-    if (text) fitText(content, text);
+    if (text) fitText(text);
   }
 
   /** Edit control on the bottom edge (shown when selected). Double-click
@@ -101,10 +98,13 @@ export class NotesLayer extends AnchoredLayer<AnnotateNote> {
   }
 }
 
-/** Grow / shrink font-size so the text fills the box without overflow. */
-function fitText(box: HTMLElement, textEl: HTMLElement): void {
-  const maxH = box.clientHeight - 8;
-  const maxW = box.clientWidth - 8;
+/** Grow / shrink font-size so the text fills its OWN box (inside the
+ *  content padding + border) without overflow — measuring the text
+ *  element's client box, not the padded content, so the last line is
+ *  never clipped by the border. v2.16.86. */
+function fitText(textEl: HTMLElement): void {
+  const maxH = textEl.clientHeight;
+  const maxW = textEl.clientWidth;
   if (maxH <= 0 || maxW <= 0) return;
   let lo = 7, hi = Math.max(8, Math.floor(maxH));
   while (lo < hi) {
