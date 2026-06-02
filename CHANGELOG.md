@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.89 — 2026-06-02
+
+Map panel: pack name now sits left-aligned right after "Map Pack:" in the header (was pushed to the far right by the header's space-between). Grid-colour now uses the standard full-width colour bar (same control as the Backdrop colour picker) instead of a bespoke small swatch.
+
 ## v2.16.88 — 2026-06-02
 
 Map panel: the pack name moves up into the panel header — "Map Pack:" followed by the name in bright white so it reads as the name; a pencil on the right (where other panels carry their switch) edits it inline, replacing the old in-body rename row. Grid-colour swatch aligned to the standard colour picker (32×24, 2px inset).

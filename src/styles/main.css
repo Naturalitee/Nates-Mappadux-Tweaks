@@ -1158,7 +1158,9 @@ body.player-view #renderer-canvas {
 /* v2.16.88 — Map Pack header: the pack name reads as the NAME (white,
    not-uppercased, bold) sitting after the "Map Pack:" label; a pencil on
    the right edits it inline. */
-#map-panel .panel-title { padding-right: 56px; }
+/* Keep "Map Pack:" + the name together on the left (the default header
+   space-between would push the name to the right edge). */
+#map-panel .panel-title { padding-right: 56px; justify-content: flex-start; gap: 0; }
 .pack-name-display {
   color: #fff;
   font-weight: 700;
@@ -5926,17 +5928,8 @@ option.select-option--add {
 /* v2.14.31 — Map-panel grid colour swatch. Sits in the fog-row--kind
    layout next to Backdrop. The native colour input is small so we
    give it a sensible fixed size rather than letting it stretch. */
-/* v2.16.88 — aligned with the standard colour picker
-   (.param-row input[type="color"]): 32×24, 2px inset, same border. */
-.map-grid-colour {
-  width: 32px;
-  height: 24px;
-  padding: 2px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  background: none;
-  cursor: pointer;
-}
+/* v2.16.89 — grid colour now uses the standard .fog-brush-row--color
+   full-width bar (same as the Backdrop colour picker); no bespoke swatch. */
 
 /* v2.14.77 — Upper-layer-opacity slider. Sits in the fog-row--kind
    layout next to Backdrop / Grid colour. Native range input given a

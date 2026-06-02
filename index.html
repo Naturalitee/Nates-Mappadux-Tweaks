@@ -88,10 +88,10 @@
              the colour itself is map-scoped. When the map isn't
              calibrated, this row swaps to a "Calibrate map" button
              since the grid can't render without a pps value. -->
-        <div class="fog-row fog-row--kind" id="map-grid-row" hidden>
-          <span class="fog-row-label">Grid colour</span>
-          <input type="color" id="map-grid-colour" class="map-grid-colour" value="#ffffff" title="Grid line colour used by both the Player View and the Scaled View when their Show Grid icon is on. Stored per-map — different maps can use different colours." />
-        </div>
+        <label class="fog-brush-row fog-brush-row--color" id="map-grid-row" hidden>
+          <span>Grid colour</span>
+          <input type="color" id="map-grid-colour" value="#ffffff" title="Grid line colour used by both the Player View and the Scaled View when their Show Grid icon is on. Stored per-map — different maps can use different colours." />
+        </label>
         <!-- v2.14.77 — GM-only fade for the topmost tile of a layered
              composite. Lets the GM preview the layer beneath without
              painting reveal_layer polygons. Shown only when the active
