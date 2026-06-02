@@ -1,5 +1,73 @@
 # Changelog
 
+## v2.17.0 — Player Voice
+
+The headline of 2.17 is **Player Voice** — your players stop being passive
+viewers and get a voice at the virtual table — plus a wave of GM tooling built
+on top of it (live annotations, in-map video, and a reworked Player Views
+panel). The granular `v2.16.x` history below is the full per-patch record;
+this is the human-readable summary of what changed since the 2.16 Soundtracks
+release.
+
+### Player Voice — your players join in
+
+- **Named, persistent players.** Each player introduces themselves once (name +
+  colour). The GM gets a live roster; identities stick across reconnects, and a
+  GM can also add an "offline" player to act on behalf of someone with no device.
+- **Player tokens.** The GM places a token for any player. With *Let players move
+  their own token* on, that player can drag their own token from their device —
+  the GM watches it move live and gets a one-click "send it back".
+- **Pings.** A player right-clicks (or long-presses) the map to ping a point;
+  everyone sees a pulse in that player's colour, labelled with their name on the
+  GM screen until dismissed.
+- **Messaging.** Players message the GM privately, or each other (copied to the
+  GM). Threads live in the Player Voice panel with an unread count.
+- **Reply Assistant (optional LLM).** Point Mappadux at a local LM Studio server
+  (no key) or a hosted provider like OpenRouter (key + model) and it drafts
+  in-character reply suggestions to player messages — click *Suggest replies*,
+  pick one to send. Everything stays between your browser and the endpoint you
+  choose.
+- **Initiative tracker.** A fanned-deck initiative rail: roll for the table,
+  drag to reorder, advance turns, with a ROUND END marker between rounds. Sort
+  high→low (d20 systems) or low→high (roll-under systems).
+
+### GM annotations — shared and map-anchored
+
+Progress clocks (Blades-style), countdown timers + stopwatches, a freehand
+whiteboard, and sticky notes. Drop them on the map; each is anchored 1:1 to the
+map and mirrored live to players + projector. They're saved with the map and
+travel in the pack.
+
+### In-map YouTube video
+
+Drop a YouTube video onto a handout (Text Map) as a borderless, resizable,
+rotatable element that plays live on the GM, players, and projector. The GM owns
+the controls (play / pause / seek / volume); viewers follow within about half a
+second. Active visual filters tint it like the rest of the scene. (Desktop
+viewers only — mobile video is a documented limitation.)
+
+### Player Views panel (was "Scaled View")
+
+The old Scaled View and player-connection bits are consolidated into one
+**Player Views** panel with two collapsible sections: **Player connections** (a
+join QR plus a summary of connected windows — local / scaled / remote, split PC
+vs mobile) and **Scaled view** (the projector / under-table controls, unchanged).
+*Show Player View* replaces the old "Open Player Window": an inline preview on the
+GM canvas that you can pop out to a full standalone window.
+
+### Quality-of-life
+
+- Settings reorganised into an accordion (one section open at a time), with
+  **Player Permissions**, **Game System**, and **Reply Assistant (LLM)** split
+  into their own sections and the help text trimmed.
+- A run of connection / preview fixes: popped-out windows behave as real player
+  views, the join QR is always a clean flag-free URL, and late joiners get the
+  correct hold-screen / video / overlay state on connect.
+
+## v2.16.113 — 2026-06-02
+
+Documentation refresh for the 2.17 release: added the high-level v2.17.0 changelog (Player Voice, annotations, in-map video, Player Views panel), and brought README + HELP up to date — new feature sections for Player Voice / annotations / in-map video, the Player Views panel (replacing Player Connection + Scaled View), the reorganised Settings, the atmospheric filter family, and corrected stale naming (Show Player View, Save Map Pack). Docs only.
+
 ## v2.16.112 — 2026-06-02
 
 Test maintenance: updated two stale unit tests (initiative advance-turn ordering and LLM reply-chip parsing) to match the current, manually-verified behaviour. No app code change; full unit suite green (47/47).
