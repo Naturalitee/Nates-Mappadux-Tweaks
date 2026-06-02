@@ -4263,13 +4263,17 @@ option.select-option--add {
      means the body grew to fit everything and pushed the footer off-
      screen instead of overflowing inside its own scroll region. */
   min-height: 0;
+  /* v2.16.110 — explicit cap alongside flex:1 so the body ALWAYS scrolls
+     once the open sections exceed it, even if the dialog's flex height
+     chain is defeated by a browser quirk. Sits just under the dialog's
+     85vh max, leaving room for the header + footer. */
+  max-height: 75vh;
   overflow-y: auto;
   padding: var(--space-md);
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  /* v2.16.109 — visible scroll affordance once enough sections are open
-     (the body already scrolls within the dialog's 85vh cap). */
+  /* v2.16.109 — visible scroll affordance once enough sections are open. */
   scrollbar-width: thin;
   scrollbar-color: var(--border) transparent;
 }

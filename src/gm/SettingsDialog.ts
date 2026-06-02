@@ -410,15 +410,13 @@ export class SettingsDialog {
   private _buildPerformanceSection(): HTMLElement {
     const sec = mkSection(
       'Performance',
-      'Trade-offs for animated-map playback. Default values work fine on capable hardware (modern GPUs, decent-resolution sources); flip these on if you hit stalls or stutter.',
+      'Animated-map playback trade-offs. Defaults are fine on capable hardware — reach for these if you hit stalls or stutter.',
     );
 
     sec.appendChild(this._buildPerfToggle({
       title: 'Send only the first frame to local player windows',
       help:
-        'When the GM\'s own PC is also running a player window (the "Open Player Window" popup) or a same-machine projector window, both compete with the GM canvas for Chrome\'s per-window video decoder budget. With this on, the GM doesn\'t send the full video bytes to same-browser peers — they show the first frame as a static map. ' +
-        'The projector window keeps trying to animate regardless. Remote players (phones, separate laptops on the LAN) always get full animation; their browser has its own decode budget.<br><br>' +
-        '<em>When to enable:</em> 4K (or larger) animated maps + GM popup-player on the same machine + visible stalling. <em>Leave off for:</em> lower-resolution animated maps that play fine in popups, or when no local player windows are open.',
+        'If your GM PC also runs a player or projector window, both fight the GM canvas for Chrome’s video-decode budget. On: same-browser windows show a static first frame instead of animating (phones / LAN players always get full animation). <em>Turn on if</em> local windows stutter on big animated maps.',
       get: isLocalPlayerStaticOnly,
       set: setLocalPlayerStaticOnly,
     }));
@@ -426,9 +424,7 @@ export class SettingsDialog {
     sec.appendChild(this._buildPerfToggle({
       title: 'Cap animated map texture at 1080p',
       help:
-        'Animated-map texture uploads are sized to the WebGL canvas by default — so a fullscreen 4K player on a 4K display uploads 4K every frame. On lower-end GPUs that saturates the upload budget and playback stalls. ' +
-        'Tick this to cap the texture at 1920 px on the longest side regardless of window size: looks slightly softer when zoomed in, plays smoothly even on modest hardware.<br><br>' +
-        '<em>When to enable:</em> remote players reporting stutter on animated maps even when fullscreen. <em>Leave off for:</em> capable GPUs where the difference is noticeable.',
+        'Animated maps upload at the player’s window size, so a 4K fullscreen player uploads 4K every frame — which stalls modest GPUs. On: caps the texture at 1920 px (slightly softer when zoomed, much smoother). <em>Turn on if</em> players report stutter on animated maps.',
       get: isVideoCap1080Enabled,
       set: setVideoCap1080Enabled,
     }));
@@ -598,7 +594,7 @@ export class SettingsDialog {
     const persist = () => setLLMSettings({
       enabled:      enableInput.checked,
       baseUrl:      baseInput.value,
-      model:        modelInput.value,
+      model:        modelsSelect.value,
       systemPrompt: promptArea.value,
     });
 
@@ -621,7 +617,6 @@ export class SettingsDialog {
     };
 
     const baseInput  = mkInput('Base URL', 'http://localhost:1234/v1', cfg.baseUrl);
-    const modelInput = mkInput('Model (the id sent to the endpoint — pick below or paste one)', 'e.g. local-model or anthropic/claude-3.5-sonnet', cfg.model);
 
     const keyLab = document.createElement('label');
     keyLab.style.display = 'flex';
@@ -647,17 +642,23 @@ export class SettingsDialog {
     modelsLab.style.flexDirection = 'column';
     modelsLab.style.gap = '3px';
     modelsLab.className = 'settings-stat-sub';
-    modelsLab.textContent = 'Pick from this endpoint (Test connection first) — fills Model above';
+    modelsLab.textContent = 'Model';
     const modelsSelect = document.createElement('select');
     modelsSelect.className = 'select-full';
-    modelsSelect.disabled = true;
-    const placeholder = document.createElement('option');
-    placeholder.value = '';
-    placeholder.textContent = 'Click “Test connection” to load…';
-    modelsSelect.appendChild(placeholder);
-    modelsSelect.addEventListener('change', () => {
-      if (modelsSelect.value) { modelInput.value = modelsSelect.value; persist(); }
-    });
+    // v2.16.110 — the dropdown IS the model source of truth (no manual field —
+    // you rarely know an LLM's full path, so picking is friendlier). Seed it
+    // with the saved model so it shows before any fetch; the button below
+    // replaces it with the endpoint's list, keeping the saved pick selected
+    // (listed as "(saved)" if the endpoint doesn't advertise it).
+    const seedModels = (saved: string): void => {
+      modelsSelect.replaceChildren();
+      const o = document.createElement('option');
+      if (saved) { o.value = saved; o.textContent = saved; o.selected = true; }
+      else       { o.value = ''; o.textContent = 'Test connection & fetch models…'; }
+      modelsSelect.appendChild(o);
+    };
+    seedModels(cfg.model);
+    modelsSelect.addEventListener('change', persist);
     modelsLab.appendChild(modelsSelect);
     wrap.appendChild(modelsLab);
 
@@ -668,7 +669,7 @@ export class SettingsDialog {
     const testBtn = document.createElement('button');
     testBtn.type = 'button';
     testBtn.className = 'btn btn--ghost btn--sm';
-    testBtn.textContent = 'Test connection';
+    testBtn.textContent = 'Test connection & fetch models';
     const testStatus = document.createElement('span');
     testStatus.className = 'settings-stat-sub';
     testStatus.style.minHeight = '1.2em';
@@ -676,61 +677,53 @@ export class SettingsDialog {
     wrap.appendChild(testRow);
 
     const runTest = async (): Promise<void> => {
+      const saved = modelsSelect.value; // preserve the current pick across the fetch
       testBtn.disabled = true;
       testStatus.style.color = 'var(--text-secondary)';
       testStatus.textContent = 'Connecting…';
-      modelsSelect.disabled = true;
-      modelsSelect.replaceChildren();
       try {
         const ids = await LLMClient.listModels(baseInput.value, keyInput.value);
         if (ids.length === 0) {
           testStatus.style.color = 'var(--warn)';
           testStatus.textContent = 'Connected, but no models are loaded on the server.';
-          const opt = document.createElement('option');
-          opt.value = '';
-          opt.textContent = 'No models loaded';
-          modelsSelect.appendChild(opt);
+          seedModels(saved);
           return;
         }
         testStatus.style.color = 'var(--ok)';
         testStatus.textContent = `Connected — ${ids.length} model${ids.length === 1 ? '' : 's'} available.`;
-        const blank = document.createElement('option');
-        blank.value = '';
-        blank.textContent = '— pick a model —';
-        modelsSelect.appendChild(blank);
-        const current = modelInput.value.trim();
+        modelsSelect.replaceChildren();
+        let matched = false;
         for (const id of ids) {
           const opt = document.createElement('option');
           opt.value = id;
           opt.textContent = id;
-          if (id === current) opt.selected = true;
+          if (id === saved) { opt.selected = true; matched = true; }
           modelsSelect.appendChild(opt);
         }
-        modelsSelect.disabled = false;
+        if (saved && !matched) {
+          const opt = document.createElement('option');
+          opt.value = saved;
+          opt.textContent = `${saved} (saved — not on this endpoint)`;
+          opt.selected = true;
+          modelsSelect.insertBefore(opt, modelsSelect.firstChild);
+        }
+        persist(); // selection may have shifted to the first model
       } catch (err) {
         testStatus.style.color = 'var(--danger)';
         testStatus.textContent = (err as Error).message;
-        const opt = document.createElement('option');
-        opt.value = '';
-        opt.textContent = 'Connection failed';
-        modelsSelect.appendChild(opt);
+        seedModels(saved);
       } finally {
         testBtn.disabled = false;
       }
     };
     testBtn.addEventListener('click', () => { void runTest(); });
 
-    // Stale-marker — if the user edits the base URL or key after testing, the
-    // listed models no longer reflect the endpoint they're about to use.
+    // If the endpoint changes after a fetch, the listed models are stale —
+    // collapse back to just the saved pick + prompt a re-fetch.
     const markStale = () => {
-      if (modelsSelect.disabled) return;
-      modelsSelect.disabled = true;
-      modelsSelect.replaceChildren();
-      const opt = document.createElement('option');
-      opt.value = '';
-      opt.textContent = 'Endpoint changed — click “Test connection” again';
-      modelsSelect.appendChild(opt);
-      testStatus.textContent = '';
+      if (modelsSelect.options.length <= 1) return;
+      seedModels(modelsSelect.value);
+      testStatus.textContent = 'Endpoint changed — fetch models again.';
     };
     baseInput.addEventListener('input', markStale);
     keyInput.addEventListener('input', markStale);
@@ -759,7 +752,7 @@ export class SettingsDialog {
     resetBtn.addEventListener('click', () => { promptArea.value = DEFAULT_GM_ASSISTANT_PROMPT; persist(); });
     wrap.appendChild(resetBtn);
 
-    for (const el of [enableInput, baseInput, modelInput, promptArea]) {
+    for (const el of [enableInput, baseInput, promptArea]) {
       el.addEventListener('change', persist);
     }
 

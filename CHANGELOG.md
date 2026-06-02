@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.110 — 2026-06-02
+
+LLM reply assistant: the model is now chosen purely from a dropdown (the manual text field is gone — you rarely know a model's full id), and the button is now "Test connection & fetch models", which fills it from the endpoint (works with OpenRouter and LM Studio). Trimmed the wordy Performance help to the symptom + the fix. Settings body now reliably scrolls when many sections are open.
+
 ## v2.16.109 — 2026-06-02
 
 Settings tidy-up. The old Player Voice section is split into three clearer sections — Player Permissions, Game System (initiative order), and Reply Assistant (LLM) — with shortened help text and a visible scrollbar. The LLM model field is clarified against the auto-populated model dropdown (which works with OpenRouter via Test connection). The hamburger menu now gives Open New Instance its own section between the pack-file and asset-library groups.
