@@ -119,6 +119,7 @@ export class ClocksLayer {
     let start: { px: number; py: number; left: number; top: number } | null = null;
     handle.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 && e.pointerType === 'mouse') return;
+      e.stopPropagation(); // don't let the GM canvas pan underneath
       const rect = this.root.getBoundingClientRect();
       start = { px: e.clientX, py: e.clientY, left: c.x * rect.width, top: c.y * rect.height };
       handle.setPointerCapture?.(e.pointerId);

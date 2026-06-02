@@ -7231,7 +7231,9 @@ option.select-option--add {
   font-size: 0.72rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: #fff;
+  /* v2.16.79 — name + count in the clock's own colour (lightened for
+     legibility on the dark card). */
+  color: color-mix(in srgb, var(--clock-color, #fff), white 25%);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -7261,8 +7263,8 @@ option.select-option--add {
 .clock-wedge.is-filled { fill: var(--clock-color, #888); }
 .clock-wedge:hover { fill: color-mix(in srgb, var(--clock-color, #888), white 20%); }
 .clock-count {
-  font-size: 0.68rem;
-  font-weight: 700;
+  font-size: 0.72rem;
+  font-weight: 800;
   color: color-mix(in srgb, var(--clock-color, #ccc), white 25%);
   text-shadow: 0 1px 2px rgba(0, 0, 0, 0.8);
 }
@@ -7292,7 +7294,7 @@ option.select-option--add {
   font-size: 0.68rem;
   font-weight: 700;
   letter-spacing: 0.02em;
-  color: #fff;
+  color: color-mix(in srgb, var(--timer-color, #fff), white 25%);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

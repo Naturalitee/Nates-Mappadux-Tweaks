@@ -137,6 +137,7 @@ export class TimersLayer {
     let start: { px: number; py: number; left: number; top: number } | null = null;
     handle.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 && e.pointerType === 'mouse') return;
+      e.stopPropagation(); // don't let the GM canvas pan underneath
       const rect = this.root.getBoundingClientRect();
       start = { px: e.clientX, py: e.clientY, left: t.x * rect.width, top: t.y * rect.height };
       handle.setPointerCapture?.(e.pointerId);

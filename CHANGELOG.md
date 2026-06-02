@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.79 — 2026-06-02
+
+Annotate quick polish: Whiteboard section moved to the top of the panel (most used); picking a pen colour now auto-arms Draw; clock + timer name/value text render in the element's own colour; dragging a clock/timer no longer pans the GM map underneath. (Larger rebuild — map-anchored 1:1 clocks/timers with the select/move/resize editor chrome, plus GM/Player Notes — in progress.)
+
 ## v2.16.78 — 2026-06-01
 
 Annotate slice 3: **timers / countdowns** — a real time-based clock. Add a named timer in count-up or countdown mode (mm:ss) with a colour; it floats as a draggable HUD card with start/pause, reset, and × controls. Running state is stored as absolute epoch anchors, so every surface (GM + players + projector) ticks locally in sync with no per-second network traffic — only GM edits broadcast. Per-map + saved + mute-aware like the rest of Annotate. Countdown flashes red at zero.

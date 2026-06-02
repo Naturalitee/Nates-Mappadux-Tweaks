@@ -409,6 +409,12 @@
         </label>
       </div>
       <div class="panel-body" hidden>
+        <p class="annotate-section-label">Whiteboard</p>
+        <div class="annotate-wb-row">
+          <button id="annotate-draw-toggle" class="btn btn--sm" title="Toggle freehand drawing on the map">Draw</button>
+          <div id="annotate-pen-colors" class="annotate-color-row"></div>
+          <button id="annotate-wb-clear" class="btn btn--sm btn--danger" title="Erase the whole whiteboard for this map">Clear</button>
+        </div>
         <p class="annotate-section-label">Progress clocks</p>
         <div class="annotate-clock-form">
           <input id="annotate-clock-name" class="select-full" type="text" autocomplete="off" placeholder="Name (e.g. Alarm raised)" />
@@ -431,12 +437,6 @@
             <div id="annotate-timer-colors" class="annotate-color-row"></div>
           </div>
           <button id="annotate-add-timer" class="btn btn--sm btn--full">+ Add timer</button>
-        </div>
-        <p class="annotate-section-label">Whiteboard</p>
-        <div class="annotate-wb-row">
-          <button id="annotate-draw-toggle" class="btn btn--sm" title="Toggle freehand drawing on the map">Draw</button>
-          <div id="annotate-pen-colors" class="annotate-color-row"></div>
-          <button id="annotate-wb-clear" class="btn btn--sm btn--danger" title="Erase the whole whiteboard for this map">Clear</button>
         </div>
       </div>
     </section>

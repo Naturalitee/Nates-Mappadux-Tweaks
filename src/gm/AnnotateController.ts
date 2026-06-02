@@ -73,6 +73,14 @@ export class AnnotateController {
     this._bindDrawing();
   }
 
+  /** Arm / disarm whiteboard draw mode (canvas takes pointer events). */
+  private _setDrawing(on: boolean): void {
+    this._drawing = on;
+    document.getElementById('annotate-draw-toggle')?.classList.toggle('is-active', on);
+    this.canvas.style.pointerEvents = on ? 'auto' : 'none';
+    this.canvas.style.cursor = on ? 'crosshair' : '';
+  }
+
   /** Start ↔ pause a timer, re-anchoring the absolute epoch + elapsed base. */
   private _toggleTimer(t: AnnotateTimer): AnnotateTimer {
     if (t.running) {
@@ -104,7 +112,9 @@ export class AnnotateController {
   private _bindPanel(): void {
     this._buildSwatches('annotate-clock-colors', CLOCK_COLORS, this._clockColor, (hex) => { this._clockColor = hex; });
     this._buildSwatches('annotate-timer-colors', CLOCK_COLORS, this._timerColor, (hex) => { this._timerColor = hex; });
-    this._buildSwatches('annotate-pen-colors', PEN_COLORS, this._penColor, (hex) => { this._penColor = hex; });
+    // v2.16.79 — picking a pen colour auto-arms Draw mode (it's the most
+    // common next action after choosing a colour).
+    this._buildSwatches('annotate-pen-colors', PEN_COLORS, this._penColor, (hex) => { this._penColor = hex; this._setDrawing(true); });
 
     const nameEl = document.getElementById('annotate-clock-name') as HTMLInputElement | null;
     const segEl  = document.getElementById('annotate-clock-segments') as HTMLInputElement | null;
@@ -137,13 +147,7 @@ export class AnnotateController {
     tModeEl?.addEventListener('change', syncDur);
     syncDur();
 
-    const drawBtn = document.getElementById('annotate-draw-toggle');
-    drawBtn?.addEventListener('click', () => {
-      this._drawing = !this._drawing;
-      drawBtn.classList.toggle('is-active', this._drawing);
-      this.canvas.style.pointerEvents = this._drawing ? 'auto' : 'none';
-      this.canvas.style.cursor = this._drawing ? 'crosshair' : '';
-    });
+    document.getElementById('annotate-draw-toggle')?.addEventListener('click', () => this._setDrawing(!this._drawing));
 
     document.getElementById('annotate-wb-clear')?.addEventListener('click', () => {
       this._mutate((s) => ({ ...s, strokes: [] }));
