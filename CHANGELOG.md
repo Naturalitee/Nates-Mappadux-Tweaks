@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.105 — 2026-06-02
+
+The popped-out player window now also gets the fullscreen button and sound: it was carrying the inline-preview pip flag, which suppresses fullscreen and mutes. Pop-outs now strip both preview flags so they behave as a normal standalone player view.
+
 ## v2.16.104 — 2026-06-02
 
 Fixed: a popped-out player window now registers as a real player on its own. Previously a pop-out was treated as a GM preview window, so it only showed up as a connected player when "Show full player UI in the GM preview window" was enabled. That setting now gates only the inline Show Player View preview, as intended; pop-outs and remote devices register normally.
