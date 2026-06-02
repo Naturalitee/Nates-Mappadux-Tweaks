@@ -1256,6 +1256,10 @@ export class PlayerApp {
         this.currentMapId   = msg.payload.map?.id ?? null;
         this.currentMarkers = msg.payload.markers ?? [];
         this.sbSlots        = msg.payload.audio?.slots ?? [];
+        // v2.16.100 — videos now ride in full_state, so a fresh window /
+        // preview / pop-out gets them on connect (not only via the discrete
+        // textmap_videos message, which could miss the timing).
+        this._textMapVideos?.setVideos(msg.textMapVideos ?? []);
         // v2.14.17 — pick up calibration + dimensions for the
         // player-side grid renderer.
         // v2.14.18 — gridOffsetX/Y travel in the same payload.

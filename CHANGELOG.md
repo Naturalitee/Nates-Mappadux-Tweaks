@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.100 — 2026-06-02
+
+In-map videos now ride in the full connection snapshot every new view requests on open, so a freshly opened Show Player View / popped-out window (or any late joiner) shows the video immediately, without needing a map change to trigger it.
+
 ## v2.16.99 — 2026-06-02
 
 Fixed the real cause of in-map videos staying blank on a fresh Show Player View / popped-out window: the YouTube player was being created while its box was still off-screen (map not yet rendered), and YouTube refuses to paint a player built into a zero-area container. The player is now built lazily, only once its box is actually on-screen with real size — so the video shows on first open without needing a map swap.

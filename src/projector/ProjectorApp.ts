@@ -536,6 +536,9 @@ export class ProjectorApp {
         if (s.view?.backgroundColor) this.currentBackgroundColor = s.view.backgroundColor;
         this.currentBackdrop = s.view?.backdrop ?? null;
         if (s.projectorViewport) this.projectorViewport = s.projectorViewport;
+        // v2.16.100 — videos ride in full_state so a fresh projector gets them
+        // on connect, not only via the discrete textmap_videos message.
+        this._textMapVideos?.setVideos(msg.textMapVideos ?? []);
         if (msg.mapPixelsPerSquare !== undefined) this.mapPixelsPerSquare = msg.mapPixelsPerSquare;
         if (msg.mapImageWidth      !== undefined) this.mapImageWidth      = msg.mapImageWidth;
         if (msg.mapImageHeight     !== undefined) this.mapImageHeight     = msg.mapImageHeight;

@@ -1,5 +1,5 @@
 import Peer, { type DataConnection } from 'peerjs';
-import type { GMMessage, SessionState, MarkerIconData, SoundboardAudioData } from '../types.ts';
+import type { GMMessage, SessionState, MarkerIconData, SoundboardAudioData, TextMapVideoElement } from '../types.ts';
 import { LocalChannel } from './LocalChannel.ts';
 import { generateRoomCode } from './roomCode.ts';
 import { isLocalPlayerStaticOnly } from '../storage/localSettings.ts';
@@ -65,6 +65,10 @@ export class Host {
   private lastMapGridOffsetX:   number | undefined = undefined;
   private lastMapGridOffsetY:   number | undefined = undefined;
   private lastMapGridColor:     string | undefined = undefined;
+  /** v2.16.100 — live text-map videos for the active map, so every
+   *  full_state (including the BroadcastChannel one a same-browser
+   *  preview / pop-out requests on open) carries them. */
+  private lastTextMapVideos:    TextMapVideoElement[] = [];
   private lastIconData:         MarkerIconData[] = [];
   private lastSoundboardActive: SoundboardAudioData[] = [];
   private lastSoundboardAssets: { assetId: string; dataUrl: string }[] = [];
@@ -169,6 +173,7 @@ export class Host {
           ...(this.lastMapGridOffsetY !== undefined ? { gridOffsetY:       this.lastMapGridOffsetY } : {}),
           ...(this.lastMapGridColor   !== undefined ? { gridColor:         this.lastMapGridColor   } : {}),
           ...(this.lastComposite                    ? { composite:         this.lastComposite      } : {}),
+          ...(this.lastTextMapVideos.length > 0      ? { textMapVideos:     this.lastTextMapVideos  } : {}),
         };
         this.local.send(msg);
         // Deliver active positional plays inline (BroadcastChannel supports large payloads)
@@ -365,6 +370,12 @@ export class Host {
   /** v2.14.34 — focused setter for the cached grid colour. Used by
    *  the GM map panel's swatch handler so colour-only updates don't
    *  have to round-trip the other map-meta fields. */
+  /** v2.16.100 — keep the cached text-map videos current so a viewer
+   *  joining AFTER a map load sees them in its initial full_state. */
+  setLastTextMapVideos(videos: TextMapVideoElement[]): void {
+    this.lastTextMapVideos = videos;
+  }
+
   setLastMapGridColor(color: string | undefined): void {
     this.lastMapGridColor = color;
   }
@@ -428,6 +439,7 @@ export class Host {
           ...(this.lastMapGridOffsetY !== undefined ? { gridOffsetY:       this.lastMapGridOffsetY } : {}),
           ...(this.lastMapGridColor   !== undefined ? { gridColor:         this.lastMapGridColor   } : {}),
           ...(this.lastComposite                    ? { composite:         this.lastComposite      } : {}),
+          ...(this.lastTextMapVideos.length > 0      ? { textMapVideos:     this.lastTextMapVideos  } : {}),
         };
         this.sendTo(conn, msg);
         // Late-joiner video catchup — if the active map is animated,

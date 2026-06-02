@@ -641,6 +641,12 @@ export interface MsgFullState {
   gridColor?:          string;
   /** v2.14.54 — composite payload. See MsgMapChange.composite. */
   composite?:          CompositeWirePayload;
+  /** v2.16.100 — live YouTube video elements for the active text-map.
+   *  Carried in full_state (not just the discrete textmap_videos message)
+   *  so EVERY new connection — same-browser preview / pop-out included —
+   *  gets them on initial connect, the same way it gets the map. Absent /
+   *  empty on maps with no video. */
+  textMapVideos?:      TextMapVideoElement[];
 }
 
 /** v2.14.54 — wire payload for a composite map. Viewers unpack the

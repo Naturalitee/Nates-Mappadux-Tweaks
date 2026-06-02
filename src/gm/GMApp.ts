@@ -2924,6 +2924,10 @@ export class GMApp {
     this._currentTextMapVideos = (mapAssetForButton?.textMap?.elements ?? [])
       .filter((e): e is import('../types.ts').TextMapVideoElement => e.type === 'video');
     this.textMapVideoLayer?.setVideos(this._currentTextMapVideos);
+    // v2.16.100 — cache on the Host so the videos ride in EVERY new
+    // connection's full_state (incl. the BroadcastChannel one a same-browser
+    // preview / pop-out requests on open), not just this live broadcast.
+    this.host.setLastTextMapVideos(this._currentTextMapVideos);
     this.host.broadcast({ type: 'textmap_videos', videos: this._currentTextMapVideos });
     if (this.editTextMapBtn)   this.editTextMapBtn.hidden   = !isTextMap;
     if (this.editCompositeBtn) this.editCompositeBtn.hidden = !isComposite;
