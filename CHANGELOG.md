@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.88 — 2026-06-02
+
+Map panel: the pack name moves up into the panel header — "Map Pack:" followed by the name in bright white so it reads as the name; a pencil on the right (where other panels carry their switch) edits it inline, replacing the old in-body rename row. Grid-colour swatch aligned to the standard colour picker (32×24, 2px inset).
+
 ## v2.16.87 — 2026-06-02
 
 Annotate: pressing an unselected object's move handle now flows straight into a drag in the same press (it was selecting then dropping, needing a second click). Selecting no longer re-renders mid-press; the chrome reflects on release. Matches markers / viewport rects.

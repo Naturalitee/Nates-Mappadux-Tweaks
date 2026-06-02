@@ -34,12 +34,17 @@
     <span id="room-code" hidden>…</span>
 
     <section class="panel" id="map-panel">
-      <button type="button" class="panel-title" aria-expanded="true">Map Selection</button>
+      <!-- v2.16.88 — the pack name lives in the panel header (brighter,
+           to read as the name); the pencil on the right edits it inline,
+           replacing the old in-body rename row. -->
+      <div class="panel-header">
+        <button type="button" class="panel-title" aria-expanded="true">Map Pack:&nbsp;<span id="pack-name-display" class="pack-name-display">Untitled pack</span></button>
+        <button type="button" id="pack-name-edit-btn" class="panel-edit-btn" title="Rename this map pack" aria-label="Rename map pack">
+          <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4Z"/></svg>
+        </button>
+        <input type="text" id="pack-name-input" class="pack-name-edit-input" placeholder="Untitled pack" hidden />
+      </div>
       <div class="panel-body">
-        <div class="param-row">
-          <label for="pack-name-input">Map Pack</label>
-          <input type="text" id="pack-name-input" class="marker-text-input" placeholder="Untitled pack" />
-        </div>
         <!-- v2.16.34 — discoverable "+ new" instead of an "Add new" entry
              buried at the bottom of the dropdown list. -->
         <div class="picker-row">

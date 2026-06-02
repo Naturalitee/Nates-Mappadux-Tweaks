@@ -445,6 +445,8 @@ export class GMApp {
    *  so a manual Cancel can clear it before it fires. */
   private _animationDoneTimer: ReturnType<typeof setTimeout> | null = null;
   private packNameInput!:           HTMLInputElement;
+  /** v2.16.88 — the white pack-name shown in the Map Pack panel header. */
+  private packNameDisplay: HTMLElement | null = null;
   /** Debounce timer for the in-panel pack-name input. */
   private _packNameSaveTimer: number | null = null;
   private transitionSelect!:        HTMLSelectElement;
@@ -3218,6 +3220,7 @@ export class GMApp {
     this.revealProgressEl           = q<HTMLElement>('#reveal-progress');
     this.revealProgressBarEl        = q<HTMLElement>('#reveal-progress-bar');
     this.packNameInput              = q<HTMLInputElement>('#pack-name-input');
+    this.packNameDisplay            = document.getElementById('pack-name-display');
     this.transitionSelect           = q<HTMLSelectElement>('#transition-select');
     // v2.16.38 — #transition-params moved into the side panel; nothing
     // to bind here. Side panel rebuilds its body each open from state.
@@ -5247,6 +5250,16 @@ export class GMApp {
     });
     this.packNameInput.addEventListener('blur', () => {
       this._schedulePackNameSave(this.packNameInput.value, /* immediate */ true);
+      this._endPackNameEdit();
+    });
+    this.packNameInput.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') { e.preventDefault(); this.packNameInput.blur(); }
+      if (e.key === 'Escape') { e.preventDefault(); this._endPackNameEdit(); }
+    });
+    // v2.16.88 — pencil in the Map Pack header → inline-edit the name.
+    document.getElementById('pack-name-edit-btn')?.addEventListener('click', (e) => {
+      e.stopPropagation(); // don't toggle the panel collapse
+      this._beginPackNameEdit();
     });
 
     // Map rename — now driven by the EditableSelect's onRename callback;
@@ -6989,6 +7002,30 @@ export class GMApp {
     const session = await loadSession();
     if (!this.packNameInput) return;
     this.packNameInput.value = session?.packName ?? '';
+    this._syncPackNameDisplay();
+  }
+
+  /** v2.16.88 — reflect the pack name in the header display span. */
+  private _syncPackNameDisplay(): void {
+    if (this.packNameDisplay) {
+      this.packNameDisplay.textContent = this.packNameInput?.value.trim() || 'Untitled pack';
+    }
+  }
+
+  /** Reveal the inline rename input over the header (pencil clicked). */
+  private _beginPackNameEdit(): void {
+    if (!this.packNameInput || !this.packNameDisplay) return;
+    this.packNameInput.value = this.packNameDisplay.textContent === 'Untitled pack' ? '' : (this.packNameDisplay.textContent ?? '');
+    this.packNameInput.hidden = false;
+    this.packNameInput.focus();
+    this.packNameInput.select();
+  }
+
+  /** Hide the rename input + update the header display. */
+  private _endPackNameEdit(): void {
+    if (!this.packNameInput) return;
+    this.packNameInput.hidden = true;
+    this._syncPackNameDisplay();
   }
 
   /**

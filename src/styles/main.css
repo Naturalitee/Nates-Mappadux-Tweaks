@@ -1155,6 +1155,52 @@ body.player-view #renderer-canvas {
   transform: translateY(-50%) rotate(90deg);
 }
 
+/* v2.16.88 — Map Pack header: the pack name reads as the NAME (white,
+   not-uppercased, bold) sitting after the "Map Pack:" label; a pencil on
+   the right edits it inline. */
+#map-panel .panel-title { padding-right: 56px; }
+.pack-name-display {
+  color: #fff;
+  font-weight: 700;
+  text-transform: none;
+  letter-spacing: 0.01em;
+}
+.panel-edit-btn {
+  position: absolute;
+  right: calc(var(--space-md) + 16px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 2;
+  width: 24px;
+  height: 24px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  background: transparent;
+  border: none;
+  border-radius: var(--radius-sm);
+  color: var(--text-secondary);
+  cursor: pointer;
+}
+.panel-edit-btn:hover { color: var(--text-primary); background: rgba(255, 255, 255, 0.08); }
+.pack-name-edit-input {
+  position: absolute;
+  left: var(--space-md);
+  right: calc(var(--space-md) + 44px);
+  top: 50%;
+  transform: translateY(-50%);
+  z-index: 3;
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border-focus, var(--accent));
+  border-radius: var(--radius-sm);
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: var(--font-size-sm);
+  outline: none;
+}
+
 /* v2.16.75 — Players panel header count badge. Sits in the right margin
    where other panels carry their vision/ear toggle icon; the "#" reads
    as "player count". Shows connected / total (total includes offline). */
@@ -5880,13 +5926,15 @@ option.select-option--add {
 /* v2.14.31 — Map-panel grid colour swatch. Sits in the fog-row--kind
    layout next to Backdrop. The native colour input is small so we
    give it a sensible fixed size rather than letting it stretch. */
+/* v2.16.88 — aligned with the standard colour picker
+   (.param-row input[type="color"]): 32×24, 2px inset, same border. */
 .map-grid-colour {
-  width: 38px;
-  height: 28px;
-  padding: 0;
+  width: 32px;
+  height: 24px;
+  padding: 2px;
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
-  background: transparent;
+  background: none;
   cursor: pointer;
 }
 
