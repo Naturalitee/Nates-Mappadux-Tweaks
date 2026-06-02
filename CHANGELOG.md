@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.93 — 2026-06-02
+
+Map Pack panel: the "Edit this Handout / Composite Map" buttons moved down to sit below the backdrop + grid-colour rows, just above the Swap Asset / Clone / Delete actions.
+
 ## v2.16.92 — 2026-06-02
 
 Players panel defaults closed on an empty table; opens automatically on first load if there are already players (e.g. saved offline players). The GM's manual toggling is respected after that.

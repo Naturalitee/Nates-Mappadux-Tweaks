@@ -53,11 +53,6 @@
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
         </div>
-        <button id="edit-textmap-btn" class="btn btn--ghost btn--sm btn--full" hidden title="Open the Text Map editor for this handout">Edit this Handout (Text Map)</button>
-        <!-- v2.14.42 — Composite Map editor entry, mirrors the
-             Text Map edit button. Visible only when the active map
-             is a composite. -->
-        <button id="edit-composite-btn" class="btn btn--ghost btn--sm btn--full" hidden title="Open the Composite Map editor — view, add, position, and remove tiles that make up this composite map.">Edit this Composite Map</button>
         <button id="start-animation-btn" class="btn btn--primary btn--sm btn--full" hidden title="Trigger the handout reveal animation on the player + projector">▶ Start Animation</button>
         <div id="reveal-progress" class="reveal-progress" hidden>
           <div id="reveal-progress-bar" class="reveal-progress-bar"></div>
@@ -101,6 +96,11 @@
           <input type="range" id="map-upper-layer-opacity" min="0" max="100" value="100" title="Fade the topmost tile so the layer beneath shows through on the GM canvas. Preview-only — never affects what the players see." />
         </div>
         <button id="map-grid-calibrate-btn" class="btn btn--ghost btn--sm btn--full" hidden title="The 1″ grid needs a calibrated pixels-per-inch. Click to calibrate this map first; then the grid colour swatch will appear here.">No Grid — calibrate map&hellip;</button>
+        <!-- v2.16.93 — Edit-this-map buttons moved here (below backdrop /
+             grid colour, above the asset actions). Only one shows, gated
+             on the active map's type. -->
+        <button id="edit-textmap-btn" class="btn btn--ghost btn--sm btn--full" hidden title="Open the Text Map editor for this handout">Edit this Handout (Text Map)</button>
+        <button id="edit-composite-btn" class="btn btn--ghost btn--sm btn--full" hidden title="Open the Composite Map editor — view, add, position, and remove tiles that make up this composite map.">Edit this Composite Map</button>
         <div class="btn-row">
           <button id="swap-map-asset-btn" class="btn btn--ghost  btn--sm" title="Replace this map's underlying image with a different asset from your library. Fog, markers, and audio all stay attached to the map — only the image changes. Useful when you've redrawn the same map at higher resolution or want to switch between line-art and final-render versions.">Swap Asset&hellip;</button>
           <button id="clone-map-btn"      class="btn btn--ghost  btn--sm">Clone Map</button>
