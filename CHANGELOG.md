@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.112 — 2026-06-02
+
+Test maintenance: updated two stale unit tests (initiative advance-turn ordering and LLM reply-chip parsing) to match the current, manually-verified behaviour. No app code change; full unit suite green (47/47).
+
 ## v2.16.111 — 2026-06-02
 
 Settings sections are now an accordion — opening one closes the others, so the dialog stays short (no hunting for a scrollbar). The Reply Assistant (LLM) section is reordered into a guided flow: Base URL (pre-filled with the LM Studio local address) - API key - Test connection & fetch models - Model, with clearer wording about when a URL / key is needed.

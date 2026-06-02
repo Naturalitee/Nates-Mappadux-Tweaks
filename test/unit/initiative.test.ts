@@ -58,7 +58,7 @@ describe('Initiative — sort modes', () => {
 });
 
 describe('Initiative — advance turn', () => {
-  it('moves the current actor to the back (before ROUND END) and marks spent', () => {
+  it('moves the current actor to the very back (after ROUND END = acts next round) and marks spent', () => {
     const state: InitiativeState = {
       ...defaultInitiativeState(),
       activeDeck: [
@@ -69,9 +69,11 @@ describe('Initiative — advance turn', () => {
       ],
     };
     const next = advanceTurn(state);
-    expect(next.activeDeck.map((c) => c.id)).toEqual(['b', 'c', 'a', 'round-end-marker']);
+    // The spent actor parks behind the ROUND END marker so it acts NEXT round,
+    // not twice this round. Verified in manual play.
+    expect(next.activeDeck.map((c) => c.id)).toEqual(['b', 'c', 'round-end-marker', 'a']);
     expect(next.activeDeck.find((c) => c.id === 'a')!.isSpent).toBe(true);
-    expect(next.activeDeck[0]!.isSpent).toBe(false); // next actor is fresh
+    expect(next.activeDeck[0]!.isSpent).toBe(false); // next actor (b) is fresh
   });
 
   it('cycling past ROUND END resets every spent flag and parks marker at the back', () => {

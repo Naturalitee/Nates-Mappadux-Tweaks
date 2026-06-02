@@ -16,8 +16,11 @@ describe('LLM reply parsing', () => {
 > A second door stands ajar. "Make a Perception roll."`;
     const opts = parseOptions(resp);
     expect(opts).toHaveLength(4);
-    expect(opts[0]).toContain('The Green Light');
+    // The chip is the reply the GM SENDS — the quoted body, with the bold
+    // category heading ("The Green Light (Positive)") and quote marks stripped.
+    expect(opts[0]).toContain('lock clicks invitingly');
     expect(opts[0]).toContain('Sleight of Hand roll');
+    expect(opts[0]).not.toContain('The Green Light');
     expect(opts[0]).not.toContain('**');
     expect(opts[0]).not.toContain('>');
     expect(opts[3]).toContain('Perception roll');
