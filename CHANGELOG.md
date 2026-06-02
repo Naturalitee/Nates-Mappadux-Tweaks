@@ -1,6 +1,6 @@
 # Changelog
 
-## v2.17.0 — Player Voice
+## v2.17.0 — Player Voice (2026-06-02)
 
 The headline of 2.17 is **Player Voice** — your players stop being passive
 viewers and get a voice at the virtual table — plus a wave of GM tooling built
