@@ -1297,10 +1297,15 @@ export interface ProgressClock {
   filled: number;
   /** Hex colour for filled wedges + accents. */
   color: string;
-  /** HUD position as a fraction (0..1) of the view, so it lands in the
-   *  same relative spot on GM / player / projector regardless of size. */
+  /** v2.16.82 — anchor + size in normalised MAP coords (0..1), so the clock
+   *  sits at a fixed map location and pans / zooms with the map, 1:1 on GM
+   *  and player. (Was a screen fraction pre-v2.16.82.) */
   x: number;
   y: number;
+  w: number;
+  h: number;
+  /** Rotation in degrees (v2.16.82). */
+  rot?: number;
 }
 
 /** A real-time timer / countdown overlay (v2.16.78). Running state is
@@ -1321,12 +1326,16 @@ export interface AnnotateTimer {
   startedAt: number;
   /** Elapsed ms accumulated from previous run segments (before current). */
   baseElapsedMs: number;
+  /** v2.16.82 — anchor + size in normalised MAP coords (see ProgressClock). */
+  w: number;
+  h: number;
+  rot?: number;
 }
 
 /** A free text note overlay (v2.16.80). Audience 'gm' shows only on the
  *  GM view; 'player' shows on player + projector + GM. The text auto-fits
- *  the box, so shrinking the box shrinks the font. Position + size are
- *  fractions (0..1) of the view. */
+ *  the box, so shrinking the box shrinks the font. v2.16.82 — position +
+ *  size are now normalised MAP coords (anchored 1:1). */
 export interface AnnotateNote {
   id: string;
   text: string;
@@ -1336,6 +1345,7 @@ export interface AnnotateNote {
   y: number;
   w: number;
   h: number;
+  rot?: number;
 }
 
 /** One freehand whiteboard stroke. Points are normalised map coordinates

@@ -60,23 +60,29 @@ export class AnnotateController {
 
   constructor(private opts: AnnotateControllerOpts, private cb: AnnotateControllerCallbacks) {
     this.canvas = opts.whiteboardCanvas;
-    this.clocksLayer = new ClocksLayer(opts.clocksRoot, true, {
+    const anchor = { project: opts.project, unproject: opts.unproject };
+    this.clocksLayer = new ClocksLayer(opts.clocksRoot, true, anchor, {
       onSetFilled: (id, filled) => this._mutate((s) => ({
         ...s,
         clocks: s.clocks.map((c) => c.id === id ? { ...c, filled: Math.max(0, Math.min(c.segments, filled)) } : c),
       })),
-      onMove: (id, x, y) => this._mutate((s) => ({ ...s, clocks: s.clocks.map((c) => c.id === id ? { ...c, x, y } : c) })),
+      onMove:   (id, x, y) => this._mutate((s) => ({ ...s, clocks: s.clocks.map((c) => c.id === id ? { ...c, x, y } : c) })),
+      onResize: (id, w, h) => this._mutate((s) => ({ ...s, clocks: s.clocks.map((c) => c.id === id ? { ...c, w, h } : c) })),
+      onRotate: (id, rot) => this._mutate((s) => ({ ...s, clocks: s.clocks.map((c) => c.id === id ? { ...c, rot } : c) })),
       onRemove: (id) => this._mutate((s) => ({ ...s, clocks: s.clocks.filter((c) => c.id !== id) })),
     });
-    this.timersLayer = new TimersLayer(opts.timersRoot, true, {
+    this.timersLayer = new TimersLayer(opts.timersRoot, true, anchor, {
       onToggle: (id) => this._mutate((s) => ({ ...s, timers: s.timers.map((t) => t.id === id ? this._toggleTimer(t) : t) })),
       onReset:  (id) => this._mutate((s) => ({ ...s, timers: s.timers.map((t) => t.id === id ? { ...t, running: false, startedAt: 0, baseElapsedMs: 0 } : t) })),
       onMove:   (id, x, y) => this._mutate((s) => ({ ...s, timers: s.timers.map((t) => t.id === id ? { ...t, x, y } : t) })),
+      onResize: (id, w, h) => this._mutate((s) => ({ ...s, timers: s.timers.map((t) => t.id === id ? { ...t, w, h } : t) })),
+      onRotate: (id, rot) => this._mutate((s) => ({ ...s, timers: s.timers.map((t) => t.id === id ? { ...t, rot } : t) })),
       onRemove: (id) => this._mutate((s) => ({ ...s, timers: s.timers.filter((t) => t.id !== id) })),
     });
-    this.notesLayer = new NotesLayer(opts.notesRoot, true, {
+    this.notesLayer = new NotesLayer(opts.notesRoot, true, anchor, {
       onMove:   (id, x, y) => this._mutate((s) => ({ ...s, notes: s.notes.map((nn) => nn.id === id ? { ...nn, x, y } : nn) })),
       onResize: (id, w, h) => this._mutate((s) => ({ ...s, notes: s.notes.map((nn) => nn.id === id ? { ...nn, w, h } : nn) })),
+      onRotate: (id, rot) => this._mutate((s) => ({ ...s, notes: s.notes.map((nn) => nn.id === id ? { ...nn, rot } : nn) })),
       onRemove: (id) => this._mutate((s) => ({ ...s, notes: s.notes.filter((nn) => nn.id !== id) })),
       onEditText: (id, text) => this._mutate((s) => ({ ...s, notes: s.notes.map((nn) => nn.id === id ? { ...nn, text } : nn) })),
     });

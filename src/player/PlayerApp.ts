@@ -308,13 +308,15 @@ export class PlayerApp {
       // (the initiative_update broadcast no longer carries the data URL).
       this.initiativeRail.setIconResolver((pid) => this._playerIcons.get(pid));
     }
-    // v2.16.76 — read-only progress clocks mirrored from the GM.
+    // v2.16.76+ — read-only annotation overlays, map-anchored 1:1 with the
+    // GM. project = map-norm → screen; read-only so unproject is unused.
+    const anchor = { project: (x: number, y: number) => this.renderer.mapNormToCanvasCss(x, y), unproject: () => null };
     const clocksEl = document.getElementById('annotate-clocks');
-    if (clocksEl) this._annotateClocks = new ClocksLayer(clocksEl, false);
+    if (clocksEl) this._annotateClocks = new ClocksLayer(clocksEl, false, anchor);
     const timersEl = document.getElementById('annotate-timers');
-    if (timersEl) this._annotateTimers = new TimersLayer(timersEl, false);
+    if (timersEl) this._annotateTimers = new TimersLayer(timersEl, false, anchor);
     const notesEl = document.getElementById('annotate-notes');
-    if (notesEl) this._annotateNotes = new NotesLayer(notesEl, false);
+    if (notesEl) this._annotateNotes = new NotesLayer(notesEl, false, anchor);
     // v2.16.77 — read-only whiteboard mirrored from the GM.
     const boardEl = document.getElementById('annotate-whiteboard') as HTMLCanvasElement | null;
     if (boardEl) this._annotateBoard = new WhiteboardLayer(boardEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));

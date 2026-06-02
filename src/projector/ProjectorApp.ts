@@ -280,12 +280,13 @@ export class ProjectorApp {
     const initEl = document.getElementById('player-initiative');
     if (initEl) this.initiativeRail = new PlayerInitiativeRail(initEl);
     // v2.16.76 — read-only progress clocks mirrored from the GM.
+    const anchor = { project: (x: number, y: number) => this.renderer.mapNormToCanvasCss(x, y), unproject: () => null };
     const clocksEl = document.getElementById('annotate-clocks');
-    if (clocksEl) this._annotateClocks = new ClocksLayer(clocksEl, false);
+    if (clocksEl) this._annotateClocks = new ClocksLayer(clocksEl, false, anchor);
     const timersEl = document.getElementById('annotate-timers');
-    if (timersEl) this._annotateTimers = new TimersLayer(timersEl, false);
+    if (timersEl) this._annotateTimers = new TimersLayer(timersEl, false, anchor);
     const notesEl = document.getElementById('annotate-notes');
-    if (notesEl) this._annotateNotes = new NotesLayer(notesEl, false);
+    if (notesEl) this._annotateNotes = new NotesLayer(notesEl, false, anchor);
     // v2.16.77 — read-only whiteboard mirrored from the GM.
     const boardEl = document.getElementById('annotate-whiteboard') as HTMLCanvasElement | null;
     if (boardEl) this._annotateBoard = new WhiteboardLayer(boardEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));

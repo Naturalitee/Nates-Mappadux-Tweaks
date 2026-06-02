@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.16.82 — 2026-06-02
+
+Annotate — big rebuild: clocks, timers, and notes are now **map-anchored** (position + size stored in map coordinates), so they pan/zoom with the map and render **1:1 between GM and player/projector** — place one off-map and it's off the player's view until the GM pans there, just like markers. All three share one **editor-chrome** model: a select/move handle (top-left), delete (bottom-left), resize (bottom-right), and **rotate** (above, with stem, snaps near cardinals). Content scales with the box (container-query units) so clocks/timers grow + shrink cleanly; notes still auto-fit their text. They render as DOM overlays above the map, so they're unaffected by visual filters.
+
+## v2.16.81 — 2026-06-02
+
+Annotate: stagger new clocks / timers / notes so a second item doesn't spawn exactly on top of the first.
+
 ## v2.16.80 — 2026-06-02
 
 Annotate: **Notes** added — free text boxes with the established editor chrome (select handle top-left to move, delete bottom-left, resize bottom-right) and text that **auto-fits the box** (shrink the box → smaller font, reflowing as needed). Double-click to edit. **GM-only** notes show on the GM view; **Player** notes show on player + projector too. Panel tidied: Whiteboard stays always-visible at the top; Notes / Clocks / Timers are collapsible sub-sections that start closed. Annotate bypass now defaults **ON** (annotations shown by default).

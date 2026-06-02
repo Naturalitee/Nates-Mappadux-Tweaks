@@ -42,8 +42,7 @@ export function makeClock(name: string, segments: number, color: string): Progre
     segments: Math.max(2, Math.min(24, Math.round(segments) || 4)),
     filled: 0,
     color,
-    x: 0.5,
-    y: 0.18,
+    x: 0.42, y: 0.10, w: 0.12, h: 0.16,
   };
 }
 
@@ -54,10 +53,7 @@ export function makeNote(text: string, audience: 'gm' | 'player', color: string)
     text: text.trim(),
     color,
     audience,
-    x: 0.40,
-    y: 0.40,
-    w: 0.20,
-    h: 0.10,
+    x: 0.40, y: 0.40, w: 0.20, h: 0.10,
   };
 }
 
@@ -69,8 +65,7 @@ export function makeTimer(name: string, mode: 'countup' | 'countdown', durationM
     name: name.trim() || (mode === 'countdown' ? 'Countdown' : 'Timer'),
     mode,
     color,
-    x: 0.5,
-    y: 0.30,
+    x: 0.42, y: 0.30, w: 0.12, h: 0.10,
     durationMs: Math.max(0, durationMs),
     running: false,
     startedAt: 0,

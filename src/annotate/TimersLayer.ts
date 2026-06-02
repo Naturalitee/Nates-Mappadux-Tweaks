@@ -1,11 +1,12 @@
 import type { AnnotateTimer } from '../types.ts';
+import { AnchoredLayer, type AnchoredOpts } from './AnchoredLayer.ts';
 
 export interface TimersLayerCallbacks {
-  /** Start / pause toggle. */
   onToggle?: (id: string) => void;
-  /** Reset to full (countdown) / zero (count-up), paused. */
   onReset?: (id: string) => void;
   onMove?: (id: string, x: number, y: number) => void;
+  onResize?: (id: string, w: number, h: number) => void;
+  onRotate?: (id: string, rot: number) => void;
   onRemove?: (id: string) => void;
 }
 
@@ -31,56 +32,42 @@ function fmt(ms: number): string {
 }
 
 /**
- * TimersLayer (v2.16.78) — draggable real-time timer / countdown overlays.
- * Running state lives in absolute epoch anchors, so this layer just ticks
- * locally (250ms) and recomputes the display — no per-second broadcast.
- * Interactive on the GM (start/pause, reset, ×, drag); read-only mirror on
- * player / projector.
+ * TimersLayer (v2.16.82) — map-anchored real-time timer / countdown overlays.
+ * Extends AnchoredLayer for projection + chrome. Running state lives in
+ * absolute epoch anchors, so a local 250ms tick recomputes the display with
+ * no per-second broadcast. Interactive on the GM; read-only mirror elsewhere.
  */
-export class TimersLayer {
-  private timers: AnnotateTimer[] = [];
+export class TimersLayer extends AnchoredLayer<AnnotateTimer> {
+  private _onToggle: ((id: string) => void) | undefined;
+  private _onReset: ((id: string) => void) | undefined;
   private timeEls = new Map<string, HTMLElement>();
   private tick: ReturnType<typeof setInterval>;
 
-  constructor(
-    private root: HTMLElement,
-    private interactive: boolean,
-    private cb: TimersLayerCallbacks = {},
-  ) {
-    this._render();
+  constructor(root: HTMLElement, interactive: boolean, opts: AnchoredOpts, cb: TimersLayerCallbacks = {}) {
+    super(root, interactive, { ...opts, aspectLock: true }, { onMove: cb.onMove, onResize: cb.onResize, onRotate: cb.onRotate, onRemove: cb.onRemove });
+    this._onToggle = cb.onToggle;
+    this._onReset = cb.onReset;
     this.tick = setInterval(() => this._tick(), 250);
   }
 
-  setTimers(timers: AnnotateTimer[]): void {
-    this.timers = timers;
-    this._render();
-  }
+  setTimers(timers: AnnotateTimer[]): void { this.setObjects(timers); }
 
-  destroy(): void { clearInterval(this.tick); }
+  override destroy(): void { clearInterval(this.tick); super.destroy(); }
+
+  protected objClass(t: AnnotateTimer): string { return 'a-timer' + (t.mode === 'countdown' ? ' is-countdown' : ''); }
 
   private _tick(): void {
-    for (const t of this.timers) {
+    for (const t of this.objects) {
       const el = this.timeEls.get(t.id);
       if (!el) continue;
       const ms = timerDisplayMs(t);
       el.textContent = fmt(ms);
-      el.parentElement?.classList.toggle('is-done', t.mode === 'countdown' && ms === 0);
+      el.closest('.a-timer')?.classList.toggle('is-done', t.mode === 'countdown' && ms === 0);
     }
   }
 
-  private _render(): void {
-    this.root.replaceChildren();
-    this.timeEls.clear();
-    this.root.classList.toggle('is-interactive', this.interactive);
-    for (const t of this.timers) this.root.appendChild(this._renderTimer(t));
-  }
-
-  private _renderTimer(t: AnnotateTimer): HTMLElement {
-    const el = document.createElement('div');
-    el.className = 'a-timer' + (t.mode === 'countdown' ? ' is-countdown' : '');
-    el.style.left = `${t.x * 100}%`;
-    el.style.top  = `${t.y * 100}%`;
-    el.style.setProperty('--timer-color', t.color);
+  protected renderContent(t: AnnotateTimer, content: HTMLElement): void {
+    content.style.setProperty('--timer-color', t.color);
 
     const head = document.createElement('div');
     head.className = 'a-timer-head';
@@ -88,24 +75,13 @@ export class TimersLayer {
     name.className = 'a-timer-name';
     name.textContent = t.name;
     head.appendChild(name);
-    if (this.interactive) {
-      const del = document.createElement('button');
-      del.type = 'button';
-      del.className = 'a-timer-del';
-      del.textContent = '×';
-      del.title = 'Remove timer';
-      del.addEventListener('pointerdown', (e) => e.stopPropagation());
-      del.addEventListener('click', (e) => { e.stopPropagation(); this.cb.onRemove?.(t.id); });
-      head.appendChild(del);
-    }
-    el.appendChild(head);
+    content.appendChild(head);
 
     const time = document.createElement('div');
     time.className = 'a-timer-time';
     time.textContent = fmt(timerDisplayMs(t));
-    el.appendChild(time);
+    content.appendChild(time);
     this.timeEls.set(t.id, time);
-    if (t.mode === 'countdown' && timerDisplayMs(t) === 0) el.classList.add('is-done');
 
     if (this.interactive) {
       const ctrls = document.createElement('div');
@@ -116,48 +92,16 @@ export class TimersLayer {
       toggle.textContent = t.running ? '❚❚' : '▶';
       toggle.title = t.running ? 'Pause' : 'Start';
       toggle.addEventListener('pointerdown', (e) => e.stopPropagation());
-      toggle.addEventListener('click', (e) => { e.stopPropagation(); this.cb.onToggle?.(t.id); });
+      toggle.addEventListener('click', (e) => { e.stopPropagation(); this._onToggle?.(t.id); });
       const reset = document.createElement('button');
       reset.type = 'button';
       reset.className = 'a-timer-btn';
       reset.textContent = '↺';
       reset.title = 'Reset';
       reset.addEventListener('pointerdown', (e) => e.stopPropagation());
-      reset.addEventListener('click', (e) => { e.stopPropagation(); this.cb.onReset?.(t.id); });
+      reset.addEventListener('click', (e) => { e.stopPropagation(); this._onReset?.(t.id); });
       ctrls.append(toggle, reset);
-      el.appendChild(ctrls);
-      this._makeDraggable(el, head, t);
+      content.appendChild(ctrls);
     }
-    return el;
-  }
-
-  private _makeDraggable(el: HTMLElement, handle: HTMLElement, t: AnnotateTimer): void {
-    handle.style.cursor = 'grab';
-    handle.style.touchAction = 'none';
-    let start: { px: number; py: number; left: number; top: number } | null = null;
-    handle.addEventListener('pointerdown', (e) => {
-      if (e.button !== 0 && e.pointerType === 'mouse') return;
-      e.stopPropagation(); // don't let the GM canvas pan underneath
-      const rect = this.root.getBoundingClientRect();
-      start = { px: e.clientX, py: e.clientY, left: t.x * rect.width, top: t.y * rect.height };
-      handle.setPointerCapture?.(e.pointerId);
-      handle.style.cursor = 'grabbing';
-    });
-    handle.addEventListener('pointermove', (e) => {
-      if (!start) return;
-      const rect = this.root.getBoundingClientRect();
-      el.style.left = `${Math.max(0, Math.min(1, (start.left + (e.clientX - start.px)) / rect.width)) * 100}%`;
-      el.style.top  = `${Math.max(0, Math.min(1, (start.top  + (e.clientY - start.py)) / rect.height)) * 100}%`;
-    });
-    handle.addEventListener('pointerup', (e) => {
-      if (!start) return;
-      const rect = this.root.getBoundingClientRect();
-      const nx = Math.max(0, Math.min(1, (start.left + (e.clientX - start.px)) / rect.width));
-      const ny = Math.max(0, Math.min(1, (start.top  + (e.clientY - start.py)) / rect.height));
-      start = null;
-      handle.style.cursor = 'grab';
-      this.cb.onMove?.(t.id, nx, ny);
-    });
-    handle.addEventListener('pointercancel', () => { start = null; handle.style.cursor = 'grab'; });
   }
 }
