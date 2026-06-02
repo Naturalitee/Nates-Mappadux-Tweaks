@@ -64,6 +64,10 @@ GM canvas that you can pop out to a full standalone window.
   views, the join QR is always a clean flag-free URL, and late joiners get the
   correct hold-screen / video / overlay state on connect.
 
+## v2.16.114 — 2026-06-02
+
+Added docs/onboarding-content.md — a working doc for the Getting Started refresh: paste-ready redrafted slide copy (kills the stale "just play" and "Open Player Window" text, retitles Player Connections to Player Views, adds the shared-screen table path) plus shot-by-shot scripts for the two onboarding videos ("Make a map in 2 mins" and "Set up your table"). Docs only.
+
 ## v2.16.113 — 2026-06-02
 
 Documentation refresh for the 2.17 release: added the high-level v2.17.0 changelog (Player Voice, annotations, in-map video, Player Views panel), and brought README + HELP up to date — new feature sections for Player Voice / annotations / in-map video, the Player Views panel (replacing Player Connection + Scaled View), the reorganised Settings, the atmospheric filter family, and corrected stale naming (Show Player View, Save Map Pack). Docs only.
