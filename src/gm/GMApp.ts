@@ -2068,14 +2068,15 @@ export class GMApp {
     // Variables stay scoped so the no-connection greying below still
     // computes the right totals.
     const projTotal = this.projectorConnections.size;
-    void localPlayers; void totalPlayers;
+    void localPlayers; void totalPlayers; void projTotal;
 
-    // Grey out the broadcast toggle on the Player Views panel header
-    // when neither players NOR projectors are connected — the bypass is
-    // moot in that state. CSS handles the visual fade; the toggle stays
-    // clickable so the GM can pre-set state before joining audience arrives.
+    // v2.17.0 — the Player Views panel header no longer fades when no
+    // players / scaled views are connected. With the panel now hosting the
+    // join QR + Show Player View (useful before anyone connects), the
+    // "broadcast is moot" fade is redundant — keep it always bright. Clear
+    // the class in case it was applied by an earlier build.
     document.querySelector('#projection-panel .panel-header')
-      ?.classList.toggle('panel-header--no-connection', totalPlayers === 0 && projTotal === 0);
+      ?.classList.remove('panel-header--no-connection');
 
     // v2.14.5 — refresh the rect chrome so the eye-icon "no-target"
     // greying updates in lock-step with the panel-header fade.
@@ -2100,8 +2101,28 @@ export class GMApp {
     // (external scanners don't use the same-browser instance namespace).
     let url = this._buildPlayerUrl(code);
     try { const u = new URL(url); u.search = ''; url = u.toString(); } catch { /* keep as-is */ }
-    if (urlEl) urlEl.textContent = url;
-    if (canvas) void QRCode.toCanvas(canvas, url, { width: 160, margin: 1 }).catch(() => { /* ignore */ });
+    // v2.17.0 — both the QR and the URL are click-to-copy. onclick (not
+    // addEventListener) so repeated renders don't stack duplicate handlers.
+    if (urlEl) {
+      urlEl.textContent = url;
+      urlEl.title = 'Click to copy the player URL';
+      urlEl.style.cursor = 'pointer';
+      urlEl.onclick = () => this._copyPlayerUrl(url);
+    }
+    if (canvas) {
+      canvas.title = 'Click to copy the player URL';
+      canvas.style.cursor = 'pointer';
+      canvas.onclick = () => this._copyPlayerUrl(url);
+      void QRCode.toCanvas(canvas, url, { width: 160, margin: 1 }).catch(() => { /* ignore */ });
+    }
+  }
+
+  /** v2.17.0 — copy the canonical player URL to the clipboard with a
+   *  status-bar confirmation. Used by the click-to-copy QR + URL. */
+  private _copyPlayerUrl(url: string): void {
+    void navigator.clipboard?.writeText(url)
+      .then(() => this.setStatus('Player URL copied to clipboard', 'ok'))
+      .catch(() => this.setStatus('Could not copy — select the URL to copy it manually', 'warn'));
   }
 
   /** v2.16.103 — window & capability summary for the Player connections
