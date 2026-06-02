@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.94 — 2026-06-02
+
+In-map YouTube videos now take on the active visual filter's tint (CSS approximation) on the player + projector, matching the map. No per-map toggle — turn the visual filter off to remove it. The filter can only tint, not stylise (cross-origin video can't be re-shaded), so painterly filters have no effect on the clip.
+
 ## v2.16.93 — 2026-06-02
 
 Map Pack panel: the "Edit this Handout / Composite Map" buttons moved down to sit below the backdrop + grid-colour rows, just above the Swap Asset / Clone / Delete actions.

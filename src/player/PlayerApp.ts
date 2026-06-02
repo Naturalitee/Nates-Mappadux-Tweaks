@@ -1043,6 +1043,15 @@ export class PlayerApp {
     } else {
       layer.style.filter = '';
     }
+    // v2.16.94 — the in-map YouTube video layer ALWAYS participates in the
+    // scene look (no per-map toggle, unlike markers): onboarding / cutscene
+    // clips get the same CSS-approx tint as the map. The GM removes it by
+    // turning the visual filter off. DOM filter applies to the iframe at the
+    // compositing stage, so cross-origin YouTube content tints fine.
+    const videoLayer = document.getElementById('textmap-video-layer');
+    if (videoLayer) {
+      videoLayer.style.filter = this.lastFilter ? cssApproxForFilter(this.lastFilter.filterId) : '';
+    }
   }
 
   /** Ask the GM to resend a specific player's icon. Debounced per playerId so

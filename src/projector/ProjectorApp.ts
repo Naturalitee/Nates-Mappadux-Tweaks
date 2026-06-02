@@ -894,6 +894,16 @@ export class ProjectorApp {
     } else {
       layer.style.filter = '';
     }
+    // v2.16.94 — the in-map YouTube video layer ALWAYS participates in the
+    // scene look (no per-map toggle, unlike markers), but still respects the
+    // projector's master filter gate (forceOff). GM removes it by turning the
+    // visual filter off.
+    const videoLayer = document.getElementById('textmap-video-layer');
+    if (videoLayer) {
+      videoLayer.style.filter = (!forceOff && this.currentFilter)
+        ? cssApproxForFilter(this.currentFilter.filterId)
+        : '';
+    }
   }
 
   private _renderMarkers(): void {
