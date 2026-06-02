@@ -84,22 +84,16 @@ export class PlayerPip {
   popOut(): void {
     const raw = this.getPlayerUrl();
     if (!raw) return;
-    // v2.16.104 — a popped-out window is a REAL player view: you hand it to a
-    // participant or put it on their screen. Strip BOTH preview flags so it
-    // behaves as a normal player:
-    //  - gmPreview marks the inline PiP as a non-registering GM preview, so it
-    //    only registered as a player when "Show full player UI in the GM
-    //    preview window" was on — that setting should gate the inline preview
-    //    ONLY, not pop-outs / remote windows.
-    //  - pip drives _isPip, which nulls the fullscreen button (and mutes the
-    //    inline preview). A standalone window wants sound + fullscreen.
+    // v2.16.107 — a pop-out is still the GM's OWN preview window, just on a
+    // second screen — so KEEP gmPreview: it must not register as a phantom
+    // player (that preview gating is correct for GM-local windows; real
+    // participants register by scanning the clean QR / opening the LAN URL,
+    // neither of which carries gmPreview). But DROP pip — that flag is only
+    // for the tiny inline PiP (it nulls the fullscreen button + mutes), and a
+    // standalone window wants the fullscreen button + sound.
     let url = raw;
-    try {
-      const u = new URL(raw);
-      u.searchParams.delete('gmPreview');
-      u.searchParams.delete('pip');
-      url = u.toString();
-    } catch { /* malformed URL — fall back to the raw string */ }
+    try { const u = new URL(raw); u.searchParams.delete('pip'); url = u.toString(); }
+    catch { /* malformed URL — fall back to the raw string */ }
     window.open(url, '_blank', 'noopener,popup,width=1280,height=720');
     // Match the existing Hide behaviour: persist intent + show pill.
     this.hide();

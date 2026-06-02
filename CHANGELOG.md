@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.107 — 2026-06-02
+
+A popped-out player window is the GM's own preview on a second screen, so it stays a preview (it no longer registers itself as a phantom player) but now drops the inline-preview flag so it gets the fullscreen button and sound. Real participants still register by scanning the QR or opening the LAN URL, which carry no preview flags.
+
 ## v2.16.106 — 2026-06-02
 
 The join QR now encodes one canonical player URL everywhere, with no window-specific options. Previously the QR shown inside the inline player preview carried its gmPreview / pip flags, so scanning it would have opened a muted, non-registering preview instead of a normal player view. The QR (player view, projector, scaled monitor, and the GM Player connections panel) is now just the clean player URL plus the room code.
