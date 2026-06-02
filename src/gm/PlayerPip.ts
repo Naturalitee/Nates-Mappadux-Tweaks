@@ -82,8 +82,17 @@ export class PlayerPip {
    *  closes; the pill button comes back so the GM can spawn another
    *  inline preview alongside the popped-out one. */
   popOut(): void {
-    const url = this.getPlayerUrl();
-    if (!url) return;
+    const raw = this.getPlayerUrl();
+    if (!raw) return;
+    // v2.16.104 — a popped-out window is a REAL player view: you hand it to a
+    // participant or put it on their screen. Strip the gmPreview flag (which
+    // marks the INLINE PiP as a non-registering GM preview) so the pop-out
+    // self-registers like any player. Without this it only registered when
+    // "Show full player UI in the GM preview window" was on — and that setting
+    // is meant to gate the inline preview ONLY, not pop-outs / remote windows.
+    let url = raw;
+    try { const u = new URL(raw); u.searchParams.delete('gmPreview'); url = u.toString(); }
+    catch { /* malformed URL — fall back to the raw string */ }
     window.open(url, '_blank', 'noopener,popup,width=1280,height=720');
     // Match the existing Hide behaviour: persist intent + show pill.
     this.hide();

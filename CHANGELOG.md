@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.104 — 2026-06-02
+
+Fixed: a popped-out player window now registers as a real player on its own. Previously a pop-out was treated as a GM preview window, so it only showed up as a connected player when "Show full player UI in the GM preview window" was enabled. That setting now gates only the inline Show Player View preview, as intended; pop-outs and remote devices register normally.
+
 ## v2.16.103 — 2026-06-02
 
 Renamed the Scaled View panel to Player Views, with two collapsible subsections: Player connections (a join QR pointing at the LAN player URL, plus a summary of connected player windows by type — local windows, scaled views, and remote, split PC vs mobile) and Scaled view (the existing projector controls). The connections summary is a window/capability count, not the player roster — that stays in the separate Players panel.
