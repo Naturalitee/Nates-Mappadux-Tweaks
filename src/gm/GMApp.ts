@@ -5559,6 +5559,9 @@ export class GMApp {
       for (const target of targets) {
         this.host.broadcast({ type: 'view_placeholder', target, show, message });
       }
+      // v2.16.108 — remember it so a viewer that connects WHILE faffing gets
+      // the hold screen on connect (full_state would otherwise show the map).
+      this.host.setFaffState(show, message);
       // v2.14.3 — refresh the rect overlay so the eye icons on both
       // viewport rects mirror the new broadcast state (panel-header
       // toggle ↔ rect eyes stay in sync in both directions).

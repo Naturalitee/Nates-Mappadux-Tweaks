@@ -69,6 +69,12 @@ export class Host {
    *  full_state (including the BroadcastChannel one a same-browser
    *  preview / pop-out requests on open) carries them. */
   private lastTextMapVideos:    TextMapVideoElement[] = [];
+  /** v2.16.108 — current "GM is faffing" hold-screen state (the Player
+   *  Views broadcast toggle, off = hold screen). Cached so a viewer
+   *  joining WHILE it's off gets the hold screen on connect instead of
+   *  the live map (the placeholder was a one-time broadcast otherwise). */
+  private _faffActive  = false;
+  private _faffMessage = '';
   private lastIconData:         MarkerIconData[] = [];
   private lastSoundboardActive: SoundboardAudioData[] = [];
   private lastSoundboardAssets: { assetId: string; dataUrl: string }[] = [];
@@ -176,6 +182,12 @@ export class Host {
           ...(this.lastTextMapVideos.length > 0      ? { textMapVideos:     this.lastTextMapVideos  } : {}),
         };
         this.local.send(msg);
+        // v2.16.108 — if the GM is faffing (broadcast toggle off), the new
+        // local window must see the hold screen, not the live map.
+        if (this._faffActive) {
+          this.local.send({ type: 'view_placeholder', target: 'player',    show: true, message: this._faffMessage });
+          this.local.send({ type: 'view_placeholder', target: 'projector', show: true, message: this._faffMessage });
+        }
         // Deliver active positional plays inline (BroadcastChannel supports large payloads)
         for (const p of this.lastPositionalActive.values()) {
           this.local.send({ type: 'positional_play', markerId: p.markerId, assetId: p.assetId, loop: p.loop, volume: p.volume, dataUrl: p.dataUrl });
@@ -376,6 +388,14 @@ export class Host {
     this.lastTextMapVideos = videos;
   }
 
+  /** v2.16.108 — remember whether the broadcast toggle is showing the hold
+   *  screen, so a late joiner gets it on connect. message is the shared faff
+   *  line currently displayed to existing viewers. */
+  setFaffState(active: boolean, message: string): void {
+    this._faffActive  = active;
+    this._faffMessage = message;
+  }
+
   setLastMapGridColor(color: string | undefined): void {
     this.lastMapGridColor = color;
   }
@@ -442,6 +462,12 @@ export class Host {
           ...(this.lastTextMapVideos.length > 0      ? { textMapVideos:     this.lastTextMapVideos  } : {}),
         };
         this.sendTo(conn, msg);
+        // v2.16.108 — if the GM is faffing (broadcast toggle off), the new
+        // peer must see the hold screen, not the live map it just received.
+        if (this._faffActive) {
+          this.sendTo(conn, { type: 'view_placeholder', target: 'player',    show: true, message: this._faffMessage });
+          this.sendTo(conn, { type: 'view_placeholder', target: 'projector', show: true, message: this._faffMessage });
+        }
         // Late-joiner video catchup — if the active map is animated,
         // deliver the cached full video bytes so the new peer can
         // swap from snapshot to VideoTexture, same as live peers did

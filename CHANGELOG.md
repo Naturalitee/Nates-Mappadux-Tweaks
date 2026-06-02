@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.108 — 2026-06-02
+
+Fixed: a player or projector that connects while the broadcast is toggled off (GM is faffing / hold screen showing) now sees the hold screen on connect, instead of briefly getting the live map. The hold state is remembered and sent to each new connection.
+
 ## v2.16.107 — 2026-06-02
 
 A popped-out player window is the GM's own preview on a second screen, so it stays a preview (it no longer registers itself as a phantom player) but now drops the inline-preview flag so it gets the fullscreen button and sound. Real participants still register by scanning the QR or opening the LAN URL, which carry no preview flags.
