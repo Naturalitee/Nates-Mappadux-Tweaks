@@ -1828,6 +1828,11 @@ export interface TextMapVideoElement extends TextMapElementBase {
   type:    'video';
   /** YouTube video id (parsed from the pasted URL via extractVideoId). */
   videoId: string;
+  /** v2.16.96 — As TextMapImageElement.lockAspect. ON by default for
+   *  video (clips are almost always 16:9, so keeping the ratio while
+   *  resizing avoids letterboxing). The reset button snaps the box back
+   *  to a true 16:9 at the current width. Toggle off to stretch freely. */
+  lockAspect?: boolean;
 }
 
 export interface TextMapAnimation {

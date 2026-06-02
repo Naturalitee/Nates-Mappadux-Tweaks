@@ -66,8 +66,10 @@ export function newVideoElement(videoId: string): TextMapElement {
   return {
     id:   'vid-' + generateId(),
     type: 'video',
-    x: 25, y: 28, w: 50, h: 28, // ~16:9 on a 4:3-ish page
+    x: 25, y: 28, w: 50, h: 28, // ~16:9 placeholder; editor snaps to exact 16:9 for the page aspect
     videoId,
+    // v2.16.96 — clips are almost always 16:9, so lock the ratio by default.
+    lockAspect: true,
   };
 }
 

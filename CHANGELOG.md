@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.96 — 2026-06-02
+
+Text Map editor: video elements now get the same aspect-lock + reset chrome as images. Aspect lock is ON by default (clips are almost always 16:9, so resizing keeps the ratio), and the reset button snaps the box to a true 16:9 at the current width. New videos are created at 16:9 for the page.
+
 ## v2.16.95 — 2026-06-02
 
 In-map YouTube videos are now GM-controlled. Only the GM has video controls (play / pause / seek / volume) via YouTube's own chrome; the player + projector have no controls and follow the GM within about half a second (state + position synced, not frame-accurate). The GM's own video is muted so it never echoes the room screen; viewers carry the audio at the GM's volume.

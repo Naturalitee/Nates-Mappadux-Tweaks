@@ -1282,18 +1282,24 @@ export class TextMapEditor {
     // at the current width — undoes any stretching the GM did.
     // Text elements skip this — handout text boxes are designed
     // for free reflow at any aspect.
-    if (el.type === 'image') {
+    if (el.type === 'image' || el.type === 'video') {
       const resetBtn = document.createElement('button');
       resetBtn.type = 'button';
       resetBtn.className = 'txt-map-el-reset';
-      resetBtn.title = 'Reset bounding box to the image\'s natural aspect at the current width.';
+      resetBtn.title = el.type === 'video'
+        ? 'Snap the bounding box to a true 16:9 at the current width.'
+        : 'Reset bounding box to the image\'s natural aspect at the current width.';
       resetBtn.innerHTML =
         '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
           '<path d="M3 12a9 9 0 1 0 3-6.7"/>' +
           '<polyline points="3 4 3 9 8 9"/>' +
         '</svg>';
       resetBtn.addEventListener('pointerdown', (ev) => ev.stopPropagation());
-      resetBtn.addEventListener('click', (ev) => { ev.stopPropagation(); void this._resetElementAspect(el.id); });
+      resetBtn.addEventListener('click', (ev) => {
+        ev.stopPropagation();
+        if (el.type === 'video') this._resetVideoAspect(el.id);
+        else void this._resetElementAspect(el.id);
+      });
       host.appendChild(resetBtn);
 
       const locked = el.lockAspect ?? true;
@@ -1428,12 +1434,28 @@ export class TextMapEditor {
     if (host) this._applyGeometry(host, el);
   }
 
+  /** v2.16.96 — Snap a video element's box to a true 16:9 at the
+   *  current width. Mirrors _resetElementAspect but the target ratio
+   *  is fixed (16:9) rather than read from an asset. Element w/h are
+   *  in % of page, so convert the pixel-aspect through the page's own
+   *  pixel aspect. */
+  private _resetVideoAspect(elementId: string): void {
+    const el = this.elements.find((x) => x.id === elementId);
+    if (!el || el.type !== 'video') return;
+    this._pushUndo();
+    const pageAspect = this.cfg.width / Math.max(1, this.cfg.height);
+    el.h = el.w * pageAspect * 9 / 16;
+    clampElementGeometry(el);
+    const host = this.elementNodes.get(elementId);
+    if (host) this._applyGeometry(host, el);
+  }
+
   /** v2.14.102 — Toggle the per-element aspect-ratio lock on an
    *  image element. Pushes undo + re-mounts the element so the
    *  lock button's icon + active state refresh. */
   private _toggleLockAspect(elementId: string): void {
     const el = this.elements.find((x) => x.id === elementId);
-    if (!el || el.type !== 'image') return;
+    if (!el || (el.type !== 'image' && el.type !== 'video')) return;
     this._pushUndo();
     el.lockAspect = !(el.lockAspect ?? true);
     // Re-mount so the lock button's SVG + active class swap. Cheap
@@ -1877,6 +1899,14 @@ export class TextMapEditor {
     const id = extractVideoId(raw.trim());
     if (!id) { window.alert('That doesn’t look like a YouTube link.'); return; }
     const el = newVideoElement(id);
+    // v2.16.96 — snap to a true 16:9 box for THIS page's aspect (the factory
+    // default is only a 4:3-page approximation) before mount, so creation is
+    // a single undo step.
+    if (el.type === 'video') {
+      const pageAspect = this.cfg.width / Math.max(1, this.cfg.height);
+      el.h = el.w * pageAspect * 9 / 16;
+      clampElementGeometry(el);
+    }
     this._pushUndo();
     this.elements.push(el);
     this._mountElement(el);
@@ -1951,7 +1981,7 @@ export class TextMapEditor {
       // dominant axis wins — whichever the cursor pulled further
       // from the start drives the other through the start aspect.
       // Text elements always free-resize; their content reflows.
-      if (el.type === 'image' && (el.lockAspect ?? true)
+      if ((el.type === 'image' || el.type === 'video') && (el.lockAspect ?? true)
           && state.startGeom.w > 0 && state.startGeom.h > 0) {
         const aspect = state.startGeom.w / state.startGeom.h;
         const wRel = Math.abs((newW - state.startGeom.w) / state.startGeom.w);
