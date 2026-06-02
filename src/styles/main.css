@@ -7330,6 +7330,25 @@ option.select-option--add {
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.5);
 }
 .textmap-video iframe { width: 100%; height: 100%; border: 0; display: block; }
+/* v2.16.101 — LONG-SHOT for Android: a phone renders video through a
+   hardware overlay that "punch-throughs" the web layer, but the clip
+   (overflow:hidden + border-radius), the box-shadow, and stacking over
+   the WebGL map canvas all break that hole — leaving just the outline.
+   On touch devices, drop the decorative clip/shadow and promote the
+   iframe to its own compositing layer to give the overlay a clean punch.
+   Helps on some Android/Chrome builds, no-op on others; desktop keeps
+   its rounded, shadowed frame. */
+@media (hover: none) and (pointer: coarse) {
+  .textmap-video {
+    overflow: visible;
+    border-radius: 0;
+    box-shadow: none;
+  }
+  .textmap-video iframe {
+    transform: translateZ(0);
+    will-change: transform;
+  }
+}
 
 /* Whiteboard canvas overlays the map exactly. pointer-events:none by
    default so the map gets pan/zoom; the GM's draw toggle flips it to auto. */

@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.101 — 2026-06-02
+
+Long-shot attempt at getting in-map YouTube videos to render on Android (currently just an outline): on touch devices, drop the video box clip / rounded corners / shadow and promote the iframe to its own layer, to give Android's hardware video overlay a clean hole to punch through. May or may not help depending on device; desktop is unchanged.
+
 ## v2.16.100 — 2026-06-02
 
 In-map videos now ride in the full connection snapshot every new view requests on open, so a freshly opened Show Player View / popped-out window (or any late joiner) shows the video immediately, without needing a map change to trigger it.
