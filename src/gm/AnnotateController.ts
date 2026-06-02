@@ -3,7 +3,7 @@ import { ClocksLayer } from '../annotate/ClocksLayer.ts';
 import { WhiteboardLayer } from '../annotate/WhiteboardLayer.ts';
 import { TimersLayer } from '../annotate/TimersLayer.ts';
 import { NotesLayer } from '../annotate/NotesLayer.ts';
-import { emptyAnnotateState, loadAnnotateState, saveAnnotateState, makeClock, makeTimer, makeNote } from '../annotate/annotateState.ts';
+import { emptyAnnotateState, makeClock, makeTimer, makeNote } from '../annotate/annotateState.ts';
 import { generateId } from '../utils/id.ts';
 
 export interface AnnotateControllerCallbacks {
@@ -26,6 +26,10 @@ export interface AnnotateControllerOpts {
   whiteboardCanvas: HTMLCanvasElement;
   project: (x: number, y: number) => { x: number; y: number } | null;
   unproject: (clientX: number, clientY: number) => { x: number; y: number } | null;
+  /** v2.16.84 — read the active map's saved annotations from SessionState. */
+  loadAnnotate: () => AnnotateState;
+  /** v2.16.84 — persist the annotations into SessionState (→ IDB + pack). */
+  persist: (state: AnnotateState) => void;
 }
 
 /** Preset clock colours — red danger, amber, green racing, cyan, violet, white. */
@@ -107,10 +111,11 @@ export class AnnotateController {
     return { ...t, running: true, startedAt: Date.now() };
   }
 
-  /** Switch to a map: load its saved annotations, render, re-broadcast. */
+  /** Switch to a map: load its saved annotations (from SessionState),
+   *  render, re-broadcast. */
   setMap(mapId: string | null): void {
     this.mapId = mapId;
-    this.state = mapId ? loadAnnotateState(mapId) : emptyAnnotateState();
+    this.state = mapId ? this.opts.loadAnnotate() : emptyAnnotateState();
     this._renderLocal();
     this._broadcastAll();
   }
@@ -249,7 +254,9 @@ export class AnnotateController {
 
   private _mutate(fn: (s: AnnotateState) => AnnotateState): void {
     this.state = fn(this.state);
-    if (this.mapId) saveAnnotateState(this.mapId, this.state);
+    // v2.16.84 — persist into SessionState (→ debounced IDB save + .mappadux
+    // pack export). No more separate localStorage key.
+    if (this.mapId) this.opts.persist(this.state);
     this._renderLocal();
     // Re-broadcast the small HUD lists (clocks + timers + player notes).
     // Strokes broadcast individually at their own call sites.

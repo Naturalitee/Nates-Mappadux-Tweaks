@@ -476,6 +476,10 @@ export interface SessionState {
   /** Projector viewport position + rotation (per-map). Optional — only set
    *  once a projector has connected at least once. */
   projectorViewport?: ProjectorViewport;
+  /** v2.16.84 — per-map annotations (progress clocks, timers, notes,
+   *  whiteboard strokes). Part of the map's saved data: persists in IDB
+   *  and travels in the .mappadux pack. */
+  annotate?: AnnotateState;
 }
 
 export function defaultSessionState(): SessionState {

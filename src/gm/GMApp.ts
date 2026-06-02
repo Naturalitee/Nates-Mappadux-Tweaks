@@ -38,6 +38,7 @@ import { LLMClient } from '../ai/LLMClient.ts';
 import { InitiativeTracker } from './InitiativeTracker.ts';
 import { loadInitiativeState, stripInitiativeForWire } from '../initiative/initiativeState.ts';
 import { AnnotateController } from './AnnotateController.ts';
+import { emptyAnnotateState } from '../annotate/annotateState.ts';
 import { isAnnotateMuted, setAnnotateMuted } from '../storage/localSettings.ts';
 import { SoundboardEngine } from '../audio/SoundboardEngine.ts';
 import { Renderer } from '../rendering/Renderer.ts';
@@ -6571,6 +6572,10 @@ export class GMApp {
           const r = wrap.getBoundingClientRect();
           return this.renderer.canvasCssToMapNorm(cx - r.left, cy - r.top);
         },
+        // v2.16.84 — annotations live in SessionState (per-map; saved to IDB
+        // + travels in the .mappadux pack).
+        loadAnnotate: () => this.state.snapshot().annotate ?? emptyAnnotateState(),
+        persist: (st) => this.state.setAnnotate(st),
       },
       {
         broadcastClocks: (clocks) => this.host.broadcast({ type: 'annotate_clocks', clocks }),

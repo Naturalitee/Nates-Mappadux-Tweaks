@@ -73,6 +73,9 @@ export abstract class AnchoredLayer<T extends AnchoredObject> {
   protected onResized?(obj: T, content: HTMLElement): void;
   /** Extra class on the object box (e.g. 'a-note' / 'clock' for styling). */
   protected abstract objClass(obj: T): string;
+  /** The object's chosen colour — drives the selection outline + chrome
+   *  accents (instead of the view-identity green/orange). */
+  protected abstract objColor(obj: T): string;
 
   private _render(): void {
     this.root.replaceChildren();
@@ -80,6 +83,7 @@ export abstract class AnchoredLayer<T extends AnchoredObject> {
     for (const o of this.objects) {
       const box = document.createElement('div');
       box.className = `anchored-obj ${this.objClass(o)}` + (this.selectedId === o.id ? ' is-selected' : '');
+      box.style.setProperty('--obj-color', this.objColor(o));
       box.dataset['id'] = o.id;
       const content = document.createElement('div');
       content.className = 'anchored-content';
@@ -110,36 +114,27 @@ export abstract class AnchoredLayer<T extends AnchoredObject> {
   }
 
   private _addChrome(box: HTMLElement, o: T, content: HTMLElement): void {
-    const move = document.createElement('div');
-    move.className = 'anchored-handle anchored-handle--move';
-    move.title = 'Move';
+    // Reuse the established editor-chrome visual language (marker-handle):
+    // 26px fixed-size handles, circular move (TL), red trashcan delete (BL),
+    // rounded-square green resize (BR), rotate above with a green stem.
+    const move = mkHandle('marker-handle anchored-handle--move', 'Move', ICON_MOVE);
     box.appendChild(move);
     this._drag(move, o, content, 'move');
 
     if (this.selectedId === o.id) {
-      const del = document.createElement('button');
-      del.type = 'button';
-      del.className = 'anchored-handle anchored-handle--del';
-      del.textContent = '×';
-      del.title = 'Delete';
+      const del = mkHandle('marker-handle marker-handle--delete anchored-handle--del', 'Delete', ICON_TRASH);
       del.addEventListener('pointerdown', (e) => e.stopPropagation());
       del.addEventListener('click', (e) => { e.stopPropagation(); this.cb.onRemove?.(o.id); });
       box.appendChild(del);
 
-      const rez = document.createElement('div');
-      rez.className = 'anchored-handle anchored-handle--resize';
-      rez.title = 'Resize';
+      const rez = mkHandle('marker-handle anchored-handle--resize', 'Resize', ICON_RESIZE);
       box.appendChild(rez);
       this._drag(rez, o, content, 'resize');
 
-      // Rotate handle — above top-centre with a connecting stem, matching
-      // the marker/editor convention. Snaps near the cardinals (±2°).
       const stem = document.createElement('div');
       stem.className = 'anchored-rotate-stem';
       box.appendChild(stem);
-      const rot = document.createElement('div');
-      rot.className = 'anchored-handle anchored-handle--rotate';
-      rot.title = 'Rotate';
+      const rot = mkHandle('marker-handle anchored-handle--rotate', 'Rotate', ICON_ROTATE);
       box.appendChild(rot);
       this._rotate(rot, box, o);
     }
@@ -215,4 +210,22 @@ export abstract class AnchoredLayer<T extends AnchoredObject> {
     handle.addEventListener('pointerup', end);
     handle.addEventListener('pointercancel', () => { startN = null; base = null; });
   }
+}
+
+// ── Editor-chrome icons (match the established marker handles) ───────────────
+
+const _SVG = (paths: string) =>
+  `<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${paths}</svg>`;
+
+const ICON_MOVE = _SVG('<polyline points="5 9 2 12 5 15"/><polyline points="9 5 12 2 15 5"/><polyline points="15 19 12 22 9 19"/><polyline points="19 9 22 12 19 15"/><line x1="2" y1="12" x2="22" y2="12"/><line x1="12" y1="2" x2="12" y2="22"/>');
+const ICON_RESIZE = _SVG('<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>');
+const ICON_TRASH = _SVG('<path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/><line x1="10" y1="11" x2="10" y2="17"/><line x1="14" y1="11" x2="14" y2="17"/>');
+const ICON_ROTATE = _SVG('<path d="M3 12a9 9 0 1 0 3-6.7"/><polyline points="3 4 3 9 8 9"/>');
+
+function mkHandle(className: string, title: string, iconSvg: string): HTMLDivElement {
+  const el = document.createElement('div');
+  el.className = className;
+  el.title = title;
+  el.innerHTML = iconSvg;
+  return el;
 }

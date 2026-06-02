@@ -43,6 +43,7 @@ export class NotesLayer extends AnchoredLayer<AnnotateNote> {
   }
 
   protected objClass(): string { return 'a-note'; }
+  protected objColor(n: AnnotateNote): string { return n.color; }
 
   protected renderContent(n: AnnotateNote, content: HTMLElement): void {
     content.style.setProperty('--note-color', n.color);

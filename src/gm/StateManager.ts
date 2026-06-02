@@ -130,6 +130,14 @@ export class StateManager {
     this._notify(['fog']);
   }
 
+  /** v2.16.84 — store the per-map annotation state (clocks/timers/notes/
+   *  whiteboard). Part of SessionState, so it auto-persists (debounced) to
+   *  IDB and travels in the .mappadux pack. */
+  setAnnotate(annotate: import('../types.ts').AnnotateState): void {
+    this.state = { ...this.state, annotate };
+    this._notify(['annotate']);
+  }
+
   setUndoHook(hook: ((kind: 'fog' | 'markers') => void) | null): void {
     this.undoHook = hook;
   }

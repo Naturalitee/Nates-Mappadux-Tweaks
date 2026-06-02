@@ -7205,43 +7205,31 @@ option.select-option--add {
 }
 :not(.is-interactive) > .anchored-obj { pointer-events: none; }
 .anchored-content { width: 100%; height: 100%; box-sizing: border-box; }
-.anchored-obj.is-selected { outline: 2px dashed var(--accent); outline-offset: 2px; }
-
-/* Editor chrome — select/move (TL), delete (BL), resize (BR), rotate
-   (above, with stem). Fixed px so they stay grabbable at any object size. */
-.anchored-handle {
-  position: absolute;
-  width: 18px;
-  height: 18px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background: rgba(20, 26, 42, 0.96);
-  border: 1px solid #fff;
-  border-radius: 50%;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.55);
-  pointer-events: auto;
+/* v2.16.84 — selection + chrome key off the OBJECT's colour (the green/
+   orange are view-identity only). Handles reuse the established
+   .marker-handle look (26px fixed, dark/white, translate-centred on the
+   box corners) so the design language is consistent; the resize grip is
+   the rounded-square in the object's colour. */
+.anchored-obj.is-selected { outline: 2px dashed var(--obj-color, var(--accent)); outline-offset: 2px; }
+.anchored-handle--move   { top: 0;    left: 0;    cursor: move; z-index: 6; }
+.anchored-handle--del    { top: 100%; left: 0;    z-index: 6; }
+.anchored-handle--resize {
+  top: 100%; left: 100%;
+  cursor: nwse-resize;
+  border-radius: 6px;
+  border-width: 2px;
+  border-color: var(--obj-color, rgba(255, 255, 255, 0.85));
   z-index: 6;
-  padding: 0;
 }
-.anchored-handle--move   { top: -9px;  left: -9px;  cursor: move; }
-.anchored-handle--resize { bottom: -9px; right: -9px; cursor: nwse-resize; }
-.anchored-handle--rotate { top: -28px; left: 50%; transform: translateX(-50%); cursor: grab; }
-.anchored-handle--del {
-  bottom: -9px; left: -9px;
-  background: var(--bg-base);
-  border-color: var(--danger);
-  color: var(--danger);
-  font-size: 13px; line-height: 1; cursor: pointer;
-}
-.anchored-handle--del:hover { background: var(--danger); color: #fff; }
+.anchored-handle--rotate { top: -32px; left: 50%; cursor: grab; z-index: 6; }
 .anchored-rotate-stem {
   position: absolute;
-  top: -19px; left: 50%;
-  width: 1.5px; height: 19px;
-  background: rgba(255, 255, 255, 0.6);
+  top: -20px; left: 50%;
+  width: 0; height: 20px;
   transform: translateX(-50%);
+  border-left: 2px solid var(--obj-color, rgba(255, 255, 255, 0.6));
   pointer-events: none;
+  z-index: 1;
 }
 
 /* Notes content — text box; the font is auto-fit by JS to fill the box. */

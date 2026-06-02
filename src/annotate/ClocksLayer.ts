@@ -27,6 +27,7 @@ export class ClocksLayer extends AnchoredLayer<ProgressClock> {
   setClocks(clocks: ProgressClock[]): void { this.setObjects(clocks); }
 
   protected objClass(): string { return 'a-clock'; }
+  protected objColor(c: ProgressClock): string { return c.color; }
 
   protected renderContent(c: ProgressClock, content: HTMLElement): void {
     content.style.setProperty('--clock-color', c.color);

@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.16.84 — 2026-06-02
+
+Annotate: now **part of the map data** — annotations live in the per-map SessionState, so they save to IndexedDB and travel inside the `.mappadux` pack (no more separate localStorage key). Editor chrome rebuilt to reuse our **established handle design** (fixed 26px marker-style handles with the standard move / trashcan-delete / rounded-square resize / rotate icons — they no longer shrink on zoom). Chrome accents (selection outline, resize grip, rotate stem) now key off the **object's own colour** rather than the green/orange view-identity colours.
+
+## v2.16.83 — 2026-06-02
+
+Annotate: note text re-fits on map zoom (ResizeObserver per note) so it always fills its frame.
+
 ## v2.16.82 — 2026-06-02
 
 Annotate — big rebuild: clocks, timers, and notes are now **map-anchored** (position + size stored in map coordinates), so they pan/zoom with the map and render **1:1 between GM and player/projector** — place one off-map and it's off the player's view until the GM pans there, just like markers. All three share one **editor-chrome** model: a select/move handle (top-left), delete (bottom-left), resize (bottom-right), and **rotate** (above, with stem, snaps near cardinals). Content scales with the box (container-query units) so clocks/timers grow + shrink cleanly; notes still auto-fit their text. They render as DOM overlays above the map, so they're unaffected by visual filters.

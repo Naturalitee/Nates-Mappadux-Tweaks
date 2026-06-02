@@ -55,6 +55,7 @@ export class TimersLayer extends AnchoredLayer<AnnotateTimer> {
   override destroy(): void { clearInterval(this.tick); super.destroy(); }
 
   protected objClass(t: AnnotateTimer): string { return 'a-timer' + (t.mode === 'countdown' ? ' is-countdown' : ''); }
+  protected objColor(t: AnnotateTimer): string { return t.color; }
 
   private _tick(): void {
     for (const t of this.objects) {
