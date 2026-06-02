@@ -154,8 +154,12 @@ export class SettingsDialog {
     if (isInProgressEnabled()) {
       body.appendChild(this._buildStagecraftSection());
     }
-    // ── Player Voice section ─────────────────────────────────────────────
-    body.appendChild(this._buildPlayerVoiceSection());
+    // ── Player Permissions / Game System / Reply Assistant ───────────────
+    // v2.16.109 — split the old "Player Voice" section into three focused
+    // ones so each reads on its own.
+    body.appendChild(this._buildPlayerPermissionsSection());
+    body.appendChild(this._buildGameSystemSection());
+    body.appendChild(this._buildReplyAssistantSection());
     // ── API Keys section ─────────────────────────────────────────────────
     body.appendChild(this._buildApiKeysSection());
     // ── Danger Zone ──────────────────────────────────────────────────────
@@ -462,16 +466,16 @@ export class SettingsDialog {
 
   // ─── Player Voice ─────────────────────────────────────────────────────────
 
-  private _buildPlayerVoiceSection(): HTMLElement {
+  private _buildPlayerPermissionsSection(): HTMLElement {
     const sec = mkSection(
-      'Player Voice',
-      'What connected players can do beyond watching. Each interaction can be switched off if it doesn’t suit your table.',
+      'Player Permissions',
+      'What connected players can do beyond watching. Switch off anything that doesn’t suit your table.',
     );
 
     sec.appendChild(this._buildPerfToggle({
       title: 'Allow player pings',
       help:
-        'Lets players right-click (or long-press on touch) the map to ping a point. Everyone sees a pulse in that player’s colour for a few seconds; on your screen it stays put, labelled with their name, until you dismiss it.',
+        'Players right-click (long-press on touch) the map to ping a point. Everyone sees a pulse in that player’s colour; on your screen it stays, labelled, until you dismiss it.',
       get: arePingsEnabled,
       set: setPingsEnabled,
     }));
@@ -479,7 +483,7 @@ export class SettingsDialog {
     sec.appendChild(this._buildPerfToggle({
       title: 'Allow player messages',
       help:
-        'Lets players message you privately, or message each other (those are copied to you). Messages arrive in the Player Voice panel, which shows an unread count.',
+        'Players message you privately, or each other (copied to you). Messages arrive in the Player Voice panel with an unread count.',
       get: isMessagingEnabled,
       set: setMessagingEnabled,
     }));
@@ -487,22 +491,40 @@ export class SettingsDialog {
     sec.appendChild(this._buildPerfToggle({
       title: 'Let players move their own token',
       help:
-        'When you’ve placed a player’s token on the map, this lets that player drag it from their own view — you see it move live and get a “send it back” button if you want to undo it. Turn off to keep token placement entirely in your hands.',
+        'Lets a player drag their placed token from their own view — you see it move live, with a “send it back” undo. Off keeps token placement in your hands.',
       get: arePlayerMarkersMovable,
       set: setPlayerMarkersMovable,
     }));
 
     sec.appendChild(this._buildPerfToggle({
-      title: 'Show full player UI in the GM preview window',
+      title: 'Full player UI in the GM preview window',
       help:
-        'Your "Open Player Window" popup isn’t a real player. With this OFF (default) the popup hides identity prompts, the floating identity pill, message toasts, the right-click action menu, and the initiative roll prompt — it still shows the map, tokens, and the atmospheric initiative rail so you can preview what players see. Flip this ON when you want the preview to behave exactly like a real player view for testing. Detection is the ?gmPreview=1 URL flag the launcher adds, so real player tabs connecting via the QR are never affected by this setting.',
+        'Off (default): the inline Show Player View / pop-out preview hides identity prompts, the identity pill, toasts, the right-click menu and the roll prompt — handy for previewing what players see. On: the preview behaves as a real player. Only affects GM preview windows (?gmPreview flag); real players joining via the QR are never gated by this.',
       get: showFullPlayerUiInPreview,
       set: setShowFullPlayerUiInPreview,
     }));
 
-    sec.appendChild(this._buildInitiativeOrderBlock());
-    sec.appendChild(this._buildLlmAssistantBlock());
+    return sec;
+  }
 
+  /** v2.16.109 — Game-system rules that shape the table tools (currently the
+   *  initiative tracker's sort direction; room here for more later). */
+  private _buildGameSystemSection(): HTMLElement {
+    const sec = mkSection(
+      'Game System',
+      'Rules that shape the table tools for your system.',
+    );
+    sec.appendChild(this._buildInitiativeOrderBlock());
+    return sec;
+  }
+
+  /** v2.16.109 — the LLM reply assistant, promoted to its own section. */
+  private _buildReplyAssistantSection(): HTMLElement {
+    const sec = mkSection(
+      'Reply Assistant (LLM)',
+      'Optional LLM that drafts replies to player messages — click “Suggest replies” on a message in the Player Voice panel. Use a local LM Studio server (no key) or a hosted provider like OpenRouter (key + model). Everything stays between your browser and the endpoint you choose.',
+    );
+    sec.appendChild(this._buildLlmAssistantBlock());
     return sec;
   }
 
@@ -553,12 +575,7 @@ export class SettingsDialog {
     wrap.style.alignItems = 'stretch';
     wrap.style.gap = 'var(--space-sm)';
 
-    const header = document.createElement('div');
-    header.innerHTML =
-      '<strong>Reply assistant (LLM)</strong><br>' +
-      '<span class="settings-stat-sub">Suggests draft replies to player messages — click “Suggest replies” on a message in the Player Voice panel. Use a local <em>LM Studio</em> server (no key) or a hosted provider like <em>OpenRouter</em> (key + model). Everything stays between your browser and the endpoint you choose.</span>';
-    wrap.appendChild(header);
-
+    // v2.16.109 — header removed; the section title + intro now cover it.
     const enableLabel = document.createElement('label');
     enableLabel.className = 'toggle-switch';
     enableLabel.style.alignSelf = 'flex-start';
@@ -604,7 +621,7 @@ export class SettingsDialog {
     };
 
     const baseInput  = mkInput('Base URL', 'http://localhost:1234/v1', cfg.baseUrl);
-    const modelInput = mkInput('Model', 'e.g. local-model or anthropic/claude-3.5-sonnet', cfg.model);
+    const modelInput = mkInput('Model (the id sent to the endpoint — pick below or paste one)', 'e.g. local-model or anthropic/claude-3.5-sonnet', cfg.model);
 
     const keyLab = document.createElement('label');
     keyLab.style.display = 'flex';
@@ -630,7 +647,7 @@ export class SettingsDialog {
     modelsLab.style.flexDirection = 'column';
     modelsLab.style.gap = '3px';
     modelsLab.className = 'settings-stat-sub';
-    modelsLab.textContent = 'Available models on this endpoint';
+    modelsLab.textContent = 'Pick from this endpoint (Test connection first) — fills Model above';
     const modelsSelect = document.createElement('select');
     modelsSelect.className = 'select-full';
     modelsSelect.disabled = true;

@@ -6888,6 +6888,25 @@ export class GMApp {
 
     this.hamburger.addDivider();
 
+    // v2.16.109 — Open New Instance in its OWN section, between the pack-file
+    // group and the asset libraries. Spawns a fresh Mappadux instance in a new
+    // tab with its own IndexedDB (split the party, keep handouts on one tab +
+    // maps on another, or experiment without touching the live pack — no
+    // syncing between instances, each is independent).
+    this.hamburger.addItem({
+      label: 'Open New Instance',
+      icon: 'plus-square',
+      onSelect: () => {
+        const id = generateInstanceId();
+        const url = new URL(window.location.href);
+        url.search = `?instance=${id}`;
+        url.hash = '';
+        window.open(url.toString(), '_blank', 'noopener');
+      },
+    });
+
+    this.hamburger.addDivider();
+
     // Asset Libraries group.
     // Same modal as the "+ Add New Map" dropdown sentinel — route both
     // through openAddMapDialog so a newly-created handout / uploaded
@@ -6928,29 +6947,7 @@ export class GMApp {
     // v2.16.66 — Initiative Tracker hamburger entry removed. Roll
     // Initiative (orange button in the Players panel) opens the
     // tracker; End Combat closes it. No reason to keep a third path.
-
-    // v2.14.90 — Spawn a fresh Mappadux instance in a new tab with
-    // its own IndexedDB. Useful for splitting the party (two
-    // running encounters), keeping handouts on one tab + maps on
-    // another, or just experimenting without touching the live
-    // pack. No syncing between instances — each is independent.
-    this.hamburger.addItem({
-      label: 'Open New Instance',
-      icon: 'plus-square',
-      onSelect: () => {
-        // v2.14.96 — readable word-based id from the same pool the
-        // room codes use ("?instance=arcane" rather than the old
-        // "?instance=8oilob" base36 string). Two GMs spawning at
-        // the same moment have a 1/256 collision chance, which
-        // for personal-tab use is fine; if it ever bites we can
-        // pair-word it.
-        const id = generateInstanceId();
-        const url = new URL(window.location.href);
-        url.search = `?instance=${id}`;
-        url.hash = '';
-        window.open(url.toString(), '_blank', 'noopener');
-      },
-    });
+    // v2.16.109 — Open New Instance moved up to its own section (above).
 
     // Footer — About pinned at the very bottom (auto-divider above).
     this.hamburger.addItem({

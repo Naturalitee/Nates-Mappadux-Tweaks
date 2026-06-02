@@ -4268,7 +4268,14 @@ option.select-option--add {
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
+  /* v2.16.109 — visible scroll affordance once enough sections are open
+     (the body already scrolls within the dialog's 85vh cap). */
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
 }
+.settings-body::-webkit-scrollbar { width: 10px; }
+.settings-body::-webkit-scrollbar-thumb { background: var(--border); border-radius: 5px; }
+.settings-body::-webkit-scrollbar-thumb:hover { background: var(--text-secondary); }
 /* v2.12.20 — Settings sections are native <details> elements now so the
    browser owns the open/close state. The grid stays the same when open;
    the summary stays compact and clickable when closed. */

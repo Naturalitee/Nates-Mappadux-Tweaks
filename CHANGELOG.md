@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.109 — 2026-06-02
+
+Settings tidy-up. The old Player Voice section is split into three clearer sections — Player Permissions, Game System (initiative order), and Reply Assistant (LLM) — with shortened help text and a visible scrollbar. The LLM model field is clarified against the auto-populated model dropdown (which works with OpenRouter via Test connection). The hamburger menu now gives Open New Instance its own section between the pack-file and asset-library groups.
+
 ## v2.16.108 — 2026-06-02
 
 Fixed: a player or projector that connects while the broadcast is toggled off (GM is faffing / hold screen showing) now sees the hold screen on connect, instead of briefly getting the live map. The hold state is remembered and sent to each new connection.
