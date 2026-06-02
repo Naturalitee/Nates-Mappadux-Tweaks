@@ -1414,6 +1414,22 @@ export interface MsgTextMapVideos {
   videos: TextMapVideoElement[];
 }
 
+/** GM → viewers: playback state for ONE in-map YouTube video. The GM owns
+ *  the controls; viewers have none and reconcile their own iframe to this
+ *  (match play/pause, seek if drift > ~0.5s, set volume). Sent on every YT
+ *  state change plus a periodic tick so late joiners + drift converge.
+ *  `state` is the raw YouTube IFrame player state (1 playing, 2 paused,
+ *  0 ended, 3 buffering, 5 cued); `seconds` is the GM's current position;
+ *  `volume` is 0..100. Not frame-accurate by design. */
+export interface MsgVideoPlayback {
+  type: 'video_playback';
+  id: string;
+  videoId: string;
+  state: number;
+  seconds: number;
+  volume: number;
+}
+
 export type GMMessage =
   | MsgFullState
   | MsgViewUpdate
@@ -1465,7 +1481,8 @@ export type GMMessage =
   | MsgAnnotateClear
   | MsgAnnotateTimers
   | MsgAnnotateNotes
-  | MsgTextMapVideos;
+  | MsgTextMapVideos
+  | MsgVideoPlayback;
 
 // ─── Storage types ───────────────────────────────────────────────────────────
 

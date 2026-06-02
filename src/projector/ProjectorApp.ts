@@ -290,7 +290,7 @@ export class ProjectorApp {
     const notesEl = document.getElementById('annotate-notes');
     if (notesEl) this._annotateNotes = new NotesLayer(notesEl, false, anchor);
     const videoLayerEl = document.getElementById('textmap-video-layer');
-    if (videoLayerEl) this._textMapVideos = new TextMapVideoLayer(videoLayerEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));
+    if (videoLayerEl) this._textMapVideos = new TextMapVideoLayer(videoLayerEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y), { mode: 'viewer' });
     // v2.16.77 — read-only whiteboard mirrored from the GM.
     const boardEl = document.getElementById('annotate-whiteboard') as HTMLCanvasElement | null;
     if (boardEl) this._annotateBoard = new WhiteboardLayer(boardEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));
@@ -852,6 +852,14 @@ export class ProjectorApp {
       }
       case 'textmap_videos': {
         this._textMapVideos?.setVideos(msg.videos);
+        break;
+      }
+      case 'video_playback': {
+        // v2.16.95 — follow the GM's play/pause/seek/volume for one video.
+        this._textMapVideos?.applyPlayback({
+          id: msg.id, videoId: msg.videoId, state: msg.state,
+          seconds: msg.seconds, volume: msg.volume,
+        });
         break;
       }
       // player_features, player_roster, player_marker_move, message_deliver,

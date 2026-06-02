@@ -3275,7 +3275,16 @@ export class GMApp {
     const videoLayerEl = document.getElementById('textmap-video-layer');
     if (videoLayerEl) {
       void import('../rendering/TextMapVideoLayer.ts').then(({ TextMapVideoLayer }) => {
-        this.textMapVideoLayer = new TextMapVideoLayer(videoLayerEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));
+        this.textMapVideoLayer = new TextMapVideoLayer(
+          videoLayerEl,
+          (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+          {
+            mode: 'gm',
+            // GM owns the controls; relay each play/pause/seek/volume change
+            // to viewers so they follow within ~0.5 s.
+            onPlayback: (ev) => this.host.broadcast({ type: 'video_playback', ...ev }),
+          },
+        );
         this.textMapVideoLayer.setVideos(this._currentTextMapVideos);
       });
     }

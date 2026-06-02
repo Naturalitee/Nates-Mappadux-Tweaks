@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.95 — 2026-06-02
+
+In-map YouTube videos are now GM-controlled. Only the GM has video controls (play / pause / seek / volume) via YouTube's own chrome; the player + projector have no controls and follow the GM within about half a second (state + position synced, not frame-accurate). The GM's own video is muted so it never echoes the room screen; viewers carry the audio at the GM's volume.
+
 ## v2.16.94 — 2026-06-02
 
 In-map YouTube videos now take on the active visual filter's tint (CSS approximation) on the player + projector, matching the map. No per-map toggle — turn the visual filter off to remove it. The filter can only tint, not stylise (cross-origin video can't be re-shaded), so painterly filters have no effect on the clip.
