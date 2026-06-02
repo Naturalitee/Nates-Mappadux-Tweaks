@@ -518,7 +518,7 @@ export class SettingsDialog {
   private _buildReplyAssistantSection(): HTMLElement {
     const sec = mkSection(
       'Reply Assistant (LLM)',
-      'Optional LLM that drafts replies to player messages — click “Suggest replies” on a message in the Player Voice panel. Use a local LM Studio server (no key) or a hosted provider like OpenRouter (key + model). Everything stays between your browser and the endpoint you choose.',
+      'Optional LLM that drafts replies to player messages — click “Suggest replies” on a message in the Player Voice panel. Use a local LM Studio server (URL pre-filled — no API key needed) or a hosted provider like OpenRouter (new URL & API key required). Everything stays between your browser and the endpoint you choose.',
     );
     sec.appendChild(this._buildLlmAssistantBlock());
     return sec;
@@ -616,7 +616,9 @@ export class SettingsDialog {
       return inp;
     };
 
-    const baseInput  = mkInput('Base URL', 'http://localhost:1234/v1', cfg.baseUrl);
+    // v2.16.111 — default to the LM Studio local URL so the common path
+    // works out of the box; a hosted-provider user overwrites it.
+    const baseInput  = mkInput('Base URL', 'http://localhost:1234/v1', cfg.baseUrl || 'http://localhost:1234/v1');
 
     const keyLab = document.createElement('label');
     keyLab.style.display = 'flex';
@@ -660,7 +662,8 @@ export class SettingsDialog {
     seedModels(cfg.model);
     modelsSelect.addEventListener('change', persist);
     modelsLab.appendChild(modelsSelect);
-    wrap.appendChild(modelsLab);
+    // v2.16.111 — modelsLab is appended AFTER the Test button below, so the
+    // section reads as a guided flow: URL -> key -> Test & fetch -> Model.
 
     const testRow = document.createElement('div');
     testRow.style.display = 'flex';
@@ -727,6 +730,10 @@ export class SettingsDialog {
     };
     baseInput.addEventListener('input', markStale);
     keyInput.addEventListener('input', markStale);
+
+    // v2.16.111 — Model box goes here, directly under Test connection & fetch
+    // models, completing the URL -> key -> Test -> Model walkthrough.
+    wrap.appendChild(modelsLab);
 
     const promptLab = document.createElement('label');
     promptLab.style.display = 'flex';
@@ -1324,6 +1331,11 @@ function mkSection(title: string, intro: string, opts?: { open?: boolean }): HTM
   // body where the browser hides them when closed.
   const sec = document.createElement('details');
   sec.className = 'settings-section';
+  // v2.16.111 — shared name makes the sections an exclusive accordion:
+  // opening one closes the others (native HTML, no JS). Keeps the dialog
+  // short so there's nothing to scroll through. Older browsers ignore the
+  // attribute and fall back to the previous multi-open behaviour.
+  sec.setAttribute('name', 'settings-accordion');
   if (opts?.open) sec.open = true;
 
   const summary = document.createElement('summary');

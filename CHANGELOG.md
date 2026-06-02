@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.111 — 2026-06-02
+
+Settings sections are now an accordion — opening one closes the others, so the dialog stays short (no hunting for a scrollbar). The Reply Assistant (LLM) section is reordered into a guided flow: Base URL (pre-filled with the LM Studio local address) - API key - Test connection & fetch models - Model, with clearer wording about when a URL / key is needed.
+
 ## v2.16.110 — 2026-06-02
 
 LLM reply assistant: the model is now chosen purely from a dropdown (the manual text field is gone — you rarely know a model's full id), and the button is now "Test connection & fetch models", which fills it from the endpoint (works with OpenRouter and LM Studio). Trimmed the wordy Performance help to the symptom + the fix. Settings body now reliably scrolls when many sections are open.
