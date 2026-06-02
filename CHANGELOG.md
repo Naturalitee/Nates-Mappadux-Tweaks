@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.99 — 2026-06-02
+
+Fixed the real cause of in-map videos staying blank on a fresh Show Player View / popped-out window: the YouTube player was being created while its box was still off-screen (map not yet rendered), and YouTube refuses to paint a player built into a zero-area container. The player is now built lazily, only once its box is actually on-screen with real size — so the video shows on first open without needing a map swap.
+
 ## v2.16.98 — 2026-06-02
 
 Fixed the in-map video not appearing in a freshly opened Show Player View / popped-out window (it only showed up after a map swap). Those preview surfaces announce themselves with a different handshake than real players and were skipping the overlay catch-up, so they now receive the current videos (and annotations + tokens) on connect, caught up to the GM's playback position.

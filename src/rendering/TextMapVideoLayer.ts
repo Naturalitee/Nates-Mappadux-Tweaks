@@ -44,6 +44,12 @@ interface Host {
   videoId: string;
   player: YTPlayer | null;
   ready: boolean;
+  /** The YT.Player is built LAZILY — only once the host has real on-screen
+   *  area. Creating it into a zero-area / hidden container makes YouTube
+   *  refuse to paint (and never fire onReady), which is why a clip stayed
+   *  blank when its iframe was built before the map had rendered (fresh
+   *  window / preview / pop-out). false until _position() builds it. */
+  built: boolean;
 }
 
 /**
@@ -101,9 +107,10 @@ export class TextMapVideoLayer {
         el.dataset['videoId'] = v.videoId;
         if (this.mode === 'viewer') el.style.pointerEvents = 'none';
         this.root.appendChild(el);
-        host = { id: v.id, el, videoId: v.videoId, player: null, ready: false };
+        host = { id: v.id, el, videoId: v.videoId, player: null, ready: false, built: false };
         this.hosts.set(v.id, host);
-        this._createPlayer(host);
+        // NB: the YT.Player is built lazily in _position() once the host has
+        // real on-screen area — see Host.built.
       }
     }
     this.videos = videos;
@@ -232,11 +239,23 @@ export class TextMapVideoLayer {
       const br = this.project((v.x + v.w) / 100, (v.y + v.h) / 100);
       if (!tl || !br) { host.el.style.visibility = 'hidden'; continue; }
       host.el.style.visibility = '';
+      const w = Math.max(8, br.x - tl.x);
+      const h = Math.max(8, br.y - tl.y);
       host.el.style.left   = `${tl.x}px`;
       host.el.style.top    = `${tl.y}px`;
-      host.el.style.width  = `${Math.max(8, br.x - tl.x)}px`;
-      host.el.style.height = `${Math.max(8, br.y - tl.y)}px`;
+      host.el.style.width  = `${w}px`;
+      host.el.style.height = `${h}px`;
       host.el.style.transform = v.rotation ? `rotate(${v.rotation}deg)` : '';
+      // Lazy build: only create the YT.Player once the host is genuinely
+      // on-screen with real area. Building into a zero-area / hidden box makes
+      // YouTube refuse to paint (and skips onReady), which is what left clips
+      // blank on a fresh window / preview / pop-out until a map swap forced a
+      // rebuild over an already-rendered map. 32px guards against the brief
+      // sub-pixel rect during the first projected frames.
+      if (!host.built && w >= 32 && h >= 32) {
+        host.built = true;
+        this._createPlayer(host);
+      }
     }
   }
 }
