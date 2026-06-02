@@ -290,7 +290,10 @@ export class ProjectorApp {
     const notesEl = document.getElementById('annotate-notes');
     if (notesEl) this._annotateNotes = new NotesLayer(notesEl, false, anchor);
     const videoLayerEl = document.getElementById('textmap-video-layer');
-    if (videoLayerEl) {
+    // v2.16.102 — skip in-map video on touch devices (doesn't render on
+    // mobile; see PlayerApp + backlog). Desktop projectors are unaffected.
+    const isMobileViewer = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    if (videoLayerEl && !isMobileViewer) {
       this._textMapVideos = new TextMapVideoLayer(videoLayerEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y), { mode: 'viewer' });
       // v2.16.97 — rebuild the iframe after a fullscreen toggle blanks it.
       document.addEventListener('fullscreenchange', () => {

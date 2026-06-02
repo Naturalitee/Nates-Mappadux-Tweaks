@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.102 — 2026-06-02
+
+In-map YouTube videos are now skipped on mobile devices rather than showing an empty box. They don't render on phones (an Android video-compositing limitation), so on touch devices the video is simply omitted from the player / projector view. Reverted the v2.16.101 CSS attempt, which made it worse. Known limitation; desktop is unaffected.
+
 ## v2.16.101 — 2026-06-02
 
 Long-shot attempt at getting in-map YouTube videos to render on Android (currently just an outline): on touch devices, drop the video box clip / rounded corners / shadow and promote the iframe to its own layer, to give Android's hardware video overlay a clean hole to punch through. May or may not help depending on device; desktop is unchanged.

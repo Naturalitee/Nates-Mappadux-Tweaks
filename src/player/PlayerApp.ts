@@ -321,7 +321,13 @@ export class PlayerApp {
     const notesEl = document.getElementById('annotate-notes');
     if (notesEl) this._annotateNotes = new NotesLayer(notesEl, false, anchor);
     const videoLayerEl = document.getElementById('textmap-video-layer');
-    if (videoLayerEl) {
+    // v2.16.102 — in-map YouTube video doesn't render on mobile: Android
+    // composites video through a hardware overlay that can't punch through the
+    // WebGL map canvas, so it showed only an empty box (and the v2.16.101
+    // CSS coaxing made it worse). Rather than display a dead outline, skip the
+    // video layer entirely on touch devices. Known limitation — see backlog.
+    const isMobileViewer = window.matchMedia('(hover: none) and (pointer: coarse)').matches;
+    if (videoLayerEl && !isMobileViewer) {
       this._textMapVideos = new TextMapVideoLayer(videoLayerEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y), { mode: 'viewer' });
       // v2.16.97 — a cross-origin YouTube iframe goes blank when the page
       // toggles fullscreen (the browser drops its compositing surface), and
