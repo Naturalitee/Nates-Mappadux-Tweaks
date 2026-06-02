@@ -17,6 +17,16 @@ export interface NotesLayerCallbacks {
  */
 export class NotesLayer extends AnchoredLayer<AnnotateNote> {
   private _onEditText: ((id: string, text: string) => void) | undefined;
+  /** Refits the text whenever a note box changes size — including the
+   *  continuous box resize the map zoom drives each frame, so the font
+   *  always fills the frame at any zoom. */
+  private ro = new ResizeObserver((entries) => {
+    for (const e of entries) {
+      const box = e.target as HTMLElement;
+      const text = box.querySelector<HTMLElement>('.a-note-text');
+      if (text) fitText(box, text);
+    }
+  });
 
   constructor(root: HTMLElement, interactive: boolean, opts: AnchoredOpts, cb: NotesLayerCallbacks = {}) {
     super(root, interactive, { ...opts, aspectLock: false }, {
@@ -27,6 +37,11 @@ export class NotesLayer extends AnchoredLayer<AnnotateNote> {
 
   setNotes(notes: AnnotateNote[]): void { this.setObjects(notes); }
 
+  override setObjects(objs: AnnotateNote[]): void {
+    this.ro.disconnect(); // drop observers on the about-to-be-replaced boxes
+    super.setObjects(objs);
+  }
+
   protected objClass(): string { return 'a-note'; }
 
   protected renderContent(n: AnnotateNote, content: HTMLElement): void {
@@ -36,6 +51,7 @@ export class NotesLayer extends AnchoredLayer<AnnotateNote> {
     text.textContent = n.text;
     content.appendChild(text);
     requestAnimationFrame(() => fitText(content, text));
+    this.ro.observe(content); // re-fit on every box size change (zoom, resize)
 
     if (this.interactive) {
       content.addEventListener('dblclick', (e) => { e.stopPropagation(); this._editNote(content, n); });
