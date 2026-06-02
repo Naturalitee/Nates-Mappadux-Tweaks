@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.87 — 2026-06-02
+
+Annotate: pressing an unselected object's move handle now flows straight into a drag in the same press (it was selecting then dropping, needing a second click). Selecting no longer re-renders mid-press; the chrome reflects on release. Matches markers / viewport rects.
+
 ## v2.16.86 — 2026-06-02
 
 Annotate: nothing in an object is interactive until it is selected via the move handle — content (clock wedges, note text) is click-through until then, so you select first, then act. Removed the note double-click-to-edit (the edge edit control is the single way in). Fixed note text being clipped at the bottom by the border: auto-fit now measures the text element's own box (inside the padding + border) instead of the padded content.

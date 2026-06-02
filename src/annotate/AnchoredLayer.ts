@@ -181,14 +181,20 @@ export abstract class AnchoredLayer<T extends AnchoredObject> {
     handle.style.touchAction = 'none';
     let startN: { x: number; y: number } | null = null;
     let base: { x: number; y: number; w: number; h: number } | null = null;
+    let moved = false;
     handle.addEventListener('pointerdown', (e) => {
       if (e.button !== 0 && e.pointerType === 'mouse') return;
       e.stopPropagation();
       const n = this.opts.unproject(e.clientX, e.clientY);
       if (!n) return;
-      if (this.selectedId !== o.id) { this.selectedId = o.id; this._render(); }
+      // v2.16.87 — select WITHOUT re-rendering (which would destroy this
+      // handle mid-press and break the drag). The same press flows
+      // straight into a drag; the selection chrome is reflected on
+      // release. Matches markers / viewport rects.
+      this.selectedId = o.id;
       startN = n;
       base = { x: o.x, y: o.y, w: o.w, h: o.h };
+      moved = false;
       handle.setPointerCapture?.(e.pointerId);
     });
     handle.addEventListener('pointermove', (e) => {
@@ -196,17 +202,14 @@ export abstract class AnchoredLayer<T extends AnchoredObject> {
       const n = this.opts.unproject(e.clientX, e.clientY);
       if (!n) return;
       const dx = n.x - startN.x, dy = n.y - startN.y;
+      if (Math.abs(dx) > 0.001 || Math.abs(dy) > 0.001) moved = true;
       if (mode === 'move') {
         o.x = base.x + dx;
         o.y = base.y + dy;
       } else {
-        let w = Math.max(MIN_SIZE, base.w + dx);
+        const w = Math.max(MIN_SIZE, base.w + dx);
         let h = Math.max(MIN_SIZE, base.h + dy);
-        if (this.opts.aspectLock) {
-          const k = base.w / base.h;
-          // Drive height from width to keep ratio.
-          h = w / k;
-        }
+        if (this.opts.aspectLock) h = w / (base.w / base.h);
         o.w = w; o.h = h;
         this.onResized?.(o, content);
       }
@@ -215,12 +218,19 @@ export abstract class AnchoredLayer<T extends AnchoredObject> {
     const end = () => {
       if (!base) return;
       const cur = { ...o };
-      startN = null; base = null;
-      if (mode === 'move') this.cb.onMove?.(o.id, cur.x, cur.y);
-      else this.cb.onResize?.(o.id, cur.w, cur.h);
+      const didMove = moved;
+      startN = null; base = null; moved = false;
+      if (didMove) {
+        // Commit → state mutation re-renders + shows the selection chrome.
+        if (mode === 'move') this.cb.onMove?.(o.id, cur.x, cur.y);
+        else this.cb.onResize?.(o.id, cur.w, cur.h);
+      } else {
+        // A click (no move) just selected — reflect the chrome now.
+        this._render();
+      }
     };
     handle.addEventListener('pointerup', end);
-    handle.addEventListener('pointercancel', () => { startN = null; base = null; });
+    handle.addEventListener('pointercancel', () => { startN = null; base = null; moved = false; });
   }
 }
 

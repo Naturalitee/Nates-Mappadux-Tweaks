@@ -36,6 +36,13 @@ uses ONE shared chrome convention. Do not invent new handle layouts.
   `src/rendering/MarkerOverlay.ts`. Reuse them; don't redraw.
 - Resize grip is the rounded-square; all other handles are circles.
 
+**Select-then-drag (single press):** pressing the move/select handle of an
+unselected object selects it AND flows straight into a drag in the same
+press — do NOT re-render on pointerdown (that destroys the handle mid-press
+and breaks the drag). Reflect the selection chrome on pointer-up: commit the
+move if it actually moved, else re-render to show the chrome on a click.
+Matches markers / viewport rects.
+
 **Deselect** on a tap (≤5px move) on empty canvas.
 
 See also memory: `feedback_editor_chrome_convention`,
