@@ -1062,6 +1062,11 @@ export interface MsgPlayerIdentify {
   playerName:    string;
   characterName: string;
   color:         string;
+  /** v2.16.103 — true when this viewer is a touch / mobile device
+   *  (matchMedia '(hover: none) and (pointer: coarse)'). Lets the GM's
+   *  Player connections summary split remote windows into PC vs mobile.
+   *  Absent = treat as desktop. */
+  mobile?:       boolean;
 }
 
 /**

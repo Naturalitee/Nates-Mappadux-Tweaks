@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.103 — 2026-06-02
+
+Renamed the Scaled View panel to Player Views, with two collapsible subsections: Player connections (a join QR pointing at the LAN player URL, plus a summary of connected player windows by type — local windows, scaled views, and remote, split PC vs mobile) and Scaled view (the existing projector controls). The connections summary is a window/capability count, not the player roster — that stays in the separate Players panel.
+
 ## v2.16.102 — 2026-06-02
 
 In-map YouTube videos are now skipped on mobile devices rather than showing an empty box. They don't render on phones (an Android video-compositing limitation), so on touch devices the video is simply omitted from the player / projector view. Reverted the v2.16.101 CSS attempt, which made it worse. Known limitation; desktop is unaffected.

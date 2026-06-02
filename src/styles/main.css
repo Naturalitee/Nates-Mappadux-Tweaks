@@ -1231,6 +1231,90 @@ body.player-view #renderer-canvas {
   padding: var(--space-sm) var(--space-md) var(--space-md);
 }
 
+/* v2.16.103 — Collapsible SUBPANELS inside a panel body (Player Views →
+   Player connections / Scaled view). Lighter than a full panel header so
+   the nesting reads clearly. Toggle uses the same aria-expanded / hidden
+   mechanism, wired separately for .subpanel-title. */
+.subpanel {
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  overflow: hidden;
+  background: rgba(0, 0, 0, 0.12);
+}
+.subpanel-title {
+  font-size: 0.68rem;
+  font-weight: 700;
+  letter-spacing: 0.12em;
+  text-transform: uppercase;
+  color: var(--text-secondary);
+  background: rgba(30, 58, 95, 0.25);
+  border: none;
+  width: 100%;
+  text-align: left;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-sm) var(--space-md);
+  position: relative;
+}
+.subpanel-title:hover { color: var(--text-primary); background: rgba(30, 58, 95, 0.45); }
+.subpanel-title::after {
+  content: '▸';
+  font-size: 0.6rem;
+  position: absolute;
+  right: var(--space-md);
+  top: 50%;
+  transform: translateY(-50%);
+  transition: transform 0.18s;
+}
+.subpanel-title[aria-expanded="true"]::after { transform: translateY(-50%) rotate(90deg); }
+.subpanel-body {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  padding: var(--space-sm) var(--space-md) var(--space-md);
+}
+
+/* Player connections — QR to join + a window / capability summary. */
+.connections-join { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.connections-qr {
+  width: 160px;
+  height: 160px;
+  background: #fff;
+  border-radius: 6px;
+  padding: 6px;
+  box-sizing: border-box;
+}
+.connections-url {
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  word-break: break-all;
+  text-align: center;
+  margin: 0;
+}
+.connections-summary {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+.connections-summary li {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  font-size: 0.75rem;
+  color: var(--text-secondary);
+  padding: 4px 8px;
+  border-radius: 4px;
+  background: rgba(255, 255, 255, 0.03);
+}
+.connections-summary li .conn-count { font-weight: 700; color: var(--text-primary); }
+.connections-summary li .conn-sub { font-size: 0.68rem; opacity: 0.75; font-weight: 400; }
+.connections-summary li.conn-empty { justify-content: center; font-style: italic; opacity: 0.6; }
+
 /* ── Session panel ─────────────────────────────────────────────────────── */
 /* QR + copy bar — a horizontal pair: tall white "Copy" bar on the left,
    QR canvas on the right. Clicking either copies the player URL. */

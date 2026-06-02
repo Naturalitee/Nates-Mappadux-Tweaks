@@ -88,11 +88,10 @@ import { CanvasTransform } from '../utils/CanvasTransform.ts';
 import { attachGestures } from '../utils/Gestures.ts';
 import type { SessionState, StoredMap, TransitionConfig, FilterState, Marker, MarkerIconData, AudioAsset, AudioRole, MotionRole, ProjectorConnection, ProjectorViewport, ViewState, GMMessage } from '../types.ts';
 import { defaultProjectorViewport } from '../types.ts';
-// v2.16.33 — QRCode import retired alongside the deleted Player
-// Connection panel. The hold screen + player connect UI handle their
-// own QR rendering. Re-add this import if a top-of-sidebar copy / QR
-// entry returns.
-// import QRCode from 'qrcode';
+// v2.16.103 — QRCode back for the Player Views → Player connections
+// subpanel (scan to open a remote player window over the LAN). The hold
+// screen + player connect UI still do their own QR rendering too.
+import QRCode from 'qrcode';
 
 const REMOTE_AUDIO_KEY = 'dmr_remote_audio';
 
@@ -1926,6 +1925,11 @@ export class GMApp {
    *  the disconnect handler to swap the status message. */
   private _gmPreviewPeers = new Set<string>();
 
+  /** v2.16.103 — per-peer device class (true = touch / mobile) reported on
+   *  player_identify, so the Player connections summary can split remote
+   *  windows into PC vs mobile. Cleared on disconnect. */
+  private _peerIsMobile = new Map<string, boolean>();
+
   /** v2.16.44 — silence ALL local audio outputs without touching the
    *  marker-mute toggle UI or broadcasting positional_mute_all to
    *  players. Triggered by the AudioCoordinator when another window
@@ -1964,6 +1968,8 @@ export class GMApp {
     // _buildPlayerUrl call is preserved so other consumers (clipboard
     // copy, status messages) still resolve the right URL.
     void playerUrl;
+    // v2.16.103 — render the Player connections QR now the room code is known.
+    this._renderConnectionsQr();
 
     const existing = await loadSession();
     // Pack name precedence: existing session > bundle-seeded default > none.
@@ -2014,6 +2020,7 @@ export class GMApp {
         this.projectorConnections.delete(clientId);
       }
     }
+    this._peerIsMobile.delete(id); // v2.16.103 — drop device class on leave
     this.projectorEditor?.setConnection(this._primaryProjector() ?? null);
     this.refreshProjectorStatus();
     this._refreshProjectionPanelMode();
@@ -2073,6 +2080,76 @@ export class GMApp {
     // v2.14.5 — refresh the rect chrome so the eye-icon "no-target"
     // greying updates in lock-step with the panel-header fade.
     this._refreshRectOverlays();
+
+    // v2.16.103 — keep the Player connections window/capability summary live.
+    this._renderConnectionsSummary();
+  }
+
+  /** v2.16.103 — render the join QR + URL into the Player connections
+   *  subpanel. Uses _buildPlayerUrl (LAN IP in dev / public URL in prod) so a
+   *  phone on the same network can open a remote player window. No-op until
+   *  the room code is known. Renders even while the subpanel is collapsed —
+   *  the canvas keeps its bitmap, ready when the GM expands it. */
+  private _renderConnectionsQr(): void {
+    const canvas = document.getElementById('connections-qr') as HTMLCanvasElement | null;
+    const urlEl  = document.getElementById('connections-url');
+    const code   = this.host.roomCode;
+    if (!code) { if (urlEl) urlEl.textContent = 'Waiting for room code…'; return; }
+    const url = this._buildPlayerUrl(code);
+    if (urlEl) urlEl.textContent = url;
+    if (canvas) void QRCode.toCanvas(canvas, url, { width: 160, margin: 1 }).catch(() => { /* ignore */ });
+  }
+
+  /** v2.16.103 — window & capability summary for the Player connections
+   *  subpanel: counts of connected player WINDOWS by type, NOT the player
+   *  roster (that's the separate Players panel). Local windows = GM-spawned
+   *  previews (Show Player View / pop-out) + same-machine player windows.
+   *  Scaled views = projector windows. Remote = network player connections,
+   *  split PC / mobile from the device class reported on identify. */
+  private _renderConnectionsSummary(): void {
+    const list = document.getElementById('connections-summary');
+    if (!list) return;
+    const projectorPeerIds = new Set(this._projectorPeerByClientId.values());
+    const remotePeers  = this.host.connectedPeerIds.filter((id) => !projectorPeerIds.has(id));
+    const remote       = remotePeers.length;
+    const remoteMobile = remotePeers.filter((id) => this._peerIsMobile.get(id) === true).length;
+    const remotePc     = remote - remoteMobile;
+    const localWindows = this._gmPreviewPeers.size + this.host.localPlayerCount;
+    const scaled       = this.projectorConnections.size;
+
+    list.replaceChildren();
+    if (localWindows + scaled + remote === 0) {
+      const li = document.createElement('li');
+      li.className = 'conn-empty';
+      li.textContent = 'No player views connected yet';
+      list.appendChild(li);
+      return;
+    }
+
+    const rows: Array<{ label: string; count: number; sub?: string }> = [
+      { label: 'Local windows', count: localWindows },
+      { label: 'Scaled views',  count: scaled },
+      { label: 'Remote',        count: remote,
+        ...(remote > 0 ? { sub: `${remotePc} PC · ${remoteMobile} mobile` } : {}) },
+    ];
+    for (const r of rows) {
+      const li = document.createElement('li');
+      const label = document.createElement('span');
+      label.textContent = r.label;
+      const right = document.createElement('span');
+      const count = document.createElement('span');
+      count.className = 'conn-count';
+      count.textContent = String(r.count);
+      right.appendChild(count);
+      if (r.sub) {
+        const sub = document.createElement('span');
+        sub.className = 'conn-sub';
+        sub.textContent = '  ' + r.sub;
+        right.appendChild(sub);
+      }
+      li.append(label, right);
+      list.appendChild(li);
+    }
   }
 
   // ─── State change → propagate to renderer + P2P ───────────────────────────
@@ -3673,6 +3750,8 @@ export class GMApp {
       // v2.17 Player Voice — a device player introduced themselves. Upsert
       // the persistent record, bind the live connection, refresh + rebroadcast.
       console.info('[gm] player_identify received', { from: _peerId, playerId: msg.playerId, name: msg.characterName || msg.playerName });
+      // v2.16.103 — remember the device class for the connections summary.
+      this._peerIsMobile.set(_peerId, !!msg.mobile);
       void this.playerRegistry.identify(_peerId, msg).then(() => {
         this._refreshPlayersPanel();
         this._broadcastRoster();
@@ -5380,6 +5459,23 @@ export class GMApp {
         btn.setAttribute('aria-expanded', String(!expanded));
         const body = btn.closest('.panel')?.querySelector<HTMLElement>('.panel-body') ?? null;
         if (body) body.hidden = expanded;
+      });
+    });
+
+    // v2.16.103 — Collapsible SUBPANELS (Player Views → Player connections /
+    // Scaled view). Same aria-expanded / hidden mechanism, but scoped to the
+    // subpanel's OWN body so it doesn't toggle the parent panel-body. Opening
+    // the connections subpanel (re)renders the QR + window summary.
+    document.querySelectorAll<HTMLElement>('.subpanel-title[aria-expanded]').forEach((btn) => {
+      btn.addEventListener('click', () => {
+        const expanded = btn.getAttribute('aria-expanded') === 'true';
+        btn.setAttribute('aria-expanded', String(!expanded));
+        const body = btn.parentElement?.querySelector<HTMLElement>('.subpanel-body') ?? null;
+        if (body) body.hidden = expanded;
+        if (!expanded && btn.parentElement?.id === 'player-connections-sub') {
+          this._renderConnectionsQr();
+          this._renderConnectionsSummary();
+        }
       });
     });
 

@@ -988,6 +988,8 @@ export class PlayerApp {
       playerName:    this.identity.playerName,
       characterName: this.identity.characterName,
       color:         this.identity.color,
+      // v2.16.103 — device class for the GM's connections summary (PC/mobile).
+      mobile:        window.matchMedia('(hover: none) and (pointer: coarse)').matches,
     });
     // Diagnostic — visible in DevTools so we can confirm an identify went out
     // when something looks wrong on the GM side.
