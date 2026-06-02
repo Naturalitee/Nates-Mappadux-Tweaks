@@ -321,7 +321,17 @@ export class PlayerApp {
     const notesEl = document.getElementById('annotate-notes');
     if (notesEl) this._annotateNotes = new NotesLayer(notesEl, false, anchor);
     const videoLayerEl = document.getElementById('textmap-video-layer');
-    if (videoLayerEl) this._textMapVideos = new TextMapVideoLayer(videoLayerEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y), { mode: 'viewer' });
+    if (videoLayerEl) {
+      this._textMapVideos = new TextMapVideoLayer(videoLayerEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y), { mode: 'viewer' });
+      // v2.16.97 — a cross-origin YouTube iframe goes blank when the page
+      // toggles fullscreen (the browser drops its compositing surface), and
+      // the layer reuses the same host so nothing rebuilds on its own. Force
+      // a rebuild once the transition settles; the clip re-syncs to the GM
+      // within ~1.5 s.
+      document.addEventListener('fullscreenchange', () => {
+        window.setTimeout(() => this._textMapVideos?.refresh(), 250);
+      });
+    }
     // v2.16.77 — read-only whiteboard mirrored from the GM.
     const boardEl = document.getElementById('annotate-whiteboard') as HTMLCanvasElement | null;
     if (boardEl) this._annotateBoard = new WhiteboardLayer(boardEl, (x, y) => this.renderer.mapNormToCanvasCss(x, y));

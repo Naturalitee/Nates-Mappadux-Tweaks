@@ -131,6 +131,27 @@ export class TextMapVideoLayer {
     } catch { /* player not ready yet — pending will replay on onReady */ }
   }
 
+  /** Force every video's iframe to be torn down and rebuilt from scratch.
+   *  Cross-origin iframes go BLANK when an ancestor toggles fullscreen (the
+   *  browser drops their compositing surface) and a same-id setVideos() is a
+   *  no-op because the host is reused — so callers hook this to fullscreen
+   *  changes. Viewers re-seek to the last known position on the rebuilt
+   *  player's onReady (pending state) and the GM's periodic report keeps them
+   *  converged, so a rebuilt clip catches up within ~1.5 s. */
+  refresh(): void {
+    const current = this.videos;
+    for (const host of this.hosts.values()) this._destroyHost(host);
+    this.hosts.clear();
+    this.videos = [];
+    this.setVideos(current);
+  }
+
+  /** GM-side: emit the current playback state for every video right now (not
+   *  waiting for the next tick) — used to catch a freshly-joined viewer up. */
+  reportNow(): void {
+    for (const host of this.hosts.values()) this._report(host);
+  }
+
   clear(): void { this.setVideos([]); }
 
   destroy(): void {

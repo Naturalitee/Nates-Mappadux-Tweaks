@@ -3670,6 +3670,9 @@ export class GMApp {
         this.annotate?.rebroadcast();
         // v2.16.91 — text-map videos for the new joiner.
         this.host.broadcast({ type: 'textmap_videos', videos: this._currentTextMapVideos });
+        // v2.16.97 — catch the new joiner up to the current playback position
+        // (captured as pending until their iframe is ready).
+        this.textMapVideoLayer?.reportNow();
         const who = msg.playerName || msg.characterName || 'A player';
         this.setStatus(`${who} joined`, 'ok');
       });
@@ -3898,6 +3901,8 @@ export class GMApp {
       if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
       this.annotate?.rebroadcast();
       this.host.broadcast({ type: 'textmap_videos', videos: this._currentTextMapVideos });
+      // v2.16.97 — catch the projector up to the current playback position.
+      this.textMapVideoLayer?.reportNow();
     }
   }
 

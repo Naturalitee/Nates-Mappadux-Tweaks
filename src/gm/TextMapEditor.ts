@@ -1247,33 +1247,38 @@ export class TextMapEditor {
     // v2.14.101 — Flip H + Flip V buttons on the top corners of the
     // selected element. Match composite editor's visual treatment +
     // active-state colour when the flip is engaged.
-    const flipH = document.createElement('button');
-    flipH.type = 'button';
-    flipH.className = `txt-map-el-flip txt-map-el-flip--h${el.flipH ? ' is-active' : ''}`;
-    flipH.title = 'Mirror this element horizontally (left ↔ right).';
-    flipH.innerHTML =
-      '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-        '<polyline points="6 4 2 12 6 20"/>' +
-        '<polyline points="18 4 22 12 18 20"/>' +
-        '<line x1="12" y1="2" x2="12" y2="22"/>' +
-      '</svg>';
-    flipH.addEventListener('pointerdown', (ev) => ev.stopPropagation());
-    flipH.addEventListener('click', (ev) => { ev.stopPropagation(); this._toggleFlip(el.id, 'h'); });
-    host.appendChild(flipH);
+    // v2.16.97 — video has no meaningful flip (mirroring a YouTube iframe
+    // just reverses the picture and never survives the rasteriser, which
+    // skips video), so the flip chrome is omitted for video elements.
+    if (el.type !== 'video') {
+      const flipH = document.createElement('button');
+      flipH.type = 'button';
+      flipH.className = `txt-map-el-flip txt-map-el-flip--h${el.flipH ? ' is-active' : ''}`;
+      flipH.title = 'Mirror this element horizontally (left ↔ right).';
+      flipH.innerHTML =
+        '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<polyline points="6 4 2 12 6 20"/>' +
+          '<polyline points="18 4 22 12 18 20"/>' +
+          '<line x1="12" y1="2" x2="12" y2="22"/>' +
+        '</svg>';
+      flipH.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+      flipH.addEventListener('click', (ev) => { ev.stopPropagation(); this._toggleFlip(el.id, 'h'); });
+      host.appendChild(flipH);
 
-    const flipV = document.createElement('button');
-    flipV.type = 'button';
-    flipV.className = `txt-map-el-flip txt-map-el-flip--v${el.flipV ? ' is-active' : ''}`;
-    flipV.title = 'Mirror this element vertically (top ↔ bottom).';
-    flipV.innerHTML =
-      '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
-        '<polyline points="4 6 12 2 20 6"/>' +
-        '<polyline points="4 18 12 22 20 18"/>' +
-        '<line x1="2" y1="12" x2="22" y2="12"/>' +
-      '</svg>';
-    flipV.addEventListener('pointerdown', (ev) => ev.stopPropagation());
-    flipV.addEventListener('click', (ev) => { ev.stopPropagation(); this._toggleFlip(el.id, 'v'); });
-    host.appendChild(flipV);
+      const flipV = document.createElement('button');
+      flipV.type = 'button';
+      flipV.className = `txt-map-el-flip txt-map-el-flip--v${el.flipV ? ' is-active' : ''}`;
+      flipV.title = 'Mirror this element vertically (top ↔ bottom).';
+      flipV.innerHTML =
+        '<svg viewBox="0 0 24 24" width="12" height="12" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+          '<polyline points="4 6 12 2 20 6"/>' +
+          '<polyline points="4 18 12 22 20 18"/>' +
+          '<line x1="2" y1="12" x2="22" y2="12"/>' +
+        '</svg>';
+      flipV.addEventListener('pointerdown', (ev) => ev.stopPropagation());
+      flipV.addEventListener('click', (ev) => { ev.stopPropagation(); this._toggleFlip(el.id, 'v'); });
+      host.appendChild(flipV);
+    }
 
     // v2.14.103 — Image-only chrome cluster: aspect-lock + reset
     // stack ABOVE the resize handle in the bottom-right corner,

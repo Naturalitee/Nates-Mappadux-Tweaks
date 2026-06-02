@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.16.97 — 2026-06-02
+
+Video element fixes: removed the (non-functional) flip controls from video in the editor; the in-map video now rebuilds itself after a fullscreen toggle on the player / projector (a cross-origin iframe goes blank when an ancestor enters fullscreen) and re-syncs within about a second-and-a-half; a freshly opened viewer now gets the video and is caught up to the GM's current playback position.
+
 ## v2.16.96 — 2026-06-02
 
 Text Map editor: video elements now get the same aspect-lock + reset chrome as images. Aspect lock is ON by default (clips are almost always 16:9, so resizing keeps the ratio), and the reset button snaps the box to a true 16:9 at the current width. New videos are created at 16:9 for the page.
