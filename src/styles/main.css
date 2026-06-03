@@ -139,6 +139,69 @@ body.gm-view {
   cursor: grab;
 }
 
+/* Empty-canvas state — shown when the workspace has no maps. The wrapper
+   gets .is-empty; this opaque panel covers every layer above (including the
+   stale WebGL map texture that the renderer leaves mounted) so the table
+   reads as a deliberate blank slate rather than an orphaned last map. */
+.empty-canvas {
+  position: absolute;
+  inset: 0;
+  z-index: 60; /* above marker-overlay / player layers, below modals */
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem;
+  padding: 2rem;
+  text-align: center;
+  background: var(--bg-base, #0a0e1a);
+  /* Capture clicks so you can't accidentally draw fog / drop markers onto
+     a map that isn't there. */
+  cursor: default;
+  user-select: none;
+}
+.empty-canvas[hidden] { display: none; }
+.empty-canvas__logo {
+  width: 128px;
+  height: 128px;
+  object-fit: contain;
+  opacity: 0.92;
+  margin-bottom: 0.75rem;
+  filter: drop-shadow(0 4px 18px rgba(0, 0, 0, 0.5));
+}
+.empty-canvas__title {
+  margin: 0;
+  font-size: 1.4rem;
+  font-weight: 600;
+  color: var(--text-primary, #e8ecf4);
+  letter-spacing: 0.01em;
+}
+.empty-canvas__body {
+  margin: 0;
+  max-width: 30rem;
+  font-size: 0.95rem;
+  color: var(--text-secondary, #7a9bb5);
+}
+.empty-canvas__hint {
+  margin: 0.5rem 0 0;
+  max-width: 30rem;
+  font-size: 0.9rem;
+  color: var(--text-secondary, #7a9bb5);
+}
+.empty-canvas__plus {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.25em;
+  height: 1.25em;
+  border-radius: 5px;
+  background: var(--ok, #22c55e);
+  color: #fff;
+  font-weight: 700;
+  line-height: 1;
+  transform: translateY(0.1em);
+}
+
 /* v2.16.40 — Picture-in-Picture inline preview of the player view.
    Internal class names use "pip"; user-facing terminology is
    consistently "Player View". Frame is positioned absolutely within

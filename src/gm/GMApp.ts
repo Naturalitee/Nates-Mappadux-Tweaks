@@ -50,7 +50,7 @@ import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
 import { Host } from '../p2p/Host.ts';
 import { generateRoomCode, generateInstanceId } from '../p2p/roomCode.ts';
 import { saveSession, loadSession, getAllMaps, getMap, saveMap, deleteMap, clearAssetLibraries, clearEverything, getActiveInstanceId } from '../storage/db.ts';
-import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, arePingsEnabled, isMessagingEnabled, arePlayerMarkersMovable, getInitiativeSortDirection } from '../storage/localSettings.ts';
+import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, DEFAULT_SEED_DONE_KEY, arePingsEnabled, isMessagingEnabled, arePlayerMarkersMovable, getInitiativeSortDirection } from '../storage/localSettings.ts';
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { seedAudioAssets } from '../storage/seedAudioAssets.ts';
 import { migrateLegacyMaps } from '../storage/seedMapAssets.ts';
@@ -2688,10 +2688,25 @@ export class GMApp {
       if (this.state.snapshot().map?.id !== last.id) {
         await this.loadMap(last);
       }
+      this._setEmptyCanvasVisible(false);
     } else {
       this._lastMapSelectValue = '';
       this.mapEditableSelect?.refresh();
+      // No maps in the workspace — the renderer leaves the last-opened map's
+      // texture mounted, so cover it with the empty-canvas state rather than
+      // stranding an orphaned map on the table.
+      this._setEmptyCanvasVisible(true);
     }
+  }
+
+  /** Toggle the "no maps yet" empty-canvas overlay (Mappadux logo + a nudge
+   *  toward the green + button). Opaque, so it masks whatever stale map
+   *  texture the renderer still has mounted. */
+  private _setEmptyCanvasVisible(show: boolean): void {
+    const el = document.getElementById('empty-canvas');
+    if (!el) return;
+    el.hidden = !show;
+    el.setAttribute('aria-hidden', show ? 'false' : 'true');
   }
 
   /** Single click handler for the Start / Cancel / Reset button.
@@ -2997,6 +3012,8 @@ export class GMApp {
   }
 
   private async loadMap(map: StoredMap): Promise<void> {
+    // A real map is coming in — make sure the empty-canvas state is down.
+    this._setEmptyCanvasVisible(false);
     // Detect "same map reload" — e.g. after editing a handout, applying
     // a Fix Missing Map, or re-loading after a retarget. The broadcast
     // map_change shouldn't replay the entry transition in that case.
@@ -7292,6 +7309,14 @@ export class GMApp {
         ...(packName ? { packName } : {}),
       });
       await seedAudioAssets(); // re-seed built-in tracker pings (CC0)
+      // v2.17.3 — restore the basic default tokens. clearAssetLibraries() wiped
+      // imageAssets, which holds the 47 Unicode marker presets + the system
+      // image categories; without this a "New Map Pack" left you with NO
+      // default tokens at all. Idempotent re-seed brings just those back.
+      await seedImageAssetsIfNeeded();
+      // v2.17.3 — mark the default seed as done so a reload doesn't drop the
+      // Getting Started pack back over the user's freshly-emptied workspace.
+      try { localStorage.setItem(DEFAULT_SEED_DONE_KEY, '1'); } catch { /* private mode */ }
       this.state.resetForImport();
       await this._reloadLibIcons();
       await this.populateMapList();

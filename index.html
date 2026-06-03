@@ -731,6 +731,21 @@
       <div id="annotate-notes" class="annotate-notes"></div>
       <div id="annotate-clocks" class="annotate-clocks"></div>
       <div id="annotate-timers" class="annotate-clocks"></div>
+      <!-- Empty-canvas state. Shown (via .is-empty on the wrapper) when the
+           workspace has no maps, so the last-opened map's stale texture isn't
+           left sitting on the canvas. Opaque backdrop covers every layer
+           above; points the user at the green + button beside the Map picker. -->
+      <div id="empty-canvas" class="empty-canvas" hidden aria-hidden="true">
+        <img class="empty-canvas__logo" src="/icons/icon-512.png" alt="Mappadux" />
+        <h2 class="empty-canvas__title">An uncharted expanse</h2>
+        <p class="empty-canvas__body">
+          No maps here yet — just you, the void, and a duck with grand ambitions.
+        </p>
+        <p class="empty-canvas__hint">
+          Hit the green <span class="empty-canvas__plus">+</span> button to draw the
+          first one onto the table.
+        </p>
+      </div>
     </div>
 
     <div id="marker-context-menu" class="context-menu" hidden>
