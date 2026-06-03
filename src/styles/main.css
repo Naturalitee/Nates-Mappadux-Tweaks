@@ -4033,9 +4033,15 @@ option.select-option--add {
   padding: var(--space-sm) var(--space-md);
   border-top: 1px solid var(--border);
   display: flex;
-  justify-content: flex-end;
+  /* v2.17.6 — token-maker link on the left, Attributions on the right. */
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
   background: var(--bg-deep, rgba(0,0,0,0.15));
 }
+/* v2.17.6 — external token-editor link. Anchor styled as a ghost button;
+   text-decoration reset so it doesn't underline like a raw link. */
+.img-modal-token-link { text-decoration: none; }
 
 /* Connector grid cells need a bit more vertical room for the Import button
  * below the label — shrink the icon visual so it doesn't push the label

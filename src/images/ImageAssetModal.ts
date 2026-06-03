@@ -380,6 +380,17 @@ export class ImageAssetModal {
     // creators get one rollup of credits across all three asset libraries.
     const footer = document.createElement('div');
     footer.className = 'img-modal-footer';
+    // External token-maker link — a free third-party editor for designing /
+    // customising tokens. Opens in a new tab; the user downloads a PNG there
+    // and uploads it back here. Sits on the left of the footer.
+    const tokenLink = document.createElement('a');
+    tokenLink.className = 'btn btn--ghost btn--sm img-modal-token-link';
+    tokenLink.href = 'https://tools.2minutetabletop.com/token-editor/index?search=';
+    tokenLink.target = '_blank';
+    tokenLink.rel = 'noopener noreferrer';
+    tokenLink.textContent = 'Make a token — 2-Minute Tabletop ↗';
+    tokenLink.title = 'Opens the free 2-Minute Tabletop token editor in a new tab. Design or customise a token there, download the PNG, then upload it into your library.';
+    footer.appendChild(tokenLink);
     const attrBtn = document.createElement('button');
     attrBtn.type = 'button';
     attrBtn.className = 'btn btn--ghost btn--sm';

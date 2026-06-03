@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.6 — 2026-06-03
+
+Small Assets Library — added a link to the free 2-Minute Tabletop token editor in the footer. Opens in a new tab to design or customise a token; download the PNG and upload it back into your library.
+
 ## v2.17.5 — 2026-06-03
 
 Initiative tracker — fixed-initiative mode. New "Preserve order" toggle under End Combat for systems where the order is set once and reused every fight. When ticked: Reroll Initiative is disabled (shaded), End Combat saves the current order instead of clearing it (spent flags reset, ROUND END parks at the back), and players aren't re-prompted to roll once an order exists — the next combat opens with everyone pre-set.
