@@ -2688,10 +2688,25 @@ export class GMApp {
       if (this.state.snapshot().map?.id !== last.id) {
         await this.loadMap(last);
       }
+      this._setEmptyCanvasVisible(false);
     } else {
       this._lastMapSelectValue = '';
       this.mapEditableSelect?.refresh();
+      // No maps in the workspace — the renderer leaves the last-opened map's
+      // texture mounted, so cover it with the empty-canvas state rather than
+      // stranding an orphaned map on the table.
+      this._setEmptyCanvasVisible(true);
     }
+  }
+
+  /** Toggle the "no maps yet" empty-canvas overlay (Mappadux logo + a nudge
+   *  toward the green + button). Opaque, so it masks whatever stale map
+   *  texture the renderer still has mounted. */
+  private _setEmptyCanvasVisible(show: boolean): void {
+    const el = document.getElementById('empty-canvas');
+    if (!el) return;
+    el.hidden = !show;
+    el.setAttribute('aria-hidden', show ? 'false' : 'true');
   }
 
   /** Single click handler for the Start / Cancel / Reset button.
@@ -2997,6 +3012,8 @@ export class GMApp {
   }
 
   private async loadMap(map: StoredMap): Promise<void> {
+    // A real map is coming in — make sure the empty-canvas state is down.
+    this._setEmptyCanvasVisible(false);
     // Detect "same map reload" — e.g. after editing a handout, applying
     // a Fix Missing Map, or re-loading after a retarget. The broadcast
     // map_change shouldn't replay the entry transition in that case.
