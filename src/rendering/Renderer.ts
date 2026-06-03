@@ -1585,13 +1585,19 @@ export class Renderer {
   private _projVec = new THREE.Vector3();
   worldToScreen(worldX: number, worldY: number): { x: number; y: number } | null {
     const canvas = this.renderer.domElement;
-    const rect   = canvas.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return null;
+    // v2.17.1 — use clientWidth/Height (LAYOUT px), NOT getBoundingClientRect.
+    // getBoundingClientRect is inflated by CSS `zoom` (the sidebar UI-scale
+    // slider at != 100%), which desynced this map->screen mapping from BOTH
+    // the GPU render and the HTML overlay — those live in layout px. The
+    // camera frustum already uses clientWidth, so this keeps them aligned.
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (w === 0 || h === 0) return null;
     this._projVec.set(worldX, worldY, 0);
     this._projVec.project(this.camera);
     return {
-      x: (this._projVec.x + 1) / 2 * rect.width,
-      y: (1 - this._projVec.y) / 2 * rect.height,
+      x: (this._projVec.x + 1) / 2 * w,
+      y: (1 - this._projVec.y) / 2 * h,
     };
   }
 
@@ -1602,12 +1608,17 @@ export class Renderer {
    * Accounts for camera.zoom — denser pixels-per-world when zoomed in.
    */
   worldToScreenScale(): { pxPerWorldX: number; pxPerWorldY: number } {
-    const rect = this.renderer.domElement.getBoundingClientRect();
-    if (rect.width === 0 || rect.height === 0) return { pxPerWorldX: 0, pxPerWorldY: 0 };
+    // v2.17.1 — clientWidth/Height (layout px), matching worldToScreen + the
+    // camera frustum, so handle offsets stay correct under a sidebar UI-scale
+    // (CSS `zoom`) that inflates getBoundingClientRect.
+    const canvas = this.renderer.domElement;
+    const w = canvas.clientWidth;
+    const h = canvas.clientHeight;
+    if (w === 0 || h === 0) return { pxPerWorldX: 0, pxPerWorldY: 0 };
     const zoom = this.camera.zoom || 1;
     return {
-      pxPerWorldX: rect.width  * zoom / Math.max(0.0001, this.camera.right - this.camera.left),
-      pxPerWorldY: rect.height * zoom / Math.max(0.0001, this.camera.top   - this.camera.bottom),
+      pxPerWorldX: w * zoom / Math.max(0.0001, this.camera.right - this.camera.left),
+      pxPerWorldY: h * zoom / Math.max(0.0001, this.camera.top   - this.camera.bottom),
     };
   }
 
