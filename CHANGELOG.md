@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.8 — 2026-06-03
+
+Initiative preserve-order fix. When a fixed-initiative combat ended partway through a round, the actors who'd already taken their turn were saved at the back of the order (they'd been rotated behind ROUND END), so the next combat opened scrambled. End Combat now rolls the round boundary to the end first — as if you'd advanced into the next round — so the saved order is always the clean start-of-round order.
+
 ## v2.17.7 — 2026-06-03
 
 Soundboard volume — fixed the fader feeling "loud everywhere". The slider was wired straight to linear amplitude, but loudness is perceived logarithmically, so almost all the audible change was crammed into the bottom of the travel and low positions still sounded loud. The fader position now runs through a perceptual taper before hitting the audio, so low settings are genuinely quiet and the control feels natural. Applies to one-shots and loops, on both the GM and player views.

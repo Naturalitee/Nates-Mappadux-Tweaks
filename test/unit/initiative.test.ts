@@ -169,9 +169,9 @@ describe('Initiative — fixed-initiative (preserve order)', () => {
       ...defaultInitiativeState(),
       preserveOrder: true,
       activeDeck: [
-        card({ id: 'a', value: '20', isSpent: true }),
+        card({ id: 'a', value: '20' }),
+        card({ id: 'b', value: '10' }),
         makeRoundMarker(),
-        card({ id: 'b', value: '10', isSpent: true }),
       ],
     };
     const next = endCombatPreserve(state);
@@ -180,6 +180,35 @@ describe('Initiative — fixed-initiative (preserve order)', () => {
     expect(next.activeDeck.map((c) => c.value)).toEqual(['20', '10', '']);
     expect(next.activeDeck.every((c) => !c.isSpent)).toBe(true);
     expect(next.preserveOrder).toBe(true);
+  });
+
+  it('endCombatPreserve mid-round restores the start-of-round order (already-acted cards lead)', () => {
+    // Order A,B,C,D; A and B already advanced, so they sit behind ROUND END.
+    // Ending here must save [A,B,C,D], not the scrambled live order.
+    const state: InitiativeState = {
+      ...defaultInitiativeState(),
+      preserveOrder: true,
+      activeDeck: [
+        card({ id: 'c', value: '10' }),
+        card({ id: 'd', value: '5' }),
+        makeRoundMarker(),
+        card({ id: 'a', value: '20', isSpent: true }),
+        card({ id: 'b', value: '15', isSpent: true }),
+      ],
+    };
+    const next = endCombatPreserve(state);
+    expect(next.activeDeck.map((c) => c.id)).toEqual(['a', 'b', 'c', 'd', 'round-end-marker']);
+    expect(next.activeDeck.every((c) => !c.isSpent)).toBe(true);
+  });
+
+  it('endCombatPreserve with ROUND END already at the back is a no-op on order', () => {
+    const state: InitiativeState = {
+      ...defaultInitiativeState(),
+      preserveOrder: true,
+      activeDeck: [card({ id: 'a' }), card({ id: 'b' }), card({ id: 'c' }), makeRoundMarker()],
+    };
+    const next = endCombatPreserve(state);
+    expect(next.activeDeck.map((c) => c.id)).toEqual(['a', 'b', 'c', 'round-end-marker']);
   });
 
   it('endCombatPreserve on an empty deck stays empty', () => {
