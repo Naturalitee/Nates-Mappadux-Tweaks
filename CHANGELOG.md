@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.7 — 2026-06-03
+
+Soundboard volume — fixed the fader feeling "loud everywhere". The slider was wired straight to linear amplitude, but loudness is perceived logarithmically, so almost all the audible change was crammed into the bottom of the travel and low positions still sounded loud. The fader position now runs through a perceptual taper before hitting the audio, so low settings are genuinely quiet and the control feels natural. Applies to one-shots and loops, on both the GM and player views.
+
 ## v2.17.6 — 2026-06-03
 
 Small Assets Library — added a link to the free 2-Minute Tabletop token editor in the footer. Opens in a new tab to design or customise a token; download the PNG and upload it back into your library.

@@ -1,5 +1,6 @@
 import { Guest } from '../p2p/Guest.ts';
 import { generateId } from '../utils/id.ts';
+import { perceptualVolume } from '../audio/volumeCurve.ts';
 import { PlayerIdentifyModal, type PlayerIdentity } from './PlayerIdentifyModal.ts';
 import { PlayerActionMenu, type ActionMenuItem } from './PlayerActionMenu.ts';
 import { PlayerMessageComposer } from './PlayerMessageComposer.ts';
@@ -1628,7 +1629,8 @@ export class PlayerApp {
           this._sbLoopPlayer?.setVolume(msg.slotId, msg.volume);
         } else {
           const el = this.sbAudioEls.get(msg.slotId);
-          if (el) el.volume = Math.max(0, Math.min(1, msg.volume));
+          // v2.17.7 — perceptual taper on the fader position (see volumeCurve.ts).
+          if (el) el.volume = perceptualVolume(msg.volume);
         }
         break;
       }
@@ -1885,7 +1887,8 @@ export class PlayerApp {
     }
     el.currentTime = 0;
     el.loop   = false;
-    el.volume = Math.max(0, Math.min(1, volume));
+    // v2.17.7 — perceptual taper on the fader position (see volumeCurve.ts).
+    el.volume = perceptualVolume(volume);
     el.muted  = this.sbMuted;
     void el.play().catch(() => {
       this._scheduleAudioResume();
