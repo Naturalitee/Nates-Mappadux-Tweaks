@@ -7854,6 +7854,30 @@ option.select-option--add {
   background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
   color: #1c1208;
 }
+/* v2.17.5 — shaded / non-interactive button (Reroll Initiative in
+   fixed-initiative mode). Greys the gradient out and kills the hover. */
+.init-btn.is-disabled {
+  filter: grayscale(0.85) brightness(0.6);
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: auto; /* keep the tooltip; click is no-op'd in JS */
+}
+.init-btn.is-disabled:hover { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+/* v2.17.5 — "Preserve order" toggle under End Combat. Compact checkbox
+   row matching the button column width. */
+.init-preserve {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 2px 0;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.15;
+}
+.init-preserve input { margin: 0; cursor: pointer; flex-shrink: 0; }
+.init-preserve:hover { color: var(--text-primary); }
 .init-sort, .init-edge {
   padding: 6px 8px;
   background: var(--bg-input);

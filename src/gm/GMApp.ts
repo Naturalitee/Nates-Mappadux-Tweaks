@@ -6516,6 +6516,13 @@ export class GMApp {
       // roster so the GM doesn't have to dig into the tracker overlay
       // first. Opens the tracker (if hidden) + broadcasts the prompt.
       onCallForInitiative: () => {
+        // v2.17.5 — Fixed-initiative mode with a saved order: reopen it
+        // instead of wiping + re-prompting (players aren't asked again).
+        if (this._hasPreservedInitiativeOrder()) {
+          this.initiativeTracker?.open();
+          this.setStatus('Initiative order preserved — players not re-prompted', 'ok');
+          return;
+        }
         // v2.16.63 — Call for Initiative wipes deck + tray + bench
         // (preserving discard) BEFORE seeding + broadcasting. Both the
         // Players-panel orange button and the in-tracker Call route
@@ -6553,6 +6560,14 @@ export class GMApp {
 
   private _broadcastRoster(): void {
     this.host.broadcast(this.playerRegistry.rosterMessage());
+  }
+
+  /** v2.17.5 — True when fixed-initiative (preserve) mode is on AND a real
+   *  order already exists. In that case Call for Initiative reopens the
+   *  saved order rather than wiping it and re-prompting players. */
+  private _hasPreservedInitiativeOrder(): boolean {
+    const st = this.initiativeTracker?.getState();
+    return !!st?.preserveOrder && st.activeDeck.some((c) => c.type !== 'round-marker');
   }
 
   /** Dedupe a non-idempotent upstream event by its client-supplied id.
@@ -6738,6 +6753,13 @@ export class GMApp {
         this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(state) });
       },
       onCallForInitiative: () => {
+        // v2.17.5 — fixed-initiative mode with a saved order: don't wipe
+        // or re-prompt (the Reroll button is disabled in this mode, but
+        // guard here too for parity with the Players-panel path).
+        if (this._hasPreservedInitiativeOrder()) {
+          this.setStatus('Initiative order preserved — players not re-prompted', 'ok');
+          return;
+        }
         // v2.16.63 — reset deck + tray + bench (preserving discard),
         // then seed players and broadcast. The Players-panel orange
         // button routes through the same path via bindPlayersPanel.

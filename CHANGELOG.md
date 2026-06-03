@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.5 — 2026-06-03
+
+Initiative tracker — fixed-initiative mode. New "Preserve order" toggle under End Combat for systems where the order is set once and reused every fight. When ticked: Reroll Initiative is disabled (shaded), End Combat saves the current order instead of clearing it (spent flags reset, ROUND END parks at the back), and players aren't re-prompted to roll once an order exists — the next combat opens with everyone pre-set.
+
 ## v2.17.4 — 2026-06-03
 
 Empty-canvas state. When the workspace has no maps — a fresh New Map Pack, or after deleting the last one — the table no longer leaves the last-opened map's texture stranded on the canvas. It now shows a tidy empty state (Mappadux logo + a nudge toward the green + button) so a blank workspace reads as deliberate rather than broken.

@@ -63,6 +63,7 @@ export function defaultInitiativeState(): InitiativeState {
     // the least-cluttered surfaces today. Easy to repin via the edge select.
     edge:     'top',
     visible:  false,
+    preserveOrder: false,
   };
 }
 
@@ -86,6 +87,7 @@ export function loadInitiativeState(): InitiativeState {
       lastNumericSortMode: (parsed.lastNumericSortMode === 'low-to-high' ? 'low-to-high' : 'high-to-low'),
       edge:        (parsed.edge as InitiativeEdge | undefined) ?? 'top',
       visible:     !!parsed.visible,
+      preserveOrder: !!parsed.preserveOrder,
     };
   } catch { return defaultInitiativeState(); }
 }
@@ -323,6 +325,23 @@ export function endCombat(state: InitiativeState): InitiativeState {
     unallocated: [],
     threatBench: defaultInitiativeState().threatBench,
     discarded:   [],
+  };
+}
+
+/** v2.17.5 — Fixed-initiative "End Combat". Instead of wiping, save the
+ *  current order so the NEXT combat opens with the same cards + values
+ *  pre-set. Spent flags clear and the ROUND END marker re-parks at the
+ *  back (so the new fight starts cleanly from the top); the deck order
+ *  and every card's value are otherwise left exactly as they were. Tray,
+ *  bench, and discard are preserved untouched. Used when preserveOrder is
+ *  on so players aren't re-rolled every combat. */
+export function endCombatPreserve(state: InitiativeState): InitiativeState {
+  const kept = state.activeDeck
+    .filter((c) => c.type !== 'round-marker')
+    .map((c) => ({ ...c, isSpent: false }));
+  return {
+    ...state,
+    activeDeck: kept.length > 0 ? [...kept, makeRoundMarker()] : [],
   };
 }
 

@@ -613,6 +613,12 @@ export interface InitiativeState {
   edge: InitiativeEdge;
   /** Is the tracker UI visible. */
   visible: boolean;
+  /** v2.17.5 — Fixed-initiative mode. Some systems set an order once and
+   *  reuse it every combat. When true: Reroll Initiative is disabled, End
+   *  Combat preserves the current order (clears spent flags + parks ROUND
+   *  END at the back) instead of wiping, and Call for Initiative won't
+   *  re-prompt players once an order exists. */
+  preserveOrder?: boolean;
 }
 
 // ─── P2P Message Protocol ────────────────────────────────────────────────────
