@@ -1172,9 +1172,17 @@ export class CompositeMapEditor {
         if (!snappedToCentre && this._snapToGrid && this._masterCellNorm && this._masterCellNorm > 0 && this._canvasH > 0) {
           const cellNormX = this._masterCellNorm;
           const cellNormY = this._masterCellNorm * (this._canvasW / this._canvasH);
-          // Grid origin = canvas centre (matches _drawReferenceGrid).
-          nx = Math.round((nx - 0.5) / cellNormX) * cellNormX + 0.5;
-          ny = Math.round((ny - 0.5) / cellNormY) * cellNormY + 0.5;
+          // v2.17.1 — snap the tile's EDGES to the master grid, not its centre.
+          // Grid origin = canvas centre (matches _drawReferenceGrid). A tile
+          // with an ODD square count has its centre at a half-cell offset, so
+          // centre-snapping landed odd tiles mid-grid; edge-snapping lines the
+          // tile's squares up with the master grid for any parity.
+          const tileWNorm = parseFloat(el.style.width)  / this._canvasW;
+          const tileHNorm = parseFloat(el.style.height) / this._canvasH;
+          const snapLeft = Math.round(((nx - tileWNorm / 2) - 0.5) / cellNormX) * cellNormX + 0.5;
+          const snapTop  = Math.round(((ny - tileHNorm / 2) - 0.5) / cellNormY) * cellNormY + 0.5;
+          nx = snapLeft + tileWNorm / 2;
+          ny = snapTop  + tileHNorm / 2;
         }
         const tileW = parseFloat(el.style.width);
         const tileH = parseFloat(el.style.height);
@@ -1234,13 +1242,24 @@ export class CompositeMapEditor {
     // sees the new tile sitting outside the previous one's centre.
     const n = tiles.length;
     const offset = Math.min(0.04 * n, 0.4);
+    // v2.17.1 — size the new tile so ONE of its grid squares matches the
+    // master grid pitch, instead of a flat 0.25 (which made tiles with
+    // different square counts render at the same width). masterCellNorm =
+    // masterCellPx/canvasW; tileW = scale*canvasW; so scale = cellsAcross *
+    // masterCellNorm makes this tile cellsAcross squares wide at the master
+    // pitch. The first tile (no master yet) keeps 0.25 and BECOMES the master.
+    let scale = 0.25;
+    if (this._masterCellNorm && this._masterCellNorm > 0 && asset.pixelsPerSquare && asset.imageWidth) {
+      const cellsAcross = asset.imageWidth / asset.pixelsPerSquare;
+      if (cellsAcross > 0) scale = cellsAcross * this._masterCellNorm;
+    }
     const tile: CompositeTile = {
       id:         generateId(),
       mapAssetId: asset.id,
       x:          0.5 + offset,
       y:          0.5 + offset,
       rotation:   0,
-      scale:      0.25,
+      scale,
     };
     // v2.14.62 — record this tile's freshly-set scale as the Reset
     // target so a later "reset scale" restores 0.25 rather than the

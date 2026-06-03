@@ -2681,7 +2681,13 @@ export class GMApp {
       this.mapSelect.value = last.id;
       this._lastMapSelectValue = last.id;
       this.mapEditableSelect?.refresh();
-      await this.loadMap(last);
+      // v2.17.1 — only (re)load if the selected map isn't already active.
+      // _editCurrentTextMap loadMap()s the edited handout and THEN calls
+      // populateMapList to refresh the dropdown; without this guard that
+      // second loadMap re-ran the reveal animation a second time.
+      if (this.state.snapshot().map?.id !== last.id) {
+        await this.loadMap(last);
+      }
     } else {
       this._lastMapSelectValue = '';
       this.mapEditableSelect?.refresh();
