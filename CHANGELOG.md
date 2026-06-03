@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.17.1 — 2026-06-03
+
+Four bugs found in real-world use:
+- Composite editor: map tiles with an odd number of grid squares now snap cleanly to the grid (they were landing half a cell off).
+- Composite editor: tiles auto-scale so one grid square is a consistent size, so maps with different square counts no longer render at the same width.
+- Text Map handouts: the reveal animation now plays once on save, not twice.
+- GM canvas: fixed an offset between the player-view outline / fog drawing and the map when the sidebar UI scale is set to anything other than 100%.
+
 ## v2.17.0 — Player Voice (2026-06-02)
 
 The headline of 2.17 is **Player Voice** — your players stop being passive
