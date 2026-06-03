@@ -74,7 +74,9 @@ export class ProjectorViewportEditor {
     this.ctx = ctx;
 
     this.syncSize();
-    window.addEventListener('resize', () => { this.syncSize(); this.redraw(); });
+    // v2.17.2 — ResizeObserver (not window 'resize') so the buffer re-syncs on
+    // LAYOUT changes (sidebar UI-scale slider), not just window resizes.
+    new ResizeObserver(() => { this.syncSize(); this.redraw(); }).observe(this.canvas);
 
     this.moveHandle = document.createElement('button');
     this.moveHandle.type = 'button';

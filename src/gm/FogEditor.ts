@@ -166,7 +166,12 @@ export class FogEditor {
 
     this.syncSize();
     this.bindEvents();
-    window.addEventListener('resize', () => { this.syncSize(); this.redraw(); });
+    // v2.17.2 — ResizeObserver, NOT window 'resize': the canvas also resizes on
+    // LAYOUT changes (the sidebar UI-scale slider widens/narrows the main area)
+    // which don't fire a window resize. Without this the drawing buffer went
+    // stale while the renderer-canvas re-synced, so fog/markers drew scaled
+    // vs the map — the offset under a != 100% UI scale.
+    new ResizeObserver(() => { this.syncSize(); this.redraw(); }).observe(this.canvas);
   }
 
   /** Wire the live-stroke + end-stroke handlers. GMApp passes:

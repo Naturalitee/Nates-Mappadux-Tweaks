@@ -84,7 +84,11 @@ export class ViewportEditor {
 
     this.syncSize();
     this.bindEvents();
-    window.addEventListener('resize', () => { this.syncSize(); this.redraw(); });
+    // v2.17.2 — ResizeObserver (not window 'resize') so the canvas buffer
+    // re-syncs on LAYOUT changes too, e.g. the sidebar UI-scale slider. The
+    // window-resize-only path left a stale buffer that scaled the viewport
+    // outline against the (re-synced) map at a != 100% UI scale.
+    new ResizeObserver(() => { this.syncSize(); this.redraw(); }).observe(this.canvas);
   }
 
   // ─── Public API ─────────────────────────────────────────────────────────────

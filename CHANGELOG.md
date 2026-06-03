@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.2 — 2026-06-03
+
+Fixed the GM canvas overlay/fog misalignment under a non-100% sidebar UI scale (the offset double-outline). The fog and viewport-rect canvases only re-sized their drawing buffer on a window resize; changing the UI scale reflows the layout WITHOUT a window resize, so they kept a stale buffer from the previous scale while the map re-synced — making everything they drew scale-shifted from the map. They now use a ResizeObserver (like the renderer + markers already did), so they re-sync on any layout change.
+
 ## v2.17.1 — 2026-06-03
 
 Four bugs found in real-world use:
