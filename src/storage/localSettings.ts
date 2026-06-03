@@ -18,6 +18,14 @@
  *  startup code that honours it. */
 export const SUPPRESS_DEFAULT_SEED_KEY = 'dmr_suppress_default_seed';
 
+/** v2.17.3 — set once the Getting Started bundle has been seeded (genuine
+ *  first run), or once the user takes control of their own workspace (the
+ *  DB already has maps, or they pick "New Map Pack…"). Makes the default
+ *  seed a TRUE one-time event: an empty DB stays empty instead of
+ *  re-seeding Getting Started every time it has no maps. Wiped by Delete
+ *  All Data, so a genuine fresh install still seeds. */
+export const DEFAULT_SEED_DONE_KEY = 'dmr_default_seed_done';
+
 /** Animated map performance cap (v2.12.x). When set, the renderer caps
  *  video-map texture uploads at 1920 px on the longest side regardless
  *  of canvas size — useful on lower-end GPUs where a 4K canvas + 4K

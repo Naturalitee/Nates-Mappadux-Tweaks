@@ -50,7 +50,7 @@ import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
 import { Host } from '../p2p/Host.ts';
 import { generateRoomCode, generateInstanceId } from '../p2p/roomCode.ts';
 import { saveSession, loadSession, getAllMaps, getMap, saveMap, deleteMap, clearAssetLibraries, clearEverything, getActiveInstanceId } from '../storage/db.ts';
-import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, arePingsEnabled, isMessagingEnabled, arePlayerMarkersMovable, getInitiativeSortDirection } from '../storage/localSettings.ts';
+import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, DEFAULT_SEED_DONE_KEY, arePingsEnabled, isMessagingEnabled, arePlayerMarkersMovable, getInitiativeSortDirection } from '../storage/localSettings.ts';
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { seedAudioAssets } from '../storage/seedAudioAssets.ts';
 import { migrateLegacyMaps } from '../storage/seedMapAssets.ts';
@@ -7292,6 +7292,14 @@ export class GMApp {
         ...(packName ? { packName } : {}),
       });
       await seedAudioAssets(); // re-seed built-in tracker pings (CC0)
+      // v2.17.3 — restore the basic default tokens. clearAssetLibraries() wiped
+      // imageAssets, which holds the 47 Unicode marker presets + the system
+      // image categories; without this a "New Map Pack" left you with NO
+      // default tokens at all. Idempotent re-seed brings just those back.
+      await seedImageAssetsIfNeeded();
+      // v2.17.3 — mark the default seed as done so a reload doesn't drop the
+      // Getting Started pack back over the user's freshly-emptied workspace.
+      try { localStorage.setItem(DEFAULT_SEED_DONE_KEY, '1'); } catch { /* private mode */ }
       this.state.resetForImport();
       await this._reloadLibIcons();
       await this.populateMapList();

@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.3 — 2026-06-03
+
+"New Map Pack…" now genuinely starts from an empty workspace with just the basic default tokens. Two fixes: it restores the default marker-icon tokens (they were being wiped with the rest of the libraries and never re-seeded), and the Getting Started pack no longer re-seeds itself on the next reload — it now seeds only once, on a true first run (or until Delete All Data). The bundled tracker ping sounds are still kept.
+
 ## v2.17.2 — 2026-06-03
 
 Fixed the GM canvas overlay/fog misalignment under a non-100% sidebar UI scale (the offset double-outline). The fog and viewport-rect canvases only re-sized their drawing buffer on a window resize; changing the UI scale reflows the layout WITHOUT a window resize, so they kept a stale buffer from the previous scale while the map re-synced — making everything they drew scale-shifted from the map. They now use a ResizeObserver (like the renderer + markers already did), so they re-sync on any layout change.

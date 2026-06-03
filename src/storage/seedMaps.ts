@@ -1,5 +1,6 @@
 import { getAllMaps } from './db.ts';
 import { importBundle } from './bundleIO.ts';
+import { DEFAULT_SEED_DONE_KEY } from './localSettings.ts';
 
 const DEFAULT_BUNDLE_URL = '/default-bundle.json';
 
@@ -15,8 +16,19 @@ const DEFAULT_BUNDLE_URL = '/default-bundle.json';
  * for forwarding this value into the eventual saveSession call.
  */
 export async function seedDefaultMaps(): Promise<string | null> {
+  // v2.17.3 — Getting Started seeds only ONCE, ever. After the first run (or
+  // after the user takes control via New Map Pack / having their own maps) the
+  // workspace stays empty when empty, instead of re-seeding Getting Started
+  // every time the DB has no maps. Delete All Data wipes this flag, so a
+  // genuine fresh install still seeds.
+  try { if (localStorage.getItem(DEFAULT_SEED_DONE_KEY) === '1') return null; } catch { /* private mode */ }
+
   const existing = await getAllMaps();
-  if (existing.length > 0) return null; // DB already has maps — skip
+  if (existing.length > 0) {
+    // Existing content means the user already has a workspace — never auto-seed.
+    try { localStorage.setItem(DEFAULT_SEED_DONE_KEY, '1'); } catch { /* private mode */ }
+    return null;
+  }
 
   try {
     const res = await fetch(DEFAULT_BUNDLE_URL);
@@ -24,7 +36,11 @@ export async function seedDefaultMaps(): Promise<string | null> {
 
     const file = new File([await res.blob()], 'default-bundle.json', { type: 'application/json' });
     const { added } = await importBundle(file);
-    return added > 0 ? 'Getting Started' : null;
+    if (added > 0) {
+      try { localStorage.setItem(DEFAULT_SEED_DONE_KEY, '1'); } catch { /* private mode */ }
+      return 'Getting Started';
+    }
+    return null;
   } catch {
     // Non-fatal — app still works without a preloaded bundle
     return null;
