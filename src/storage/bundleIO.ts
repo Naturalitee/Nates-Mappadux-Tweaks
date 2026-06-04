@@ -6,6 +6,7 @@ import {
   isEncryptedBundleEnvelope,
 } from './bundleCrypto.ts';
 import { gzipString, gunzipToString, startsWithGzipMagic } from './bundleCompression.ts';
+import { collectBundledPreferences, applyBundledPreferences, type BundledGmPreferences } from './localSettings.ts';
 
 const BUNDLE_VERSION = 1;
 
@@ -178,6 +179,11 @@ export interface DMRBundle {
    *  references). The track URLs travel; per-machine auth tokens do
    *  not. Recipients see the same tracks queued up on their own player. */
   soundtracks?:   import('../types.ts').SoundtracksConfig;
+  /** v2.17.11 — campaign/ruleset preferences that travel with the pack:
+   *  measurement scale, initiative direction, player-permission rules. See
+   *  BundledGmPreferences. Device settings, secrets, and connection endpoints
+   *  are deliberately excluded. */
+  gmPreferences?: BundledGmPreferences;
   /** ID of the map the creator had open when they saved. Restored on import
    *  so recipients land where the creator left off, useful for guided packs
    *  ("start on the city overview"). Falls through silently if the saved
@@ -442,6 +448,7 @@ export async function exportBundle(opts?: { password?: string }): Promise<Export
     exportedAt:    Date.now(),
     ...(packName.length > 0        ? { packName } : {}),
     ...(splash                     ? { splash } : {}),
+    gmPreferences: collectBundledPreferences(),
     ...(session?.soundtracks       ? { soundtracks: session.soundtracks } : {}),
     ...(theme                      ? { theme } : {}),
     ...(lastMapId                  ? { lastMapId } : {}),
@@ -720,6 +727,11 @@ export async function importBundleText(
       await saveAudioAsset({ ...asset, locallyStored: false } as AudioAsset);
     }
   }
+
+  // Restore bundle-portable GM/system preferences (measurement scale,
+  // initiative direction, player permissions) into localStorage. Absent on
+  // older bundles → leaves current settings untouched.
+  applyBundledPreferences(bundle.gmPreferences);
 
   // Restore workspace-level metadata (pack name, splash) from the bundle.
   // Only write if we already have a session record — don't fabricate one here.

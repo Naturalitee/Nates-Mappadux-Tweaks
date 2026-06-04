@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.11 — 2026-06-04
+
+Pack exports now carry your campaign/system constants. A `.mappadux` bundle includes the measurement scale, initiative direction, and player-permission rules, applied on import — so a shared pack plays on the creator's settings instead of the recipient's defaults. Device settings, secrets (API keys / tokens), connection endpoints, and soundtrack auth are deliberately excluded.
+
 ## v2.17.10 — 2026-06-04
 
 Measurement scale now syncs to players. The GM's "Measure from here" unit (number + tag) is broadcast to connected player views over the existing player-features channel — on connect and whenever it changes — so remote players measure in the same units as the GM instead of falling back to the 5' default. Same-browser views still read it locally.
