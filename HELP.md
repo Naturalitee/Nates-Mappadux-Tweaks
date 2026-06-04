@@ -426,6 +426,14 @@ When no projector is active, the panel shows just the dropdown and a brief intro
 
 ---
 
+## Measure distance *(new in v2.17)*
+
+Right-click (or long-press on touch) the map and pick **Measure from here**, then click a second point. A line is drawn between the two with the game-world distance — based on the map's grid — shown to one decimal place. The line fades after about five seconds; press **Esc** or right-click to cancel mid-measure.
+
+Available on both the GM map and the player view. The item is greyed out until the map is **calibrated** (has a grid scale) — there's no meaningful distance without one.
+
+Set the scale in **Settings → Scaled View → Measurement scale**: a number plus a unit tag, e.g. `5` + `'` (the D&D default of 5 feet per square) or `3` + `m`. The number is multiplied by the square count; the tag is appended to the result. *(Remote player devices use the 5' default unless they share this browser.)*
+
 ## Markers / Tokens
 
 Place icons on the map to represent characters, objects, or points of interest.

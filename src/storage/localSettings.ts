@@ -106,6 +106,40 @@ export function setInitiativeSortDirection(dir: 'high-to-low' | 'low-to-high'): 
   catch { /* private mode etc. — no-op */ }
 }
 
+/** v2.17.9 — Distance unit for the "Measure from here" map tool. A square
+ *  on the grid is worth `value` of `suffix` (e.g. 5 + "'" → 5' per square,
+ *  3 + "m" → 3m per square). `value` is the number the measurement maths
+ *  multiplies the square-count by; `suffix` is a free-form tag appended to
+ *  the result. Default 5' (D&D / Pathfinder). GM-set in Settings → Scaled
+ *  View; same-browser player views share this via localStorage. */
+export const MEASURE_UNIT_VALUE_KEY  = 'mappadux:measure_unit_value';
+export const MEASURE_UNIT_SUFFIX_KEY = 'mappadux:measure_unit_suffix';
+
+export function getMeasureUnitValue(): number {
+  try {
+    const v = parseFloat(localStorage.getItem(MEASURE_UNIT_VALUE_KEY) ?? '');
+    return Number.isFinite(v) && v > 0 ? v : 5;
+  } catch { return 5; }
+}
+
+export function setMeasureUnitValue(value: number): void {
+  try {
+    if (Number.isFinite(value) && value > 0) localStorage.setItem(MEASURE_UNIT_VALUE_KEY, String(value));
+  } catch { /* private mode etc. — no-op */ }
+}
+
+export function getMeasureUnitSuffix(): string {
+  try {
+    const s = localStorage.getItem(MEASURE_UNIT_SUFFIX_KEY);
+    return s === null ? "'" : s;
+  } catch { return "'"; }
+}
+
+export function setMeasureUnitSuffix(suffix: string): void {
+  try { localStorage.setItem(MEASURE_UNIT_SUFFIX_KEY, suffix); }
+  catch { /* private mode etc. — no-op */ }
+}
+
 /** v2.16.76 — Annotate mute. When set, clocks + whiteboard + notes are
  *  hidden on ALL surfaces (GM, player, projector) without deleting the
  *  per-map data. v2.16.80 — default SHOWN (Alex 2026-06-02) — unlike the

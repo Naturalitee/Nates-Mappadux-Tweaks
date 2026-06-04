@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.9 — 2026-06-04
+
+Measure-from-here ruler. Right-click (or long-press) the map and pick "Measure from here", then click a second point — a line is drawn with the game-world distance to one decimal place, fading after five seconds (Esc / right-click cancels). Works on both the GM and player views. Ghosted until the map is calibrated. Set the scale in Settings → Scaled View → Measurement scale: a number + a unit tag (default 5', or e.g. 3 + m for metric games).
+
 ## v2.17.8 — 2026-06-03
 
 Initiative preserve-order fix. When a fixed-initiative combat ended partway through a round, the actors who'd already taken their turn were saved at the back of the order (they'd been rotated behind ROUND END), so the next combat opened scrambled. End Combat now rolls the round boundary to the end first — as if you'd advanced into the next round — so the saved order is always the clean start-of-round order.

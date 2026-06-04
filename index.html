@@ -735,6 +735,9 @@
            workspace has no maps, so the last-opened map's stale texture isn't
            left sitting on the canvas. Opaque backdrop covers every layer
            above; points the user at the green + button beside the Map picker. -->
+      <!-- Transient on-map ruler ("Measure from here"). Drawn line + label
+           + crosshair capture layer mount here; inset over the canvas. -->
+      <div id="measure-layer" class="measure-layer"></div>
       <div id="empty-canvas" class="empty-canvas" hidden aria-hidden="true">
         <img class="empty-canvas__logo" src="/icons/icon-512.png" alt="Mappadux" />
         <h2 class="empty-canvas__title">An uncharted expanse</h2>
@@ -750,6 +753,7 @@
 
     <div id="marker-context-menu" class="context-menu" hidden>
       <button id="ctx-add-marker">Add marker here</button>
+      <button id="ctx-measure" title="Click a second point to measure the distance. Needs a calibrated map.">Measure from here</button>
     </div>
   </main>
 

@@ -1,6 +1,7 @@
 import { Guest } from '../p2p/Guest.ts';
 import { generateId } from '../utils/id.ts';
 import { perceptualVolume } from '../audio/volumeCurve.ts';
+import { MeasureTool, squaresBetweenNorm } from '../rendering/MeasureTool.ts';
 import { PlayerIdentifyModal, type PlayerIdentity } from './PlayerIdentifyModal.ts';
 import { PlayerActionMenu, type ActionMenuItem } from './PlayerActionMenu.ts';
 import { PlayerMessageComposer } from './PlayerMessageComposer.ts';
@@ -14,7 +15,7 @@ import { NotesLayer } from '../annotate/NotesLayer.ts';
 import { WhiteboardLayer } from '../annotate/WhiteboardLayer.ts';
 import { TextMapVideoLayer } from '../rendering/TextMapVideoLayer.ts';
 import { PlayerInitiativeRollModal } from './PlayerInitiativeRollModal.ts';
-import { showFullPlayerUiInPreview } from '../storage/localSettings.ts';
+import { showFullPlayerUiInPreview, getMeasureUnitValue, getMeasureUnitSuffix } from '../storage/localSettings.ts';
 import { Viewer } from '../viewers/Viewer.ts';
 import { PROFILE_PLAYER } from '../viewers/profiles.ts';
 import { drawGrid } from '../viewers/strategies/drawGrid.ts';
@@ -216,6 +217,8 @@ export class PlayerApp {
   private _composer = new PlayerMessageComposer();
   private _msgToasts: PlayerMessageToasts | null = null;
   private pingLayer: PingLayer | null = null;
+  /** Transient on-map ruler ("Measure from here"). */
+  private _measureTool: MeasureTool | null = null;
   private playerMarkerLayer: PlayerMarkerLayer | null = null;
   /** Per-player icon data URLs received via player_icon_update (chunked over
    *  the wire so multi-KB images don't blow past the DataChannel limit).
@@ -299,6 +302,24 @@ export class PlayerApp {
         (x, y) => this.renderer.mapNormToCanvasCss(x, y),
         { showLabel: false, persistent: false, ttlMs: 10000 },
       );
+    }
+    // Measure-from-here ruler (player face). Same component as the GM uses;
+    // distance maths reads this view's mirrored grid scale.
+    const measureLayerEl = document.getElementById('measure-layer');
+    if (measureLayerEl) {
+      this._measureTool = new MeasureTool({
+        host: measureLayerEl,
+        project: (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        unproject: (clientX, clientY) => {
+          const c = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
+          if (!c) return null;
+          const r = c.getBoundingClientRect();
+          return this.renderer.canvasCssToMapNorm(clientX - r.left, clientY - r.top);
+        },
+        squaresBetween: (a, b) =>
+          squaresBetweenNorm(a, b, this.mapImageWidth, this.mapImageHeight, this.mapPixelsPerSquare),
+        unit: () => ({ value: getMeasureUnitValue(), suffix: getMeasureUnitSuffix() }),
+      });
     }
     // v2.17 Player Voice — incoming-message toasts (GM replies, other players).
     const toastsEl = document.getElementById('player-msg-toasts');
@@ -1140,6 +1161,13 @@ export class PlayerApp {
     if (this.features.pings) {
       items.push({ label: 'Ping here', onSelect: () => this._sendPing(norm.x, norm.y) });
     }
+    // Measure-from-here ruler. Ghosted when the active map has no scale.
+    const measurable = this.mapPixelsPerSquare != null && this.mapImageWidth > 0 && this.mapImageHeight > 0;
+    items.push({
+      label: 'Measure from here',
+      disabled: !measurable,
+      onSelect: () => this._measureTool?.start({ x: norm.x, y: norm.y }),
+    });
     if (this.features.messaging) {
       items.push({ label: 'Message the GM', onSelect: () => void this._composeAndSend(undefined, 'the GM') });
       for (const p of this.roster) {
@@ -1315,6 +1343,8 @@ export class PlayerApp {
 
       case 'map_change': {
         this.currentMapId = msg.payload.id;
+        // Abandon any in-flight ruler — its anchor belonged to the old map.
+        this._measureTool?.cancel();
         if (msg.markers !== undefined) this.currentMarkers = msg.markers;
         if (msg.audio?.slots)          this.sbSlots = msg.audio.slots;
         // v2.14.17 — refresh calibration + dimensions for the new map.
