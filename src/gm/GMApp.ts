@@ -7670,6 +7670,14 @@ export class GMApp {
       const importedSession = await loadSession();
       applyTheme(importedSession?.theme);
 
+      // v2.17.11 — the pack's GM/system preferences (measurement scale,
+      // initiative direction, player permissions) were applied to
+      // localStorage during import; push the live ones out now. Features
+      // broadcast covers measure scale + permissions to connected players;
+      // the initiative event re-sorts the tracker to the imported direction.
+      this._broadcastPlayerFeatures();
+      this.initiativeTracker?.setSortDirection(getInitiativeSortDirection());
+
       // Retrofit pass — auto-detect grid scale on any map in the loaded pack
       // that doesn't already carry one. Manually-calibrated maps and no-grid
       // opt-outs are skipped. Ambiguous maps stay uncalibrated; the creator

@@ -140,6 +140,50 @@ export function setMeasureUnitSuffix(suffix: string): void {
   catch { /* private mode etc. — no-op */ }
 }
 
+/** v2.17.11 — Bundle-portable GM/system preferences. These are the
+ *  campaign/ruleset constants that define how a pack plays, as opposed to
+ *  device settings (UI scale, projector calibration), secrets (API keys,
+ *  tokens — never exported), or one-shot flags. They travel inside the
+ *  `.mappadux` bundle so a pack carries its own measurement scale, initiative
+ *  direction, and player-permission rules. Deliberately EXCLUDES: LLM /
+ *  Spotify / Freesound credentials, Stagecraft connection endpoints,
+ *  display/device prefs, and soundtrack configs (which already travel via
+ *  their own bundle field). */
+export interface BundledGmPreferences {
+  measureUnitValue?:        number;
+  measureUnitSuffix?:       string;
+  initiativeSortDirection?: 'high-to-low' | 'low-to-high';
+  playerPingsEnabled?:      boolean;
+  playerMessagingEnabled?:  boolean;
+  playerMarkersMovable?:    boolean;
+}
+
+/** Snapshot the bundle-portable preferences for an export. */
+export function collectBundledPreferences(): BundledGmPreferences {
+  return {
+    measureUnitValue:        getMeasureUnitValue(),
+    measureUnitSuffix:       getMeasureUnitSuffix(),
+    initiativeSortDirection: getInitiativeSortDirection(),
+    playerPingsEnabled:      arePingsEnabled(),
+    playerMessagingEnabled:  isMessagingEnabled(),
+    playerMarkersMovable:    arePlayerMarkersMovable(),
+  };
+}
+
+/** Apply bundle-portable preferences on import. Each field is optional —
+ *  absent fields (older bundles) leave the current value untouched. */
+export function applyBundledPreferences(p: BundledGmPreferences | undefined): void {
+  if (!p) return;
+  if (typeof p.measureUnitValue === 'number')  setMeasureUnitValue(p.measureUnitValue);
+  if (typeof p.measureUnitSuffix === 'string') setMeasureUnitSuffix(p.measureUnitSuffix);
+  if (p.initiativeSortDirection === 'high-to-low' || p.initiativeSortDirection === 'low-to-high') {
+    setInitiativeSortDirection(p.initiativeSortDirection);
+  }
+  if (typeof p.playerPingsEnabled === 'boolean')     setPingsEnabled(p.playerPingsEnabled);
+  if (typeof p.playerMessagingEnabled === 'boolean') setMessagingEnabled(p.playerMessagingEnabled);
+  if (typeof p.playerMarkersMovable === 'boolean')   setPlayerMarkersMovable(p.playerMarkersMovable);
+}
+
 /** v2.16.76 — Annotate mute. When set, clocks + whiteboard + notes are
  *  hidden on ALL surfaces (GM, player, projector) without deleting the
  *  per-map data. v2.16.80 — default SHOWN (Alex 2026-06-02) — unlike the
