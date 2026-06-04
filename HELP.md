@@ -432,7 +432,7 @@ Right-click (or long-press on touch) the map and pick **Measure from here**, the
 
 Available on both the GM map and the player view. The item is greyed out until the map is **calibrated** (has a grid scale) — there's no meaningful distance without one.
 
-Set the scale in **Settings → Scaled View → Measurement scale**: a number plus a unit tag, e.g. `5` + `'` (the D&D default of 5 feet per square) or `3` + `m`. The number is multiplied by the square count; the tag is appended to the result. *(Remote player devices use the 5' default unless they share this browser.)*
+Set the scale in **Settings → Scaled View → Measurement scale**: a number plus a unit tag, e.g. `5` + `'` (the D&D default of 5 feet per square) or `3` + `m`. The number is multiplied by the square count; the tag is appended to the result. Your scale is shared with connected player views, so everyone measures in the same units.
 
 ## Markers / Tokens
 

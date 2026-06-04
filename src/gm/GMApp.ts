@@ -6643,6 +6643,8 @@ export class GMApp {
       pings: arePingsEnabled(),
       messaging: isMessagingEnabled(),
       movableMarkers: arePlayerMarkersMovable(),
+      measureUnitValue:  getMeasureUnitValue(),
+      measureUnitSuffix: getMeasureUnitSuffix(),
     });
   }
 
@@ -6828,6 +6830,11 @@ export class GMApp {
     window.addEventListener('mappadux:initiative-direction-changed', (e) => {
       const dir = (e as CustomEvent).detail as 'high-to-low' | 'low-to-high';
       this.initiativeTracker?.setSortDirection(dir);
+    });
+    // v2.17.10 — measurement scale changed in Settings → push it to players
+    // so remote views measure on the same units.
+    window.addEventListener('mappadux:measure-unit-changed', () => {
+      this._broadcastPlayerFeatures();
     });
     // Broadcast initial state so any already-connected players sync up.
     this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });

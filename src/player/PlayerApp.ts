@@ -248,6 +248,11 @@ export class PlayerApp {
   /** Player-Voice features the GM currently allows. Default-on until the GM
    *  says otherwise (mirrors the default-enabled settings). */
   private features = { pings: true, messaging: true, movableMarkers: true };
+  /** v2.17.10 — measurement scale received from the GM (player_features), so
+   *  the ruler reads in the GM's units. Null until received → falls back to
+   *  this browser's local setting (same-browser views) or the 5' default. */
+  private _measureUnitValue:  number | null = null;
+  private _measureUnitSuffix: string | null = null;
   /** Long-press detection state for touch ping/menu. */
   private _pressTimer: number | null = null;
   private _pressStart: { x: number; y: number } | null = null;
@@ -318,7 +323,10 @@ export class PlayerApp {
         },
         squaresBetween: (a, b) =>
           squaresBetweenNorm(a, b, this.mapImageWidth, this.mapImageHeight, this.mapPixelsPerSquare),
-        unit: () => ({ value: getMeasureUnitValue(), suffix: getMeasureUnitSuffix() }),
+        unit: () => ({
+          value:  this._measureUnitValue  ?? getMeasureUnitValue(),
+          suffix: this._measureUnitSuffix ?? getMeasureUnitSuffix(),
+        }),
       });
     }
     // v2.17 Player Voice — incoming-message toasts (GM replies, other players).
@@ -1717,6 +1725,9 @@ export class PlayerApp {
         if (typeof msg.pings === 'boolean')          this.features.pings          = msg.pings;
         if (typeof msg.messaging === 'boolean')      this.features.messaging      = msg.messaging;
         if (typeof msg.movableMarkers === 'boolean') this.features.movableMarkers = msg.movableMarkers;
+        // v2.17.10 — adopt the GM's measurement scale.
+        if (typeof msg.measureUnitValue === 'number' && msg.measureUnitValue > 0) this._measureUnitValue = msg.measureUnitValue;
+        if (typeof msg.measureUnitSuffix === 'string') this._measureUnitSuffix = msg.measureUnitSuffix;
         break;
       }
 

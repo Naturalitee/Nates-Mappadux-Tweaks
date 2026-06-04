@@ -1155,6 +1155,11 @@ export interface MsgPlayerFeatures {
   pings?:          boolean;
   messaging?:      boolean;
   movableMarkers?: boolean;
+  /** v2.17.10 — distance scale for the "Measure from here" ruler, so remote
+   *  player views measure on the GM's units. `measureUnitValue` per grid
+   *  square, `measureUnitSuffix` tagged on the result (e.g. 5 + "'"). */
+  measureUnitValue?:  number;
+  measureUnitSuffix?: string;
 }
 
 /**

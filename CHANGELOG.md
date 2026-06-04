@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.10 — 2026-06-04
+
+Measurement scale now syncs to players. The GM's "Measure from here" unit (number + tag) is broadcast to connected player views over the existing player-features channel — on connect and whenever it changes — so remote players measure in the same units as the GM instead of falling back to the 5' default. Same-browser views still read it locally.
+
 ## v2.17.9 — 2026-06-04
 
 Measure-from-here ruler. Right-click (or long-press) the map and pick "Measure from here", then click a second point — a line is drawn with the game-world distance to one decimal place, fading after five seconds (Esc / right-click cancels). Works on both the GM and player views. Ghosted until the map is calibrated. Set the scale in Settings → Scaled View → Measurement scale: a number + a unit tag (default 5', or e.g. 3 + m for metric games).

@@ -443,6 +443,7 @@ export class SettingsDialog {
       const v = parseFloat(num.value);
       if (Number.isFinite(v) && v > 0) setMeasureUnitValue(v);
       else num.value = String(getMeasureUnitValue());
+      window.dispatchEvent(new CustomEvent('mappadux:measure-unit-changed'));
     });
 
     const suffix = document.createElement('input');
@@ -452,7 +453,10 @@ export class SettingsDialog {
     suffix.className = 'marker-text-input';
     suffix.style.width = '52px';
     suffix.title = 'Unit tag appended to the result (e.g. \', ft, m, km)';
-    suffix.addEventListener('change', () => setMeasureUnitSuffix(suffix.value));
+    suffix.addEventListener('change', () => {
+      setMeasureUnitSuffix(suffix.value);
+      window.dispatchEvent(new CustomEvent('mappadux:measure-unit-changed'));
+    });
 
     const perSq = document.createElement('span');
     perSq.className = 'settings-stat-sub';
