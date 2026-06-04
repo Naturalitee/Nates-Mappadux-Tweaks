@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.12 — 2026-06-04
+
+New Map Pack now keeps your creator branding. Starting a fresh pack wipes the maps and assets but preserves your customised About (text, banner graphic, and the links at the bottom) and theme — they're your identity, not pack content, so you don't rebuild them every time. If you never customised the About, it still shows the default Mappadux "Hi, I'm Alex…" content as before.
+
 ## v2.17.11 — 2026-06-04
 
 Pack exports now carry your campaign/system constants. A `.mappadux` bundle includes the measurement scale, initiative direction, and player-permission rules, applied on import — so a shared pack plays on the creator's settings instead of the recipient's defaults. Device settings, secrets (API keys / tokens), connection endpoints, and soundtrack auth are deliberately excluded.
