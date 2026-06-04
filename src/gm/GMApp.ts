@@ -34,6 +34,7 @@ import { PlayerRegistry } from '../players/PlayerRegistry.ts';
 import { assetToPlayerIcon } from '../players/playerIcon.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
 import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
+import { MeasureTool, squaresBetweenNorm } from '../rendering/MeasureTool.ts';
 import { LLMClient } from '../ai/LLMClient.ts';
 import { InitiativeTracker } from './InitiativeTracker.ts';
 import { loadInitiativeState, stripInitiativeForWire } from '../initiative/initiativeState.ts';
@@ -50,7 +51,7 @@ import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
 import { Host } from '../p2p/Host.ts';
 import { generateRoomCode, generateInstanceId } from '../p2p/roomCode.ts';
 import { saveSession, loadSession, getAllMaps, getMap, saveMap, deleteMap, clearAssetLibraries, clearEverything, getActiveInstanceId } from '../storage/db.ts';
-import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, DEFAULT_SEED_DONE_KEY, arePingsEnabled, isMessagingEnabled, arePlayerMarkersMovable, getInitiativeSortDirection } from '../storage/localSettings.ts';
+import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, DEFAULT_SEED_DONE_KEY, arePingsEnabled, isMessagingEnabled, arePlayerMarkersMovable, getInitiativeSortDirection, getMeasureUnitValue, getMeasureUnitSuffix } from '../storage/localSettings.ts';
 import { seedDefaultMaps } from '../storage/seedMaps.ts';
 import { seedAudioAssets } from '../storage/seedAudioAssets.ts';
 import { migrateLegacyMaps } from '../storage/seedMapAssets.ts';
@@ -325,6 +326,8 @@ export class GMApp {
   /** Active map's asset metadata, mirrored for projector-role math. Null when no map / no calibration. */
   private _lastMapAssetMeta: { pixelsPerSquare: number; imageWidth: number; imageHeight: number } | null = null;
   private markerEditor!:   MarkerEditor;
+  /** Transient on-map ruler ("Measure from here"). Lazily created in bindMarkerEditor. */
+  private measureTool: MeasureTool | null = null;
   /** v2.16.37 — FilterPanel instance is now constructed inside the side
    *  panel each open. Kept as nullable so callers (state sync) can probe
    *  for "is the side panel currently rendering controls?". */
@@ -1255,6 +1258,9 @@ export class GMApp {
    *  otherwise. Called whenever the active map (or its calibration)
    *  changes, and whenever the user picks a new colour. */
   private _updateMapGridPanel(): void {
+    // Calibration just changed → keep the "Measure from here" item's ghost
+    // state in sync (this runs in every refreshProjectorMapInfo branch).
+    this._updateMeasureMenuItem();
     const row     = document.getElementById('map-grid-row');
     const colour  = document.getElementById('map-grid-colour') as HTMLInputElement | null;
     const calBtn  = document.getElementById('map-grid-calibrate-btn') as HTMLButtonElement | null;
@@ -3014,6 +3020,8 @@ export class GMApp {
   private async loadMap(map: StoredMap): Promise<void> {
     // A real map is coming in — make sure the empty-canvas state is down.
     this._setEmptyCanvasVisible(false);
+    // Abandon any in-flight ruler — its anchor belongs to the outgoing map.
+    this.measureTool?.cancel();
     // Detect "same map reload" — e.g. after editing a handout, applying
     // a Fix Missing Map, or re-loading after a retarget. The broadcast
     // map_change shouldn't replay the entry transition in that case.
@@ -3773,6 +3781,19 @@ export class GMApp {
    *  the auto-flip to 'full' mode on uncalibrated map swaps. */
   private _isActiveMapCalibrated(): boolean {
     return !!this._lastMapAssetMeta?.pixelsPerSquare;
+  }
+
+  /** Ghost the "Measure from here" context-menu item when the active map
+   *  isn't calibrated (no scale → no meaningful distance). Called whenever
+   *  the active map's calibration metadata changes. */
+  private _updateMeasureMenuItem(): void {
+    const btn = document.querySelector<HTMLButtonElement>('#ctx-measure');
+    if (!btn) return;
+    const ok = this._isActiveMapCalibrated();
+    btn.disabled = !ok;
+    btn.title = ok
+      ? 'Click a second point to measure the distance.'
+      : 'Calibrate this map (give it a grid scale) to enable measuring.';
   }
 
   private onPeerMessage(_peerId: string, msg: GMMessage): void {
@@ -6106,6 +6127,37 @@ export class GMApp {
       ctxMenuEl.hidden = true;
     });
 
+    // Measure-from-here ruler. The host is #measure-layer (inset over the
+    // canvas); projections come from the renderer; distance maths uses the
+    // active map's calibration (_lastMapAssetMeta). Ghosted in the menu when
+    // the map isn't calibrated (see _updateMeasureMenuItem).
+    const measureLayer = document.getElementById('measure-layer');
+    if (measureLayer) {
+      this.measureTool = new MeasureTool({
+        host: measureLayer,
+        project: (mx, my) => this.renderer.mapNormToCanvasCss(mx, my),
+        unproject: (clientX, clientY) => {
+          const wrap = document.getElementById('canvas-wrapper');
+          if (!wrap) return null;
+          const r = wrap.getBoundingClientRect();
+          return this.renderer.canvasCssToMapNorm(clientX - r.left, clientY - r.top);
+        },
+        squaresBetween: (a, b) => {
+          const m = this._lastMapAssetMeta;
+          if (!m) return null;
+          return squaresBetweenNorm(a, b, m.imageWidth, m.imageHeight, m.pixelsPerSquare);
+        },
+        unit: () => ({ value: getMeasureUnitValue(), suffix: getMeasureUnitSuffix() }),
+      });
+    }
+    document.querySelector('#ctx-measure')?.addEventListener('click', () => {
+      ctxMenuEl.hidden = true;
+      if (!this._isActiveMapCalibrated()) return;
+      const { x, y } = this.markerEditor.ctxPos;
+      this.measureTool?.start({ x, y });
+    });
+    this._updateMeasureMenuItem();
+
     document.querySelector('#clone-marker-btn')?.addEventListener('click', () => {
       if (!this.selectedMarkerId) return;
       const src = this.state.getState().markers.find((m) => m.id === this.selectedMarkerId);
@@ -6516,6 +6568,13 @@ export class GMApp {
       // roster so the GM doesn't have to dig into the tracker overlay
       // first. Opens the tracker (if hidden) + broadcasts the prompt.
       onCallForInitiative: () => {
+        // v2.17.5 — Fixed-initiative mode with a saved order: reopen it
+        // instead of wiping + re-prompting (players aren't asked again).
+        if (this._hasPreservedInitiativeOrder()) {
+          this.initiativeTracker?.open();
+          this.setStatus('Initiative order preserved — players not re-prompted', 'ok');
+          return;
+        }
         // v2.16.63 — Call for Initiative wipes deck + tray + bench
         // (preserving discard) BEFORE seeding + broadcasting. Both the
         // Players-panel orange button and the in-tracker Call route
@@ -6555,6 +6614,14 @@ export class GMApp {
     this.host.broadcast(this.playerRegistry.rosterMessage());
   }
 
+  /** v2.17.5 — True when fixed-initiative (preserve) mode is on AND a real
+   *  order already exists. In that case Call for Initiative reopens the
+   *  saved order rather than wiping it and re-prompting players. */
+  private _hasPreservedInitiativeOrder(): boolean {
+    const st = this.initiativeTracker?.getState();
+    return !!st?.preserveOrder && st.activeDeck.some((c) => c.type !== 'round-marker');
+  }
+
   /** Dedupe a non-idempotent upstream event by its client-supplied id.
    *  Returns true if it was already seen (caller should drop it). */
   private _seenUpstream(id: string): boolean {
@@ -6576,6 +6643,8 @@ export class GMApp {
       pings: arePingsEnabled(),
       messaging: isMessagingEnabled(),
       movableMarkers: arePlayerMarkersMovable(),
+      measureUnitValue:  getMeasureUnitValue(),
+      measureUnitSuffix: getMeasureUnitSuffix(),
     });
   }
 
@@ -6738,6 +6807,13 @@ export class GMApp {
         this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(state) });
       },
       onCallForInitiative: () => {
+        // v2.17.5 — fixed-initiative mode with a saved order: don't wipe
+        // or re-prompt (the Reroll button is disabled in this mode, but
+        // guard here too for parity with the Players-panel path).
+        if (this._hasPreservedInitiativeOrder()) {
+          this.setStatus('Initiative order preserved — players not re-prompted', 'ok');
+          return;
+        }
         // v2.16.63 — reset deck + tray + bench (preserving discard),
         // then seed players and broadcast. The Players-panel orange
         // button routes through the same path via bindPlayersPanel.
@@ -6754,6 +6830,11 @@ export class GMApp {
     window.addEventListener('mappadux:initiative-direction-changed', (e) => {
       const dir = (e as CustomEvent).detail as 'high-to-low' | 'low-to-high';
       this.initiativeTracker?.setSortDirection(dir);
+    });
+    // v2.17.10 — measurement scale changed in Settings → push it to players
+    // so remote views measure on the same units.
+    window.addEventListener('mappadux:measure-unit-changed', () => {
+      this._broadcastPlayerFeatures();
     });
     // Broadcast initial state so any already-connected players sync up.
     this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });

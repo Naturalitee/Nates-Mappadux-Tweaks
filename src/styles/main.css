@@ -2710,6 +2710,12 @@ option.select-option--add {
 }
 
 .context-menu button:hover { background: var(--bg-hover); }
+.context-menu button:disabled {
+  color: var(--text-dim);
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+.context-menu button:disabled:hover { background: none; }
 
 /* ── Marker sidebar inputs ──────────────────────────────────────────────── */
 .marker-text-input {
@@ -4033,9 +4039,15 @@ option.select-option--add {
   padding: var(--space-sm) var(--space-md);
   border-top: 1px solid var(--border);
   display: flex;
-  justify-content: flex-end;
+  /* v2.17.6 — token-maker link on the left, Attributions on the right. */
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--space-sm);
   background: var(--bg-deep, rgba(0,0,0,0.15));
 }
+/* v2.17.6 — external token-editor link. Anchor styled as a ghost button;
+   text-decoration reset so it doesn't underline like a raw link. */
+.img-modal-token-link { text-decoration: none; }
 
 /* Connector grid cells need a bit more vertical room for the Import button
  * below the label — shrink the icon visual so it doesn't push the label
@@ -7854,6 +7866,30 @@ option.select-option--add {
   background: linear-gradient(135deg, #fbbf24 0%, #f59e0b 100%);
   color: #1c1208;
 }
+/* v2.17.5 — shaded / non-interactive button (Reroll Initiative in
+   fixed-initiative mode). Greys the gradient out and kills the hover. */
+.init-btn.is-disabled {
+  filter: grayscale(0.85) brightness(0.6);
+  opacity: 0.55;
+  cursor: not-allowed;
+  pointer-events: auto; /* keep the tooltip; click is no-op'd in JS */
+}
+.init-btn.is-disabled:hover { background: linear-gradient(135deg, #f59e0b 0%, #d97706 100%); }
+/* v2.17.5 — "Preserve order" toggle under End Combat. Compact checkbox
+   row matching the button column width. */
+.init-preserve {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 2px 2px 0;
+  font-size: 0.7rem;
+  color: var(--text-secondary);
+  cursor: pointer;
+  user-select: none;
+  line-height: 1.15;
+}
+.init-preserve input { margin: 0; cursor: pointer; flex-shrink: 0; }
+.init-preserve:hover { color: var(--text-primary); }
 .init-sort, .init-edge {
   padding: 6px 8px;
   background: var(--bg-input);
@@ -8719,6 +8755,65 @@ body.is-gm-preview .player-init { pointer-events: none; }
   z-index: 6;
   overflow: hidden;
 }
+
+/* ── Measure-from-here ruler (v2.17.9) ──────────────────────────────────── */
+/* Container is inert; the crosshair capture child opts pointer-events back
+   in only while a measurement is being placed. Sits above pings/markers. */
+.measure-layer {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 12;
+  overflow: visible;
+}
+.measure-capture {
+  position: absolute;
+  inset: 0;
+  pointer-events: auto;
+  cursor: crosshair;
+  /* transparent — the live line beneath shows through */
+  background: transparent;
+  touch-action: none;
+}
+.measure-svg {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  overflow: visible;
+  transition: opacity 0.6s ease;
+}
+.measure-svg.is-fading { opacity: 0; }
+.measure-line {
+  stroke: #fbbf24;
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  filter: drop-shadow(0 1px 2px rgba(0, 0, 0, 0.7));
+}
+.measure-line.is-live { stroke-dasharray: 7 5; opacity: 0.9; }
+.measure-cap {
+  fill: #fbbf24;
+  stroke: rgba(0, 0, 0, 0.6);
+  stroke-width: 1;
+}
+.measure-label {
+  position: absolute;
+  transform: translate(-50%, -160%);
+  pointer-events: none;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: rgba(17, 21, 31, 0.9);
+  border: 1px solid #fbbf24;
+  color: #fde68a;
+  font-family: var(--font-mono, monospace);
+  font-size: 0.8rem;
+  font-weight: 700;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.5);
+  transition: opacity 0.6s ease;
+}
+.measure-label.is-fading { opacity: 0; }
 .ping {
   position: absolute;
   transform: translate(-50%, -50%);

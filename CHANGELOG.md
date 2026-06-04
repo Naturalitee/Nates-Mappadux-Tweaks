@@ -1,5 +1,29 @@
 # Changelog
 
+## v2.17.10 — 2026-06-04
+
+Measurement scale now syncs to players. The GM's "Measure from here" unit (number + tag) is broadcast to connected player views over the existing player-features channel — on connect and whenever it changes — so remote players measure in the same units as the GM instead of falling back to the 5' default. Same-browser views still read it locally.
+
+## v2.17.9 — 2026-06-04
+
+Measure-from-here ruler. Right-click (or long-press) the map and pick "Measure from here", then click a second point — a line is drawn with the game-world distance to one decimal place, fading after five seconds (Esc / right-click cancels). Works on both the GM and player views. Ghosted until the map is calibrated. Set the scale in Settings → Scaled View → Measurement scale: a number + a unit tag (default 5', or e.g. 3 + m for metric games).
+
+## v2.17.8 — 2026-06-03
+
+Initiative preserve-order fix. When a fixed-initiative combat ended partway through a round, the actors who'd already taken their turn were saved at the back of the order (they'd been rotated behind ROUND END), so the next combat opened scrambled. End Combat now rolls the round boundary to the end first — as if you'd advanced into the next round — so the saved order is always the clean start-of-round order.
+
+## v2.17.7 — 2026-06-03
+
+Soundboard volume — fixed the fader feeling "loud everywhere". The slider was wired straight to linear amplitude, but loudness is perceived logarithmically, so almost all the audible change was crammed into the bottom of the travel and low positions still sounded loud. The fader position now runs through a perceptual taper before hitting the audio, so low settings are genuinely quiet and the control feels natural. Applies to one-shots and loops, on both the GM and player views.
+
+## v2.17.6 — 2026-06-03
+
+Small Assets Library — added a link to the free 2-Minute Tabletop token editor in the footer. Opens in a new tab to design or customise a token; download the PNG and upload it back into your library.
+
+## v2.17.5 — 2026-06-03
+
+Initiative tracker — fixed-initiative mode. New "Preserve order" toggle under End Combat for systems where the order is set once and reused every fight. When ticked: Reroll Initiative is disabled (shaded), End Combat saves the current order instead of clearing it (spent flags reset, ROUND END parks at the back), and players aren't re-prompted to roll once an order exists — the next combat opens with everyone pre-set.
+
 ## v2.17.4 — 2026-06-03
 
 Empty-canvas state. When the workspace has no maps — a fresh New Map Pack, or after deleting the last one — the table no longer leaves the last-opened map's texture stranded on the canvas. It now shows a tidy empty state (Mappadux logo + a nudge toward the green + button) so a blank workspace reads as deliberate rather than broken.

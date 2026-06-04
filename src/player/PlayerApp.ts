@@ -1,5 +1,7 @@
 import { Guest } from '../p2p/Guest.ts';
 import { generateId } from '../utils/id.ts';
+import { perceptualVolume } from '../audio/volumeCurve.ts';
+import { MeasureTool, squaresBetweenNorm } from '../rendering/MeasureTool.ts';
 import { PlayerIdentifyModal, type PlayerIdentity } from './PlayerIdentifyModal.ts';
 import { PlayerActionMenu, type ActionMenuItem } from './PlayerActionMenu.ts';
 import { PlayerMessageComposer } from './PlayerMessageComposer.ts';
@@ -13,7 +15,7 @@ import { NotesLayer } from '../annotate/NotesLayer.ts';
 import { WhiteboardLayer } from '../annotate/WhiteboardLayer.ts';
 import { TextMapVideoLayer } from '../rendering/TextMapVideoLayer.ts';
 import { PlayerInitiativeRollModal } from './PlayerInitiativeRollModal.ts';
-import { showFullPlayerUiInPreview } from '../storage/localSettings.ts';
+import { showFullPlayerUiInPreview, getMeasureUnitValue, getMeasureUnitSuffix } from '../storage/localSettings.ts';
 import { Viewer } from '../viewers/Viewer.ts';
 import { PROFILE_PLAYER } from '../viewers/profiles.ts';
 import { drawGrid } from '../viewers/strategies/drawGrid.ts';
@@ -215,6 +217,8 @@ export class PlayerApp {
   private _composer = new PlayerMessageComposer();
   private _msgToasts: PlayerMessageToasts | null = null;
   private pingLayer: PingLayer | null = null;
+  /** Transient on-map ruler ("Measure from here"). */
+  private _measureTool: MeasureTool | null = null;
   private playerMarkerLayer: PlayerMarkerLayer | null = null;
   /** Per-player icon data URLs received via player_icon_update (chunked over
    *  the wire so multi-KB images don't blow past the DataChannel limit).
@@ -244,6 +248,11 @@ export class PlayerApp {
   /** Player-Voice features the GM currently allows. Default-on until the GM
    *  says otherwise (mirrors the default-enabled settings). */
   private features = { pings: true, messaging: true, movableMarkers: true };
+  /** v2.17.10 — measurement scale received from the GM (player_features), so
+   *  the ruler reads in the GM's units. Null until received → falls back to
+   *  this browser's local setting (same-browser views) or the 5' default. */
+  private _measureUnitValue:  number | null = null;
+  private _measureUnitSuffix: string | null = null;
   /** Long-press detection state for touch ping/menu. */
   private _pressTimer: number | null = null;
   private _pressStart: { x: number; y: number } | null = null;
@@ -298,6 +307,27 @@ export class PlayerApp {
         (x, y) => this.renderer.mapNormToCanvasCss(x, y),
         { showLabel: false, persistent: false, ttlMs: 10000 },
       );
+    }
+    // Measure-from-here ruler (player face). Same component as the GM uses;
+    // distance maths reads this view's mirrored grid scale.
+    const measureLayerEl = document.getElementById('measure-layer');
+    if (measureLayerEl) {
+      this._measureTool = new MeasureTool({
+        host: measureLayerEl,
+        project: (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        unproject: (clientX, clientY) => {
+          const c = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
+          if (!c) return null;
+          const r = c.getBoundingClientRect();
+          return this.renderer.canvasCssToMapNorm(clientX - r.left, clientY - r.top);
+        },
+        squaresBetween: (a, b) =>
+          squaresBetweenNorm(a, b, this.mapImageWidth, this.mapImageHeight, this.mapPixelsPerSquare),
+        unit: () => ({
+          value:  this._measureUnitValue  ?? getMeasureUnitValue(),
+          suffix: this._measureUnitSuffix ?? getMeasureUnitSuffix(),
+        }),
+      });
     }
     // v2.17 Player Voice — incoming-message toasts (GM replies, other players).
     const toastsEl = document.getElementById('player-msg-toasts');
@@ -1139,6 +1169,13 @@ export class PlayerApp {
     if (this.features.pings) {
       items.push({ label: 'Ping here', onSelect: () => this._sendPing(norm.x, norm.y) });
     }
+    // Measure-from-here ruler. Ghosted when the active map has no scale.
+    const measurable = this.mapPixelsPerSquare != null && this.mapImageWidth > 0 && this.mapImageHeight > 0;
+    items.push({
+      label: 'Measure from here',
+      disabled: !measurable,
+      onSelect: () => this._measureTool?.start({ x: norm.x, y: norm.y }),
+    });
     if (this.features.messaging) {
       items.push({ label: 'Message the GM', onSelect: () => void this._composeAndSend(undefined, 'the GM') });
       for (const p of this.roster) {
@@ -1314,6 +1351,8 @@ export class PlayerApp {
 
       case 'map_change': {
         this.currentMapId = msg.payload.id;
+        // Abandon any in-flight ruler — its anchor belonged to the old map.
+        this._measureTool?.cancel();
         if (msg.markers !== undefined) this.currentMarkers = msg.markers;
         if (msg.audio?.slots)          this.sbSlots = msg.audio.slots;
         // v2.14.17 — refresh calibration + dimensions for the new map.
@@ -1628,7 +1667,8 @@ export class PlayerApp {
           this._sbLoopPlayer?.setVolume(msg.slotId, msg.volume);
         } else {
           const el = this.sbAudioEls.get(msg.slotId);
-          if (el) el.volume = Math.max(0, Math.min(1, msg.volume));
+          // v2.17.7 — perceptual taper on the fader position (see volumeCurve.ts).
+          if (el) el.volume = perceptualVolume(msg.volume);
         }
         break;
       }
@@ -1685,6 +1725,9 @@ export class PlayerApp {
         if (typeof msg.pings === 'boolean')          this.features.pings          = msg.pings;
         if (typeof msg.messaging === 'boolean')      this.features.messaging      = msg.messaging;
         if (typeof msg.movableMarkers === 'boolean') this.features.movableMarkers = msg.movableMarkers;
+        // v2.17.10 — adopt the GM's measurement scale.
+        if (typeof msg.measureUnitValue === 'number' && msg.measureUnitValue > 0) this._measureUnitValue = msg.measureUnitValue;
+        if (typeof msg.measureUnitSuffix === 'string') this._measureUnitSuffix = msg.measureUnitSuffix;
         break;
       }
 
@@ -1885,7 +1928,8 @@ export class PlayerApp {
     }
     el.currentTime = 0;
     el.loop   = false;
-    el.volume = Math.max(0, Math.min(1, volume));
+    // v2.17.7 — perceptual taper on the fader position (see volumeCurve.ts).
+    el.volume = perceptualVolume(volume);
     el.muted  = this.sbMuted;
     void el.play().catch(() => {
       this._scheduleAudioResume();

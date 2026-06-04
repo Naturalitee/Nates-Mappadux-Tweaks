@@ -63,6 +63,7 @@ export function defaultInitiativeState(): InitiativeState {
     // the least-cluttered surfaces today. Easy to repin via the edge select.
     edge:     'top',
     visible:  false,
+    preserveOrder: false,
   };
 }
 
@@ -86,6 +87,7 @@ export function loadInitiativeState(): InitiativeState {
       lastNumericSortMode: (parsed.lastNumericSortMode === 'low-to-high' ? 'low-to-high' : 'high-to-low'),
       edge:        (parsed.edge as InitiativeEdge | undefined) ?? 'top',
       visible:     !!parsed.visible,
+      preserveOrder: !!parsed.preserveOrder,
     };
   } catch { return defaultInitiativeState(); }
 }
@@ -323,6 +325,39 @@ export function endCombat(state: InitiativeState): InitiativeState {
     unallocated: [],
     threatBench: defaultInitiativeState().threatBench,
     discarded:   [],
+  };
+}
+
+/** v2.17.5 — Fixed-initiative "End Combat". Instead of wiping, save the
+ *  current order so the NEXT combat opens with the same cards + values
+ *  pre-set. Spent flags clear and the ROUND END marker re-parks at the
+ *  back (so the new fight starts cleanly from the top); every card's value
+ *  is left exactly as it was. Tray, bench, and discard are preserved
+ *  untouched. Used when preserveOrder is on so players aren't re-rolled
+ *  every combat.
+ *
+ *  v2.17.8 — RESTORE THE START-OF-ROUND ORDER first. If combat ends
+ *  mid-round, the actors who already went have been rotated to the BACK of
+ *  the deck (behind ROUND END) by advanceTurn. Saving verbatim would
+ *  scramble next combat's order (a fast player who'd already acted would
+ *  open at the back). So we rotate the round boundary to the end — exactly
+ *  as if Advance had been clicked enough times to roll into the next round
+ *  — which puts the already-acted cards back at the front, ahead of those
+ *  still to go, reconstructing the canonical order. */
+export function endCombatPreserve(state: InitiativeState): InitiativeState {
+  const deck = state.activeDeck;
+  const markerIdx = deck.findIndex((c) => c.type === 'round-marker');
+  // Cards after ROUND END acted earlier this round → they lead next round;
+  // cards before ROUND END still had their turn pending → they follow.
+  const rolled = markerIdx === -1
+    ? deck.slice()
+    : [...deck.slice(markerIdx + 1), ...deck.slice(0, markerIdx)];
+  const kept = rolled
+    .filter((c) => c.type !== 'round-marker')
+    .map((c) => ({ ...c, isSpent: false }));
+  return {
+    ...state,
+    activeDeck: kept.length > 0 ? [...kept, makeRoundMarker()] : [],
   };
 }
 

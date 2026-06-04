@@ -8,6 +8,10 @@ import {
   setLocalPlayerStaticOnly,
   isScaledViewTransitionsEnabled,
   setScaledViewTransitionsEnabled,
+  getMeasureUnitValue,
+  setMeasureUnitValue,
+  getMeasureUnitSuffix,
+  setMeasureUnitSuffix,
   getUiScale,
   setUiScale,
   applyUiScale,
@@ -402,7 +406,65 @@ export class SettingsDialog {
       set: setScaledViewTransitionsEnabled,
     }));
 
+    sec.appendChild(this._buildMeasureUnitRow());
+
     return sec;
+  }
+
+  /** Distance unit for the "Measure from here" map ruler: a number-per-square
+   *  plus a free-form suffix (e.g. 5 + "'" or 3 + "m"). */
+  private _buildMeasureUnitRow(): HTMLElement {
+    const row = document.createElement('div');
+    row.className = 'settings-danger-row';
+    row.style.alignItems = 'center';
+    row.style.justifyContent = 'space-between';
+
+    const label = document.createElement('div');
+    label.innerHTML =
+      '<strong>Measurement scale</strong><br><span class="settings-stat-sub">' +
+      'One grid square equals this distance, used by "Measure from here". The number is multiplied by the square count; the unit is tagged on the end. E.g. 5 + \' or 3 + m.</span>';
+    row.appendChild(label);
+
+    const group = document.createElement('div');
+    group.style.display = 'flex';
+    group.style.gap = '6px';
+    group.style.alignItems = 'center';
+    group.style.flexShrink = '0';
+
+    const num = document.createElement('input');
+    num.type = 'number';
+    num.min = '0';
+    num.step = 'any';
+    num.value = String(getMeasureUnitValue());
+    num.className = 'marker-text-input';
+    num.style.width = '64px';
+    num.title = 'Distance per grid square (the number used in the maths)';
+    num.addEventListener('change', () => {
+      const v = parseFloat(num.value);
+      if (Number.isFinite(v) && v > 0) setMeasureUnitValue(v);
+      else num.value = String(getMeasureUnitValue());
+      window.dispatchEvent(new CustomEvent('mappadux:measure-unit-changed'));
+    });
+
+    const suffix = document.createElement('input');
+    suffix.type = 'text';
+    suffix.value = getMeasureUnitSuffix();
+    suffix.maxLength = 8;
+    suffix.className = 'marker-text-input';
+    suffix.style.width = '52px';
+    suffix.title = 'Unit tag appended to the result (e.g. \', ft, m, km)';
+    suffix.addEventListener('change', () => {
+      setMeasureUnitSuffix(suffix.value);
+      window.dispatchEvent(new CustomEvent('mappadux:measure-unit-changed'));
+    });
+
+    const perSq = document.createElement('span');
+    perSq.className = 'settings-stat-sub';
+    perSq.textContent = '/ square';
+
+    group.append(num, suffix, perSq);
+    row.appendChild(group);
+    return row;
   }
 
   // ─── Performance ────────────────────────────────────────────────────────

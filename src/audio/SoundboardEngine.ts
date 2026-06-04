@@ -1,4 +1,5 @@
 import { WebAudioLoopPlayer } from './WebAudioLoopPlayer.ts';
+import { perceptualVolume } from './volumeCurve.ts';
 
 /**
  * SoundboardEngine — GM-side audio playback.
@@ -83,7 +84,8 @@ export class SoundboardEngine {
     // Always restart from the beginning — supports pew-pew retriggering
     el.currentTime = 0;
     el.loop        = false;
-    el.volume      = Math.max(0, Math.min(1, volume));
+    // v2.17.7 — perceptual taper on the fader position (see volumeCurve.ts).
+    el.volume      = perceptualVolume(volume);
     el.muted       = this._muteAll;
 
     // Wire ended callback so one-shot sounds reset the play button
@@ -118,7 +120,7 @@ export class SoundboardEngine {
       return;
     }
     const el = this.audioEls.get(slotId);
-    if (el) el.volume = Math.max(0, Math.min(1, volume));
+    if (el) el.volume = perceptualVolume(volume);
   }
 
   setLoop(slotId: string, loop: boolean): void {

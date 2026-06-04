@@ -27,6 +27,8 @@
  * v2.16.50.
  */
 
+import { perceptualVolume } from './volumeCurve.ts';
+
 interface ActiveSlot {
   source:        AudioBufferSourceNode;
   gain:          GainNode;
@@ -98,7 +100,11 @@ export class WebAudioLoopPlayer {
     source.loop = true;
 
     const gain = ctx.createGain();
-    const vol = Math.max(0, Math.min(1, volume));
+    // v2.17.7 — perceptual taper: the incoming `volume` is the raw fader
+    // POSITION; curve it before it hits the gain node so low slider
+    // positions are actually quiet. intendedVolume stores the curved gain
+    // so mute/unmute restores the right level.
+    const vol = perceptualVolume(volume);
     gain.gain.value = this._muted ? 0 : vol;
 
     source.connect(gain).connect(ctx.destination);
@@ -140,7 +146,8 @@ export class WebAudioLoopPlayer {
   setVolume(slotId: string, volume: number): void {
     const slot = this.slots.get(slotId);
     if (!slot) return;
-    const vol = Math.max(0, Math.min(1, volume));
+    // v2.17.7 — curve the fader position to a perceptual gain (see play()).
+    const vol = perceptualVolume(volume);
     slot.intendedVolume = vol;
     slot.gain.gain.value = this._muted ? 0 : vol;
   }

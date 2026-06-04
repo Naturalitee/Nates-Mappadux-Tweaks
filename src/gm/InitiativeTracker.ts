@@ -9,6 +9,7 @@ import {
   injectFromStagingWithValue,
   discardCard,
   endCombat,
+  endCombatPreserve,
   resetForNewCombat,
   restoreFromDiscard,
   reorderCard,
@@ -162,10 +163,23 @@ export class InitiativeTracker {
   private _setEdge(edge: InitiativeEdge): void { this._mutate((s) => ({ ...s, edge })); }
 
   private _endCombat(): void {
+    // v2.17.5 — In fixed-initiative (preserve) mode, End Combat is a SAVE,
+    // not a wipe: keep the order for next time and just close. No confirm
+    // needed since nothing is destroyed.
+    if (this.state.preserveOrder) {
+      this._mutate((s) => ({ ...endCombatPreserve(s), visible: false }));
+      return;
+    }
     if (!confirm('End combat? Clears the rail + tray + bench + discard and closes the tracker.')) return;
     // v2.16.61 — End Combat is now also the "close tracker" affordance
     // (the hide × went away). Wipe + close in one mutation.
     this._mutate((s) => ({ ...endCombat(s), visible: false }));
+  }
+
+  /** v2.17.5 — Toggle fixed-initiative mode (preserve order between
+   *  combats). Persists in state + broadcasts like any other change. */
+  private _setPreserveOrder(on: boolean): void {
+    this._mutate((s) => ({ ...s, preserveOrder: on }));
   }
 
   private _editValue(cardId: string, value: string): void {
@@ -297,9 +311,39 @@ export class InitiativeTracker {
     // initiative action. Resets deck + tray + bench (preserving discard)
     // and re-prompts players. Both this button and the Players-panel
     // orange one route through cb.onCallForInitiative.
-    const reroll = mkBtn('Reroll Initiative', 'init-btn init-btn--roll', () => this.cb.onCallForInitiative());
+    // v2.17.5 — disabled in fixed-initiative (preserve) mode: a preserved
+    // order shouldn't be re-rolled. Shaded + non-interactive, with a
+    // tooltip pointing at the Preserve toggle below.
+    const reroll = mkBtn('Reroll Initiative', 'init-btn init-btn--roll', () => {
+      if (this.state.preserveOrder) return;
+      this.cb.onCallForInitiative();
+    });
+    if (this.state.preserveOrder) {
+      reroll.classList.add('is-disabled');
+      reroll.title = 'Initiative order is preserved between combats (fixed-initiative mode). Untick "Preserve order" to re-roll.';
+    }
     const end = mkBtn('End Combat', 'init-btn init-btn--danger', () => this._endCombat());
+    if (this.state.preserveOrder) {
+      end.title = 'Saves the current order for next combat and closes the tracker (fixed-initiative mode).';
+    }
     primary.append(advance, reroll, end);
+
+    // v2.17.5 — "Preserve order" toggle, sitting directly under End Combat.
+    // Fixed-initiative systems set an order once and reuse it; ticking this
+    // disables Reroll, turns End Combat into a save, and stops players being
+    // re-prompted once an order exists.
+    const preserveRow = document.createElement('label');
+    preserveRow.className = 'init-preserve';
+    preserveRow.title = 'Fixed-initiative games: keep the same order every combat. End Combat saves the order instead of clearing it, and players are not asked to re-roll.';
+    const preserveCb = document.createElement('input');
+    preserveCb.type = 'checkbox';
+    preserveCb.checked = !!this.state.preserveOrder;
+    preserveCb.addEventListener('change', () => this._setPreserveOrder(preserveCb.checked));
+    const preserveTxt = document.createElement('span');
+    preserveTxt.textContent = 'Preserve order';
+    preserveRow.append(preserveCb, preserveTxt);
+    primary.append(preserveRow);
+
     ctl.append(primary);
     // v2.16.64 — sort-direction dropdown removed. Direction is a
     // one-time settings choice (default High → Low). Manual mode is
