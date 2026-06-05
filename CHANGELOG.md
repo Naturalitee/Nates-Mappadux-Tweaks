@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.15 — 2026-06-05
+
+Added an "under active development" note to the default About dialog and the README, pointing people to the Discord to report bugs so they get fixed before they become annoying.
+
 ## v2.17.14 — 2026-06-05
 
 Composite map picker only forces the scaled filter for the first tile. Once a calibrated tile is in the composite (setting the master grid), "+ Add Map" opens unfiltered so you can drop in unscaled tiles — their scale is inferred from the master. The first tile still opens scaled-only.
