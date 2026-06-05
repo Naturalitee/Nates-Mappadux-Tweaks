@@ -3802,6 +3802,10 @@ export class GMApp {
       // window). The disconnect handler reads the set to show a sane
       // status message instead of "Player (peerid…) disconnected".
       this._gmPreviewPeers.add(_peerId);
+      // v2.17.13 — onPeerConnected already flashed the generic
+      // "Player connected (peerid…)" status; rewrite it now that we know
+      // this peer is the GM's own Player View (PiP / pop-out), not a guest.
+      this.setStatus('Player connected (GM Player View)', 'ok');
       // v2.16.98 — previews identify via gm_preview_hello (NOT
       // player_identify), so they skipped the overlay catch-up bundle that
       // real joiners get: map-anchored state (videos, annotations, tokens)
@@ -7379,8 +7383,12 @@ export class GMApp {
       const allMaps = await getAllMaps();
       for (const m of allMaps) await deleteMap(m.id);
       await clearAssetLibraries();
-      // Preserve peerId (and lastMapId=null) but drop packName/splash/theme
-      // unless the user typed a new pack name.
+      // v2.17.12 — preserve the creator's IDENTITY across a new pack: their
+      // customised About (splash — text, graphic, and the links at the
+      // bottom) and theme carry over, so "New Map Pack" wipes the maps /
+      // assets but keeps your branding. An un-customised splash stays
+      // undefined → the default "Hi, I'm Alex…" About still shows. Pack
+      // content (soundtracks) is NOT preserved — that's per-pack, not identity.
       const peerId    = existing?.peerId ?? '';
       const packName  = choice.packName.trim();
       await saveSession({
@@ -7388,6 +7396,8 @@ export class GMApp {
         peerId,
         lastMapId: null,
         ...(packName ? { packName } : {}),
+        ...(existing?.splash ? { splash: existing.splash } : {}),
+        ...(existing?.theme  ? { theme:  existing.theme  } : {}),
       });
       await seedAudioAssets(); // re-seed built-in tracker pings (CC0)
       // v2.17.3 — restore the basic default tokens. clearAssetLibraries() wiped
@@ -7402,7 +7412,7 @@ export class GMApp {
       await this._reloadLibIcons();
       await this.populateMapList();
       void this._refreshPackNameInput();
-      applyTheme(undefined); // back to default theme
+      applyTheme(existing?.theme); // keep the creator's theme (default if none)
       this.setStatus('New pack ready — empty workspace', 'ok');
     } catch (err) {
       this.setStatus(`New pack failed: ${(err as Error).message}`, 'error');
