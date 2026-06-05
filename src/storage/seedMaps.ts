@@ -1,8 +1,20 @@
-import { getAllMaps } from './db.ts';
+import { getAllMaps, clearEverything, loadSession, saveSession } from './db.ts';
 import { importBundle } from './bundleIO.ts';
-import { DEFAULT_SEED_DONE_KEY } from './localSettings.ts';
+import { DEFAULT_SEED_DONE_KEY, setWelcomePackSeededVersion } from './localSettings.ts';
 
 const DEFAULT_BUNDLE_URL = '/default-bundle.json';
+
+/**
+ * v2.17.19 — Content version of the bundled Getting Started pack
+ * (public/default-bundle.json). BUMP THIS whenever the default bundle is
+ * regenerated with new content. The seeded version is recorded per browser;
+ * when this constant is newer, the GM is offered a one-click refresh of the
+ * tour (it is never auto-replaced — see GMApp._maybeOfferWelcomePackRefresh).
+ *
+ *   1 — original tour (no walkthrough video)
+ *   2 — adds the embedded walkthrough video (shipped 2026-06-05)
+ */
+export const WELCOME_PACK_VERSION = 2;
 
 /**
  * On first run (empty map library) fetch and import the default bundle from
@@ -38,11 +50,46 @@ export async function seedDefaultMaps(): Promise<string | null> {
     const { added } = await importBundle(file);
     if (added > 0) {
       try { localStorage.setItem(DEFAULT_SEED_DONE_KEY, '1'); } catch { /* private mode */ }
+      // Record which welcome-pack version this browser now holds, so a future
+      // content bump can offer a refresh without re-nagging users already current.
+      setWelcomePackSeededVersion(WELCOME_PACK_VERSION);
       return 'Getting Started';
     }
     return null;
   } catch {
     // Non-fatal — app still works without a preloaded bundle
     return null;
+  }
+}
+
+/**
+ * v2.17.19 — Replace the workspace with a fresh copy of the current default
+ * bundle (the updated Getting Started tour). Used by the "a new tour is
+ * available" offer once the GM has CONSENTED — this wipes the current
+ * workspace, so the caller must confirm first and reload the UI afterwards.
+ * The room code is preserved so the GM keeps the same join link.
+ *
+ * Returns true on success, false if the bundle couldn't be fetched/imported
+ * (in which case the workspace has already been cleared — the caller should
+ * reload regardless so the app re-seeds cleanly).
+ */
+export async function reseedWelcomePack(): Promise<boolean> {
+  const session = await loadSession();
+  const peerId = session?.peerId ?? '';
+  await clearEverything();
+  // Recreate a minimal session so importBundle can restore the pack's
+  // metadata (packName, lastMapId, any splash/theme) into it.
+  await saveSession({ key: 'current', peerId, lastMapId: null, packName: 'Getting Started' });
+  try {
+    const res = await fetch(DEFAULT_BUNDLE_URL);
+    if (!res.ok) return false;
+    const file = new File([await res.blob()], 'default-bundle.json', { type: 'application/json' });
+    const { added } = await importBundle(file);
+    if (added <= 0) return false;
+    try { localStorage.setItem(DEFAULT_SEED_DONE_KEY, '1'); } catch { /* private mode */ }
+    setWelcomePackSeededVersion(WELCOME_PACK_VERSION);
+    return true;
+  } catch {
+    return false;
   }
 }
