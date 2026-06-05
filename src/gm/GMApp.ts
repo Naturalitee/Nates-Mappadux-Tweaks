@@ -3798,13 +3798,19 @@ export class GMApp {
 
   private onPeerMessage(_peerId: string, msg: GMMessage): void {
     if (msg.type === 'gm_preview_hello') {
-      // v2.16.43 — tag this peer as a GM preview (PiP iframe or pop-out
-      // window). The disconnect handler reads the set to show a sane
-      // status message instead of "Player (peerid…) disconnected".
-      this._gmPreviewPeers.add(_peerId);
-      // v2.17.13 — onPeerConnected already flashed the generic
-      // "Player connected (peerid…)" status; rewrite it now that we know
-      // this peer is the GM's own Player View (PiP / pop-out), not a guest.
+      // v2.16.43 — tag this preview (PiP iframe or pop-out window) so the
+      // disconnect handler shows a sane status instead of "Player (peerid…)
+      // disconnected".
+      // v2.17.16 — previews now arrive over LocalChannel (_peerId === 'local'),
+      // which carries no peer id, so key the tracking on the preview's
+      // clientId. That lets the matching player_bye (also clientId-tagged)
+      // clear it on close — restoring the connect/count/disconnect lifecycle
+      // the dropped PeerJS path used to provide.
+      const key = msg.clientId ?? _peerId;
+      this._gmPreviewPeers.add(key);
+      this._updatePlayerCount();
+      // v2.17.13 — show the GM that their own Player View is connected
+      // (rather than a generic peer hash or a guest joining).
       this.setStatus('Player connected (GM Player View)', 'ok');
       // v2.16.98 — previews identify via gm_preview_hello (NOT
       // player_identify), so they skipped the overlay catch-up bundle that
@@ -3846,6 +3852,14 @@ export class GMApp {
       return;
     }
     if (msg.type === 'player_bye') {
+      // v2.17.16 — a same-browser GM preview (LocalChannel-only) signs off
+      // with player_bye on pagehide. Clear its clientId-keyed tracking +
+      // show the matching disconnect status, mirroring the old PeerJS path.
+      if (this._gmPreviewPeers.delete(msg.clientId)) {
+        this._updatePlayerCount();
+        this.setStatus('GM Player View disconnected', 'ok');
+        return;
+      }
       this.playerRegistry.bye(msg.clientId);
       this._refreshPlayersPanel();
       this._broadcastRoster();

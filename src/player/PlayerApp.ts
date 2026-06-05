@@ -927,7 +927,7 @@ export class PlayerApp {
         // "Player (peerid…) disconnected" when the GM minimises / closes
         // the preview.
         if (this._gmPreviewFlag) {
-          try { this.guest?.send({ type: 'gm_preview_hello' }); } catch { /* best-effort */ }
+          try { this.guest?.send({ type: 'gm_preview_hello', clientId: this.clientId }); } catch { /* best-effort */ }
         }
         void this._onConnectedIdentity();
       },
@@ -940,7 +940,14 @@ export class PlayerApp {
       onMessage: (msg, blob) => this.handleMessage(msg, blob),
     });
 
-    this.guest.connect(roomCode);
+    // v2.17.16 — A GM preview (PiP / pop-out) is always same-browser, so
+    // ride on LocalChannel alone and skip the flaky PeerJS loopback. Real
+    // players (QR / room code, no gmPreview flag) still connect over PeerJS.
+    if (this._gmPreviewFlag) {
+      this.guest.connectLocalOnly();
+    } else {
+      this.guest.connect(roomCode);
+    }
 
     // Liveness pings so the GM can detect this same-machine player even
     // though BroadcastChannel offers no presence signal. PeerJS-connected
@@ -949,7 +956,11 @@ export class PlayerApp {
     if (this._heartbeatInterval !== null) clearInterval(this._heartbeatInterval);
     const beat = () => {
       // Don't announce a same-browser preview popup as a real player.
-      if (this._isPreviewMode()) return;
+      // v2.17.16 — gate on the gmPreview flag (not _isPreviewMode): the GM's
+      // own Player View is tracked via gm_preview_hello, so it must never
+      // also heartbeat as a local player — even when "preview behaves as a
+      // real player" is on — or it would be counted twice.
+      if (this._gmPreviewFlag) return;
       this.guest.send({ type: 'player_heartbeat', clientId: this.clientId });
     };
     beat();

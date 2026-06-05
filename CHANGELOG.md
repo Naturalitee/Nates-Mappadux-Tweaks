@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.16 — 2026-06-05
+
+Fixed the GM's own Player View constantly disconnecting / reconnecting. The preview is always in the same browser as the GM, so it now rides on the local BroadcastChannel alone instead of also opening a redundant peer-to-peer loopback — that loopback was being suspended by browser background-throttling (worst in Chrome) every time the GM focused the main window, which caused the reconnect loop, the "P2P error: Connection is not open" toasts, and the occasional marker move that didn't reach the preview. The Host also no longer attempts to send on a half-closed connection, so a flaky remote peer can't surface that error either.
+
 ## v2.17.15 — 2026-06-05
 
 Added an "under active development" note to the default About dialog and the README, pointing people to the Discord to report bugs so they get fixed before they become annoying.
