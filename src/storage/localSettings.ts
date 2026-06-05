@@ -26,6 +26,48 @@ export const SUPPRESS_DEFAULT_SEED_KEY = 'dmr_suppress_default_seed';
  *  All Data, so a genuine fresh install still seeds. */
 export const DEFAULT_SEED_DONE_KEY = 'dmr_default_seed_done';
 
+/** v2.17.19 — Welcome (Getting Started) pack content version last seeded into
+ *  this browser. Compared against WELCOME_PACK_VERSION (src/storage/seedMaps.ts)
+ *  to offer a refresh when a newer tour ships. Absent on installs seeded before
+ *  versioning began — callers treat "seeded-but-unversioned" as version 1. */
+export const WELCOME_PACK_SEEDED_VERSION_KEY = 'dmr_welcome_pack_version';
+export function getWelcomePackSeededVersion(): number | null {
+  try {
+    const v = localStorage.getItem(WELCOME_PACK_SEEDED_VERSION_KEY);
+    return v === null ? null : (Number(v) || 0);
+  } catch { return null; }
+}
+export function setWelcomePackSeededVersion(v: number): void {
+  try { localStorage.setItem(WELCOME_PACK_SEEDED_VERSION_KEY, String(v)); } catch { /* private mode */ }
+}
+
+/** v2.17.19 — Welcome-pack-refresh version the user declined with "Not now".
+ *  Suppresses re-offering the same tour update until a newer one ships. */
+export const WELCOME_PACK_OFFER_DISMISSED_KEY = 'dmr_welcome_pack_offer_dismissed';
+export function getWelcomePackOfferDismissedVersion(): number {
+  try { return Number(localStorage.getItem(WELCOME_PACK_OFFER_DISMISSED_KEY)) || 0; }
+  catch { return 0; }
+}
+export function setWelcomePackOfferDismissedVersion(v: number): void {
+  try { localStorage.setItem(WELCOME_PACK_OFFER_DISMISSED_KEY, String(v)); } catch { /* private mode */ }
+}
+
+/** v2.17.19 — One-shot flag set just before reloading after a welcome-pack
+ *  refresh; read + cleared on the next startup to show the confirmation toast. */
+export const WELCOME_PACK_REFRESHED_KEY = 'dmr_welcome_pack_refreshed';
+export function setWelcomePackRefreshedFlag(): void {
+  try { localStorage.setItem(WELCOME_PACK_REFRESHED_KEY, '1'); } catch { /* private mode */ }
+}
+export function consumeWelcomePackRefreshedFlag(): boolean {
+  try {
+    if (localStorage.getItem(WELCOME_PACK_REFRESHED_KEY) === '1') {
+      localStorage.removeItem(WELCOME_PACK_REFRESHED_KEY);
+      return true;
+    }
+  } catch { /* private mode */ }
+  return false;
+}
+
 /** Animated map performance cap (v2.12.x). When set, the renderer caps
  *  video-map texture uploads at 1920 px on the longest side regardless
  *  of canvas size — useful on lower-end GPUs where a 4K canvas + 4K

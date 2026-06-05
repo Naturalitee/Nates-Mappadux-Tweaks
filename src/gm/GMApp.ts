@@ -51,8 +51,8 @@ import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
 import { Host } from '../p2p/Host.ts';
 import { generateRoomCode, generateInstanceId } from '../p2p/roomCode.ts';
 import { saveSession, loadSession, getAllMaps, getMap, saveMap, deleteMap, clearAssetLibraries, clearEverything, getActiveInstanceId } from '../storage/db.ts';
-import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, DEFAULT_SEED_DONE_KEY, arePingsEnabled, isMessagingEnabled, arePlayerMarkersMovable, getInitiativeSortDirection, getMeasureUnitValue, getMeasureUnitSuffix } from '../storage/localSettings.ts';
-import { seedDefaultMaps } from '../storage/seedMaps.ts';
+import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, DEFAULT_SEED_DONE_KEY, arePingsEnabled, isMessagingEnabled, arePlayerMarkersMovable, getInitiativeSortDirection, getMeasureUnitValue, getMeasureUnitSuffix, getWelcomePackSeededVersion, getWelcomePackOfferDismissedVersion, setWelcomePackOfferDismissedVersion, setWelcomePackRefreshedFlag, consumeWelcomePackRefreshedFlag } from '../storage/localSettings.ts';
+import { seedDefaultMaps, reseedWelcomePack, WELCOME_PACK_VERSION } from '../storage/seedMaps.ts';
 import { seedAudioAssets } from '../storage/seedAudioAssets.ts';
 import { migrateLegacyMaps } from '../storage/seedMapAssets.ts';
 import { seedImageAssetsIfNeeded } from '../images/seedImageAssets.ts';
@@ -2002,6 +2002,11 @@ export class GMApp {
     });
     void this._refreshPackNameInput();
 
+    // v2.17.19 — confirmation toast after a welcome-pack refresh reload.
+    if (consumeWelcomePackRefreshedFlag()) {
+      this.setStatus('Updated your Getting Started tour — now with a walkthrough video.', 'ok');
+    }
+
     // First-run intro: if the default bundle was just seeded, pop the About
     // dialog so a new user sees what they've landed on. Snapshot the flag
     // BEFORE clearing it so _maybeShowMotd can read it after the
@@ -2013,8 +2018,59 @@ export class GMApp {
     // MOTD popup: one-off message gate driven by src/motd/motd.ts.
     // Runs after the seed/About decision so it can defer when About
     // is open. Internally checks _didSeedDefault to silently mark
-    // first-installers as caught up.
-    void this._maybeShowMotd().finally(() => { this._didSeedDefault = false; });
+    // first-installers as caught up. v2.17.19 — once MOTD has resolved,
+    // offer the refreshed Getting Started tour if a newer one has shipped.
+    void (async () => {
+      try { await this._maybeShowMotd(); }
+      finally { this._didSeedDefault = false; }
+      await this._maybeOfferWelcomePackRefresh();
+    })();
+  }
+
+  /**
+   * v2.17.19 — Offer (never force) a refresh of the Getting Started tour when
+   * a newer welcome-pack version has shipped. Gated tightly so we only ever
+   * approach a user still sitting on the untouched default tour: they must
+   * have been seeded, be behind the current version, not have already declined
+   * this version, still carry the default pack name, and have no custom About
+   * or theme (renaming or branding the pack = they've made it their own). The
+   * refresh itself wipes + re-seeds, so it runs ONLY on explicit consent.
+   */
+  private async _maybeOfferWelcomePackRefresh(): Promise<void> {
+    if (this._aboutOpen) return; // don't stack on the first-run About
+    try { if (localStorage.getItem(DEFAULT_SEED_DONE_KEY) !== '1') return; } catch { return; }
+    if (getWelcomePackOfferDismissedVersion() >= WELCOME_PACK_VERSION) return;
+    // Installs seeded before versioning existed count as version 1.
+    const seeded = getWelcomePackSeededVersion() ?? 1;
+    if (seeded >= WELCOME_PACK_VERSION) return; // already on the latest tour
+
+    const session = await loadSession();
+    if (!session) return;
+    if ((session.packName ?? '') !== 'Getting Started') return; // renamed → their own
+    if (session.splash || session.theme) return;                // branded → their own
+
+    const ok = await confirmDialog({
+      title: 'A fresh Getting Started tour is ready',
+      body: 'The walkthrough has been refreshed and now includes a short intro video. Load the new version? This replaces the current Getting Started pack in this browser.',
+      confirmLabel: 'Load it',
+      cancelLabel:  'Not now',
+      confirmTone:  'primary',
+    });
+    if (!ok) {
+      // Remember the decline so we don't re-ask until an even newer tour ships.
+      setWelcomePackOfferDismissedVersion(WELCOME_PACK_VERSION);
+      return;
+    }
+
+    this.setStatus('Loading the new Getting Started tour…', 'ok');
+    const done = await reseedWelcomePack();
+    if (!done) {
+      // reseedWelcomePack clears before importing, so on failure a reload is
+      // the cleanest recovery — startup re-seeds from the bundle on its own.
+      this.setStatus('Re-seeding the tour — reloading…', 'warn');
+    }
+    setWelcomePackRefreshedFlag();
+    location.reload();
   }
 
   private onPeerConnected(id: string): void {

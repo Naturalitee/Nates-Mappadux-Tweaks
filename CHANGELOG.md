@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.19 — 2026-06-05
+
+The Getting Started pack is now internally versioned. When a newer tour ships, anyone still on an older one is offered a one-click refresh on startup ("A fresh Getting Started tour is ready — Load it? / Not now"). It never auto-replaces anything: the offer only appears if you still have the default, unbranded Getting Started pack, and loading is your choice. Decline once and it won't ask again until an even newer tour ships.
+
 ## v2.17.18 — 2026-06-05
 
 Refreshed the Getting Started pack with a walkthrough video built into the tour, to make first-run onboarding easier.
