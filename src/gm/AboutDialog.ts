@@ -890,6 +890,11 @@ export class AboutDialog {
 
   private _defaultBody(): string {
     return (
+      '<p style="border: 1px solid rgba(224,160,64,0.5); border-radius: 6px; padding: 8px 10px; background: rgba(224,160,64,0.08);">' +
+        '<strong>Heads-up:</strong> Mappadux is under active, ongoing development, so you may run into the odd bug. ' +
+        'If something’s broken or annoying, please <a href="' + DISCORD_URL + '" target="_blank" rel="noopener">pop onto the Discord</a> and let me know — ' +
+        'reporting it is the fastest way to get it fixed before it gets in the way of your game.' +
+      '</p>' +
       '<p><strong>Hi, I’m Alex.</strong></p>' +
       '<p>I wanted VTT features for the table I actually game at — players around real wood, a screen showing the map. I kept cobbling together half a dozen tools, and prep was eating most of my evening before anyone arrived. I wanted <em>one</em> thing: fast to set up, easy to use without breaking the flow of play.</p>' +
       '<p>So Mappadux:</p>' +

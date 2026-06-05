@@ -11,6 +11,8 @@
 
 No account needed. No server. Everything stays on your device — maps you upload are stored in your browser's local storage and never sent anywhere. Just open the link and go.
 
+> **Heads-up:** Mappadux is under active, ongoing development, so you may run into the odd bug. If something's broken or annoying, please [pop onto the Discord](https://discord.gg/UAEq4zzjD8) and let me know — reporting it is the fastest way to get it fixed before it gets in the way of your game.
+
 ## Why Mappadux
 
 **Hi, I'm Alex.** I wanted VTT features for the table I actually game at — players around real wood, a screen showing the map. I kept cobbling together half a dozen tools, and prep was eating most of my evening before anyone arrived. I wanted *one* thing: fast to set up, easy to use without breaking the flow of play. That's Mappadux.

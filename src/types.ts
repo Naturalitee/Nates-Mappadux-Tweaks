@@ -909,14 +909,19 @@ export interface MsgProjectorHello {
 
 /**
  * v2.16.43 — PiP iframe / pop-out window → GM identification. PlayerApp
- * sends this on PeerJS connect when the URL carries `?gmPreview=1`, so
- * the GM can show "GM Player View disconnected" instead of a generic
- * "Player (peerid…) disconnected" when the GM minimises / closes the
- * preview. No payload beyond the type — peer id on the wire is all the
- * GM needs to track these.
+ * sends this when the URL carries `?gmPreview=1`, so the GM can show
+ * "GM Player View disconnected" instead of a generic "Player (peerid…)
+ * disconnected" when the GM minimises / closes the preview.
+ *
+ * v2.17.16 — GM previews are always same-browser, so they now run over
+ * LocalChannel only (the PeerJS loopback was redundant and dropped
+ * constantly under browser background-throttling). LocalChannel carries
+ * no peer id, so the hello includes the preview's clientId — the GM keys
+ * its preview tracking + the matching player_bye on it.
  */
 export interface MsgGmPreviewHello {
   type: 'gm_preview_hello';
+  clientId?: string;
 }
 
 /**

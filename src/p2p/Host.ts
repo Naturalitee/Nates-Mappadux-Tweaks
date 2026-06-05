@@ -533,6 +533,13 @@ export class Host {
   }
 
   private sendTo(conn: DataConnection, msg: GMMessage): void {
+    // v2.17.16 — Never send on a connection whose data channel isn't open.
+    // PeerJS's send() emits a "Connection is not open" error on a closed /
+    // half-torn-down channel, which bubbled to the GM as a scary P2P error
+    // toast and tripped removeConnection mid-broadcast. A closed conn is
+    // already being cleaned up by its own close/error handler, so skipping
+    // it here is safe — the peer catches up on its next full_state.
+    if (!conn.open) return;
     const { mapBlob, ...rest } = msg as { mapBlob?: ArrayBuffer } & GMMessage;
 
     // Audio data URLs are too large for a single data-channel JSON frame (> 16 KB).

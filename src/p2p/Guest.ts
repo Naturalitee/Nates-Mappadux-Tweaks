@@ -84,6 +84,34 @@ export class Guest {
   }
 
   /**
+   * v2.17.16 — Same-browser-only connect. Skips the PeerJS loopback
+   * entirely and rides on LocalChannel (BroadcastChannel) alone.
+   *
+   * The GM's own Player View (PiP iframe / pop-out, `?gmPreview=1`) is
+   * always in the same browser as the GM, so BroadcastChannel already
+   * delivers every state update reliably. The redundant loopback WebRTC
+   * channel, by contrast, gets suspended by browser background-throttling
+   * the moment the GM focuses the main window (Chrome especially), which
+   * tore the connection down + reconnected every few seconds — spamming
+   * "connection not open" errors on the GM and dropping the odd marker
+   * move. Dropping PeerJS for previews removes that whole failure mode.
+   *
+   * Fires onConnected on a microtask so the caller's identify / hello
+   * flow runs exactly as it would on a real PeerJS open.
+   */
+  connectLocalOnly(): void {
+    this._reconnectCode = null;     // no peer to reconnect to
+    this._reconnectAttempt = 0;
+    this._isSameMachineSession = true;
+    this._teardownPeer();           // ensure no stray loopback peer lingers
+    this.local.requestState();      // (re)ask in case the GM mounted late
+    void Promise.resolve().then(() => {
+      if (this._destroyed) return;
+      this.events.onConnected();
+    });
+  }
+
+  /**
    * Send a message upstream to the GM. Goes through both LocalChannel
    * (instant for same-browser windows) and the PeerJS connection (for
    * remote players). Cheap to double-send: GM dedups by message identity
