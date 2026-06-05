@@ -51,6 +51,14 @@ type ProjectorRole = 'primary' | 'monitor';
  */
 export class ProjectorApp {
   private clientId = generateId();
+  /** v2.17.17 — true when this projector is the GM's own same-machine window
+   *  (launched with ?gmLocal=1). Such windows ride LocalChannel only and skip
+   *  the PeerJS loopback, which browser background-throttling kept tearing down
+   *  + reconnecting. Remote tablet projectors (no flag) still use PeerJS. */
+  private _gmLocalFlag = (() => {
+    try { return new URLSearchParams(location.search).has('gmLocal'); }
+    catch { return false; }
+  })();
   private role: ProjectorRole | null = null;     // null = role not yet assigned by GM
   private monitorIndex: number | null = null;
   /** Fraction of the map width/height the primary projector currently shows.
@@ -433,7 +441,12 @@ export class ProjectorApp {
       onError:   (err) => this._showStatus(`Error: ${err.message}`),
       onMessage: (msg, blob) => this._onMessage(msg, blob),
     });
-    this.guest.connect(room);
+    // v2.17.17 — same-machine GM projector: LocalChannel only (no loopback).
+    if (this._gmLocalFlag) {
+      this.guest.connectLocalOnly();
+    } else {
+      this.guest.connect(room);
+    }
     this._sendHello();
   }
 

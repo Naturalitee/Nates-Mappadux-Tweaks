@@ -1,5 +1,13 @@
 # Changelog
 
+## v2.17.18 — 2026-06-05
+
+Refreshed the Getting Started pack with a walkthrough video built into the tour, to make first-run onboarding easier.
+
+## v2.17.17 — 2026-06-05
+
+Extended the same-browser connection fix to the projector. A projector window opened from the GM (a second screen wired to the GM's PC) now rides the local BroadcastChannel only, skipping the redundant peer-to-peer loopback that browser background-throttling kept tearing down — so a local table/second-monitor projector no longer disconnects/reconnects when the GM works in the main window. Remote tablet projectors that join via the room code are unchanged and still connect peer-to-peer.
+
 ## v2.17.16 — 2026-06-05
 
 Fixed the GM's own Player View constantly disconnecting / reconnecting. The preview is always in the same browser as the GM, so it now rides on the local BroadcastChannel alone instead of also opening a redundant peer-to-peer loopback — that loopback was being suspended by browser background-throttling (worst in Chrome) every time the GM focused the main window, which caused the reconnect loop, the "P2P error: Connection is not open" toasts, and the occasional marker move that didn't reach the preview. The Host also no longer attempts to send on a half-closed connection, so a flaky remote peer can't surface that error either.

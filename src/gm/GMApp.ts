@@ -531,7 +531,15 @@ export class GMApp {
     return `${this.playerOrigin}/player.html${this._instanceQuery()}#${code}`;
   }
   private _buildProjectorUrl(code: string): string {
-    return `/projector.html${this._instanceQuery()}#${code}`;
+    // v2.17.17 — gmLocal=1 marks this as the GM's own same-machine projector
+    // window (this URL is only ever used by the window.open launches below,
+    // i.e. a second screen wired to the GM's PC). The projector reads the flag
+    // and rides LocalChannel only, skipping the flaky PeerJS loopback — same
+    // rationale as the Player View preview. A remote tablet projector (opened
+    // from projector.html via the join code) never carries it, so it still
+    // connects over PeerJS.
+    const q = this._instanceQuery();
+    return `/projector.html${q}${q ? '&' : '?'}gmLocal=1#${code}`;
   }
   private hamburger!: HamburgerMenu;
   /** Pack name suggested by `seedDefaultMaps()` on first run. Consumed by
