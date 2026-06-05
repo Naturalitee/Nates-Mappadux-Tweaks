@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.13 — 2026-06-05
+
+The GM's own Player View now identifies itself in the status line. Opening the inline / pop-out preview reads "Player connected (GM Player View)" instead of a raw peer hash, so it's no longer mistaken for a remote player joining.
+
 ## v2.17.12 — 2026-06-04
 
 New Map Pack now keeps your creator branding. Starting a fresh pack wipes the maps and assets but preserves your customised About (text, banner graphic, and the links at the bottom) and theme — they're your identity, not pack content, so you don't rebuild them every time. If you never customised the About, it still shows the default Mappadux "Hi, I'm Alex…" content as before.

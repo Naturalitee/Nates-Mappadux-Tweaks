@@ -3802,6 +3802,10 @@ export class GMApp {
       // window). The disconnect handler reads the set to show a sane
       // status message instead of "Player (peerid…) disconnected".
       this._gmPreviewPeers.add(_peerId);
+      // v2.17.13 — onPeerConnected already flashed the generic
+      // "Player connected (peerid…)" status; rewrite it now that we know
+      // this peer is the GM's own Player View (PiP / pop-out), not a guest.
+      this.setStatus('Player connected (GM Player View)', 'ok');
       // v2.16.98 — previews identify via gm_preview_hello (NOT
       // player_identify), so they skipped the overlay catch-up bundle that
       // real joiners get: map-anchored state (videos, annotations, tokens)
