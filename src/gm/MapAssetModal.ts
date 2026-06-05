@@ -127,7 +127,10 @@ export class MapAssetModal {
    *  asset (no StoredMap created); closing without picking resolves
    *  with null. Re-uses the same filter / sort / banner UX as the
    *  first-tile pick (just with different banner copy). */
-  openForCompositeAddTile(onPick: (asset: MapAsset | null) => void): void {
+  openForCompositeAddTile(
+    onPick: (asset: MapAsset | null) => void,
+    opts?: { hasScaledMaster?: boolean },
+  ): void {
     this._compositeAddTileCallback = onPick;
     this._compositePickMode = true;
     // v2.14.88 — preselect the 'scaled' pill so the picker opens
@@ -135,7 +138,11 @@ export class MapAssetModal {
     // GM can clear the pill to widen the view to unscaled handouts /
     // decorative tiles / etc. — composite-pick mode no longer
     // hard-excludes any kind except other composites.
-    this._activeFilters = new Set(['scaled']);
+    // v2.17.14 — only force the scaled filter while the composite has
+    // NO calibrated tile yet. Once a master grid exists, open unfiltered
+    // so the GM can drop in unscaled tiles (their scale is inferred from
+    // the master). The first tile still opens scaled-only.
+    this._activeFilters = opts?.hasScaledMaster ? new Set() : new Set(['scaled']);
     // v2.14.46 — re-append to body so this modal lands on top of
     // the composite editor (which was appended after the asset
     // modal's initial DOM construction, so was stacking ABOVE it).
