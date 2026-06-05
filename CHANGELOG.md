@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.18 — 2026-06-05
+
+Refreshed the Getting Started pack with a walkthrough video built into the tour, to make first-run onboarding easier.
+
 ## v2.17.17 — 2026-06-05
 
 Extended the same-browser connection fix to the projector. A projector window opened from the GM (a second screen wired to the GM's PC) now rides the local BroadcastChannel only, skipping the redundant peer-to-peer loopback that browser background-throttling kept tearing down — so a local table/second-monitor projector no longer disconnects/reconnects when the GM works in the main window. Remote tablet projectors that join via the room code are unchanged and still connect peer-to-peer.
