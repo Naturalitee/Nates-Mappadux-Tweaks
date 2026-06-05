@@ -2876,8 +2876,8 @@ export class GMApp {
     // v2.14.43 — wire "+ Add Map" through the existing MapAssetModal
     // in tile-add mode. Returns the picked MapAsset (or null on
     // cancel) to the editor, which appends a tile.
-    const pickAsset = (): Promise<typeof asset | null> => new Promise((resolve) => {
-      this.mapAssetModal.openForCompositeAddTile((picked) => resolve(picked));
+    const pickAsset = (opts?: { hasScaledMaster?: boolean }): Promise<typeof asset | null> => new Promise((resolve) => {
+      this.mapAssetModal.openForCompositeAddTile((picked) => resolve(picked), opts);
     });
     const updated = await new CompositeMapEditor().open(asset, { pickAsset });
     if (!updated) return; // cancel — no mutation

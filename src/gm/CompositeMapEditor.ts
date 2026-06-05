@@ -25,8 +25,11 @@ import { attachGestures } from '../utils/Gestures.ts';
 
 /** Caller-supplied picker for "+ Add Map". Returns null if the user
  *  cancelled the pick. The editor doesn't depend on the picker
- *  implementation — GMApp wires it to MapAssetModal.openForCompositeAddTile. */
-export type PickAssetFn = () => Promise<MapAsset | null>;
+ *  implementation — GMApp wires it to MapAssetModal.openForCompositeAddTile.
+ *  v2.17.14 — `hasScaledMaster` tells the picker a calibrated tile is
+ *  already in the composite, so it can stop forcing the scaled-only
+ *  filter (later tiles inherit the master grid and can be unscaled). */
+export type PickAssetFn = (opts?: { hasScaledMaster?: boolean }) => Promise<MapAsset | null>;
 
 /** v2.14.59 — snap a free-rotated angle (degrees, may be < 0 or
  *  > 360) to common tile-set angles. Right angles (0/90/180/270)
@@ -1224,7 +1227,11 @@ export class CompositeMapEditor {
    *  silently a no-op. */
   private async _handleAddMap(): Promise<void> {
     if (!this.pickAsset || !this.working) return;
-    const asset = await this.pickAsset();
+    // v2.17.14 — _masterCellNorm is set (from the latest render) whenever a
+    // calibrated tile is already in the composite. Once we have a master, the
+    // scaled-only filter is no longer needed: extra tiles can be unscaled
+    // because their scale is inferred from the master grid.
+    const asset = await this.pickAsset({ hasScaledMaster: this._masterCellNorm != null });
     if (!asset) return;
     this._pushUndo();
     this._addTile(asset);

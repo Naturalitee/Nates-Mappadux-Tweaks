@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.14 — 2026-06-05
+
+Composite map picker only forces the scaled filter for the first tile. Once a calibrated tile is in the composite (setting the master grid), "+ Add Map" opens unfiltered so you can drop in unscaled tiles — their scale is inferred from the master. The first tile still opens scaled-only.
+
 ## v2.17.13 — 2026-06-05
 
 The GM's own Player View now identifies itself in the status line. Opening the inline / pop-out preview reads "Player connected (GM Player View)" instead of a raw peer hash, so it's no longer mistaken for a remote player joining.
