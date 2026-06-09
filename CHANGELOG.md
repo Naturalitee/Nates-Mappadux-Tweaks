@@ -1,5 +1,21 @@
 # Changelog
 
+## v2.17.23 — 2026-06-09
+
+Actually fix right-click opening the activity log in the GM's local preview windows. The preview's renderer canvas has pointer-events disabled (so the GM can pan the map behind it), so the canvas never saw the right-click — now the document-level handler opens the log instead, so it works in both the inline preview and a popped-out window.
+
+## v2.17.22 — 2026-06-09
+
+The GM's local Player View preview suppresses the player right-click menu (ping/measure don't apply there) — so right-clicking it now opens the activity log directly, giving the GM the connection log from the preview window for debugging.
+
+## v2.17.21 — 2026-06-09
+
+New Settings → Game System option: Initiative anonymisation (on by default). On, players see opposition turns as anonymous "!" cards and the threat letter is stripped from the broadcast entirely. Off, players see the same A/B/C threat letters the GM does — for tables that track named or numbered enemies openly. Toggling it reships the rail to connected players live. Also: the player view no longer shows the corner activity (i) — it was distracting during play; the connection log is now opened on demand via a "Show activity" entry on the right-click menu instead. The GM keeps its always-present footer (i).
+
+## v2.17.20 — 2026-06-09
+
+Connection and status messages ("Connecting…", "Ready", "Reconnecting…", errors) no longer pop up over the GM sidebar or the player's map. They now feed a quiet (i) activity log in the corner that twinkles when something arrives; click it for the last few messages with timestamps and a one-tap copy-to-clipboard (handy for a Discord bug report). Great for debugging, out of the way during play.
+
 ## v2.17.19 — 2026-06-05
 
 The Getting Started pack is now internally versioned. When a newer tour ships, anyone still on an older one is offered a one-click refresh on startup ("A fresh Getting Started tour is ready — Load it? / Not now"). It never auto-replaces anything: the offer only appears if you still have the default, unbranded Getting Started pack, and loading is your choice. Decline once and it won't ask again until an even newer tour ships.

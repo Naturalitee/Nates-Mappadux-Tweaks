@@ -1,5 +1,6 @@
 import { Guest } from '../p2p/Guest.ts';
 import { generateId } from '../utils/id.ts';
+import { MessageLog } from '../ui/MessageLog.ts';
 import { perceptualVolume } from '../audio/volumeCurve.ts';
 import { MeasureTool, squaresBetweenNorm } from '../rendering/MeasureTool.ts';
 import { PlayerIdentifyModal, type PlayerIdentity } from './PlayerIdentifyModal.ts';
@@ -52,6 +53,7 @@ export class PlayerApp {
   private transitionEngine!: TransitionEngine;
   private guest!: Guest;
   private statusEl!: HTMLElement;
+  private messageLog?: MessageLog;
   private connectPanel!: HTMLElement;
   private roomInput!: HTMLInputElement;
   /** Tracks which map ID the player is currently showing (or loading). */
@@ -480,6 +482,11 @@ export class PlayerApp {
     });
 
     this.statusEl     = document.querySelector('#status')!;
+    // v2.17.20 — connection chatter feeds a quiet activity log rather than a
+    // toast over the map. v2.17.21 — on the player view there's no visible (i)
+    // at all (a corner indicator distracts during play); the log is opened on
+    // demand via the right-click "Show activity" entry below.
+    this.messageLog   = new MessageLog(document.body, { title: 'Activity', showButton: false });
     this.connectPanel = document.querySelector('#connect-panel')!;
     this.roomInput    = document.querySelector<HTMLInputElement>('#room-input')!;
 
@@ -508,14 +515,24 @@ export class PlayerApp {
     // the single affordance — transparent until clicked, the user
     // taps it once to unmute and again to mute. No giant prompt.
 
-    // Prevent the browser context menu on right-click (keep canvas clean)
-    document.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Prevent the browser context menu on right-click (keep canvas clean).
+    // v2.17.23 — in the GM's local preview (PiP iframe / pop-out) the renderer
+    // canvas has `pointer-events: none` (so the GM can pan/zoom the map behind
+    // it), which means the canvas's own contextmenu handler below NEVER fires
+    // there. The right-click lands on the body and only reaches this document
+    // listener — so this is where we open the activity log for a preview window,
+    // giving the GM the connection log for debugging even though the player
+    // action menu (ping/measure) is intentionally suppressed in previews.
+    document.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (this._isPreviewMode()) this.messageLog?.show({ x: e.clientX, y: e.clientY });
+    });
 
     // v2.17 Player Voice — right-click / long-press the map → action menu (ping, …).
     const mapCanvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
     mapCanvas?.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      if (this._isPreviewMode()) return;
+      if (this._isPreviewMode()) return; // preview right-click handled at document level above
       this._openPlayerMenu(e.clientX, e.clientY);
     });
     mapCanvas?.addEventListener('pointerdown', (e) => {
@@ -1209,6 +1226,8 @@ export class PlayerApp {
     if (resetBtn && !resetBtn.hidden) {
       items.push({ label: 'Reset view to GM\'s', onSelect: () => resetBtn.click() });
     }
+    // v2.17.21 — connection/activity log on demand only (no corner indicator).
+    items.push({ label: 'Show activity', onSelect: () => this.messageLog?.show({ x: clientX, y: clientY }) });
     this._actionMenu.open(clientX, clientY, items);
   }
 
@@ -2190,8 +2209,15 @@ export class PlayerApp {
   }
 
   private setStatus(msg: string): void {
-    this.statusEl.textContent = msg;
-    this.statusEl.hidden = !msg;
+    // v2.17.20 — route to the quiet (i) activity log instead of a toast over
+    // the map. Infer a severity from the text so errors/reconnects tint the
+    // twinkle (the old bar had no level on the player side).
+    const t = msg.toLowerCase();
+    const level: 'ok' | 'warn' | 'error' =
+      t.startsWith('error') || t.includes('error') ? 'error'
+      : t.includes('reconnect') || t.includes('disconnect') || t.includes('waiting') || t.includes('lost') ? 'warn'
+      : 'ok';
+    this.messageLog?.push(msg, level);
   }
 }
 

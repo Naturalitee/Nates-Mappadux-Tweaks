@@ -101,9 +101,25 @@ export function loadInitiativeState(): InitiativeState {
  *  renders from its own in-memory state (which keeps markerUrl); only the
  *  broadcast copy is slimmed. The player rail falls back to the initial-
  *  letter disc when markerUrl is absent. */
-export function stripInitiativeForWire(state: InitiativeState): InitiativeState {
+/**
+ * @param anonymiseEnemies v2.17.21 — when true (default) the enemy threat
+ *  letter is ALSO stripped from the wire, so players genuinely can't tell which
+ *  opposition card is which (the player rail then shows a uniform "!"). When
+ *  false the letter rides along and the player rail renders it, matching the
+ *  GM's A/B/C — for tables that track named/numbered enemies openly.
+ */
+export function stripInitiativeForWire(
+  state: InitiativeState,
+  anonymiseEnemies = true,
+): InitiativeState {
   const slim = (cards: InitiativeCard[]): InitiativeCard[] =>
-    cards.map(({ markerUrl: _drop, ...rest }) => rest);
+    cards.map(({ markerUrl: _drop, ...rest }) => {
+      if (anonymiseEnemies && rest.type === 'enemy') {
+        const { threatLetter: _letter, ...bare } = rest;
+        return bare;
+      }
+      return rest;
+    });
   return {
     ...state,
     activeDeck:  slim(state.activeDeck),

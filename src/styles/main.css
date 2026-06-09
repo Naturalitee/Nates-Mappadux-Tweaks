@@ -2637,6 +2637,125 @@ option.select-option--add {
   width: 100%;
 }
 
+/* ── Activity log (quiet status) ────────────────────────────────────────────
+   v2.17.20 — Connection/status chatter no longer floats over panels. It feeds
+   a small (i) button that twinkles on new messages; click for the last few
+   with timestamps + copy-to-clipboard. Shared by the GM sidebar + player view. */
+.msglog { display: inline-flex; }
+.msglog__btn {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px;
+  height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-md);
+  color: var(--text-dim);
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s ease, color 0.15s ease, background 0.15s ease;
+}
+.msglog__btn:hover { opacity: 1; color: var(--text-secondary); background: rgba(255, 255, 255, 0.06); }
+.msglog__btn[aria-expanded="true"] { opacity: 1; color: var(--text-secondary); background: rgba(255, 255, 255, 0.08); }
+.msglog__btn--blink { animation: msglog-twinkle 1.4s ease-out; }
+@keyframes msglog-twinkle {
+  0%   { color: var(--accent, #0d9adb); transform: scale(1); }
+  20%  { color: var(--accent, #0d9adb); transform: scale(1.25); }
+  100% { color: var(--text-dim); transform: scale(1); }
+}
+.msglog__dot {
+  position: absolute;
+  top: 1px; right: 1px;
+  width: 7px; height: 7px;
+  border-radius: 50%;
+  background: var(--accent, #0d9adb);
+  box-shadow: 0 0 5px 1px currentColor;
+  color: var(--accent, #0d9adb);
+}
+.msglog__dot[data-level="ok"]    { background: var(--ok);     color: var(--ok); }
+.msglog__dot[data-level="warn"]  { background: var(--warn);   color: var(--warn); }
+.msglog__dot[data-level="error"] { background: var(--danger); color: var(--danger); }
+
+.msglog__pop {
+  position: fixed;
+  z-index: 200;
+  width: min(320px, calc(100vw - 24px));
+  max-height: 50vh;
+  display: flex;
+  flex-direction: column;
+  background: rgba(10, 14, 26, 0.96);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  box-shadow: 0 8px 28px rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(6px);
+  overflow: hidden;
+}
+.msglog__head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 6px 8px 6px 10px;
+  border-bottom: 1px solid var(--border);
+}
+.msglog__title {
+  font-family: var(--font-mono);
+  font-size: 0.7rem;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+.msglog__copy {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 24px; height: 24px;
+  padding: 0;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+  cursor: pointer;
+}
+.msglog__copy:hover { color: var(--text-secondary); background: rgba(255, 255, 255, 0.06); }
+.msglog__copy--done { color: var(--ok); }
+.msglog__list {
+  list-style: none;
+  margin: 0;
+  padding: 4px 0;
+  overflow-y: auto;
+}
+.msglog__item {
+  display: flex;
+  gap: 8px;
+  padding: 4px 10px;
+  font-size: var(--font-size-sm);
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+.msglog__item[data-level="warn"]  { color: var(--warn); }
+.msglog__item[data-level="error"] { color: var(--danger); }
+.msglog__time {
+  flex: 0 0 auto;
+  font-family: var(--font-mono);
+  font-size: 0.68rem;
+  color: var(--text-dim);
+  padding-top: 1px;
+}
+.msglog__text { flex: 1 1 auto; word-break: break-word; }
+.msglog__empty {
+  padding: 10px;
+  text-align: center;
+  font-size: var(--font-size-sm);
+  color: var(--text-dim);
+}
+
+/* The player view has no visible (i) — the activity log is opened on demand
+   from the right-click "Show activity" entry (v2.17.21), so it never distracts
+   during play. Only the GM keeps the always-present corner indicator. */
+
 /* ── Status bar ─────────────────────────────────────────────────────────── */
 .status-bar {
   margin-top: auto;

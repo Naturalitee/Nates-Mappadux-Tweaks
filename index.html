@@ -696,8 +696,11 @@
       </div>
     </section>
 
-    <div id="status" class="status-bar" data-level="ok">Ready</div>
+    <!-- v2.17.20 — status chatter now feeds the quiet activity log (the (i)
+         in the footer row); the old always-on status bar is retired so it can't
+         park itself over the panels mid-session. -->
     <div class="app-footer-row">
+      <span id="msglog-host" class="msglog-host"></span>
       <span id="storage-gauge" class="storage-gauge" title="Local storage used by this app"></span>
       <span id="app-version" class="app-version"></span>
     </div>
