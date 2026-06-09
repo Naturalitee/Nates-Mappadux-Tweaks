@@ -522,7 +522,14 @@ export class PlayerApp {
     const mapCanvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
     mapCanvas?.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      if (this._isPreviewMode()) return;
+      if (this._isPreviewMode()) {
+        // v2.17.22 — the GM's local preview window suppresses the player action
+        // menu (ping/measure/etc. are meaningless there), but the GM still wants
+        // the connection/activity log from here for debugging, so a right-click
+        // opens just that.
+        this.messageLog?.show({ x: e.clientX, y: e.clientY });
+        return;
+      }
       this._openPlayerMenu(e.clientX, e.clientY);
     });
     mapCanvas?.addEventListener('pointerdown', (e) => {

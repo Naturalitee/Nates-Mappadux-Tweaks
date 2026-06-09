@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.22 — 2026-06-09
+
+The GM's local Player View preview suppresses the player right-click menu (ping/measure don't apply there) — so right-clicking it now opens the activity log directly, giving the GM the connection log from the preview window for debugging.
+
 ## v2.17.21 — 2026-06-09
 
 New Settings → Game System option: Initiative anonymisation (on by default). On, players see opposition turns as anonymous "!" cards and the threat letter is stripped from the broadcast entirely. Off, players see the same A/B/C threat letters the GM does — for tables that track named or numbered enemies openly. Toggling it reships the rail to connected players live. Also: the player view no longer shows the corner activity (i) — it was distracting during play; the connection log is now opened on demand via a "Show activity" entry on the right-click menu instead. The GM keeps its always-present footer (i).
