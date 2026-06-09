@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.20 — 2026-06-09
+
+Connection and status messages ("Connecting…", "Ready", "Reconnecting…", errors) no longer pop up over the GM sidebar or the player's map. They now feed a quiet (i) activity log in the corner that twinkles when something arrives; click it for the last few messages with timestamps and a one-tap copy-to-clipboard (handy for a Discord bug report). Great for debugging, out of the way during play.
+
 ## v2.17.19 — 2026-06-05
 
 The Getting Started pack is now internally versioned. When a newer tour ships, anyone still on an older one is offered a one-click refresh on startup ("A fresh Getting Started tour is ready — Load it? / Not now"). It never auto-replaces anything: the offer only appears if you still have the default, unbranded Getting Started pack, and loading is your choice. Decline once and it won't ask again until an even newer tour ships.

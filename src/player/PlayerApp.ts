@@ -1,5 +1,6 @@
 import { Guest } from '../p2p/Guest.ts';
 import { generateId } from '../utils/id.ts';
+import { MessageLog } from '../ui/MessageLog.ts';
 import { perceptualVolume } from '../audio/volumeCurve.ts';
 import { MeasureTool, squaresBetweenNorm } from '../rendering/MeasureTool.ts';
 import { PlayerIdentifyModal, type PlayerIdentity } from './PlayerIdentifyModal.ts';
@@ -52,6 +53,7 @@ export class PlayerApp {
   private transitionEngine!: TransitionEngine;
   private guest!: Guest;
   private statusEl!: HTMLElement;
+  private messageLog?: MessageLog;
   private connectPanel!: HTMLElement;
   private roomInput!: HTMLInputElement;
   /** Tracks which map ID the player is currently showing (or loading). */
@@ -480,6 +482,9 @@ export class PlayerApp {
     });
 
     this.statusEl     = document.querySelector('#status')!;
+    // v2.17.20 — connection chatter feeds a quiet (i) log in the corner rather
+    // than a toast over the map; .player-view CSS floats it bottom-left.
+    this.messageLog   = new MessageLog(document.body, { title: 'Activity' });
     this.connectPanel = document.querySelector('#connect-panel')!;
     this.roomInput    = document.querySelector<HTMLInputElement>('#room-input')!;
 
@@ -2190,8 +2195,15 @@ export class PlayerApp {
   }
 
   private setStatus(msg: string): void {
-    this.statusEl.textContent = msg;
-    this.statusEl.hidden = !msg;
+    // v2.17.20 — route to the quiet (i) activity log instead of a toast over
+    // the map. Infer a severity from the text so errors/reconnects tint the
+    // twinkle (the old bar had no level on the player side).
+    const t = msg.toLowerCase();
+    const level: 'ok' | 'warn' | 'error' =
+      t.startsWith('error') || t.includes('error') ? 'error'
+      : t.includes('reconnect') || t.includes('disconnect') || t.includes('waiting') || t.includes('lost') ? 'warn'
+      : 'ok';
+    this.messageLog?.push(msg, level);
   }
 }
 

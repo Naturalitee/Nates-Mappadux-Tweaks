@@ -4,6 +4,7 @@ import { CanvasUndoManager } from './CanvasUndoManager.ts';
 import { FogEditor } from './FogEditor.ts';
 import { OVERLAY_KIND_REGISTRY, OVERLAY_KIND_ORDER, overlayKind, DEFAULT_EDGE_FADE } from '../mapfx/overlayKindRegistry.ts';
 import { confirmDialog } from './confirmDialog.ts';
+import { MessageLog } from '../ui/MessageLog.ts';
 import type { OverlayKind, FogPolygon } from '../types.ts';
 import { offsetPolyline } from '../mapfx/polylineOffset.ts';
 import { subtractFromAll, cleanRibbonToBlobs } from '../mapfx/polygonOps.ts';
@@ -493,7 +494,7 @@ export class GMApp {
   private roomCodeEl!:             HTMLElement;
   // v2.16.33 — qrContainer + playerCountEl fields retired alongside the
   // deleted Player Connection panel.
-  private statusEl!:               HTMLElement;
+  private messageLog?:             MessageLog;
   private markerSelect!:           HTMLSelectElement;
   private markerEditableSelect!:   EditableSelect;
   private projectorEditableSelect: EditableSelect | null = null;
@@ -3441,7 +3442,8 @@ export class GMApp {
     this.viewBgFxBtn           = q<HTMLButtonElement>('#view-bg-fx-btn');
     this.mapFxBtn              = q<HTMLButtonElement>('#mapfx-fx-btn');
     this.roomCodeEl            = q('#room-code');
-    this.statusEl              = q('#status');
+    const msglogHost = document.querySelector<HTMLElement>('#msglog-host');
+    if (msglogHost) this.messageLog = new MessageLog(msglogHost, { title: 'Activity' });
     this.markerSelect          = q<HTMLSelectElement>('#marker-select');
     this.markerEditableSelect  = new EditableSelect(this.markerSelect, {
       onRename: (id, label) => this._renameMarker(id, label),
@@ -6120,8 +6122,9 @@ export class GMApp {
   }
 
   private setStatus(msg: string, level: 'ok' | 'warn' | 'error'): void {
-    this.statusEl.textContent = msg;
-    this.statusEl.dataset['level'] = level;
+    // v2.17.20 — feed the quiet activity log instead of the always-on bar, so
+    // connection chatter never parks itself over the panels during play.
+    this.messageLog?.push(msg, level);
   }
 
   // ─── Marker editor ────────────────────────────────────────────────────────
