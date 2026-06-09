@@ -38,14 +38,20 @@ export class MessageLog {
   private readonly max: number;
   private open = false;
   private blinkTimer: ReturnType<typeof setTimeout> | null = null;
+  private readonly showButton: boolean;
 
   /**
    * @param host    element the (i) button is appended into.
    * @param opts.max number of messages to retain (default 8 — "half a dozen"+).
    * @param opts.title heading shown above the list.
+   * @param opts.showButton v2.17.21 — when false, no visible (i) is rendered
+   *   and nothing twinkles; the log is opened on demand via open() (the player
+   *   view wires this to a right-click "Show activity" entry, so the corner
+   *   indicator never distracts during play).
    */
-  constructor(host: HTMLElement, opts?: { max?: number; title?: string }) {
+  constructor(host: HTMLElement, opts?: { max?: number; title?: string; showButton?: boolean }) {
     this.max = opts?.max ?? 8;
+    this.showButton = opts?.showButton ?? true;
 
     this.root = document.createElement('div');
     this.root.className = 'msglog';
@@ -66,7 +72,7 @@ export class MessageLog {
     this.btn.appendChild(this.dot);
 
     this.root.appendChild(this.btn);
-    host.appendChild(this.root);
+    if (this.showButton) host.appendChild(this.root);
 
     // Popover lives on <body> so an overflow:auto sidebar can't clip it.
     this.pop = document.createElement('div');
@@ -116,6 +122,7 @@ export class MessageLog {
   }
 
   private blink(level: MessageLevel): void {
+    if (!this.showButton) return; // no visible indicator — opened on demand
     this.dot.hidden = false;
     this.dot.dataset['level'] = level;
     this.btn.classList.remove('msglog__btn--blink');
@@ -128,26 +135,40 @@ export class MessageLog {
 
   private toggle(): void { this.open ? this.close() : this.openPop(); }
 
-  private openPop(): void {
+  /** Open the log on demand. `anchor` (viewport coords) positions the popover
+   *  near a click point — used by the player's right-click "Show activity"
+   *  entry; omit it to anchor above the (i) button (GM footer). */
+  openPop(anchor?: { x: number; y: number }): void {
     this.render();
     this.pop.hidden = false;
     this.open = true;
     this.btn.setAttribute('aria-expanded', 'true');
     this.dot.hidden = true; // mark read
-    this.position();
+    this.position(anchor);
   }
 
-  private close(): void {
+  /** Public alias — open from an external trigger (e.g. a context-menu item). */
+  show(anchor?: { x: number; y: number }): void { this.openPop(anchor); }
+
+  close(): void {
     this.pop.hidden = true;
     this.open = false;
     this.btn.setAttribute('aria-expanded', 'false');
   }
 
-  /** Anchor the popover just above the button, left-aligned and viewport-clamped. */
-  private position(): void {
-    const r = this.btn.getBoundingClientRect();
+  /** Position the popover: near `anchor` if given, else just above the button. */
+  private position(anchor?: { x: number; y: number }): void {
     const pr = this.pop.getBoundingClientRect();
     const margin = 8;
+    if (anchor) {
+      const left = Math.min(anchor.x, window.innerWidth - pr.width - margin);
+      const top = Math.min(anchor.y, window.innerHeight - pr.height - margin);
+      this.pop.style.left = `${Math.max(margin, Math.round(left))}px`;
+      this.pop.style.top = `${Math.max(margin, Math.round(top))}px`;
+      this.pop.style.bottom = 'auto';
+      return;
+    }
+    const r = this.btn.getBoundingClientRect();
     let left = r.left;
     if (left + pr.width > window.innerWidth - margin) left = window.innerWidth - pr.width - margin;
     if (left < margin) left = margin;

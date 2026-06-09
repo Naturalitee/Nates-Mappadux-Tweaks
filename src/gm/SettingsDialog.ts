@@ -22,6 +22,8 @@ import {
   setPingsEnabled,
   getInitiativeSortDirection,
   setInitiativeSortDirection,
+  isInitiativeAnonymised,
+  setInitiativeAnonymised,
   isMessagingEnabled,
   setMessagingEnabled,
   arePlayerMarkersMovable,
@@ -573,6 +575,18 @@ export class SettingsDialog {
       'Rules that shape the table tools for your system.',
     );
     sec.appendChild(this._buildInitiativeOrderBlock());
+    sec.appendChild(this._buildPerfToggle({
+      title: 'Initiative anonymisation',
+      help:
+        'On (default): players see opposition turns as anonymous "!" cards — no threat letter, no clue which enemy is which (the letter is stripped from the broadcast entirely). Off: players see the same A/B/C threat letters you do, for tables that track named or numbered enemies openly.',
+      get: isInitiativeAnonymised,
+      set: (v) => {
+        setInitiativeAnonymised(v);
+        // Re-broadcast so connected players update live without waiting for the
+        // next tracker change. GMApp listens and reships the (re-)stripped state.
+        window.dispatchEvent(new CustomEvent('mappadux:initiative-anonymise-changed', { detail: v }));
+      },
+    }));
     return sec;
   }
 

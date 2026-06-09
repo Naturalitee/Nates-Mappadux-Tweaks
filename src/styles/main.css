@@ -2752,17 +2752,9 @@ option.select-option--add {
   color: var(--text-dim);
 }
 
-/* Player view — float the (i) in the otherwise-empty bottom-left corner. */
-.player-view .msglog {
-  position: fixed;
-  bottom: 12px; left: 12px;
-  z-index: 100;
-}
-.player-view .msglog__btn {
-  width: 32px; height: 32px;
-  background: rgba(0, 0, 0, 0.55);
-  border-color: var(--border);
-}
+/* The player view has no visible (i) — the activity log is opened on demand
+   from the right-click "Show activity" entry (v2.17.21), so it never distracts
+   during play. Only the GM keeps the always-present corner indicator. */
 
 /* ── Status bar ─────────────────────────────────────────────────────────── */
 .status-bar {

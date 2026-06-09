@@ -110,7 +110,10 @@ export class PlayerInitiativeRail {
       // say "!" (upright on the player view too), body fills with a
       // dark Mappadux duck close-up. v2.16.59 — let CSS own the palette
       // so the GM-side red doesn't bleed across to the player view.
-      _appendEdgeTabs(el, '!');
+      // v2.17.21 — when the GM turns Initiative Anonymisation OFF, the
+      // threat letter rides the wire (stripInitiativeForWire keeps it) and
+      // we show it instead of "!", so players see the same A/B/C the GM does.
+      _appendEdgeTabs(el, card.threatLetter ?? '!');
       const body = document.createElement('div');
       body.className = 'init-card-body init-card-body--enemy';
       const duck = document.createElement('img');

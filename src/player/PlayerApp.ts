@@ -482,9 +482,11 @@ export class PlayerApp {
     });
 
     this.statusEl     = document.querySelector('#status')!;
-    // v2.17.20 — connection chatter feeds a quiet (i) log in the corner rather
-    // than a toast over the map; .player-view CSS floats it bottom-left.
-    this.messageLog   = new MessageLog(document.body, { title: 'Activity' });
+    // v2.17.20 — connection chatter feeds a quiet activity log rather than a
+    // toast over the map. v2.17.21 — on the player view there's no visible (i)
+    // at all (a corner indicator distracts during play); the log is opened on
+    // demand via the right-click "Show activity" entry below.
+    this.messageLog   = new MessageLog(document.body, { title: 'Activity', showButton: false });
     this.connectPanel = document.querySelector('#connect-panel')!;
     this.roomInput    = document.querySelector<HTMLInputElement>('#room-input')!;
 
@@ -1214,6 +1216,8 @@ export class PlayerApp {
     if (resetBtn && !resetBtn.hidden) {
       items.push({ label: 'Reset view to GM\'s', onSelect: () => resetBtn.click() });
     }
+    // v2.17.21 — connection/activity log on demand only (no corner indicator).
+    items.push({ label: 'Show activity', onSelect: () => this.messageLog?.show({ x: clientX, y: clientY }) });
     this._actionMenu.open(clientX, clientY, items);
   }
 

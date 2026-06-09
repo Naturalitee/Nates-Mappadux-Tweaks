@@ -12,6 +12,7 @@ import {
   jumpToFront,
   endCombat,
   endCombatPreserve,
+  stripInitiativeForWire,
 } from '../../src/initiative/initiativeState.ts';
 
 function card(opts: Partial<InitiativeCard> & { id: string }): InitiativeCard {
@@ -214,5 +215,35 @@ describe('Initiative — fixed-initiative (preserve order)', () => {
   it('endCombatPreserve on an empty deck stays empty', () => {
     const state: InitiativeState = { ...defaultInitiativeState(), preserveOrder: true, activeDeck: [] };
     expect(endCombatPreserve(state).activeDeck).toEqual([]);
+  });
+});
+
+describe('Initiative — wire anonymisation (v2.17.21)', () => {
+  const state = (): InitiativeState => ({
+    ...defaultInitiativeState(),
+    activeDeck: [
+      card({ id: 'p', type: 'player', name: 'Aria' }),
+      card({ id: 'e', type: 'enemy', name: 'Goblin', threatLetter: 'A', value: '14' }),
+    ],
+  });
+
+  it('strips the enemy threat letter when anonymised (default)', () => {
+    const wire = stripInitiativeForWire(state());
+    const enemy = wire.activeDeck.find((c) => c.type === 'enemy')!;
+    expect(enemy.threatLetter).toBeUndefined();
+  });
+
+  it('keeps the enemy threat letter when anonymisation is off', () => {
+    const wire = stripInitiativeForWire(state(), false);
+    const enemy = wire.activeDeck.find((c) => c.type === 'enemy')!;
+    expect(enemy.threatLetter).toBe('A');
+  });
+
+  it('never touches player cards either way', () => {
+    for (const anon of [true, false]) {
+      const wire = stripInitiativeForWire(state(), anon);
+      const player = wire.activeDeck.find((c) => c.type === 'player')!;
+      expect(player.name).toBe('Aria');
+    }
   });
 });

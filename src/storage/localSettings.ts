@@ -148,6 +148,24 @@ export function setInitiativeSortDirection(dir: 'high-to-low' | 'low-to-high'): 
   catch { /* private mode etc. — no-op */ }
 }
 
+/** v2.17.21 — Initiative anonymisation. On (default) the player rail hides
+ *  which enemy is which: every opposition card shows a uniform "!" tab and the
+ *  threat letter is stripped from the broadcast entirely. Off: players see the
+ *  same A/B/C letters the GM does — handy for systems / tables that track named
+ *  or numbered enemies openly. Stored as '0' when DISABLED so the common
+ *  (anonymised) case needs no key. Travels with the pack. */
+export const INITIATIVE_ANONYMISE_KEY = 'mappadux:initiative_anonymise';
+
+export function isInitiativeAnonymised(): boolean {
+  try { return localStorage.getItem(INITIATIVE_ANONYMISE_KEY) !== '0'; }
+  catch { return true; }
+}
+
+export function setInitiativeAnonymised(on: boolean): void {
+  try { localStorage.setItem(INITIATIVE_ANONYMISE_KEY, on ? '1' : '0'); }
+  catch { /* private mode etc. — no-op */ }
+}
+
 /** v2.17.9 — Distance unit for the "Measure from here" map tool. A square
  *  on the grid is worth `value` of `suffix` (e.g. 5 + "'" → 5' per square,
  *  3 + "m" → 3m per square). `value` is the number the measurement maths
@@ -195,6 +213,7 @@ export interface BundledGmPreferences {
   measureUnitValue?:        number;
   measureUnitSuffix?:       string;
   initiativeSortDirection?: 'high-to-low' | 'low-to-high';
+  initiativeAnonymise?:     boolean;
   playerPingsEnabled?:      boolean;
   playerMessagingEnabled?:  boolean;
   playerMarkersMovable?:    boolean;
@@ -206,6 +225,7 @@ export function collectBundledPreferences(): BundledGmPreferences {
     measureUnitValue:        getMeasureUnitValue(),
     measureUnitSuffix:       getMeasureUnitSuffix(),
     initiativeSortDirection: getInitiativeSortDirection(),
+    initiativeAnonymise:     isInitiativeAnonymised(),
     playerPingsEnabled:      arePingsEnabled(),
     playerMessagingEnabled:  isMessagingEnabled(),
     playerMarkersMovable:    arePlayerMarkersMovable(),
@@ -221,6 +241,7 @@ export function applyBundledPreferences(p: BundledGmPreferences | undefined): vo
   if (p.initiativeSortDirection === 'high-to-low' || p.initiativeSortDirection === 'low-to-high') {
     setInitiativeSortDirection(p.initiativeSortDirection);
   }
+  if (typeof p.initiativeAnonymise === 'boolean')    setInitiativeAnonymised(p.initiativeAnonymise);
   if (typeof p.playerPingsEnabled === 'boolean')     setPingsEnabled(p.playerPingsEnabled);
   if (typeof p.playerMessagingEnabled === 'boolean') setMessagingEnabled(p.playerMessagingEnabled);
   if (typeof p.playerMarkersMovable === 'boolean')   setPlayerMarkersMovable(p.playerMarkersMovable);

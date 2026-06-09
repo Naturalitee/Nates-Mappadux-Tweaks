@@ -5,6 +5,7 @@ import {
   getMeasureUnitValue,
   getMeasureUnitSuffix,
   getInitiativeSortDirection,
+  isInitiativeAnonymised,
   arePingsEnabled,
   isMessagingEnabled,
   arePlayerMarkersMovable,
@@ -18,6 +19,7 @@ describe('Bundled GM preferences — pack round-trip', () => {
     expect(p.measureUnitValue).toBe(5);
     expect(p.measureUnitSuffix).toBe("'");
     expect(p.initiativeSortDirection).toBe('high-to-low');
+    expect(p.initiativeAnonymise).toBe(true);
     expect(p.playerPingsEnabled).toBe(true);
     expect(p.playerMessagingEnabled).toBe(true);
     expect(p.playerMarkersMovable).toBe(true);
@@ -28,6 +30,7 @@ describe('Bundled GM preferences — pack round-trip', () => {
       measureUnitValue: 3,
       measureUnitSuffix: 'm',
       initiativeSortDirection: 'low-to-high',
+      initiativeAnonymise: false,
       playerPingsEnabled: false,
       playerMessagingEnabled: false,
       playerMarkersMovable: false,
@@ -35,6 +38,7 @@ describe('Bundled GM preferences — pack round-trip', () => {
     expect(getMeasureUnitValue()).toBe(3);
     expect(getMeasureUnitSuffix()).toBe('m');
     expect(getInitiativeSortDirection()).toBe('low-to-high');
+    expect(isInitiativeAnonymised()).toBe(false);
     expect(arePingsEnabled()).toBe(false);
     expect(isMessagingEnabled()).toBe(false);
     expect(arePlayerMarkersMovable()).toBe(false);
@@ -42,6 +46,7 @@ describe('Bundled GM preferences — pack round-trip', () => {
       measureUnitValue: 3,
       measureUnitSuffix: 'm',
       initiativeSortDirection: 'low-to-high',
+      initiativeAnonymise: false,
       playerPingsEnabled: false,
       playerMessagingEnabled: false,
       playerMarkersMovable: false,

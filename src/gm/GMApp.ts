@@ -52,7 +52,7 @@ import { transitionRegistry } from '../transitions/TransitionRegistry.ts';
 import { Host } from '../p2p/Host.ts';
 import { generateRoomCode, generateInstanceId } from '../p2p/roomCode.ts';
 import { saveSession, loadSession, getAllMaps, getMap, saveMap, deleteMap, clearAssetLibraries, clearEverything, getActiveInstanceId } from '../storage/db.ts';
-import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, DEFAULT_SEED_DONE_KEY, arePingsEnabled, isMessagingEnabled, arePlayerMarkersMovable, getInitiativeSortDirection, getMeasureUnitValue, getMeasureUnitSuffix, getWelcomePackSeededVersion, getWelcomePackOfferDismissedVersion, setWelcomePackOfferDismissedVersion, setWelcomePackRefreshedFlag, consumeWelcomePackRefreshedFlag } from '../storage/localSettings.ts';
+import { clearAllLocalSettings, SUPPRESS_DEFAULT_SEED_KEY, DEFAULT_SEED_DONE_KEY, arePingsEnabled, isMessagingEnabled, arePlayerMarkersMovable, getInitiativeSortDirection, isInitiativeAnonymised, getMeasureUnitValue, getMeasureUnitSuffix, getWelcomePackSeededVersion, getWelcomePackOfferDismissedVersion, setWelcomePackOfferDismissedVersion, setWelcomePackRefreshedFlag, consumeWelcomePackRefreshedFlag } from '../storage/localSettings.ts';
 import { seedDefaultMaps, reseedWelcomePack, WELCOME_PACK_VERSION } from '../storage/seedMaps.ts';
 import { seedAudioAssets } from '../storage/seedAudioAssets.ts';
 import { migrateLegacyMaps } from '../storage/seedMapAssets.ts';
@@ -3904,7 +3904,7 @@ export class GMApp {
         this._refreshPlayerMarkers(); // let the new joiner see existing tokens
         this._broadcastAllPlayerIcons(); // seed their per-player icon cache
         // Initiative tracker — fire current state to the new joiner.
-        if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
+        if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState(), isInitiativeAnonymised()) });
         // v2.16.76 — annotations (clocks) for the new joiner.
         this.annotate?.rebroadcast();
         // v2.16.91 — text-map videos for the new joiner.
@@ -4145,7 +4145,7 @@ export class GMApp {
       // re-apply, so it's cheap.
       this._refreshPlayerMarkers();
       this._broadcastAllPlayerIcons();
-      if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
+      if (this.initiativeTracker) this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState(), isInitiativeAnonymised()) });
       this.annotate?.rebroadcast();
       this.host.broadcast({ type: 'textmap_videos', videos: this._currentTextMapVideos });
       // v2.16.97 — catch the projector up to the current playback position.
@@ -6889,7 +6889,7 @@ export class GMApp {
         // Mirror the state to every player view so they render in lock-step.
         // v2.16.71 — strip per-card markerUrl data URLs so the JSON stays
         // under the DataChannel single-frame limit (see stripInitiativeForWire).
-        this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(state) });
+        this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(state, isInitiativeAnonymised()) });
       },
       onCallForInitiative: () => {
         // v2.17.5 — fixed-initiative mode with a saved order: don't wipe
@@ -6916,13 +6916,20 @@ export class GMApp {
       const dir = (e as CustomEvent).detail as 'high-to-low' | 'low-to-high';
       this.initiativeTracker?.setSortDirection(dir);
     });
+    // v2.17.21 — Initiative anonymisation toggled in Settings → reship the
+    // (re-)stripped state so players reveal / re-hide the threat letters live.
+    window.addEventListener('mappadux:initiative-anonymise-changed', () => {
+      if (this.initiativeTracker) {
+        this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState(), isInitiativeAnonymised()) });
+      }
+    });
     // v2.17.10 — measurement scale changed in Settings → push it to players
     // so remote views measure on the same units.
     window.addEventListener('mappadux:measure-unit-changed', () => {
       this._broadcastPlayerFeatures();
     });
     // Broadcast initial state so any already-connected players sync up.
-    this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState()) });
+    this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState(), isInitiativeAnonymised()) });
   }
 
   /** v2.16.76 — per-map Annotate layer (progress clocks; whiteboard next).
