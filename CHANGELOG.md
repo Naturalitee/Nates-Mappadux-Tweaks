@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.23 — 2026-06-09
+
+Actually fix right-click opening the activity log in the GM's local preview windows. The preview's renderer canvas has pointer-events disabled (so the GM can pan the map behind it), so the canvas never saw the right-click — now the document-level handler opens the log instead, so it works in both the inline preview and a popped-out window.
+
 ## v2.17.22 — 2026-06-09
 
 The GM's local Player View preview suppresses the player right-click menu (ping/measure don't apply there) — so right-clicking it now opens the activity log directly, giving the GM the connection log from the preview window for debugging.

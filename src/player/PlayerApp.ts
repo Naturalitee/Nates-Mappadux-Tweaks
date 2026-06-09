@@ -515,21 +515,24 @@ export class PlayerApp {
     // the single affordance — transparent until clicked, the user
     // taps it once to unmute and again to mute. No giant prompt.
 
-    // Prevent the browser context menu on right-click (keep canvas clean)
-    document.addEventListener('contextmenu', (e) => e.preventDefault());
+    // Prevent the browser context menu on right-click (keep canvas clean).
+    // v2.17.23 — in the GM's local preview (PiP iframe / pop-out) the renderer
+    // canvas has `pointer-events: none` (so the GM can pan/zoom the map behind
+    // it), which means the canvas's own contextmenu handler below NEVER fires
+    // there. The right-click lands on the body and only reaches this document
+    // listener — so this is where we open the activity log for a preview window,
+    // giving the GM the connection log for debugging even though the player
+    // action menu (ping/measure) is intentionally suppressed in previews.
+    document.addEventListener('contextmenu', (e) => {
+      e.preventDefault();
+      if (this._isPreviewMode()) this.messageLog?.show({ x: e.clientX, y: e.clientY });
+    });
 
     // v2.17 Player Voice — right-click / long-press the map → action menu (ping, …).
     const mapCanvas = document.querySelector<HTMLCanvasElement>('#renderer-canvas');
     mapCanvas?.addEventListener('contextmenu', (e) => {
       e.preventDefault();
-      if (this._isPreviewMode()) {
-        // v2.17.22 — the GM's local preview window suppresses the player action
-        // menu (ping/measure/etc. are meaningless there), but the GM still wants
-        // the connection/activity log from here for debugging, so a right-click
-        // opens just that.
-        this.messageLog?.show({ x: e.clientX, y: e.clientY });
-        return;
-      }
+      if (this._isPreviewMode()) return; // preview right-click handled at document level above
       this._openPlayerMenu(e.clientX, e.clientY);
     });
     mapCanvas?.addEventListener('pointerdown', (e) => {
