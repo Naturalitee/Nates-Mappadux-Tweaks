@@ -26,7 +26,7 @@ export class PlayerInitiativeRail {
   }
 
   /** Wire the icon lookup (PlayerApp passes its per-player icon cache). */
-  setIconResolver(fn: (playerId: string) => string | undefined): void {
+  setPlayerIconResolver(fn: (playerId: string) => string | undefined): void {
     this.iconFor = fn;
   }
 

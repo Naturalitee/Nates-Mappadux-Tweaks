@@ -341,7 +341,7 @@ export class PlayerApp {
       this.initiativeRail = new PlayerInitiativeRail(initEl);
       // v2.16.72 — the rail resolves player portraits from the icon cache
       // (the initiative_update broadcast no longer carries the data URL).
-      this.initiativeRail.setIconResolver((pid) => this._playerIcons.get(pid));
+      this.initiativeRail.setPlayerIconResolver((pid) => this._playerIcons.get(pid));
     }
     // v2.16.76+ — read-only annotation overlays, map-anchored 1:1 with the
     // GM. project = map-norm → screen; read-only so unproject is unused.
