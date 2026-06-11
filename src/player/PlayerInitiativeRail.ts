@@ -19,7 +19,10 @@ export class PlayerInitiativeRail {
    *  carried in the (stripped) initiative_update broadcast any more — it
    *  arrives via the chunked player_icon_update path and is cached by
    *  PlayerApp — so the rail looks it up here by card.playerId. */
-  private iconFor: ((playerId: string) => string | undefined) | null = null;
+  private playerIconFor: ((playerId: string) => string | undefined) | null = null;
+  /** NMT - resolve a marker based card's token icon by id. It also arrives via
+   *  PlayerApp; so the rail looks it up here by card.markerId. */
+  private markerIconFor: ((playerId: string) => string | undefined) | null = null;
 
   constructor(private root: HTMLElement) {
     this._render();
@@ -27,12 +30,12 @@ export class PlayerInitiativeRail {
 
   /** Wire the icon lookup for players (PlayerApp passes its per-player icon cache). */
   setPlayerIconResolver(fn: (playerId: string) => string | undefined): void {
-    this.iconFor = fn;
+    this.playerIconFor = fn;
   }
 
   /** Wire the icon lookup for markers */
   setMarkerIconResolver(fn: (playerId: string) => string | undefined): void {
-    this.iconFor = fn;
+    this.markerIconFor = fn;
   }
 
   /** Re-render with the current state (e.g. when a player's icon arrives
@@ -118,15 +121,26 @@ export class PlayerInitiativeRail {
       // v2.17.21 — when the GM turns Initiative Anonymisation OFF, the
       // threat letter rides the wire (stripInitiativeForWire keeps it) and
       // we show it instead of "!", so players see the same A/B/C the GM does.
+
+      // NMT - Pass over card's marker id reference to retrieve marker icon
+      const markerSpritePortrait = card.markerUrl ?? (card.playerId ? this.markerIconFor?.(card.playerId) : undefined);
       _appendEdgeTabs(el, card.threatLetter ?? '!');
       const body = document.createElement('div');
       body.className = 'init-card-body init-card-body--enemy';
-      const duck = document.createElement('img');
-      duck.className = 'init-card-duck';
-      duck.src = '/icons/icon-512.png';
-      duck.alt = '';
-      duck.draggable = false;
-      body.appendChild(duck);
+      const enemyPortrait = document.createElement('img');
+      //NMT - init-card-duck is now init-card-enemy-portrait for generalization.
+      enemyPortrait.className = 'init-card-enemy-portrait'; 
+      
+      if (markerSpritePortrait) { //NMT - if a marker sprite is usable, utilize it. Otherwise, fall back to using placeholder duck.
+        enemyPortrait.src = markerSpritePortrait;
+      }
+      else {
+        enemyPortrait.src = '/icons/icon-512.png';
+      }
+
+      enemyPortrait.alt = '';
+      enemyPortrait.draggable = false;
+      body.appendChild(enemyPortrait);
       el.appendChild(body);
       return el;
     }
@@ -146,7 +160,7 @@ export class PlayerInitiativeRail {
     body.className = 'init-card-body';
     // markerUrl is stripped from the wire (v2.16.71); fall back to the
     // icon cache keyed by playerId.
-    const portrait = card.markerUrl ?? (card.playerId ? this.iconFor?.(card.playerId) : undefined);
+    const portrait = card.markerUrl ?? (card.playerId ? this.playerIconFor?.(card.playerId) : undefined);
     if (portrait) {
       // Player has chosen a token icon — render it as the centred portrait.
       const img = document.createElement('img');

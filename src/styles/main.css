@@ -8462,7 +8462,7 @@ option.select-option--add {
 }
 /* Dark duck silhouette on player-view enemy cards. v2.16.59 — close-up
    fills the body, brighter (was nearly invisible at opacity 0.35). */
-.init-card-duck {
+.init-card-enemy-portrait {
   width: 100%;
   height: 100%;
   object-fit: cover;
