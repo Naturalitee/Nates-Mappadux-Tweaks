@@ -578,6 +578,14 @@ export interface InitiativeCard {
   /** Optional player id for player cards — lets the GM unallocate / re-place
    *  the same player without re-typing names. */
   playerId?: string;
+  /** NMT - Optional marker id for enemy cards - lets players see enemy portraits 
+   * on their initiative rail. */
+  // NMT - Also: this and playerId could be incorporated into a full on reference ID, 
+  // usable by both player-based and marker-based cards, as theoretically there is 
+  // no overlap between uses of playerId and markerId. Althought I didn't do it
+  // because its scary and could probably ruin everything. 
+  // Oh well! Feel free to use any approach.
+  markerId?: string;
   /** Sort metric — string so it handles numbers, words, anything. */
   value: string;
   /** True once the card has acted this round; faded + dim until ROUND END
