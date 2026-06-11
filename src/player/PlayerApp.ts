@@ -342,6 +342,19 @@ export class PlayerApp {
       // v2.16.72 — the rail resolves player portraits from the icon cache
       // (the initiative_update broadcast no longer carries the data URL).
       this.initiativeRail.setPlayerIconResolver((pid) => this._playerIcons.get(pid));
+      // NMT v1.0 - Tries to get an icon asset from cache and converts it to data url
+      // to be used to resolve marker portraits
+      // not really sure if this is the correct way to go about things; feel free to change
+      this.initiativeRail.setMarkerIconResolver((mid) => {
+        const marker = this.playerIconCache.get(`libAsset:upload-${mid}`)
+        if (marker) { //fallback if it doesnt even exist, theoretically impossible but hey you never know
+          const canvas = document.createElement('canvas');
+          canvas.width = marker.width;
+          canvas.height = marker.height;
+          canvas.getContext('2d')!.drawImage(marker, 0, 0);
+          return canvas.toDataURL();
+        }
+      });
     }
     // v2.16.76+ — read-only annotation overlays, map-anchored 1:1 with the
     // GM. project = map-norm → screen; read-only so unproject is unused.

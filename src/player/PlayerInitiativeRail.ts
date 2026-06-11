@@ -25,8 +25,13 @@ export class PlayerInitiativeRail {
     this._render();
   }
 
-  /** Wire the icon lookup (PlayerApp passes its per-player icon cache). */
+  /** Wire the icon lookup for players (PlayerApp passes its per-player icon cache). */
   setPlayerIconResolver(fn: (playerId: string) => string | undefined): void {
+    this.iconFor = fn;
+  }
+
+  /** Wire the icon lookup for markers */
+  setMarkerIconResolver(fn: (playerId: string) => string | undefined): void {
     this.iconFor = fn;
   }
 
