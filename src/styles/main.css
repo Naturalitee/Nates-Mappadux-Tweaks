@@ -94,6 +94,7 @@ body {
   background: var(--bg-base);
 }
 
+
 /* ── GM Layout ─────────────────────────────────────────────────────────── */
 body.gm-view {
   display: grid;
@@ -1798,7 +1799,8 @@ option.select-option--add {
   min-height: 28px;
 }
 
-.param-row label {
+
+.param-row label { 
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
   min-width: 0;
@@ -1824,6 +1826,28 @@ option.select-option--add {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/*  NMT - Stacked variant used in the marker controls secction. Overrides 
+    .param-row--stacked's padding settings when used specifically in marker 
+    controls. */
+#marker-controls > .param-row--stacked { 
+  padding: var(--space-xs) var(--space-sm);
+}
+
+.param-row--input {
+  display: flex;
+  align-items: stretch;
+  gap: var(--space-xs);
+  width: 100%;
+}
+
+.param-row--input input[type="number"] {
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
 }
 
 .param-controls {
