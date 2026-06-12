@@ -155,6 +155,15 @@ export class InitiativeTracker {
     });
   }
 
+  /** Utilize the threat card at the top of the threat bench to represent
+   * a marker in the initiative rail by passing its markerId and IconId. Called by GMApp */
+  createCardFromMarker(roll: string, mid: string, markerIconId: string): void{
+    const nextThreat = this.state.threatBench[0];
+    nextThreat.markerId = mid;
+    nextThreat.markerIconId = markerIconId;
+    this._injectWithValue(nextThreat.id, roll);
+  }
+
   // ── Mutations driven by UI events ──────────────────────────────────────────
 
   private _advance(): void { this._mutate(advanceTurn); }

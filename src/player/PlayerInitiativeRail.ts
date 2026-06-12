@@ -20,9 +20,9 @@ export class PlayerInitiativeRail {
    *  arrives via the chunked player_icon_update path and is cached by
    *  PlayerApp — so the rail looks it up here by card.playerId. */
   private playerIconFor: ((playerId: string) => string | undefined) | null = null;
-  /** NMT - resolve a marker based card's token icon by id. It also arrives via
-   *  PlayerApp; so the rail looks it up here by card.markerId. */
-  private markerIconFor: ((playerId: string) => string | undefined) | null = null;
+  /** resolve a marker based card's icon by id. It also arrives via
+   *  PlayerApp; so the rail looks it up here by card.markerIconId. */
+  private resolveMarkerIcon: ((markerIcon: string) => string | undefined) | null = null;
 
   constructor(private root: HTMLElement) {
     this._render();
@@ -34,8 +34,8 @@ export class PlayerInitiativeRail {
   }
 
   /** Wire the icon lookup for markers */
-  setMarkerIconResolver(fn: (playerId: string) => string | undefined): void {
-    this.markerIconFor = fn;
+  setMarkerIconResolver(fn: (markerIcon: string) => string | undefined): void {
+    this.resolveMarkerIcon = fn;
   }
 
   /** Re-render with the current state (e.g. when a player's icon arrives
@@ -122,16 +122,15 @@ export class PlayerInitiativeRail {
       // threat letter rides the wire (stripInitiativeForWire keeps it) and
       // we show it instead of "!", so players see the same A/B/C the GM does.
 
-      // NMT - Pass over card's marker id reference to retrieve marker icon
-      const markerSpritePortrait = card.markerUrl ?? (card.playerId ? this.markerIconFor?.(card.playerId) : undefined);
+      // Check if card has markerIconId, then pass with markerId reference to retrieve marker icon
+      const markerSpritePortrait = card.markerUrl ?? (card.markerIconId ? this.resolveMarkerIcon?.(card.markerIconId) : undefined);
       _appendEdgeTabs(el, card.threatLetter ?? '!');
       const body = document.createElement('div');
       body.className = 'init-card-body init-card-body--enemy';
       const enemyPortrait = document.createElement('img');
-      //NMT - init-card-duck is now init-card-enemy-portrait for generalization.
+      //init-card-duck is now init-card-enemy-portrait for generalization.
       enemyPortrait.className = 'init-card-enemy-portrait'; 
-      
-      if (markerSpritePortrait) { //NMT - if a marker sprite is usable, utilize it. Otherwise, fall back to using placeholder duck.
+      if (markerSpritePortrait) { //if a marker sprite is usable, utilize it. Otherwise, fall back to using placeholder duck.
         enemyPortrait.src = markerSpritePortrait;
       }
       else {
