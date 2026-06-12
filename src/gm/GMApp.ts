@@ -1921,6 +1921,10 @@ export class GMApp {
     const initialSession = await loadSession();
     applyTheme(initialSession?.theme);
 
+    // Update anonymised initiative so that its visibility follows
+    // the current anonymisation setting.
+    this.updateAnonMarkerDisclaimerVisibility(isInitiativeAnonymised());
+
     this.renderer.start();
     this.setStatus('Ready', 'ok');
   }
@@ -5696,6 +5700,17 @@ export class GMApp {
     window.setInterval(() => this._updatePlayerCount(), 5000);
   }
 
+    /**Toggles whether the Initiative Anonymisation disclaimer is visible
+       for the "Add Marker as Initiative Threat Card" feature */
+    // TODO: possibly relocate this function somewhere else, and rename
+    // according to function naming conventions.
+  private updateAnonMarkerDisclaimerVisibility(isInitAnon: boolean){
+    const anonDisclaimer = document.querySelector<HTMLElement>("#marker-initiative-anon-disclaimer");
+    if (anonDisclaimer) {
+      anonDisclaimer.hidden = !isInitAnon;
+    }
+  }
+
   private _wireBroadcastBypass(selector: string, targets: ('player' | 'projector')[]): void {
     const toggle = document.querySelector<HTMLInputElement>(selector);
     if (!toggle) return;
@@ -6920,7 +6935,10 @@ export class GMApp {
     // (re-)stripped state so players reveal / re-hide the threat letters live.
     window.addEventListener('mappadux:initiative-anonymise-changed', () => {
       if (this.initiativeTracker) {
-        this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState(), isInitiativeAnonymised()) });
+        const isInitAnon = isInitiativeAnonymised()
+        //update disclaimer visibility on anonymisation toggle.
+        this.updateAnonMarkerDisclaimerVisibility(isInitAnon);
+        this.host.broadcast({ type: 'initiative_update', state: stripInitiativeForWire(this.initiativeTracker.getState(), isInitAnon) });
       }
     });
     // v2.17.10 — measurement scale changed in Settings → push it to players
