@@ -130,7 +130,7 @@ export class PlayerInitiativeRail {
       const enemyPortrait = document.createElement('img');
       //init-card-duck is now init-card-enemy-portrait for generalization.
       enemyPortrait.className = 'init-card-enemy-portrait'; 
-      // if a marker sprite is usable and GM cards arent anonymized, use spritePortrait. 
+      // if a marker sprite is usable and GM cards arent anonymised, use spritePortrait. 
       // Otherwise, fall back to using placeholder duck.
       if (markerSpritePortrait && card.threatLetter) { 
         enemyPortrait.src = markerSpritePortrait;
