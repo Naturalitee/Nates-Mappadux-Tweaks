@@ -226,6 +226,10 @@ export class PlayerApp {
    *  the wire so multi-KB images don't blow past the DataChannel limit).
    *  Merged into the marker view before handing to PlayerMarkerLayer. */
   private _playerIcons = new Map<string, string>();
+  /** Store any data URLs created via the markerIconResolver.
+   *  This is done to avoid calling canvas.toDataURL too many times
+   *  during rendering. */
+  private _initMarkerIcons = new Map<string, string>();
   /** Last received player_markers payload — re-merged on any icon update so
    *  an icon arriving after the markers triggers an immediate re-render. */
   private _lastPlayerMarkers: Array<{ playerId: string; name: string; color: string; x: number; y: number; iconChar?: string; hasIcon?: boolean }> = [];
@@ -342,17 +346,23 @@ export class PlayerApp {
       // v2.16.72 — the rail resolves player portraits from the icon cache
       // (the initiative_update broadcast no longer carries the data URL).
       this.initiativeRail.setPlayerIconResolver((pid) => this._playerIcons.get(pid));
-      // NMT v1.0 - Tries to get an icon asset from cache and converts it to data url
-      // to be used to resolve marker portraits
+      // Tries to get an icon asset from cache and converts it to data url
+      // used to resolve marker portraits. Also caches to _initMarkerIcons
+      // to avoid converting to dataURL too many times.
       // not really sure if this is the correct way to go about things; feel free to change
-      this.initiativeRail.setMarkerIconResolver((mid) => {
-        const marker = this.playerIconCache.get(`libAsset:upload-${mid}`)
-        if (marker) { //fallback if it doesnt even exist, theoretically impossible but hey you never know
+      this.initiativeRail.setMarkerIconResolver((iconid) => {
+        const cachedIcon = this._initMarkerIcons.get(iconid);
+        if (cachedIcon) return cachedIcon; //try retrieving from cache, if found, exit early.
+
+        const markerIcon = this.playerIconCache.get(iconid)
+        if (markerIcon) { //fallback if the icon doesnt exist, theoretically impossible but hey you never know
           const canvas = document.createElement('canvas');
-          canvas.width = marker.width;
-          canvas.height = marker.height;
-          canvas.getContext('2d')!.drawImage(marker, 0, 0);
-          return canvas.toDataURL();
+          canvas.width = markerIcon.width;
+          canvas.height = markerIcon.height;
+          canvas.getContext('2d')!.drawImage(markerIcon, 0, 0);
+          const dataURL = canvas.toDataURL();
+          this._initMarkerIcons.set(iconid, dataURL);
+          return dataURL
         }
       });
     }
