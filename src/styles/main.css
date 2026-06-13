@@ -82,6 +82,7 @@
 }
 
 /* ── Reset ─────────────────────────────────────────────────────────────── */
+
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 [hidden] { display: none !important; }
 
@@ -94,6 +95,23 @@ body {
   background: var(--bg-base);
 }
 
+/* ── CSS Animations ─────────────────────────────────────────────────────────────── */
+@keyframes markerInitTurnIndicator {
+  0% {
+    border: 4px dashed rgba(255, 221, 0, 0.9);
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  }
+
+  50% {
+    border: 4px dashed rgba(255, 221, 0, 0);
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0);
+  }
+
+  100% {
+    border: 4px dashed rgba(255, 221, 0, 0.9);
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  }
+}
 
 /* ── GM Layout ─────────────────────────────────────────────────────────── */
 body.gm-view {
@@ -770,6 +788,22 @@ body.projector-view .marker-overlay {
   border-radius: 8px;
   pointer-events: none;
   box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+}
+
+/* Turn indicator ring - flashing yellow dashed rectangle around the 
+   marker indicating that it is currently its turn in the initiative
+   order. This is only applicable if the current initiative card was
+   created using the marker. */
+.marker-turn-indicator-ring {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width:  calc(2 * var(--icon-half-w, 0px) + 10px);
+  height: calc(2 * var(--icon-half-h, 0px) + 10px);
+  transform: translate(-50%, -50%);
+  border-radius: 8px;
+  pointer-events: none;
+  animation: markerInitTurnIndicator 1.5s infinite
 }
 
 /* Resize handle — bottom-right corner of the icon (opposite the move
