@@ -399,6 +399,10 @@ export class GMApp {
   /** v2.16.91 — live YouTube videos placed on a text-map page. */
   private textMapVideoLayer: import('../rendering/TextMapVideoLayer.ts').TextMapVideoLayer | null = null;
   private _currentTextMapVideos: import('../types.ts').TextMapVideoElement[] = [];
+  /** v2.17.25 — accessibility layer: hover tooltip + screen-reader list of the
+   *  text-map's block text (which is otherwise baked into the page image). */
+  private textMapTextLayer: import('../rendering/TextMapTextLayer.ts').TextMapTextLayer | null = null;
+  private _currentTextMapTexts: import('../types.ts').TextMapTextElement[] = [];
   /** GM sender colour for message replies — a slate that reads clearly on
    *  player views without straying into the reserved near-black range. */
   private static readonly GM_MESSAGE_COLOR = '#64748b';
@@ -3122,6 +3126,11 @@ export class GMApp {
     this._currentTextMapVideos = (mapAssetForButton?.textMap?.elements ?? [])
       .filter((e): e is import('../types.ts').TextMapVideoElement => e.type === 'video');
     this.textMapVideoLayer?.setVideos(this._currentTextMapVideos);
+    // v2.17.25 — feed the same text-map's TEXT blocks to the accessibility
+    // layer (hover tooltip + screen-reader list); empty for non-text-maps.
+    this._currentTextMapTexts = (mapAssetForButton?.textMap?.elements ?? [])
+      .filter((e): e is import('../types.ts').TextMapTextElement => e.type === 'text');
+    this.textMapTextLayer?.setTexts(this._currentTextMapTexts);
     // v2.16.100 — cache on the Host so the videos ride in EVERY new
     // connection's full_state (incl. the BroadcastChannel one a same-browser
     // preview / pop-out requests on open), not just this live broadcast.
@@ -3489,6 +3498,21 @@ export class GMApp {
           },
         );
         this.textMapVideoLayer.setVideos(this._currentTextMapVideos);
+      });
+    }
+
+    // v2.17.25 — text-map accessibility layer (hover tooltip + SR list of the
+    // block text baked into the page image). Hit-tests pointer moves on the
+    // wrapper, so it never intercepts map panning.
+    const canvasWrapper = document.getElementById('canvas-wrapper');
+    if (canvasWrapper) {
+      void import('../rendering/TextMapTextLayer.ts').then(({ TextMapTextLayer }) => {
+        this.textMapTextLayer = new TextMapTextLayer(
+          canvasWrapper,
+          canvasWrapper,
+          (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        );
+        this.textMapTextLayer.setTexts(this._currentTextMapTexts);
       });
     }
 
