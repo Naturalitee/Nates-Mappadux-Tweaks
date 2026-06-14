@@ -95,24 +95,6 @@ body {
   background: var(--bg-base);
 }
 
-/* ── CSS Animations ─────────────────────────────────────────────────────────────── */
-@keyframes markerInitTurnIndicator {
-  0% {
-    border: 4px dashed rgba(255, 221, 0, 0.9);
-    box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
-  }
-
-  50% {
-    border: 4px dashed rgba(255, 221, 0, 0);
-    box-shadow: 0 0 6px rgba(0, 0, 0, 0);
-  }
-
-  100% {
-    border: 4px dashed rgba(255, 221, 0, 0.9);
-    box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
-  }
-}
-
 /* ── GM Layout ─────────────────────────────────────────────────────────── */
 body.gm-view {
   display: grid;
@@ -803,8 +785,25 @@ body.projector-view .marker-overlay {
   transform: translate(-50%, -50%);
   border-radius: 8px;
   pointer-events: none;
-  animation: markerInitTurnIndicator 1.5s infinite;
+  animation: markerInitTurnIndicator 1.5s infinite ease;
   z-index: -1;
+}
+
+@keyframes markerInitTurnIndicator {
+  0% {
+    border: 4px dashed rgba(255, 221, 0, 0);
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0);
+  }
+
+  50% {
+    border: 4px dashed rgba(255, 221, 0, 0.9);
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  }
+
+  100% {
+    border: 4px dashed rgba(255, 221, 0, 0);
+    box-shadow: 0 0 6px rgba(0, 0, 0, 0);
+  }
 }
 
 /* Resize handle — bottom-right corner of the icon (opposite the move
