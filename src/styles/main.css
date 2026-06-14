@@ -803,7 +803,8 @@ body.projector-view .marker-overlay {
   transform: translate(-50%, -50%);
   border-radius: 8px;
   pointer-events: none;
-  animation: markerInitTurnIndicator 1.5s infinite
+  animation: markerInitTurnIndicator 1.5s infinite;
+  z-index: -1;
 }
 
 /* Resize handle — bottom-right corner of the icon (opposite the move
