@@ -76,6 +76,7 @@ import { SoundtracksPanel } from './SoundtracksPanel.ts';
 import { fireStagecraftForAsset } from '../stagecraft/stagecraftDispatcher.ts';
 import { BundleUrlPromptDialog } from './BundleUrlPromptDialog.ts';
 import { saveBlob } from '../utils/saveBlob.ts';
+import { labelControl } from '../utils/controlLabel.ts';
 import { applyTheme } from '../utils/applyTheme.ts';
 import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
 import { MarkerInteractionRegistry, type InteractionContext } from './markerInteractions/MarkerInteraction.ts';
@@ -925,7 +926,9 @@ export class GMApp {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'reset-view-btn';
-      btn.title = 'Reset workspace view';
+      // Icon-only when the rail is minimised (label span collapses to a glyph),
+      // so pin a stable accessible name regardless of the visible label.
+      labelControl(btn, 'Reset view', 'reset the workspace pan & zoom');
       btn.innerHTML =
         '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
           '<polyline points="1 4 1 10 7 10"/>' +

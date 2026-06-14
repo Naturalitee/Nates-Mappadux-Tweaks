@@ -23,7 +23,7 @@
       </div>
       <button type="button" class="brand-menu-btn" id="gm-menu-btn"
               aria-haspopup="true" aria-expanded="false" aria-controls="gm-menu"
-              title="Menu">☰</button>
+              aria-label="Menu" title="Menu — open the main menu">☰</button>
       <div class="gm-menu" id="gm-menu" role="menu" hidden></div>
     </div>
 
@@ -49,7 +49,7 @@
              buried at the bottom of the dropdown list. -->
         <div class="picker-row">
           <select id="map-select" class="select-full picker-row__select"></select>
-          <button type="button" id="add-map-btn" class="picker-row__add" title="Add a new map">
+          <button type="button" id="add-map-btn" class="picker-row__add" aria-label="Add map" title="Add map — add a new map to the pack">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
         </div>
@@ -143,7 +143,7 @@
           <select id="marker-select" class="select-full picker-row__select">
             <option value="">— No marker selected —</option>
           </select>
-          <button type="button" id="add-marker-btn" class="picker-row__add" title="Add a new marker on the current map">
+          <button type="button" id="add-marker-btn" class="picker-row__add" aria-label="Add marker" title="Add marker — add a new marker on the current map">
             <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
           </button>
         </div>
@@ -175,7 +175,7 @@
                 <input type="color" id="marker-color" value="#e03e3e" />
               </div>
             </div>
-            <button type="button" id="marker-icon-btn" class="marker-icon-btn marker-icon-btn--lg" title="Click to choose an icon">&#9670;</button>
+            <button type="button" id="marker-icon-btn" class="marker-icon-btn marker-icon-btn--lg" aria-label="Marker icon" title="Marker icon — click to choose an icon">&#9670;</button>
           </div>
           <!-- Size slider removed in v2.11/A3b4 — drag the resize handle
                below the marker on the canvas to scale it visually. -->
@@ -214,9 +214,9 @@
               <div id="marker-sound-controls" hidden>
                 <div class="sb-slot-controls">
                   <div class="sb-mode-btns" title="Playback mode">
-                    <button id="marker-once-btn" class="sb-mode-btn" title="Play once"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><polygon points="1,2 10,8 1,14" fill="currentColor"/><rect x="12" y="2" width="2.5" height="12" rx="0.5" fill="currentColor"/></svg></button>
-                    <button id="marker-loop-btn" class="sb-mode-btn" title="Loop"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 Q2 11 2 9 L2 7 Q2 5 4 5 L11 5"/><polyline points="9 3 11 5 9 7"/><path d="M13 5 Q14 5 14 7 L14 9 Q14 11 12 11 L5 11"/><polyline points="7 9 5 11 7 13"/></svg></button>
-                    <button id="marker-random-btn" class="sb-mode-btn" title="Random"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 Q2 11 2 9 L2 7 Q2 5 4 5 L11 5"/><polyline points="9 3 11 5 9 7"/><path d="M13 5 Q14 5 14 7 L14 9 Q14 11 12 11 L5 11"/><polyline points="7 9 5 11 7 13"/><text x="8" y="8.5" text-anchor="middle" dominant-baseline="middle" font-size="7" font-weight="bold" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">?</text></svg></button>
+                    <button id="marker-once-btn" class="sb-mode-btn" aria-label="Play once" title="Play once"><svg viewBox="0 0 16 16" width="14" height="14" aria-hidden="true"><polygon points="1,2 10,8 1,14" fill="currentColor"/><rect x="12" y="2" width="2.5" height="12" rx="0.5" fill="currentColor"/></svg></button>
+                    <button id="marker-loop-btn" class="sb-mode-btn" aria-label="Loop" title="Loop"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 Q2 11 2 9 L2 7 Q2 5 4 5 L11 5"/><polyline points="9 3 11 5 9 7"/><path d="M13 5 Q14 5 14 7 L14 9 Q14 11 12 11 L5 11"/><polyline points="7 9 5 11 7 13"/></svg></button>
+                    <button id="marker-random-btn" class="sb-mode-btn" aria-label="Random" title="Random"><svg viewBox="0 0 16 16" width="14" height="14" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M3 11 Q2 11 2 9 L2 7 Q2 5 4 5 L11 5"/><polyline points="9 3 11 5 9 7"/><path d="M13 5 Q14 5 14 7 L14 9 Q14 11 12 11 L5 11"/><polyline points="7 9 5 11 7 13"/><text x="8" y="8.5" text-anchor="middle" dominant-baseline="middle" font-size="7" font-weight="bold" font-family="system-ui,sans-serif" fill="currentColor" stroke="none">?</text></svg></button>
                   </div>
                   <input type="range" id="marker-audio-volume" class="sb-volume" min="0" max="1" step="0.01" value="1" title="Volume" />
                 </div>
@@ -558,7 +558,7 @@
           <label for="projection-projector-select">Display</label>
           <div class="picker-row" id="scaled-view-projection-picker">
             <select id="projection-projector-select" class="select-full picker-row__select" title="Pick a calibrated display (TV / monitor / projector)"></select>
-            <button type="button" id="add-display-btn" class="picker-row__add" title="Calibrate a new display">
+            <button type="button" id="add-display-btn" class="picker-row__add" aria-label="Add display" title="Add display — calibrate a new display">
               <svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
             </button>
           </div>
