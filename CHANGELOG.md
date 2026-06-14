@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.24 — 2026-06-14
+
+Community UI fixes (thanks to Naturalitee on GitHub): consistent input styling for the annotate clock/timer name fields and the customize-pack text inputs; the scaled-view projection picker no longer overflows its container in the Player View panel; Settings sections use normal scroll instead of `overflow: hidden`, so opening one no longer distorts the others; and the marker move/visibility badges now render above the selection ring instead of under it.
+
 ## v2.17.23 — 2026-06-09
 
 Actually fix right-click opening the activity log in the GM's local preview windows. The preview's renderer canvas has pointer-events disabled (so the GM can pan the map behind it), so the canvas never saw the right-click — now the document-level handler opens the log instead, so it works in both the inline preview and a popped-out window.

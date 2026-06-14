@@ -23,6 +23,9 @@ DMR-2-Roadmap.txt
 # Per-release test plan — running notes, gitignored like the roadmap.
 V2.11-TEST-PLAN.md
 
+# Local agent/editor tooling config
+.claude/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
