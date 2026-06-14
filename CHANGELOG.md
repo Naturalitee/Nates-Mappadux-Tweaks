@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.27 — 2026-06-14
+
+Handout screen-reader content now reaches the player view too, not just the GM. The GM broadcasts the active handout's text + image alt to connected players (carried in the initial connection state and on every map change), where it feeds the same visually-hidden region — so a player using a screen reader hears the handout's words, including on mobile. (The projector is intentionally left out — nobody runs a screen reader on a projected TV.)
+
 ## v2.17.26 — 2026-06-14
 
 Refined the text-map accessibility work. The sighted hover tooltip is gone — screen-reader support never needed it, and a popup on every handout hover would just be noise; assistive tech reads the same visually-hidden content list with zero on-screen change. That list now also covers images on a handout (announced in reading order alongside the text), and image elements gained an "Alt text" field in the handout editor — what a screen reader says for the image, falling back to the asset's name when left blank.
