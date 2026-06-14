@@ -61,6 +61,12 @@ export class MarkerEditor {
     this._redraw();
   }
 
+  /** Return the icon string for a marker given its markerId */
+  getMarkerIconId(id: string | null): string | undefined{
+    const markerById = this.markers.find((marker) => marker.id === id);
+    return markerById?.icon;
+  }
+
   /** Called when a click misses all markers — routes to fog polygon selection. */
   setFogSelectCallback(fn: (pos: { x: number; y: number }) => void): void {
     this._fogSelectCb = fn;
