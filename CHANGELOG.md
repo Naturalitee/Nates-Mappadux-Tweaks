@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.25 — 2026-06-14
+
+Accessibility pass (part 1). Text-map handouts: the block text is baked into the page image, so it was invisible to screen readers and offered no hover hint — now a visually-hidden region exposes every block's text in reading order for assistive tech, and hovering a block on the GM canvas shows its underlying text in a floating tooltip (hit-tested, so map panning is unaffected). Buttons: icon-only controls now carry a proper accessible name (aria-label) and their tooltips lead with the name before the explanation ("Add marker — add a new marker on the current map") across the GM chrome and reset-view button, via a reusable helper. (Follow-ups banked: the same name pass for the editor/modal components, plus reduced-motion, contrast, landmarks and keyboard navigation.)
+
 ## v2.17.24 — 2026-06-14
 
 Community UI fixes (thanks to Naturalitee on GitHub): consistent input styling for the annotate clock/timer name fields and the customize-pack text inputs; the scaled-view projection picker no longer overflows its container in the Player View panel; Settings sections use normal scroll instead of `overflow: hidden`, so opening one no longer distorts the others; and the marker move/visibility badges now render above the selection ring instead of under it.
