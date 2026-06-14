@@ -1835,6 +1835,10 @@ export interface TextMapImageElement extends TextMapElementBase {
   type:    'image';
   /** ImageAssetStore id. The rasteriser resolves to inline SVG / blob URL. */
   assetId: string;
+  /** v2.17.26 — accessibility alt text announced for this image by the
+   *  handout's screen-reader region. When absent/blank, the referenced
+   *  asset's name is used as the fallback. */
+  alt?:    string;
   /** Optional tint colour for monochrome SVG icons. */
   tint?:   string;
   /** v2.14.102 — When true (the default), resizing preserves the

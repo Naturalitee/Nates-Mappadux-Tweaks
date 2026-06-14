@@ -77,6 +77,7 @@ import { fireStagecraftForAsset } from '../stagecraft/stagecraftDispatcher.ts';
 import { BundleUrlPromptDialog } from './BundleUrlPromptDialog.ts';
 import { saveBlob } from '../utils/saveBlob.ts';
 import { labelControl } from '../utils/controlLabel.ts';
+import { TextMapAltText, plainText, type AltTextItem } from '../rendering/TextMapAltText.ts';
 import { applyTheme } from '../utils/applyTheme.ts';
 import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
 import { MarkerInteractionRegistry, type InteractionContext } from './markerInteractions/MarkerInteraction.ts';
@@ -400,10 +401,10 @@ export class GMApp {
   /** v2.16.91 — live YouTube videos placed on a text-map page. */
   private textMapVideoLayer: import('../rendering/TextMapVideoLayer.ts').TextMapVideoLayer | null = null;
   private _currentTextMapVideos: import('../types.ts').TextMapVideoElement[] = [];
-  /** v2.17.25 — accessibility layer: hover tooltip + screen-reader list of the
-   *  text-map's block text (which is otherwise baked into the page image). */
-  private textMapTextLayer: import('../rendering/TextMapTextLayer.ts').TextMapTextLayer | null = null;
-  private _currentTextMapTexts: import('../types.ts').TextMapTextElement[] = [];
+  /** v2.17.26 — screen-reader region exposing the handout's text + image alt
+   *  (otherwise baked into the page image, invisible to assistive tech). */
+  private textMapAltText: TextMapAltText | null = null;
+  private _currentAltItems: AltTextItem[] = [];
   /** GM sender colour for message replies — a slate that reads clearly on
    *  player views without straying into the reserved near-black range. */
   private static readonly GM_MESSAGE_COLOR = '#64748b';
@@ -3129,11 +3130,22 @@ export class GMApp {
     this._currentTextMapVideos = (mapAssetForButton?.textMap?.elements ?? [])
       .filter((e): e is import('../types.ts').TextMapVideoElement => e.type === 'video');
     this.textMapVideoLayer?.setVideos(this._currentTextMapVideos);
-    // v2.17.25 — feed the same text-map's TEXT blocks to the accessibility
-    // layer (hover tooltip + screen-reader list); empty for non-text-maps.
-    this._currentTextMapTexts = (mapAssetForButton?.textMap?.elements ?? [])
-      .filter((e): e is import('../types.ts').TextMapTextElement => e.type === 'text');
-    this.textMapTextLayer?.setTexts(this._currentTextMapTexts);
+    // v2.17.26 — build the handout's screen-reader content: each text block's
+    // words, and each image's alt (authored, or the asset name as fallback).
+    // Empty for non-text-maps. Positions ride along so the SR region can read
+    // in page order.
+    const altItems: AltTextItem[] = [];
+    for (const e of (mapAssetForButton?.textMap?.elements ?? [])) {
+      if (e.type === 'text') {
+        altItems.push({ x: e.x, y: e.y, text: plainText(e.html) });
+      } else if (e.type === 'image') {
+        let alt = (e.alt ?? '').trim();
+        if (!alt) alt = (await ImageAssetStore.get(e.assetId))?.name ?? '';
+        if (alt) altItems.push({ x: e.x, y: e.y, text: alt });
+      }
+    }
+    this._currentAltItems = altItems;
+    this.textMapAltText?.setItems(altItems);
     // v2.16.100 — cache on the Host so the videos ride in EVERY new
     // connection's full_state (incl. the BroadcastChannel one a same-browser
     // preview / pop-out requests on open), not just this live broadcast.
@@ -3504,19 +3516,13 @@ export class GMApp {
       });
     }
 
-    // v2.17.25 — text-map accessibility layer (hover tooltip + SR list of the
-    // block text baked into the page image). Hit-tests pointer moves on the
-    // wrapper, so it never intercepts map panning.
+    // v2.17.26 — text-map accessibility: a visually-hidden screen-reader region
+    // listing the handout's text + image alt (baked into the page image, so
+    // invisible to AT). No visual presence; sighted users see no change.
     const canvasWrapper = document.getElementById('canvas-wrapper');
     if (canvasWrapper) {
-      void import('../rendering/TextMapTextLayer.ts').then(({ TextMapTextLayer }) => {
-        this.textMapTextLayer = new TextMapTextLayer(
-          canvasWrapper,
-          canvasWrapper,
-          (x, y) => this.renderer.mapNormToCanvasCss(x, y),
-        );
-        this.textMapTextLayer.setTexts(this._currentTextMapTexts);
-      });
+      this.textMapAltText = new TextMapAltText(canvasWrapper);
+      this.textMapAltText.setItems(this._currentAltItems);
     }
 
     // v2.17 Player Voice — player tokens. The GM can drag any token to place it.
