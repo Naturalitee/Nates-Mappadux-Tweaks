@@ -77,7 +77,8 @@ import { fireStagecraftForAsset } from '../stagecraft/stagecraftDispatcher.ts';
 import { BundleUrlPromptDialog } from './BundleUrlPromptDialog.ts';
 import { saveBlob } from '../utils/saveBlob.ts';
 import { labelControl } from '../utils/controlLabel.ts';
-import { TextMapAltText, plainText, type AltTextItem } from '../rendering/TextMapAltText.ts';
+import { TextMapAltText, plainText } from '../rendering/TextMapAltText.ts';
+import type { TextMapAltItem } from '../types.ts';
 import { applyTheme } from '../utils/applyTheme.ts';
 import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
 import { MarkerInteractionRegistry, type InteractionContext } from './markerInteractions/MarkerInteraction.ts';
@@ -404,7 +405,7 @@ export class GMApp {
   /** v2.17.26 — screen-reader region exposing the handout's text + image alt
    *  (otherwise baked into the page image, invisible to assistive tech). */
   private textMapAltText: TextMapAltText | null = null;
-  private _currentAltItems: AltTextItem[] = [];
+  private _currentAltItems: TextMapAltItem[] = [];
   /** GM sender colour for message replies — a slate that reads clearly on
    *  player views without straying into the reserved near-black range. */
   private static readonly GM_MESSAGE_COLOR = '#64748b';
@@ -3134,7 +3135,7 @@ export class GMApp {
     // words, and each image's alt (authored, or the asset name as fallback).
     // Empty for non-text-maps. Positions ride along so the SR region can read
     // in page order.
-    const altItems: AltTextItem[] = [];
+    const altItems: TextMapAltItem[] = [];
     for (const e of (mapAssetForButton?.textMap?.elements ?? [])) {
       if (e.type === 'text') {
         altItems.push({ x: e.x, y: e.y, text: plainText(e.html) });
@@ -3146,6 +3147,11 @@ export class GMApp {
     }
     this._currentAltItems = altItems;
     this.textMapAltText?.setItems(altItems);
+    // Mirror the video path: cache on the Host so the alt content rides in
+    // every new connection's full_state, and broadcast it live to players +
+    // projector so their screen-reader region announces this handout too.
+    this.host.setLastTextMapAlt(altItems);
+    this.host.broadcast({ type: 'textmap_alt', items: altItems });
     // v2.16.100 — cache on the Host so the videos ride in EVERY new
     // connection's full_state (incl. the BroadcastChannel one a same-browser
     // preview / pop-out requests on open), not just this live broadcast.

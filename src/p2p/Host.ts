@@ -1,5 +1,5 @@
 import Peer, { type DataConnection } from 'peerjs';
-import type { GMMessage, SessionState, MarkerIconData, SoundboardAudioData, TextMapVideoElement } from '../types.ts';
+import type { GMMessage, SessionState, MarkerIconData, SoundboardAudioData, TextMapVideoElement, TextMapAltItem } from '../types.ts';
 import { LocalChannel } from './LocalChannel.ts';
 import { generateRoomCode } from './roomCode.ts';
 import { isLocalPlayerStaticOnly } from '../storage/localSettings.ts';
@@ -69,6 +69,9 @@ export class Host {
    *  full_state (including the BroadcastChannel one a same-browser
    *  preview / pop-out requests on open) carries them. */
   private lastTextMapVideos:    TextMapVideoElement[] = [];
+  /** v2.17.27 — accessibility content (text + image alt) for the active
+   *  text-map, cached so every full_state carries it like the videos do. */
+  private lastTextMapAlt:       TextMapAltItem[] = [];
   /** v2.16.108 — current "GM is faffing" hold-screen state (the Player
    *  Views broadcast toggle, off = hold screen). Cached so a viewer
    *  joining WHILE it's off gets the hold screen on connect instead of
@@ -180,6 +183,7 @@ export class Host {
           ...(this.lastMapGridColor   !== undefined ? { gridColor:         this.lastMapGridColor   } : {}),
           ...(this.lastComposite                    ? { composite:         this.lastComposite      } : {}),
           ...(this.lastTextMapVideos.length > 0      ? { textMapVideos:     this.lastTextMapVideos  } : {}),
+          ...(this.lastTextMapAlt.length > 0         ? { textMapAlt:        this.lastTextMapAlt     } : {}),
         };
         this.local.send(msg);
         // v2.16.108 — if the GM is faffing (broadcast toggle off), the new
@@ -388,6 +392,12 @@ export class Host {
     this.lastTextMapVideos = videos;
   }
 
+  /** v2.17.27 — keep cached alt content current so a viewer joining after a
+   *  map load gets the handout's screen-reader text in its initial full_state. */
+  setLastTextMapAlt(items: TextMapAltItem[]): void {
+    this.lastTextMapAlt = items;
+  }
+
   /** v2.16.108 — remember whether the broadcast toggle is showing the hold
    *  screen, so a late joiner gets it on connect. message is the shared faff
    *  line currently displayed to existing viewers. */
@@ -460,6 +470,7 @@ export class Host {
           ...(this.lastMapGridColor   !== undefined ? { gridColor:         this.lastMapGridColor   } : {}),
           ...(this.lastComposite                    ? { composite:         this.lastComposite      } : {}),
           ...(this.lastTextMapVideos.length > 0      ? { textMapVideos:     this.lastTextMapVideos  } : {}),
+          ...(this.lastTextMapAlt.length > 0         ? { textMapAlt:        this.lastTextMapAlt     } : {}),
         };
         this.sendTo(conn, msg);
         // v2.16.108 — if the GM is faffing (broadcast toggle off), the new

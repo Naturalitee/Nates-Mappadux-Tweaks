@@ -1,12 +1,4 @@
-/** One handout element reduced to its accessible text plus the top-left
- *  position used only to order the list the way the page reads. */
-export interface AltTextItem {
-  /** Top-left as PERCENTAGES of the page (0..100) — for reading-order sort. */
-  x:    number;
-  y:    number;
-  /** The accessible text: a text block's words, or an image's alt / name. */
-  text: string;
-}
+import type { TextMapAltItem } from '../types.ts';
 
 /**
  * TextMapAltText (v2.17.26) — screen-reader alternative for text-map handouts.
@@ -31,7 +23,7 @@ export class TextMapAltText {
 
   /** Replace the announced content. Pass the current map's text + image items
    *  (empty for non-text-maps). Ordered here so reading follows the layout. */
-  setItems(items: AltTextItem[]): void {
+  setItems(items: TextMapAltItem[]): void {
     const ordered = [...items]
       .filter((it) => it.text.length > 0)
       .sort((a, b) => (a.y - b.y) || (a.x - b.x));
