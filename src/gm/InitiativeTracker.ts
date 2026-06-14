@@ -100,6 +100,21 @@ export class InitiativeTracker {
 
   getState(): InitiativeState { return this.state; }
 
+  /** Return the intiative card currently taking its turn in the 
+   *  active deck. Called by GMApp for setInitiativeBorderFunc. */
+  getCurrentTurnCard(): InitiativeCard {
+    return this.state.activeDeck[0]
+  }
+
+  /** Called when deck changes need UI components to re-render. */
+  private sendRenderUpdate: ( () => void ) | null = null;
+
+  /** Accept the UI refresh callback provided by GMApp. */
+  setRenderUpdateFunc(fn: () => void): void {
+    this.sendRenderUpdate = fn;
+  }
+
+
   /** Open the tracker overlay. Seeds ROUND END if the deck was empty. */
   open(): void {
     this._mutate((s) => ({ ...s, visible: true, activeDeck: s.activeDeck.length === 0 ? [makeRoundMarker()] : s.activeDeck }));
@@ -216,6 +231,7 @@ export class InitiativeTracker {
     this.state = fn(this.state);
     saveInitiativeState(this.state);
     this.cb.onChange(this.state);
+    this.sendRenderUpdate?.();
     this._render();
   }
 

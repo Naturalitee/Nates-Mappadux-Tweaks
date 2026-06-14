@@ -1921,7 +1921,30 @@ export class GMApp {
     const initialSession = await loadSession();
     applyTheme(initialSession?.theme);
 
-    // Update anonymised initiative so that its visibility follows
+    // Define markerOverlays turn indicator border function so that it has access
+    // to the first card in the initiativeTracker's activeDeck
+    // This could probably be implemented better but this works for now.
+    this._markerOverlay?.setInitiativeBorderFunc((el, item, ) => {
+      const currentTurnCard = this.initiativeTracker?.getCurrentTurnCard();
+      const isMarkersTurn = currentTurnCard?.markerId == el.root.getAttribute('data-marker-id') ;
+      const isApplicable = !item.selected && isMarkersTurn;
+
+      if (isApplicable && !el.turnIndicatorRing) {
+        el.turnIndicatorRing = document.createElement('div');
+        el.turnIndicatorRing.className = 'marker-turn-indicator-ring';
+        el.root.appendChild(el.turnIndicatorRing);
+      } 
+      else if (!isApplicable && el.turnIndicatorRing) {
+        el.turnIndicatorRing.remove();
+        el.turnIndicatorRing = null;
+      }
+    })
+
+    // Allow initiativeTracker to force a redraw to update turn indicator
+    // on activeDeck mutation.
+    this.initiativeTracker?.setRenderUpdateFunc(() => this.markerEditor.redraw())
+
+    // Update anonymised initiative disclaimer so its visibility follows
     // the current anonymisation setting.
     this.updateAnonMarkerDisclaimerVisibility(isInitiativeAnonymised());
 

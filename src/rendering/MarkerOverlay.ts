@@ -240,20 +240,21 @@ function badgeColor(kind: BadgeKind, on: boolean): string {
 }
 
 interface MarkerElements {
-  root:          HTMLDivElement;
-  label:         HTMLDivElement | null;
-  moveHandle:    HTMLDivElement | null;
-  badgesRow:     HTMLDivElement | null;
+  root:               HTMLDivElement;
+  label:              HTMLDivElement | null;
+  moveHandle:         HTMLDivElement | null;
+  badgesRow:          HTMLDivElement | null;
   /** Map of badge kind → button element so we can reuse / restyle each. */
-  badges:        Map<BadgeKind, HTMLButtonElement>;
-  selectionRing: HTMLDivElement | null;
-  resizeHandle:  HTMLDivElement | null;
-  rotateHandle:  HTMLDivElement | null;
-  rotateStem:    HTMLDivElement | null;
-  flipVHandle:   HTMLDivElement | null;
-  flipHHandle:   HTMLDivElement | null;
-  deleteHandle:  HTMLDivElement | null;
-  lockGlyph:     HTMLDivElement | null;
+  badges:             Map<BadgeKind, HTMLButtonElement>;
+  selectionRing:      HTMLDivElement | null;
+  turnIndicatorRing:  HTMLDivElement | null;
+  resizeHandle:       HTMLDivElement | null;
+  rotateHandle:       HTMLDivElement | null;
+  rotateStem:         HTMLDivElement | null;
+  flipVHandle:        HTMLDivElement | null;
+  flipHHandle:        HTMLDivElement | null;
+  deleteHandle:       HTMLDivElement | null;
+  lockGlyph:          HTMLDivElement | null;
 }
 
 interface RectElements {
@@ -741,7 +742,7 @@ export class MarkerOverlay {
     this.container.appendChild(root);
     return {
       root, label: null, moveHandle: null, badgesRow: null,
-      badges: new Map(), selectionRing: null, resizeHandle: null,
+      badges: new Map(), selectionRing: null, turnIndicatorRing: null, resizeHandle: null,
       rotateHandle: null, rotateStem: null, flipVHandle: null, flipHHandle: null,
       deleteHandle: null, lockGlyph: null,
     };
@@ -761,6 +762,7 @@ export class MarkerOverlay {
     this._applyMoveHandle(el, item);
     this._applyLockGlyph(el, item);
     this._applyBadges(el, item);
+    this._applyInitiativeBorder?.(el, item);
     this._applySelectionAffordances(el, item);
   }
 
@@ -786,6 +788,16 @@ export class MarkerOverlay {
       el.root.appendChild(el.lockGlyph);
     }
   }
+
+  /** Applies a flashing yellow dashed ring around the icon as a turn indicator
+   * for marker based cards. */
+  private _applyInitiativeBorder: ((el: MarkerElements, item: OverlayItem) => string | undefined) | null = null;
+
+  //function requires initiative reference, so we accept function from GMApp
+  setInitiativeBorderFunc(fn: (el: MarkerElements, item: OverlayItem) => string | undefined): void {
+    this._applyInitiativeBorder = fn;
+  }
+
 
   /** Selection-only chrome: dashed ring around the icon + resize handle below it. */
   private _applySelectionAffordances(el: MarkerElements, item: OverlayItem): void {
