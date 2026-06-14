@@ -15,6 +15,7 @@ import { TimersLayer } from '../annotate/TimersLayer.ts';
 import { NotesLayer } from '../annotate/NotesLayer.ts';
 import { WhiteboardLayer } from '../annotate/WhiteboardLayer.ts';
 import { TextMapVideoLayer } from '../rendering/TextMapVideoLayer.ts';
+import { TextMapAltText } from '../rendering/TextMapAltText.ts';
 import { PlayerInitiativeRollModal } from './PlayerInitiativeRollModal.ts';
 import { showFullPlayerUiInPreview, getMeasureUnitValue, getMeasureUnitSuffix } from '../storage/localSettings.ts';
 import { Viewer } from '../viewers/Viewer.ts';
@@ -244,6 +245,9 @@ export class PlayerApp {
   private _annotateNotes: NotesLayer | null = null;
   /** v2.16.91 — live YouTube videos on a text-map page. */
   private _textMapVideos: TextMapVideoLayer | null = null;
+  /** v2.17.27 — screen-reader region for the active text-map (text + image alt
+   *  sent by the GM). No visual presence; runs on mobile too (unlike video). */
+  private _textMapAlt: TextMapAltText | null = null;
   private _initiativeRollModal = new PlayerInitiativeRollModal();
   /** Roster broadcast by the GM — used to list other players as message targets. */
   private roster: Array<{ id: string; playerName: string; characterName: string; color: string; connected: boolean }> = [];
@@ -352,6 +356,10 @@ export class PlayerApp {
     if (timersEl) this._annotateTimers = new TimersLayer(timersEl, false, anchor);
     const notesEl = document.getElementById('annotate-notes');
     if (notesEl) this._annotateNotes = new NotesLayer(notesEl, false, anchor);
+    // v2.17.27 — screen-reader region for handout text/image alt. Visually
+    // hidden (so parent choice is cosmetic) and runs on every viewer including
+    // mobile/touch. player.html has no canvas wrapper, so anchor on <body>.
+    this._textMapAlt = new TextMapAltText(document.body);
     const videoLayerEl = document.getElementById('textmap-video-layer');
     // v2.16.102 — in-map YouTube video doesn't render on mobile: Android
     // composites video through a hardware overlay that can't punch through the
@@ -1335,6 +1343,7 @@ export class PlayerApp {
         // preview / pop-out gets them on connect (not only via the discrete
         // textmap_videos message, which could miss the timing).
         this._textMapVideos?.setVideos(msg.textMapVideos ?? []);
+        this._textMapAlt?.setItems(msg.textMapAlt ?? []);
         // v2.14.17 — pick up calibration + dimensions for the
         // player-side grid renderer.
         // v2.14.18 — gridOffsetX/Y travel in the same payload.
@@ -1855,6 +1864,11 @@ export class PlayerApp {
       case 'textmap_videos': {
         // v2.16.91 — live YouTube videos for the active text-map.
         this._textMapVideos?.setVideos(msg.videos);
+        break;
+      }
+      case 'textmap_alt': {
+        // v2.17.27 — handout text/image alt for the screen-reader region.
+        this._textMapAlt?.setItems(msg.items);
         break;
       }
       case 'video_playback': {
