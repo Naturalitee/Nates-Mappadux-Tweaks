@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.26 — 2026-06-14
+
+Refined the text-map accessibility work. The sighted hover tooltip is gone — screen-reader support never needed it, and a popup on every handout hover would just be noise; assistive tech reads the same visually-hidden content list with zero on-screen change. That list now also covers images on a handout (announced in reading order alongside the text), and image elements gained an "Alt text" field in the handout editor — what a screen reader says for the image, falling back to the asset's name when left blank.
+
 ## v2.17.25 — 2026-06-14
 
 Accessibility pass (part 1). Text-map handouts: the block text is baked into the page image, so it was invisible to screen readers and offered no hover hint — now a visually-hidden region exposes every block's text in reading order for assistive tech, and hovering a block on the GM canvas shows its underlying text in a floating tooltip (hit-tested, so map panning is unaffected). Buttons: icon-only controls now carry a proper accessible name (aria-label) and their tooltips lead with the name before the explanation ("Add marker — add a new marker on the current map") across the GM chrome and reset-view button, via a reusable helper. (Follow-ups banked: the same name pass for the editor/modal components, plus reduced-motion, contrast, landmarks and keyboard navigation.)
