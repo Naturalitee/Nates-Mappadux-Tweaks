@@ -275,12 +275,13 @@ export class PlayerPip {
       startTop  = frameRect.top  - wrapRect.top;
       // Switch to top/left positioning so dragging works regardless of
       // whether we started with a bottom/right anchor.
-      frame.style.left   = `${startLeft}px`;
-      frame.style.top    = `${startTop}px`;
+      frame.style.left   = `${startLeft}px`; //im too lazy to change this to be consistent
+      frame.style.top    = `${startTop}px`; //it doesnt have much of an effect anyway
       frame.style.bottom = '';
       frame.style.right  = '';
       e.preventDefault();
     });
+
     handle.addEventListener('pointermove', (e) => {
       if (!dragging) return;
       const dx = e.clientX - startMouseX;
@@ -292,9 +293,13 @@ export class PlayerPip {
       const maxTop  = wrapRect.height - frameRect.height;
       const nextLeft = Math.max(0, Math.min(maxLeft, startLeft + dx));
       const nextTop  = Math.max(0, Math.min(maxTop,  startTop  + dy));
-      frame.style.left = `${nextLeft}px`;
-      frame.style.top  = `${nextTop}px`;
+      // Use percentage based values so as to not lose the PlayerPip.
+      // Old functionality used absolute pixels causing it to render outside the visible 
+      // area when the viewport size changes (after browser zooming or window resizing).
+      frame.style.left = `${this._pxToContainerPercent(wrapRect.width, nextLeft)}%`;
+      frame.style.top  = `${this._pxToContainerPercent(wrapRect.height, nextTop)}%`;
     });
+    
     handle.addEventListener('pointerup', (e) => {
       if (!dragging) return;
       dragging = false;
@@ -305,7 +310,11 @@ export class PlayerPip {
     });
     handle.addEventListener('pointercancel', () => { dragging = false; });
   }
-
+  //
+  private _pxToContainerPercent(trueMax: number, pxMeasure: number): number | undefined {
+    if (trueMax <= 0) return;
+    return (pxMeasure / trueMax) * 100;
+  }
   // ─── Storage ─────────────────────────────────────────────────────────────
 
   private _loadPosition(): PersistedPosition | null {
