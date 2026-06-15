@@ -1790,6 +1790,18 @@ export class TextMapEditor {
       if (node) (node as HTMLElement).style.color = colour.value;
     });
     tb.appendChild(colour);
+    // v2.17.26 — accessibility alt text. Announced by the handout's screen-reader
+    // region (the image is baked into the page picture, so this is the only way
+    // its meaning reaches assistive tech). Blank falls back to the asset's name.
+    tb.appendChild(this._toolbarLabel('Alt text'));
+    const alt = document.createElement('input');
+    alt.type = 'text';
+    alt.className = 'txt-map-alt-input';
+    alt.placeholder = 'Describe this image';
+    alt.title = 'Alt text — what a screen reader announces for this image (blank = the asset name)';
+    alt.value = el.alt ?? '';
+    alt.addEventListener('input', () => { el.alt = alt.value; });
+    tb.appendChild(alt);
     const hint = document.createElement('span');
     hint.className = 'txt-map-element-hint';
     hint.textContent = 'Drag handle bar to move • corner to resize';

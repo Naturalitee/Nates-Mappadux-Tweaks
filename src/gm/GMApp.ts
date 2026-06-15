@@ -76,6 +76,9 @@ import { SoundtracksPanel } from './SoundtracksPanel.ts';
 import { fireStagecraftForAsset } from '../stagecraft/stagecraftDispatcher.ts';
 import { BundleUrlPromptDialog } from './BundleUrlPromptDialog.ts';
 import { saveBlob } from '../utils/saveBlob.ts';
+import { labelControl } from '../utils/controlLabel.ts';
+import { TextMapAltText, plainText } from '../rendering/TextMapAltText.ts';
+import type { TextMapAltItem } from '../types.ts';
 import { applyTheme } from '../utils/applyTheme.ts';
 import { AudioAssetStore } from '../audio/AudioAssetStore.ts';
 import { MarkerInteractionRegistry, type InteractionContext } from './markerInteractions/MarkerInteraction.ts';
@@ -399,6 +402,10 @@ export class GMApp {
   /** v2.16.91 — live YouTube videos placed on a text-map page. */
   private textMapVideoLayer: import('../rendering/TextMapVideoLayer.ts').TextMapVideoLayer | null = null;
   private _currentTextMapVideos: import('../types.ts').TextMapVideoElement[] = [];
+  /** v2.17.26 — screen-reader region exposing the handout's text + image alt
+   *  (otherwise baked into the page image, invisible to assistive tech). */
+  private textMapAltText: TextMapAltText | null = null;
+  private _currentAltItems: TextMapAltItem[] = [];
   /** GM sender colour for message replies — a slate that reads clearly on
    *  player views without straying into the reserved near-black range. */
   private static readonly GM_MESSAGE_COLOR = '#64748b';
@@ -921,7 +928,9 @@ export class GMApp {
       const btn = document.createElement('button');
       btn.type = 'button';
       btn.className = 'reset-view-btn';
-      btn.title = 'Reset workspace view';
+      // Icon-only when the rail is minimised (label span collapses to a glyph),
+      // so pin a stable accessible name regardless of the visible label.
+      labelControl(btn, 'Reset view', 'reset the workspace pan & zoom');
       btn.innerHTML =
         '<svg viewBox="0 0 24 24" width="14" height="14" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">' +
           '<polyline points="1 4 1 10 7 10"/>' +
@@ -3149,6 +3158,27 @@ export class GMApp {
     this._currentTextMapVideos = (mapAssetForButton?.textMap?.elements ?? [])
       .filter((e): e is import('../types.ts').TextMapVideoElement => e.type === 'video');
     this.textMapVideoLayer?.setVideos(this._currentTextMapVideos);
+    // v2.17.26 — build the handout's screen-reader content: each text block's
+    // words, and each image's alt (authored, or the asset name as fallback).
+    // Empty for non-text-maps. Positions ride along so the SR region can read
+    // in page order.
+    const altItems: TextMapAltItem[] = [];
+    for (const e of (mapAssetForButton?.textMap?.elements ?? [])) {
+      if (e.type === 'text') {
+        altItems.push({ x: e.x, y: e.y, text: plainText(e.html) });
+      } else if (e.type === 'image') {
+        let alt = (e.alt ?? '').trim();
+        if (!alt) alt = (await ImageAssetStore.get(e.assetId))?.name ?? '';
+        if (alt) altItems.push({ x: e.x, y: e.y, text: alt });
+      }
+    }
+    this._currentAltItems = altItems;
+    this.textMapAltText?.setItems(altItems);
+    // Mirror the video path: cache on the Host so the alt content rides in
+    // every new connection's full_state, and broadcast it live to players +
+    // projector so their screen-reader region announces this handout too.
+    this.host.setLastTextMapAlt(altItems);
+    this.host.broadcast({ type: 'textmap_alt', items: altItems });
     // v2.16.100 — cache on the Host so the videos ride in EVERY new
     // connection's full_state (incl. the BroadcastChannel one a same-browser
     // preview / pop-out requests on open), not just this live broadcast.
@@ -3517,6 +3547,15 @@ export class GMApp {
         );
         this.textMapVideoLayer.setVideos(this._currentTextMapVideos);
       });
+    }
+
+    // v2.17.26 — text-map accessibility: a visually-hidden screen-reader region
+    // listing the handout's text + image alt (baked into the page image, so
+    // invisible to AT). No visual presence; sighted users see no change.
+    const canvasWrapper = document.getElementById('canvas-wrapper');
+    if (canvasWrapper) {
+      this.textMapAltText = new TextMapAltText(canvasWrapper);
+      this.textMapAltText.setItems(this._currentAltItems);
     }
 
     // v2.17 Player Voice — player tokens. The GM can drag any token to place it.

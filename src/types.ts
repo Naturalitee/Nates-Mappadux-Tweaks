@@ -665,6 +665,11 @@ export interface MsgFullState {
    *  gets them on initial connect, the same way it gets the map. Absent /
    *  empty on maps with no video. */
   textMapVideos?:      TextMapVideoElement[];
+  /** v2.17.27 — accessibility content for the active text-map: each text
+   *  block's words and each image's alt (resolved by the GM), so a viewer's
+   *  screen-reader region can announce the handout. Carried in full_state for
+   *  every new connection, the same as textMapVideos. Absent on non-text-maps. */
+  textMapAlt?:         TextMapAltItem[];
 }
 
 /** v2.14.54 — wire payload for a composite map. Viewers unpack the
@@ -1453,6 +1458,23 @@ export interface MsgTextMapVideos {
   videos: TextMapVideoElement[];
 }
 
+/** One handout element reduced to its accessible text plus the top-left
+ *  position used to read the list in page order. The GM resolves image alt
+ *  (authored, else the asset name) so viewers don't need the source assets. */
+export interface TextMapAltItem {
+  x:    number;
+  y:    number;
+  text: string;
+}
+
+/** GM → viewers: the active text-map's screen-reader content (text + image
+ *  alt). Viewers feed it to a visually-hidden region; no visual effect. Empty
+ *  list on non-text-maps. */
+export interface MsgTextMapAlt {
+  type: 'textmap_alt';
+  items: TextMapAltItem[];
+}
+
 /** GM → viewers: playback state for ONE in-map YouTube video. The GM owns
  *  the controls; viewers have none and reconcile their own iframe to this
  *  (match play/pause, seek if drift > ~0.5s, set volume). Sent on every YT
@@ -1521,6 +1543,7 @@ export type GMMessage =
   | MsgAnnotateTimers
   | MsgAnnotateNotes
   | MsgTextMapVideos
+  | MsgTextMapAlt
   | MsgVideoPlayback;
 
 // ─── Storage types ───────────────────────────────────────────────────────────
@@ -1847,6 +1870,10 @@ export interface TextMapImageElement extends TextMapElementBase {
   type:    'image';
   /** ImageAssetStore id. The rasteriser resolves to inline SVG / blob URL. */
   assetId: string;
+  /** v2.17.26 — accessibility alt text announced for this image by the
+   *  handout's screen-reader region. When absent/blank, the referenced
+   *  asset's name is used as the fallback. */
+  alt?:    string;
   /** Optional tint colour for monochrome SVG icons. */
   tint?:   string;
   /** v2.14.102 — When true (the default), resizing preserves the

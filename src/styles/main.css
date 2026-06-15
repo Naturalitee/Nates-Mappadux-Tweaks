@@ -770,6 +770,7 @@ body.projector-view .marker-overlay {
   border-radius: 8px;
   pointer-events: none;
   box-shadow: 0 0 6px rgba(0, 0, 0, 0.5);
+  z-index: -1;
 }
 
 /* Turn indicator ring - flashing yellow dashed rectangle around the 
@@ -901,6 +902,17 @@ body.projector-view .marker-overlay {
 .fog-delete-handle:active { transform: translate(-50%, -50%) scale(0.94); }
 .fog-delete-handle svg { display: block; }
 .fog-delete-handle[hidden] { display: none; }
+
+/*  These two prevent the projection picker from the scaled view section from overflowing
+    It is kind of a duct tape solution but it should work for now. */
+#scaled-view-projection-row{
+  grid-template-columns: auto;
+}
+
+#scaled-view-projection-picker, #scaled-view-projection-picker .editable-select {
+  min-width: 0;
+}
+
 #projector-viewport-canvas {
   position: absolute;
   inset: 0;
@@ -4153,6 +4165,17 @@ option.select-option--add {
   background: transparent;
   cursor: pointer;
 }
+/* v2.17.26 — alt-text input in the image element toolbar (accessibility). */
+.txt-map-alt-input {
+  height: 30px;
+  min-width: 140px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg-input);
+  color: var(--text-primary);
+  font-size: var(--font-size-sm);
+}
 .txt-map-preview-wrap {
   flex: 1;
   display: grid;
@@ -4535,12 +4558,14 @@ option.select-option--add {
 /* v2.12.20 — Settings sections are native <details> elements now so the
    browser owns the open/close state. The grid stays the same when open;
    the summary stays compact and clickable when closed. */
+/* old overflow: hidden behavior caused settings menu to 
+   contort in strange ways, keeping it visible works well for now */
 .settings-section {
   padding: 0;
   border: 1px solid var(--border);
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.02);
-  overflow: hidden;  /* clip the body when collapsing — keeps the chevron stuck to a single rounded rect */
+  overflow: visible;  
 }
 .settings-section > .settings-section-title {
   list-style: none;
@@ -5152,6 +5177,20 @@ option.select-option--add {
 .about-edit-label {
   font-size: var(--font-size-sm);
   color: var(--text-secondary);
+}
+
+.about-edit input { 
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+.about-links-edit {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 }
 
 /* Edit-mode action row — Cancel / Save at the bottom-right. */
@@ -7678,6 +7717,20 @@ option.select-option--add {
 }
 .textmap-video iframe { width: 100%; height: 100%; border: 0; display: block; }
 
+/* Visually hidden but exposed to assistive tech (the standard a11y recipe). */
+.sr-only {
+  position: absolute !important;
+  width: 1px;
+  height: 1px;
+  margin: -1px;
+  padding: 0;
+  border: 0;
+  overflow: hidden;
+  clip: rect(0, 0, 0, 0);
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
 /* Whiteboard canvas overlays the map exactly. pointer-events:none by
    default so the map gets pan/zoom; the GM's draw toggle flips it to auto. */
 .annotate-whiteboard {
@@ -7796,14 +7849,71 @@ option.select-option--add {
   letter-spacing: 0.08em;
   color: var(--text-secondary);
 }
-.annotate-clock-form { display: flex; flex-direction: column; gap: 6px; }
-.annotate-clock-row { display: flex; align-items: center; gap: 8px; }
-.annotate-seg-label { font-size: var(--font-size-sm); color: var(--text-secondary); }
-#annotate-clock-segments { width: 52px; padding: 4px 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); }
-.annotate-timer-mode { padding: 4px 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); font-size: var(--font-size-sm); }
-#annotate-timer-duration { width: 60px; padding: 4px 6px; background: var(--bg-input); border: 1px solid var(--border); border-radius: var(--radius-sm); color: var(--text-primary); text-align: center; }
-#annotate-timer-duration:disabled { opacity: 0.4; }
-.annotate-color-row { display: flex; gap: 5px; flex-wrap: wrap; }
+
+/*Consistent styling for any inputs designated for naming within the annotation section*/
+.annotate-section-name-input {
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+}
+
+.annotate-clock-form { 
+  display: flex; 
+  flex-direction: column; 
+  gap: 6px; 
+}
+
+.annotate-clock-row { 
+  display: flex; 
+  align-items: center; 
+  gap: 8px; 
+}
+
+.annotate-seg-label { 
+  font-size: var(--font-size-sm); 
+  color: var(--text-secondary); 
+}
+
+#annotate-clock-segments { 
+  width: 52px; 
+  padding: 4px 6px; 
+  background: var(--bg-input); 
+  border: 1px solid var(--border); 
+  border-radius: var(--radius-sm); 
+  color: var(--text-primary); 
+}
+
+.annotate-timer-mode { 
+  padding: 4px 6px; 
+  background: var(--bg-input); 
+  border: 1px solid var(--border); 
+  border-radius: var(--radius-sm); 
+  color: var(--text-primary); 
+  font-size: var(--font-size-sm); 
+}
+
+#annotate-timer-duration {
+  width: 60px;
+  padding: 4px 6px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  text-align: center;
+}
+
+#annotate-timer-duration:disabled {
+  opacity: 0.4;
+}
+
+.annotate-color-row {
+  display: flex;
+  gap: 5px;
+  flex-wrap: wrap;
+}
+
 .annotate-swatch {
   width: 20px;
   height: 20px;
