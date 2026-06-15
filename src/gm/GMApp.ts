@@ -6540,11 +6540,19 @@ export class GMApp {
       patchTrackerCfg({ returnPingVolume: parseFloat((e.target as HTMLInputElement).value) });
     });
 
-    // Add Marker as Initiative Threat Card
+    // Add Marker as Initiative Threat Card button functionality
     document.querySelector('#add-marker-initiative-btn')?.addEventListener('click', () => {
+      //Alert user if initiative tracker is not active.
+      if (document.querySelector('#initiative-tracker')?.hasAttribute("hidden")) {
+        window.alert("Initiative tracker is currently not open. Call for Initiative in the Players section before using this feature.")
+        return;
+      }
+
       const rollInput = document.querySelector<HTMLInputElement>('#marker-initiative-input')?.value
       const selectedMarkerIdIcon = this.markerEditor.getMarkerIconId(this.selectedMarkerId);
+
       if (!rollInput || !this.selectedMarkerId || !selectedMarkerIdIcon) return;
+
       this.initiativeTracker?.createCardFromMarker(rollInput, this.selectedMarkerId, selectedMarkerIdIcon)
     });
 
