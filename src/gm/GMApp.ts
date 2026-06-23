@@ -3139,11 +3139,11 @@ export class GMApp {
     const altItems: TextMapAltItem[] = [];
     for (const e of (mapAssetForButton?.textMap?.elements ?? [])) {
       if (e.type === 'text') {
-        altItems.push({ x: e.x, y: e.y, text: plainText(e.html) });
+        altItems.push({ x: e.x, y: e.y, w: e.w, h: e.h, text: plainText(e.html) });
       } else if (e.type === 'image') {
         let alt = (e.alt ?? '').trim();
         if (!alt) alt = (await ImageAssetStore.get(e.assetId))?.name ?? '';
-        if (alt) altItems.push({ x: e.x, y: e.y, text: alt });
+        if (alt) altItems.push({ x: e.x, y: e.y, w: e.w, h: e.h, text: alt });
       }
     }
     this._currentAltItems = altItems;
@@ -3528,9 +3528,13 @@ export class GMApp {
     // invisible to AT). No visual presence; sighted users see no change.
     const canvasWrapper = document.getElementById('canvas-wrapper');
     if (canvasWrapper) {
-      // Pass the map canvas so it becomes role="img" + described-by the region
-      // while a handout is active — landing on the map graphic announces it.
-      this.textMapAltText = new TextMapAltText(canvasWrapper, canvas);
+      // project = map-norm → canvas-css, so the focusable a11y boxes sit over
+      // their handout elements and track pan/zoom; canvas gets role="img" too.
+      this.textMapAltText = new TextMapAltText(
+        canvasWrapper,
+        (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        canvas,
+      );
       this.textMapAltText.setItems(this._currentAltItems);
     }
 

@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.31 — 2026-06-23
+
+Handout text is now reachable on the map itself with a screen reader / keyboard. Each text + image box on a handout gets an invisible, focusable region placed over it: Tab (or scan) through the handout and the reader announces each box's words where it sits, with a focus outline showing which box. Invisible otherwise and click-through, so the map still pans normally. Works on the GM and player views.
+
 ## v2.17.30 — 2026-06-23
 
 New "Open Onboarding Map" entry in the ☰ menu, just under Load Map Pack (deliberately dimmed — a handy fallback, not an everyday pick). It replaces everything in this browser with a fresh copy of the bundled Getting Started pack, after a confirm — a one-click way back to the tour if you've cleared or muddled your workspace.

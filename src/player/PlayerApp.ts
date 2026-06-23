@@ -359,9 +359,14 @@ export class PlayerApp {
     // v2.17.27 — screen-reader region for handout text/image alt. Visually
     // hidden (so parent choice is cosmetic) and runs on every viewer including
     // mobile/touch. player.html has no canvas wrapper, so anchor on <body>.
-    // Pass the map canvas so it becomes role="img" + described-by the region
-    // while a handout is active (player.html has no canvas wrapper → anchor on body).
-    this._textMapAlt = new TextMapAltText(document.body, document.querySelector<HTMLCanvasElement>('#renderer-canvas'));
+    // Focusable a11y boxes over the handout, positioned via the player's own
+    // projection; canvas marked role="img" too. (player.html has no canvas
+    // wrapper → anchor the region on body.)
+    this._textMapAlt = new TextMapAltText(
+      document.body,
+      (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+      document.querySelector<HTMLCanvasElement>('#renderer-canvas'),
+    );
     const videoLayerEl = document.getElementById('textmap-video-layer');
     // v2.16.102 — in-map YouTube video doesn't render on mobile: Android
     // composites video through a hardware overlay that can't punch through the

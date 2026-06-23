@@ -1450,8 +1450,12 @@ export interface MsgTextMapVideos {
  *  position used to read the list in page order. The GM resolves image alt
  *  (authored, else the asset name) so viewers don't need the source assets. */
 export interface TextMapAltItem {
+  /** Geometry as PERCENTAGES of the page (0..100) — top-left + size. Used to
+   *  read in page order and to place the focusable a11y overlay over the box. */
   x:    number;
   y:    number;
+  w:    number;
+  h:    number;
   text: string;
 }
 

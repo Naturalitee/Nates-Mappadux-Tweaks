@@ -7662,6 +7662,29 @@ option.select-option--add {
 }
 .textmap-video iframe { width: 100%; height: 100%; border: 0; display: block; }
 
+/* v2.17.31 — text-map accessibility overlay. A labelled region over the map
+   holding one focusable, invisible box per handout element (TextMapAltText.ts).
+   pointer-events:none so it never blocks panning; the only visible effect is a
+   focus outline when a keyboard/screen-reader user tabs onto a box. */
+.textmap-alt-text {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 7;
+}
+.textmap-alt-box {
+  position: absolute;
+  pointer-events: none;
+}
+/* !important so the focus ring beats the app's global `outline: none` focus
+   resets — a focusable element must show a visible focus indicator (WCAG 2.4.7). */
+.textmap-alt-box:focus,
+.textmap-alt-box:focus-visible {
+  outline: 2px solid var(--accent, #5af07a) !important;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 /* Visually hidden but exposed to assistive tech (the standard a11y recipe). */
 .sr-only {
   position: absolute !important;
