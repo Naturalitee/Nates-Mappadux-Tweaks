@@ -75,6 +75,7 @@ import { StagecraftPanel } from './StagecraftPanel.ts';
 import { SoundtracksPanel } from './SoundtracksPanel.ts';
 import { fireStagecraftForAsset } from '../stagecraft/stagecraftDispatcher.ts';
 import { BundleUrlPromptDialog } from './BundleUrlPromptDialog.ts';
+import { BundleUrlFallbackDialog } from './BundleUrlFallbackDialog.ts';
 import { saveBlob } from '../utils/saveBlob.ts';
 import { labelControl } from '../utils/controlLabel.ts';
 import { TextMapAltText, plainText } from '../rendering/TextMapAltText.ts';
@@ -7484,12 +7485,12 @@ export class GMApp {
       return true;
     }
 
+    const filenameGuess = bundleUrl.split(/[\\/?#]/).filter(Boolean).pop() ?? 'bundle.mappadux';
     try {
       this.setStatus('Loading pack from URL…', 'ok');
       const res = await fetch(bundleUrl);
       if (!res.ok) throw new Error(`the server returned HTTP ${res.status}`);
       const blob = await res.blob();
-      const filenameGuess = bundleUrl.split(/[\\/?#]/).filter(Boolean).pop() ?? 'bundle.mappadux';
       const file = new File([blob], filenameGuess, { type: blob.type });
       // skipConfirm because the URL-load prompt already gathered consent.
       // For a fresh-IDB user no prompt was shown, but they did open a URL
@@ -7497,17 +7498,20 @@ export class GMApp {
       await this.loadBundleFromFile(file, { skipConfirm: true });
       return true;
     } catch (err) {
-      // A failed cross-origin fetch surfaces as an opaque TypeError ("Failed to
-      // fetch") with no status — almost always CORS (the host didn't allow this
-      // origin). Give actionable guidance rather than the raw message.
-      const raw = (err as Error).message || String(err);
-      const likelyCors = err instanceof TypeError;
-      const msg = likelyCors
-        ? 'Pack URL blocked by the browser (CORS). The host must send "Access-Control-Allow-Origin" over https, or host the pack on this site. Tip: a GitHub "raw" URL works out of the box.'
-        : `Pack URL load failed: ${raw}.`;
-      this.setStatus(msg, 'error');
       // eslint-disable-next-line no-console
       console.error('[bundle-url] load failed:', err);
+      // A failed cross-origin fetch surfaces as an opaque TypeError ("Failed to
+      // fetch") with no status — almost always CORS (the host didn't allow this
+      // origin). A plain DOWNLOAD isn't subject to CORS, so fall back to
+      // download-then-import instead of dead-ending.
+      if (err instanceof TypeError) {
+        this.setStatus('Direct load blocked (CORS) — download the pack, then load it.', 'warn');
+        await new BundleUrlFallbackDialog().open(bundleUrl, filenameGuess, () => {
+          document.querySelector<HTMLInputElement>('#bundle-import')?.click();
+        });
+      } else {
+        this.setStatus(`Pack URL load failed: ${(err as Error).message || String(err)}.`, 'error');
+      }
       return true; // we DID handle the URL — don't fall through to seeding
     }
   }

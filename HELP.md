@@ -35,6 +35,13 @@ Pack-level actions live behind the hamburger.
 > **Sharing a pack via URL** — Append `?bundle=<URL>` to the Mappadux URL
 > (e.g. `https://www.mappadux.com/?bundle=https://example.com/my-pack.mappadux`)
 > and Mappadux will fetch and load that pack on startup. If you already have content, you're asked **Save current, then load** / **Discard and load** / **Cancel**. Encrypted packs prompt for their password as usual.
+>
+> **Where to host the pack file.** The URL must be **https** (an `http://` link is blocked on the https site), and for a *seamless* one-click load the host must allow cross-origin access (a CORS header). Hosts that work out of the box:
+> - **GitHub** — commit the `.mappadux` to a repo and use its **`raw`** URL (`https://raw.githubusercontent.com/...`). Free, https, CORS-enabled, up to 100 MB. Easiest option.
+> - **Cloudflare R2** (public bucket), **Amazon S3** with a CORS rule, or your own server with `Access-Control-Allow-Origin: *`.
+> - Same site (host the file on mappadux.com itself) needs nothing extra.
+>
+> If a host doesn't send CORS, Mappadux falls back automatically: it offers to **download** the pack (a download isn't subject to CORS) and then load it from your disk in one extra click. **Google Drive / Dropbox share links are unreliable** for this — prefer a raw/direct file URL.
 
 ---
 

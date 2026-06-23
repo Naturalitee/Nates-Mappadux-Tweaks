@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.29 — 2026-06-23
+
+Loading a Map Pack from a `?bundle=` URL now works even when the host doesn't allow cross-origin reads. If the direct load is blocked, Mappadux offers a one-click fallback: download the pack (a download isn't subject to CORS), then load it from your disk. Also documented in Help where to host packs so a link loads in one step (GitHub `raw` URLs work as-is; https + CORS required).
+
 ## v2.17.28 — 2026-06-23
 
 Handout screen-reader content now reaches the reader when you land on the map itself: while a handout is shown, the map graphic is exposed as an image named by the handout's first line and described by the full text (GM and player views) — previously the words were only reachable in a screen reader's browse mode. Also: loading a Map Pack from a `?bundle=` URL now explains *why* it failed instead of failing silently — it flags an http:// pack on an https:// page (mixed content) and a host that doesn't allow cross-origin loading (CORS), with guidance to host over https with CORS (a GitHub "raw" URL works as-is).
