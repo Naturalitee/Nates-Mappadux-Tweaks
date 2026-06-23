@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.30 — 2026-06-23
+
+New "Open Onboarding Map" entry in the ☰ menu, just under Load Map Pack (deliberately dimmed — a handy fallback, not an everyday pick). It replaces everything in this browser with a fresh copy of the bundled Getting Started pack, after a confirm — a one-click way back to the tour if you've cleared or muddled your workspace.
+
 ## v2.17.29 — 2026-06-23
 
 Loading a Map Pack from a `?bundle=` URL now works even when the host doesn't allow cross-origin reads. If the direct load is blocked, Mappadux offers a one-click fallback: download the pack (a download isn't subject to CORS), then load it from your disk. Also documented in Help where to host packs so a link loads in one step (GitHub `raw` URLs work as-is; https + CORS required).

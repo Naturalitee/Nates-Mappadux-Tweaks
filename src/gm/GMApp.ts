@@ -7134,6 +7134,14 @@ export class GMApp {
         input?.click();
       },
     });
+    // De-emphasised fallback: reset this browser to the bundled Getting Started
+    // pack. Faded so it doesn't read as a usual pick, but handy to recover.
+    this.hamburger.addItem({
+      label: 'Open Onboarding Map',
+      icon: 'map',
+      subtle: true,
+      onSelect: () => { void this._openOnboardingMap(); },
+    });
     this.hamburger.addItem({
       label: 'Save Map Pack…',
       icon: 'save',
@@ -7514,6 +7522,24 @@ export class GMApp {
       }
       return true; // we DID handle the URL — don't fall through to seeding
     }
+  }
+
+  /** Reset this browser to a fresh copy of the bundled Getting Started pack —
+   *  the de-emphasised "Open Onboarding Map" fallback. Destructive (wipes the
+   *  current workspace), so confirm first; reseedWelcomePack clears + re-imports
+   *  the bundle, then we reload so the app re-hydrates cleanly. */
+  private async _openOnboardingMap(): Promise<void> {
+    const ok = await confirmDialog({
+      title: 'Open the onboarding map?',
+      body: 'This replaces everything in this browser — all maps, sounds, custom icons, and settings — with a fresh copy of the bundled Getting Started pack. Save your current pack first if you want to keep it.',
+      confirmLabel: 'Open onboarding map',
+      cancelLabel:  'Cancel',
+      confirmTone:  'danger',
+    });
+    if (!ok) return;
+    this.setStatus('Loading the onboarding map…', 'ok');
+    await reseedWelcomePack();
+    location.reload();
   }
 
   /** Wipe the current workspace and start a fresh, empty pack with the

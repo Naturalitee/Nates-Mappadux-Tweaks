@@ -1123,6 +1123,9 @@ body.player-view #renderer-canvas {
   cursor: not-allowed;
   opacity: 0.6;
 }
+/* De-emphasised but fully clickable — a useful-but-rare fallback. */
+.gm-menu-item--subtle { opacity: 0.6; }
+.gm-menu-item--subtle:hover:not(:disabled) { opacity: 1; }
 .gm-menu-item--danger { color: var(--danger); }
 .gm-menu-item--danger:hover:not(:disabled) {
   background: rgba(224, 62, 62, 0.12);

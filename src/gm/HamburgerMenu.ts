@@ -21,6 +21,9 @@ export interface HamburgerItem {
   /** Render as a destructive / red item (red text, hover keeps the colour).
    *  Used for actions that wipe data — paired with a confirm in the handler. */
   danger?: boolean;
+  /** Render de-emphasised (dimmed, but fully clickable) — for a useful-but-
+   *  rare fallback that shouldn't read as a primary pick. Brightens on hover. */
+  subtle?: boolean;
 }
 
 /** Small inline-SVG icon set used by the hamburger menu. Lucide-style 24×24
@@ -160,6 +163,7 @@ export class HamburgerMenu {
       el.classList.add('gm-menu-item--disabled');
     }
     if (item.danger) el.classList.add('gm-menu-item--danger');
+    if (item.subtle) el.classList.add('gm-menu-item--subtle');
     el.addEventListener('click', () => {
       this.close();
       item.onSelect();
