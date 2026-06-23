@@ -8327,6 +8327,43 @@ option.select-option--add {
    meant for the input. */
 .init-card--staging .init-card-portrait,
 .init-card--staging .init-card-disc { pointer-events: none; }
+
+/* v2.17.32 — per-card "associate with marker" link icon + picker. The icon
+   sits in the top-left corner of an enemy card; clicking reveals a dropdown of
+   the current map's markers. Dimmed until linked, brightens to the accent. */
+.init-card-marker-link {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+}
+.init-card-marker-link:hover { color: #fff; background: rgba(0, 0, 0, 0.7); }
+.init-card-marker-link.is-linked { color: var(--accent, #5af07a); }
+.init-card-marker-select {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  z-index: 21;
+  max-width: 150px;
+  padding: 2px 4px;
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid var(--accent, #5af07a);
+  border-radius: 4px;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+}
 .init-zone-label {
   font-size: var(--font-size-sm);
   text-transform: uppercase;

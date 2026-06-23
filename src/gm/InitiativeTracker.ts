@@ -1,9 +1,10 @@
-import type { InitiativeCard, InitiativeState, InitiativeEdge, PersistentPlayer } from '../types.ts';
+import type { InitiativeCard, InitiativeState, InitiativeEdge, PersistentPlayer, Marker } from '../types.ts';
 import {
   saveInitiativeState,
   sortActiveDeck,
   advanceTurn,
   patchCardValue,
+  setCardMarker,
   addCardToDeck,
   injectFromStagingAt,
   injectFromStagingWithValue,
@@ -26,6 +27,9 @@ export interface InitiativeTrackerCallbacks {
   onCallForInitiative: () => void;
   /** Provide the current persistent players for the unallocated tray. */
   getPlayers: () => PersistentPlayer[];
+  /** v2.17.32 — current map's markers, for the per-card "associate with
+   *  marker" dropdown. */
+  getMarkers: () => Marker[];
 }
 
 /**
@@ -688,8 +692,9 @@ export class InitiativeTracker {
     const draggable = pile !== 'discard' || this._discardExpanded;
     if (draggable) this._makeCardDraggable(el, card.id, pile);
 
-    // Edge tabs (single-edge per orientation, per v2.16.57).
-    const edgeText = card.type === 'enemy' ? (card.threatLetter ?? '?') : card.name;
+    // Edge tabs (single-edge per orientation, per v2.16.57). A marker-linked
+    // enemy shows the marker's name instead of its threat letter.
+    const edgeText = card.type === 'enemy' ? (this._linkedMarkerName(card) ?? card.threatLetter ?? '?') : card.name;
     for (const side of ['left', 'right', 'top', 'bottom'] as const) {
       const tab = document.createElement('div');
       tab.className = `init-card-tab init-card-tab--${side}`;
@@ -750,6 +755,7 @@ export class InitiativeTracker {
       el.appendChild(valInput);
     }
 
+    this._appendMarkerLink(el, card);
     return el;
   }
 
@@ -832,7 +838,7 @@ export class InitiativeTracker {
     // fanned deck only ever exposes ONE edge of a mid-deck card, so a
     // single-edge label was unreadable for stacked cards. CSS hides the
     // edges that don't apply to the current rail orientation.
-    const edgeText = card.type === 'enemy' ? (card.threatLetter ?? '?') : card.name;
+    const edgeText = card.type === 'enemy' ? (this._linkedMarkerName(card) ?? card.threatLetter ?? '?') : card.name;
     for (const side of ['left', 'right', 'top', 'bottom'] as const) {
       const tab = document.createElement('div');
       tab.className = `init-card-tab init-card-tab--${side}`;
@@ -897,9 +903,74 @@ export class InitiativeTracker {
       });
       input.addEventListener('blur', () => commit(true));
     });
+    this._appendMarkerLink(el, card);
     return el;
   }
+
+  // ─── Marker association (v2.17.32) ──────────────────────────────────────
+  //
+  // A link/chain icon on enemy cards opens a dropdown of the current map's
+  // markers; picking one makes the card adopt that marker's name (and, players-
+  // side in a later pass, its image). Transient — a new initiative rebuilds the
+  // decks, so the association clears itself. Lets the GM identify a threat from
+  // the tracker without hopping to the map.
+
+  /** The associated marker's display name, or null if unset / marker gone. */
+  private _linkedMarkerName(card: InitiativeCard): string | null {
+    if (card.type !== 'enemy' || !card.associatedMarkerId) return null;
+    const m = this.cb.getMarkers().find((mk) => mk.id === card.associatedMarkerId);
+    return m ? (m.label.trim() || '(unnamed marker)') : null;
+  }
+
+  private _setCardMarker(cardId: string, markerId: string | null): void {
+    this._mutate((s) => setCardMarker(s, cardId, markerId));
+  }
+
+  /** Add the link-icon button to an enemy card (no-op for players / round
+   *  marker). Clicking opens the marker picker. */
+  private _appendMarkerLink(el: HTMLElement, card: InitiativeCard): void {
+    if (card.type !== 'enemy') return;
+    const name = this._linkedMarkerName(card);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'init-card-marker-link' + (name ? ' is-linked' : '');
+    btn.title = name ? `Linked to ${name} — click to change or unlink` : 'Associate with a marker';
+    btn.setAttribute('aria-label', btn.title);
+    btn.innerHTML = LINK_ICON_SVG;
+    // Don't let the press start a card drag or fall through to the card.
+    btn.addEventListener('mousedown', (e) => e.stopPropagation());
+    btn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    btn.addEventListener('click', (e) => { e.stopPropagation(); this._openMarkerPicker(el, card); });
+    el.appendChild(btn);
+  }
+
+  /** Reveal an inline <select> of markers (+ "no marker") over the card. */
+  private _openMarkerPicker(el: HTMLElement, card: InitiativeCard): void {
+    if (el.querySelector('.init-card-marker-select')) return;
+    const sel = document.createElement('select');
+    sel.className = 'init-card-marker-select';
+    sel.add(new Option('— No marker —', ''));
+    for (const m of this.cb.getMarkers()) {
+      sel.add(new Option(m.label.trim() || '(unnamed marker)', m.id));
+    }
+    sel.value = card.associatedMarkerId ?? '';
+    el.appendChild(sel);
+    sel.focus();
+    sel.addEventListener('mousedown', (e) => e.stopPropagation());
+    sel.addEventListener('pointerdown', (e) => e.stopPropagation());
+    // On pick, mutate (which re-renders + drops this transient <select>).
+    sel.addEventListener('change', () => this._setCardMarker(card.id, sel.value || null));
+    sel.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') sel.remove(); });
+    sel.addEventListener('blur', () => { if (sel.isConnected) sel.remove(); });
+  }
 }
+
+/** Lucide-style "link" glyph — the card↔marker association control. */
+const LINK_ICON_SVG =
+  '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" '
+  + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+  + '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>'
+  + '<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
 
 function ensureMarkerIfActive(state: InitiativeState): InitiativeState {
   if (state.activeDeck.length === 0) return state;

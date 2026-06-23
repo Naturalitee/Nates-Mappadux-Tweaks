@@ -207,6 +207,25 @@ export function patchCardValue(state: InitiativeState, cardId: string, value: st
   return { ...state, activeDeck: sortActiveDeck(updated, state.sortMode) };
 }
 
+/** v2.17.32 — set (or clear, with markerId=null) a card's transient marker
+ *  association. The card can be in any pile, so map over all four. */
+export function setCardMarker(state: InitiativeState, cardId: string, markerId: string | null): InitiativeState {
+  const patch = (cards: InitiativeCard[]): InitiativeCard[] =>
+    cards.map((c) => {
+      if (c.id !== cardId) return c;
+      if (markerId) return { ...c, associatedMarkerId: markerId };
+      const { associatedMarkerId: _drop, ...rest } = c;
+      return rest;
+    });
+  return {
+    ...state,
+    activeDeck:  patch(state.activeDeck),
+    unallocated: patch(state.unallocated),
+    threatBench: patch(state.threatBench),
+    discarded:   patch(state.discarded),
+  };
+}
+
 /** Add a fresh card to the active deck in the right place for sort mode. */
 export function addCardToDeck(state: InitiativeState, card: InitiativeCard): InitiativeState {
   const deck = state.sortMode === 'manual'

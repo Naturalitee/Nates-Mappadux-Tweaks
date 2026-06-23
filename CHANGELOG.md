@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.32 — 2026-06-23
+
+Initiative threats can now be tied to a map marker. Each threat card gets a small link icon; click it to pick a marker from the current map (or none), and the card takes on that marker's name instead of the generic letter — so you can tell at a glance that this is the Griffin, without leaving the tracker. The link lasts the current fight and clears itself on a new initiative; re-link in a couple of seconds. (Players seeing the marker's image + name follows in the next step.)
+
 ## v2.17.31 — 2026-06-23
 
 Handout text is now reachable on the map itself with a screen reader / keyboard. Each text + image box on a handout gets an invisible, focusable region placed over it: Tab (or scan) through the handout and the reader announces each box's words where it sits, with a focus outline showing which box. Invisible otherwise and click-through, so the map still pans normally. Works on the GM and player views.

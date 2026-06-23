@@ -6954,6 +6954,7 @@ export class GMApp {
         this.setStatus('Call for Initiative broadcast', 'ok');
       },
       getPlayers: () => this.playerRegistry.all(),
+      getMarkers: () => this.state.getState().markers,
     });
     // v2.16.65 — Initiative direction setting (Settings → Player Voice).
     // Apply on startup + whenever the GM changes it in the dialog.
