@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.33 — 2026-06-23
+
+A marker-linked threat now writes its name sideways down the card edge on a horizontal rail (like player names), instead of being stuck upright the way a single letter was — so "Griffin" reads cleanly along the thin edge.
+
 ## v2.17.32 — 2026-06-23
 
 Initiative threats can now be tied to a map marker. Each threat card gets a small link icon; click it to pick a marker from the current map (or none), and the card takes on that marker's name instead of the generic letter — so you can tell at a glance that this is the Griffin, without leaving the tracker. The link lasts the current fight and clears itself on a new initiative; re-link in a couple of seconds. (Players seeing the marker's image + name follows in the next step.)

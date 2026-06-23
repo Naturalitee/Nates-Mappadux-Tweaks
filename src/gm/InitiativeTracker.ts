@@ -685,6 +685,8 @@ export class InitiativeTracker {
     el.style.setProperty('--stack-size', String(opts.stackSize));
     el.dataset['cardId'] = card.id;
     el.dataset['pile'] = pile;
+    // Linked enemy shows a NAME not a letter → sideways like player names.
+    if (this._linkedMarkerName(card)) el.classList.add('init-card--marker-named');
 
     // Drag source (v2.16.73 — pointer-based). Bench/unallocated cards are
     // always draggable; discard cards only while the pile is expanded
@@ -806,6 +808,9 @@ export class InitiativeTracker {
     }
     el.style.zIndex = String(100 - index);
     el.dataset['cardId'] = card.id;
+    // Linked enemy shows a NAME not a letter → write it sideways down the
+    // strip (like player names) in a horizontal rail. See CSS.
+    if (this._linkedMarkerName(card)) el.classList.add('init-card--marker-named');
 
     // v2.16.73 — pointer-based drag source. Round marker is not draggable.
     if (card.type !== 'round-marker') this._makeCardDraggable(el, card.id, 'rail');

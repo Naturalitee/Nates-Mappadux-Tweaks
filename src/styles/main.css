@@ -8566,6 +8566,20 @@ option.select-option--add {
    reads outward (left strip reads bottom-up, right strip reads top-down). */
 .init-card-tab--left  .init-card-tab-text { writing-mode: vertical-rl; transform: rotate(180deg); max-height: 88px; }
 .init-card-tab--right .init-card-tab-text { writing-mode: vertical-rl;                            max-height: 88px; }
+/* v2.17.32 — a marker-LINKED enemy shows a NAME (e.g. "Griffin"), not a single
+   letter, so on a horizontal rail it must read sideways down the strip like a
+   player name — overriding the single-letter upright rule above. (More specific
+   so it wins.) Vertical-rail top/bottom tabs already read horizontally — fine. */
+.init-card--marker-named.init-card--enemy .init-card-tab--left  .init-card-tab-text,
+.init-card--marker-named.init-card--enemy .init-card-tab--right .init-card-tab-text {
+  writing-mode: vertical-rl;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  max-height: 88px;
+}
+.init-card--marker-named.init-card--enemy .init-card-tab--left  .init-card-tab-text { transform: rotate(180deg); }
+.init-card--marker-named.init-card--enemy .init-card-tab--right .init-card-tab-text { transform: none; }
 /* Horizontal strips read left-to-right, truncated by card width. */
 .init-card-tab--top    .init-card-tab-text,
 .init-card-tab--bottom .init-card-tab-text { max-width: calc(100% - 8px); }
