@@ -3527,7 +3527,9 @@ export class GMApp {
     // invisible to AT). No visual presence; sighted users see no change.
     const canvasWrapper = document.getElementById('canvas-wrapper');
     if (canvasWrapper) {
-      this.textMapAltText = new TextMapAltText(canvasWrapper);
+      // Pass the map canvas so it becomes role="img" + described-by the region
+      // while a handout is active — landing on the map graphic announces it.
+      this.textMapAltText = new TextMapAltText(canvasWrapper, canvas);
       this.textMapAltText.setItems(this._currentAltItems);
     }
 
@@ -7471,10 +7473,21 @@ export class GMApp {
       }
     }
 
+    // Mixed content: an http:// pack can't be fetched from an https:// page —
+    // the browser blocks it before the request is even made. Catch it up front
+    // so the user gets a real explanation instead of a generic "failed to fetch".
+    if (location.protocol === 'https:' && bundleUrl.startsWith('http://')) {
+      this.setStatus(
+        'Pack URL blocked: it is http:// but this site is https://. Host the pack over https:// and try again.',
+        'error',
+      );
+      return true;
+    }
+
     try {
       this.setStatus('Loading pack from URL…', 'ok');
       const res = await fetch(bundleUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status} fetching pack`);
+      if (!res.ok) throw new Error(`the server returned HTTP ${res.status}`);
       const blob = await res.blob();
       const filenameGuess = bundleUrl.split(/[\\/?#]/).filter(Boolean).pop() ?? 'bundle.mappadux';
       const file = new File([blob], filenameGuess, { type: blob.type });
@@ -7484,7 +7497,17 @@ export class GMApp {
       await this.loadBundleFromFile(file, { skipConfirm: true });
       return true;
     } catch (err) {
-      this.setStatus(`URL load failed: ${(err as Error).message}`, 'error');
+      // A failed cross-origin fetch surfaces as an opaque TypeError ("Failed to
+      // fetch") with no status — almost always CORS (the host didn't allow this
+      // origin). Give actionable guidance rather than the raw message.
+      const raw = (err as Error).message || String(err);
+      const likelyCors = err instanceof TypeError;
+      const msg = likelyCors
+        ? 'Pack URL blocked by the browser (CORS). The host must send "Access-Control-Allow-Origin" over https, or host the pack on this site. Tip: a GitHub "raw" URL works out of the box.'
+        : `Pack URL load failed: ${raw}.`;
+      this.setStatus(msg, 'error');
+      // eslint-disable-next-line no-console
+      console.error('[bundle-url] load failed:', err);
       return true; // we DID handle the URL — don't fall through to seeding
     }
   }
