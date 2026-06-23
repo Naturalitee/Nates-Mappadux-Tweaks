@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.28 — 2026-06-23
+
+Handout screen-reader content now reaches the reader when you land on the map itself: while a handout is shown, the map graphic is exposed as an image named by the handout's first line and described by the full text (GM and player views) — previously the words were only reachable in a screen reader's browse mode. Also: loading a Map Pack from a `?bundle=` URL now explains *why* it failed instead of failing silently — it flags an http:// pack on an https:// page (mixed content) and a host that doesn't allow cross-origin loading (CORS), with guidance to host over https with CORS (a GitHub "raw" URL works as-is).
+
 ## v2.17.27 — 2026-06-14
 
 Handout screen-reader content now reaches the player view too, not just the GM. The GM broadcasts the active handout's text + image alt to connected players (carried in the initial connection state and on every map change), where it feeds the same visually-hidden region — so a player using a screen reader hears the handout's words, including on mobile. (The projector is intentionally left out — nobody runs a screen reader on a projected TV.)
