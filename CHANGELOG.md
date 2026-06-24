@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.36 — 2026-06-23
+
+Fixed: rotating (or flipping) a marker now updates the player/projector views immediately. Marker rotation and flips are baked into the rendered token, but they'd been dropped from the cache key, so a rotate alone didn't redraw the token — it only corrected on the next size change. Rotation/flip are back in the key, so the players follow a rotate right away.
+
 ## v2.17.35 — 2026-06-23
 
 Polished the marker-linked threat cards: on the GM the marker image now fills the card just like the player's, darkened so the white roll value stays readable (no more corner thumbnail). And renaming a marker or changing its icon now updates the linked card live on both the GM and player views — no need to re-link.

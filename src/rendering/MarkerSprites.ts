@@ -158,6 +158,11 @@ export class MarkerSprites {
       const hasBmp = getMarkerBitmap(m, iconCache) ? 1 : 0;
       const digest = [
         m.icon, m.color, m.size.toFixed(3),
+        // v2.17.36 — rotation + flips are baked into the sprite canvas, so they
+        // MUST be in the digest or a rotate/flip with no other change leaves the
+        // stale canvas up (it only corrected on the next size change). This was
+        // the "player doesn't follow rotation until you resize" regression.
+        (m.rotation ?? 0).toFixed(1), m.flipH ? 1 : 0, m.flipV ? 1 : 0,
         m.label ?? '', m.showLabel ? 1 : 0,
         m.hidden ? 1 : 0, m.locked ? 1 : 0,
         m.audioMuted ? 1 : 0, m.motionMuted ? 1 : 0,
