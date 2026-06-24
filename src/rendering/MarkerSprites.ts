@@ -233,8 +233,12 @@ export class MarkerSprites {
     ctx.imageSmoothingQuality = 'high';
     ctx.clearRect(0, 0, pxW, pxH);
 
-    const shortSide = Math.min(pxW, pxH);
-    const r = shortSide / (2 * PAD_FACTOR);
+    // r is the icon's half-HEIGHT (drawMarkerShape derives width = r·aspect).
+    // The canvas is always sized pxW = pxH·aspect, so deriving r from the
+    // HEIGHT fills both axes for any aspect. (Was `min(pxW,pxH)` — correct only
+    // for landscape; for portrait the short side is the WIDTH, which shrank the
+    // icon by a factor of aspect and made it shorter than the GM's render.)
+    const r = pxH / (2 * PAD_FACTOR);
     // selection is always false here — selection rings only render on the
     // GM HTML canvas (MarkerLayer), never on the broadcast textures.
     drawMarkerShape(ctx, m, pxW / 2, pxH / 2, r, false, isGM, iconCache);
