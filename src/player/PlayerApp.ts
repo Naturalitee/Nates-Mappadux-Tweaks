@@ -27,7 +27,8 @@ import { Renderer } from '../rendering/Renderer.ts';
 import { MarkerTexture } from '../rendering/MarkerTexture.ts';
 import { MarkerSprites } from '../rendering/MarkerSprites.ts';
 import { MarkerOverlay, type OverlayItem } from '../rendering/MarkerOverlay.ts';
-import { getMarkerAspect } from '../rendering/MarkerLayer.ts';
+import { getMarkerAspect, getMarkerBitmap } from '../rendering/MarkerLayer.ts';
+import { isGlyphIcon, glyphToDataUrl } from '../rendering/glyphIcon.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
 import { cssApproxForFilter } from '../filters/cssApproximations.ts';
 import { TransitionEngine } from '../transitions/TransitionEngine.ts';
@@ -248,6 +249,9 @@ export class PlayerApp {
   /** v2.17.27 — screen-reader region for the active text-map (text + image alt
    *  sent by the GM). No visual presence; runs on mobile too (unlike video). */
   private _textMapAlt: TextMapAltText | null = null;
+  /** v2.17.34 — last marker name/icon/colour signature, so the initiative rail
+   *  only re-renders on a linked marker's identity change, not position drags. */
+  private _markerIdentitySig = '';
   private _initiativeRollModal = new PlayerInitiativeRollModal();
   /** Roster broadcast by the GM — used to list other players as message targets. */
   private roster: Array<{ id: string; playerName: string; characterName: string; color: string; connected: boolean }> = [];
@@ -346,6 +350,17 @@ export class PlayerApp {
       // v2.16.72 — the rail resolves player portraits from the icon cache
       // (the initiative_update broadcast no longer carries the data URL).
       this.initiativeRail.setIconResolver((pid) => this._playerIcons.get(pid));
+      // v2.17.34 — resolve a GM-linked threat's marker name + cached image from
+      // the marker data the player already holds (no extra broadcast).
+      this.initiativeRail.setMarkerResolver((markerId) => {
+        const m = this.currentMarkers.find((mk) => mk.id === markerId);
+        if (!m) return null;
+        const bitmap = getMarkerBitmap(m, this.playerIconCache);
+        // Font/Unicode glyph markers have no bitmap — rasterise the glyph so the
+        // card shows the actual icon, not just a name disc.
+        const glyphDataUrl = !bitmap && isGlyphIcon(m.icon) ? glyphToDataUrl(m.icon, m.color) : null;
+        return { name: m.label, bitmap, glyphDataUrl };
+      });
     }
     // v2.16.76+ — read-only annotation overlays, map-anchored 1:1 with the
     // GM. project = map-norm → screen; read-only so unproject is unused.
@@ -359,7 +374,14 @@ export class PlayerApp {
     // v2.17.27 — screen-reader region for handout text/image alt. Visually
     // hidden (so parent choice is cosmetic) and runs on every viewer including
     // mobile/touch. player.html has no canvas wrapper, so anchor on <body>.
-    this._textMapAlt = new TextMapAltText(document.body);
+    // Focusable a11y boxes over the handout, positioned via the player's own
+    // projection; canvas marked role="img" too. (player.html has no canvas
+    // wrapper → anchor the region on body.)
+    this._textMapAlt = new TextMapAltText(
+      document.body,
+      (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+      document.querySelector<HTMLCanvasElement>('#renderer-canvas'),
+    );
     const videoLayerEl = document.getElementById('textmap-video-layer');
     // v2.16.102 — in-map YouTube video doesn't render on mobile: Android
     // composites video through a hardware overlay that can't punch through the
@@ -1597,6 +1619,15 @@ export class PlayerApp {
           this.markerSprites.render(this.currentMarkers, this.playerIconCache);
           this._updateMarkerOverlay();
           this.renderer.markMarkersDirty();
+          // v2.17.34 — a marker (or its image) may back a linked initiative
+          // card; re-render the rail when a marker's IDENTITY (name/icon/colour)
+          // changes so the card stays current — but not on position-only drags
+          // (the FLIP animation would churn).
+          const sig = this.currentMarkers.map((m) => `${m.id}:${m.label}:${m.icon}:${m.color}`).join('|');
+          if (sig !== this._markerIdentitySig) {
+            this._markerIdentitySig = sig;
+            this.initiativeRail?.refresh();
+          }
         })();
         break;
       }

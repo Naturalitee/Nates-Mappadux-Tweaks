@@ -1,5 +1,45 @@
 # Changelog
 
+## v2.17.37 — 2026-06-23
+
+Fixed: a marker that uses a plain font/Unicode icon (the default presets) now shows its icon on a linked initiative card too — previously only uploaded images and Game Icons appeared, and the default token fell back to a letter until you changed its icon. Also added a hosting guide for sharing Map Packs by URL (docs/hosting-map-packs.md), linked from Help.
+
+## v2.17.36 — 2026-06-23
+
+Fixed: rotating (or flipping) a marker now updates the player/projector views immediately. Marker rotation and flips are baked into the rendered token, but they'd been dropped from the cache key, so a rotate alone didn't redraw the token — it only corrected on the next size change. Rotation/flip are back in the key, so the players follow a rotate right away.
+
+## v2.17.35 — 2026-06-23
+
+Polished the marker-linked threat cards: on the GM the marker image now fills the card just like the player's, darkened so the white roll value stays readable (no more corner thumbnail). And renaming a marker or changing its icon now updates the linked card live on both the GM and player views — no need to re-link.
+
+## v2.17.34 — 2026-06-23
+
+A marker-linked threat now shows up for the players too: instead of the anonymous "!" card, players see the marker's name and image — so "Griffin" reads as Griffin on their screen, the moment you link it. The GM card gains a small marker thumbnail as well. No extra data is sent over the wire — it reuses the marker image players already have. (Markers without a picture — e.g. a plain emoji token — show the name with a letter disc.)
+
+## v2.17.33 — 2026-06-23
+
+A marker-linked threat now writes its name sideways down the card edge on a horizontal rail (like player names), instead of being stuck upright the way a single letter was — so "Griffin" reads cleanly along the thin edge.
+
+## v2.17.32 — 2026-06-23
+
+Initiative threats can now be tied to a map marker. Each threat card gets a small link icon; click it to pick a marker from the current map (or none), and the card takes on that marker's name instead of the generic letter — so you can tell at a glance that this is the Griffin, without leaving the tracker. The link lasts the current fight and clears itself on a new initiative; re-link in a couple of seconds. (Players seeing the marker's image + name follows in the next step.)
+
+## v2.17.31 — 2026-06-23
+
+Handout text is now reachable on the map itself with a screen reader / keyboard. Each text + image box on a handout gets an invisible, focusable region placed over it: Tab (or scan) through the handout and the reader announces each box's words where it sits, with a focus outline showing which box. Invisible otherwise and click-through, so the map still pans normally. Works on the GM and player views.
+
+## v2.17.30 — 2026-06-23
+
+New "Open Onboarding Map" entry in the ☰ menu, just under Load Map Pack (deliberately dimmed — a handy fallback, not an everyday pick). It replaces everything in this browser with a fresh copy of the bundled Getting Started pack, after a confirm — a one-click way back to the tour if you've cleared or muddled your workspace.
+
+## v2.17.29 — 2026-06-23
+
+Loading a Map Pack from a `?bundle=` URL now works even when the host doesn't allow cross-origin reads. If the direct load is blocked, Mappadux offers a one-click fallback: download the pack (a download isn't subject to CORS), then load it from your disk. Also documented in Help where to host packs so a link loads in one step (GitHub `raw` URLs work as-is; https + CORS required).
+
+## v2.17.28 — 2026-06-23
+
+Handout screen-reader content now reaches the reader when you land on the map itself: while a handout is shown, the map graphic is exposed as an image named by the handout's first line and described by the full text (GM and player views) — previously the words were only reachable in a screen reader's browse mode. Also: loading a Map Pack from a `?bundle=` URL now explains *why* it failed instead of failing silently — it flags an http:// pack on an https:// page (mixed content) and a host that doesn't allow cross-origin loading (CORS), with guidance to host over https with CORS (a GitHub "raw" URL works as-is).
+
 ## v2.17.27 — 2026-06-14
 
 Handout screen-reader content now reaches the player view too, not just the GM. The GM broadcasts the active handout's text + image alt to connected players (carried in the initial connection state and on every map change), where it feeds the same visually-hidden region — so a player using a screen reader hears the handout's words, including on mobile. (The projector is intentionally left out — nobody runs a screen reader on a projected TV.)
