@@ -6955,6 +6955,17 @@ export class GMApp {
       },
       getPlayers: () => this.playerRegistry.all(),
       getMarkers: () => this.state.getState().markers,
+      resolveMarkerImage: (m) => {
+        // data: icons are self-contained; asset/libAsset resolve from the
+        // already-rendered icon cache (compound key for tintable libAssets).
+        // Emoji markers have no image → null (card keeps its value).
+        if (m.icon.startsWith('data:')) return m.icon;
+        if (m.icon.startsWith('libAsset:')) {
+          return this.iconDataUrls.get(`${m.icon}#${m.color}`) ?? this.iconDataUrls.get(m.icon) ?? null;
+        }
+        if (m.icon.startsWith('asset:')) return this.iconDataUrls.get(m.icon) ?? null;
+        return null;
+      },
     });
     // v2.16.65 — Initiative direction setting (Settings → Player Voice).
     // Apply on startup + whenever the GM changes it in the dialog.

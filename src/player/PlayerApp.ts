@@ -27,7 +27,7 @@ import { Renderer } from '../rendering/Renderer.ts';
 import { MarkerTexture } from '../rendering/MarkerTexture.ts';
 import { MarkerSprites } from '../rendering/MarkerSprites.ts';
 import { MarkerOverlay, type OverlayItem } from '../rendering/MarkerOverlay.ts';
-import { getMarkerAspect } from '../rendering/MarkerLayer.ts';
+import { getMarkerAspect, getMarkerBitmap } from '../rendering/MarkerLayer.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
 import { cssApproxForFilter } from '../filters/cssApproximations.ts';
 import { TransitionEngine } from '../transitions/TransitionEngine.ts';
@@ -346,6 +346,13 @@ export class PlayerApp {
       // v2.16.72 — the rail resolves player portraits from the icon cache
       // (the initiative_update broadcast no longer carries the data URL).
       this.initiativeRail.setIconResolver((pid) => this._playerIcons.get(pid));
+      // v2.17.34 — resolve a GM-linked threat's marker name + cached image from
+      // the marker data the player already holds (no extra broadcast).
+      this.initiativeRail.setMarkerResolver((markerId) => {
+        const m = this.currentMarkers.find((mk) => mk.id === markerId);
+        if (!m) return null;
+        return { name: m.label, bitmap: getMarkerBitmap(m, this.playerIconCache) };
+      });
     }
     // v2.16.76+ — read-only annotation overlays, map-anchored 1:1 with the
     // GM. project = map-norm → screen; read-only so unproject is unused.
@@ -1604,6 +1611,9 @@ export class PlayerApp {
           this.markerSprites.render(this.currentMarkers, this.playerIconCache);
           this._updateMarkerOverlay();
           this.renderer.markMarkersDirty();
+          // v2.17.34 — a marker (or its image) may back a linked initiative
+          // card; re-render the rail so the name/image fills in once available.
+          this.initiativeRail?.refresh();
         })();
         break;
       }

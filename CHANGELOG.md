@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.34 — 2026-06-23
+
+A marker-linked threat now shows up for the players too: instead of the anonymous "!" card, players see the marker's name and image — so "Griffin" reads as Griffin on their screen, the moment you link it. The GM card gains a small marker thumbnail as well. No extra data is sent over the wire — it reuses the marker image players already have. (Markers without a picture — e.g. a plain emoji token — show the name with a letter disc.)
+
 ## v2.17.33 — 2026-06-23
 
 A marker-linked threat now writes its name sideways down the card edge on a horizontal rail (like player names), instead of being stuck upright the way a single letter was — so "Griffin" reads cleanly along the thin edge.

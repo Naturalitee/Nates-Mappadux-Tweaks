@@ -30,6 +30,9 @@ export interface InitiativeTrackerCallbacks {
   /** v2.17.32 — current map's markers, for the per-card "associate with
    *  marker" dropdown. */
   getMarkers: () => Marker[];
+  /** v2.17.34 — resolve a marker's icon to a dataUrl for the card thumbnail
+   *  (null for emoji markers / not-yet-cached). */
+  resolveMarkerImage: (marker: Marker) => string | null;
 }
 
 /**
@@ -730,6 +733,7 @@ export class InitiativeTracker {
       disc.textContent = (card.name.trim()[0] ?? '?').toUpperCase();
       body.appendChild(disc);
     }
+    this._appendMarkerThumb(body, card);
     el.appendChild(body);
 
     // Value input — only on the TOP card of the bench (so the GM types
@@ -871,6 +875,7 @@ export class InitiativeTracker {
       big.textContent = card.value || '—';
       body.appendChild(big);
     }
+    this._appendMarkerThumb(body, card);
     el.appendChild(body);
 
     // v2.16.60 — corner X removed. Discard pile is the only removal
@@ -920,11 +925,31 @@ export class InitiativeTracker {
   // decks, so the association clears itself. Lets the GM identify a threat from
   // the tracker without hopping to the map.
 
+  /** The associated marker (if this enemy card is linked + the marker exists). */
+  private _linkedMarker(card: InitiativeCard): Marker | null {
+    if (card.type !== 'enemy' || !card.associatedMarkerId) return null;
+    return this.cb.getMarkers().find((mk) => mk.id === card.associatedMarkerId) ?? null;
+  }
+
   /** The associated marker's display name, or null if unset / marker gone. */
   private _linkedMarkerName(card: InitiativeCard): string | null {
-    if (card.type !== 'enemy' || !card.associatedMarkerId) return null;
-    const m = this.cb.getMarkers().find((mk) => mk.id === card.associatedMarkerId);
+    const m = this._linkedMarker(card);
     return m ? (m.label.trim() || '(unnamed marker)') : null;
+  }
+
+  /** Add a small marker thumbnail to an associated enemy card's body (no-op
+   *  when unlinked / emoji / image not cached). */
+  private _appendMarkerThumb(body: HTMLElement, card: InitiativeCard): void {
+    const m = this._linkedMarker(card);
+    if (!m) return;
+    const url = this.cb.resolveMarkerImage(m);
+    if (!url) return;
+    const img = document.createElement('img');
+    img.className = 'init-card-marker-thumb';
+    img.src = url;
+    img.alt = '';
+    img.draggable = false;
+    body.appendChild(img);
   }
 
   private _setCardMarker(cardId: string, markerId: string | null): void {

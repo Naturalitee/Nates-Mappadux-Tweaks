@@ -20,6 +20,11 @@ export class PlayerInitiativeRail {
    *  arrives via the chunked player_icon_update path and is cached by
    *  PlayerApp — so the rail looks it up here by card.playerId. */
   private iconFor: ((playerId: string) => string | undefined) | null = null;
+  /** v2.17.34 — resolve an associated map marker's name + cached bitmap by id.
+   *  Lets a GM-linked enemy card show that marker's image + name instead of the
+   *  anonymous "!". The image rides the marker channel the player already has
+   *  (no extra broadcast); null bitmap = not cached yet (falls back to a disc). */
+  private markerFor: ((markerId: string) => { name: string; bitmap: ImageBitmap | null } | null) | null = null;
 
   constructor(private root: HTMLElement) {
     this._render();
@@ -28,6 +33,12 @@ export class PlayerInitiativeRail {
   /** Wire the icon lookup (PlayerApp passes its per-player icon cache). */
   setIconResolver(fn: (playerId: string) => string | undefined): void {
     this.iconFor = fn;
+  }
+
+  /** Wire the marker lookup (PlayerApp resolves from currentMarkers + its
+   *  marker-icon bitmap cache). */
+  setMarkerResolver(fn: (markerId: string) => { name: string; bitmap: ImageBitmap | null } | null): void {
+    this.markerFor = fn;
   }
 
   /** Re-render with the current state (e.g. when a player's icon arrives
@@ -106,6 +117,32 @@ export class PlayerInitiativeRail {
     }
 
     if (card.type === 'enemy') {
+      // v2.17.34 — if the GM linked this threat to a map marker, reveal that
+      // marker's name + image (the GM's explicit identification) instead of the
+      // anonymous blackout. The image comes from the marker channel the player
+      // already has, so no extra broadcast.
+      const linked = card.associatedMarkerId ? this.markerFor?.(card.associatedMarkerId) : null;
+      if (linked && linked.name.trim()) {
+        el.classList.add('init-card--marker-named'); // name reads sideways on a horizontal rail
+        _appendEdgeTabs(el, linked.name.trim());
+        const body = document.createElement('div');
+        body.className = 'init-card-body init-card-body--enemy';
+        if (linked.bitmap) {
+          const cv = document.createElement('canvas');
+          cv.className = 'init-card-portrait';
+          cv.width = linked.bitmap.width;
+          cv.height = linked.bitmap.height;
+          cv.getContext('2d')?.drawImage(linked.bitmap, 0, 0);
+          body.appendChild(cv);
+        } else {
+          const disc = document.createElement('div');
+          disc.className = 'init-card-disc';
+          disc.textContent = (linked.name.trim()[0] ?? '?').toUpperCase();
+          body.appendChild(disc);
+        }
+        el.appendChild(body);
+        return el;
+      }
       // Information blackout: charcoal palette driven by CSS, edge tabs
       // say "!" (upright on the player view too), body fills with a
       // dark Mappadux duck close-up. v2.16.59 — let CSS own the palette

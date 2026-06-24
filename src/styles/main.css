@@ -8364,6 +8364,19 @@ option.select-option--add {
   font-family: var(--font-ui);
   font-size: 0.78rem;
 }
+/* GM-side marker thumbnail — small badge in the card corner so the big roll
+   value stays the focus while still showing which marker this threat is. */
+.init-card-marker-thumb {
+  position: absolute;
+  bottom: 3px;
+  right: 3px;
+  width: 22px;
+  height: 22px;
+  object-fit: contain;
+  border-radius: 3px;
+  background: rgba(0, 0, 0, 0.35);
+  pointer-events: none;
+}
 .init-zone-label {
   font-size: var(--font-size-sm);
   text-transform: uppercase;
