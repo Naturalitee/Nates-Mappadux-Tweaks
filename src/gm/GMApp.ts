@@ -34,6 +34,7 @@ import { buildMessageThreadPanel } from './MessageThreadPanel.ts';
 import { PlayerRegistry } from '../players/PlayerRegistry.ts';
 import { assetToPlayerIcon } from '../players/playerIcon.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
+import { glyphToDataUrl } from '../rendering/glyphIcon.ts';
 import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
 import { MeasureTool, squaresBetweenNorm } from '../rendering/MeasureTool.ts';
 import { LLMClient } from '../ai/LLMClient.ts';
@@ -6970,13 +6971,13 @@ export class GMApp {
       resolveMarkerImage: (m) => {
         // data: icons are self-contained; asset/libAsset resolve from the
         // already-rendered icon cache (compound key for tintable libAssets).
-        // Emoji markers have no image → null (card keeps its value).
         if (m.icon.startsWith('data:')) return m.icon;
         if (m.icon.startsWith('libAsset:')) {
           return this.iconDataUrls.get(`${m.icon}#${m.color}`) ?? this.iconDataUrls.get(m.icon) ?? null;
         }
         if (m.icon.startsWith('asset:')) return this.iconDataUrls.get(m.icon) ?? null;
-        return null;
+        // Font/Unicode glyph (the default presets) — rasterise it like the map.
+        return glyphToDataUrl(m.icon, m.color);
       },
     });
     // v2.16.65 — Initiative direction setting (Settings → Player Voice).

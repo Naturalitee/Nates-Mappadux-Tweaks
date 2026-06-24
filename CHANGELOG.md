@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.37 — 2026-06-23
+
+Fixed: a marker that uses a plain font/Unicode icon (the default presets) now shows its icon on a linked initiative card too — previously only uploaded images and Game Icons appeared, and the default token fell back to a letter until you changed its icon. Also added a hosting guide for sharing Map Packs by URL (docs/hosting-map-packs.md), linked from Help.
+
 ## v2.17.36 — 2026-06-23
 
 Fixed: rotating (or flipping) a marker now updates the player/projector views immediately. Marker rotation and flips are baked into the rendered token, but they'd been dropped from the cache key, so a rotate alone didn't redraw the token — it only corrected on the next size change. Rotation/flip are back in the key, so the players follow a rotate right away.

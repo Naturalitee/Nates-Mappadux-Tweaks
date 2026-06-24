@@ -24,7 +24,7 @@ export class PlayerInitiativeRail {
    *  Lets a GM-linked enemy card show that marker's image + name instead of the
    *  anonymous "!". The image rides the marker channel the player already has
    *  (no extra broadcast); null bitmap = not cached yet (falls back to a disc). */
-  private markerFor: ((markerId: string) => { name: string; bitmap: ImageBitmap | null } | null) | null = null;
+  private markerFor: ((markerId: string) => { name: string; bitmap: ImageBitmap | null; glyphDataUrl?: string | null } | null) | null = null;
 
   constructor(private root: HTMLElement) {
     this._render();
@@ -37,7 +37,7 @@ export class PlayerInitiativeRail {
 
   /** Wire the marker lookup (PlayerApp resolves from currentMarkers + its
    *  marker-icon bitmap cache). */
-  setMarkerResolver(fn: (markerId: string) => { name: string; bitmap: ImageBitmap | null } | null): void {
+  setMarkerResolver(fn: (markerId: string) => { name: string; bitmap: ImageBitmap | null; glyphDataUrl?: string | null } | null): void {
     this.markerFor = fn;
   }
 
@@ -134,6 +134,14 @@ export class PlayerInitiativeRail {
           cv.height = linked.bitmap.height;
           cv.getContext('2d')?.drawImage(linked.bitmap, 0, 0);
           body.appendChild(cv);
+        } else if (linked.glyphDataUrl) {
+          // Font/Unicode glyph marker — rasterised to a dataURL by the resolver.
+          const img = document.createElement('img');
+          img.className = 'init-card-portrait';
+          img.src = linked.glyphDataUrl;
+          img.alt = '';
+          img.draggable = false;
+          body.appendChild(img);
         } else {
           const disc = document.createElement('div');
           disc.className = 'init-card-disc';

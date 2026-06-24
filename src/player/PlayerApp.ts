@@ -28,6 +28,7 @@ import { MarkerTexture } from '../rendering/MarkerTexture.ts';
 import { MarkerSprites } from '../rendering/MarkerSprites.ts';
 import { MarkerOverlay, type OverlayItem } from '../rendering/MarkerOverlay.ts';
 import { getMarkerAspect, getMarkerBitmap } from '../rendering/MarkerLayer.ts';
+import { isGlyphIcon, glyphToDataUrl } from '../rendering/glyphIcon.ts';
 import { filterRegistry } from '../filters/FilterRegistry.ts';
 import { cssApproxForFilter } from '../filters/cssApproximations.ts';
 import { TransitionEngine } from '../transitions/TransitionEngine.ts';
@@ -354,7 +355,11 @@ export class PlayerApp {
       this.initiativeRail.setMarkerResolver((markerId) => {
         const m = this.currentMarkers.find((mk) => mk.id === markerId);
         if (!m) return null;
-        return { name: m.label, bitmap: getMarkerBitmap(m, this.playerIconCache) };
+        const bitmap = getMarkerBitmap(m, this.playerIconCache);
+        // Font/Unicode glyph markers have no bitmap — rasterise the glyph so the
+        // card shows the actual icon, not just a name disc.
+        const glyphDataUrl = !bitmap && isGlyphIcon(m.icon) ? glyphToDataUrl(m.icon, m.color) : null;
+        return { name: m.label, bitmap, glyphDataUrl };
       });
     }
     // v2.16.76+ — read-only annotation overlays, map-anchored 1:1 with the

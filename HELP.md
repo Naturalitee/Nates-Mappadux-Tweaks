@@ -42,6 +42,8 @@ Pack-level actions live behind the hamburger.
 > - Same site (host the file on mappadux.com itself) needs nothing extra.
 >
 > If a host doesn't send CORS, Mappadux falls back automatically: it offers to **download** the pack (a download isn't subject to CORS) and then load it from your disk in one extra click. **Google Drive / Dropbox share links are unreliable** for this — prefer a raw/direct file URL.
+>
+> Full setup guide (GitHub / Cloudflare R2 / S3 / your own server): [docs/hosting-map-packs.md](docs/hosting-map-packs.md).
 
 ---
 
