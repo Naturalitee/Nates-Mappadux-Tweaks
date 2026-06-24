@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.35 — 2026-06-23
+
+Polished the marker-linked threat cards: on the GM the marker image now fills the card just like the player's, darkened so the white roll value stays readable (no more corner thumbnail). And renaming a marker or changing its icon now updates the linked card live on both the GM and player views — no need to re-link.
+
 ## v2.17.34 — 2026-06-23
 
 A marker-linked threat now shows up for the players too: instead of the anonymous "!" card, players see the marker's name and image — so "Griffin" reads as Griffin on their screen, the moment you link it. The GM card gains a small marker thumbnail as well. No extra data is sent over the wire — it reuses the marker image players already have. (Markers without a picture — e.g. a plain emoji token — show the name with a letter disc.)

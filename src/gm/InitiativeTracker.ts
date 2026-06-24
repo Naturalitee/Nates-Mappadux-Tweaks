@@ -107,6 +107,10 @@ export class InitiativeTracker {
 
   getState(): InitiativeState { return this.state; }
 
+  /** v2.17.34 — re-render in place (no state change) so marker-linked cards
+   *  pick up a renamed / re-iconed marker. Called by GMApp on marker edits. */
+  refresh(): void { this._render(); }
+
   /** Open the tracker overlay. Seeds ROUND END if the deck was empty. */
   open(): void {
     this._mutate((s) => ({ ...s, visible: true, activeDeck: s.activeDeck.length === 0 ? [makeRoundMarker()] : s.activeDeck }));
@@ -733,7 +737,7 @@ export class InitiativeTracker {
       disc.textContent = (card.name.trim()[0] ?? '?').toUpperCase();
       body.appendChild(disc);
     }
-    this._appendMarkerThumb(body, card);
+    this._appendMarkerArt(body, card);
     el.appendChild(body);
 
     // Value input — only on the TOP card of the bench (so the GM types
@@ -875,7 +879,7 @@ export class InitiativeTracker {
       big.textContent = card.value || '—';
       body.appendChild(big);
     }
-    this._appendMarkerThumb(body, card);
+    this._appendMarkerArt(body, card);
     el.appendChild(body);
 
     // v2.16.60 — corner X removed. Discard pile is the only removal
@@ -937,19 +941,21 @@ export class InitiativeTracker {
     return m ? (m.label.trim() || '(unnamed marker)') : null;
   }
 
-  /** Add a small marker thumbnail to an associated enemy card's body (no-op
-   *  when unlinked / emoji / image not cached). */
-  private _appendMarkerThumb(body: HTMLElement, card: InitiativeCard): void {
+  /** Fill an associated enemy card's body with the marker image (same look as
+   *  the player card), darkened so the white roll value reads on top. No-op
+   *  when unlinked / emoji / image not cached. */
+  private _appendMarkerArt(body: HTMLElement, card: InitiativeCard): void {
     const m = this._linkedMarker(card);
     if (!m) return;
     const url = this.cb.resolveMarkerImage(m);
     if (!url) return;
+    body.classList.add('init-card-body--art');
     const img = document.createElement('img');
-    img.className = 'init-card-marker-thumb';
+    img.className = 'init-card-portrait init-card-portrait--gm';
     img.src = url;
     img.alt = '';
     img.draggable = false;
-    body.appendChild(img);
+    body.insertBefore(img, body.firstChild); // sits behind the value (z-index)
   }
 
   private _setCardMarker(cardId: string, markerId: string | null): void {

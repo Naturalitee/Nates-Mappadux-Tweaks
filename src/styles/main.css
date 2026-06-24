@@ -8364,18 +8364,22 @@ option.select-option--add {
   font-family: var(--font-ui);
   font-size: 0.78rem;
 }
-/* GM-side marker thumbnail — small badge in the card corner so the big roll
-   value stays the focus while still showing which marker this threat is. */
-.init-card-marker-thumb {
+/* GM-side marker art — fills the card like the player's portrait, but darkened
+   and sat behind the roll value so the white number reads clearly on top. */
+.init-card-body--art { position: relative; }
+.init-card-portrait--gm {
   position: absolute;
-  bottom: 3px;
-  right: 3px;
-  width: 22px;
-  height: 22px;
-  object-fit: contain;
-  border-radius: 3px;
-  background: rgba(0, 0, 0, 0.35);
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  filter: brightness(0.5);
+  z-index: 0;
   pointer-events: none;
+}
+.init-card-body--art .init-card-big {
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 5px rgba(0, 0, 0, 0.8);
 }
 .init-zone-label {
   font-size: var(--font-size-sm);

@@ -425,6 +425,10 @@ export class GMApp {
   private _markerMoveOrigin = new Map<string, { x: number; y: number; facing?: number }>();
   /** Initiative tracker (fanned-deck rail, threat bench, unallocated tray). */
   private initiativeTracker: InitiativeTracker | null = null;
+  /** v2.17.34 — last seen marker name/icon/colour signature, so the initiative
+   *  tracker only re-renders when a LINKED marker's identity changes (not on
+   *  position drags). */
+  private _markerIdentitySig = '';
   /** v2.16.76 — per-map annotations (progress clocks + whiteboard). */
   private annotate: AnnotateController | null = null;
 
@@ -2657,6 +2661,14 @@ export class GMApp {
       this.markerEditor.update(state.markers, this.mapAspectRatio);
       this.updateMarkerPanel();
       this.interactions.notifyMarkersChanged(this._interactionCtx());
+      // v2.17.34 — refresh the initiative tracker only when a marker's IDENTITY
+      // (name / icon / colour) changes, so a linked threat card stays current
+      // without churning on every position drag.
+      const identitySig = state.markers.map((m) => `${m.id}:${m.label}:${m.icon}:${m.color}`).join('|');
+      if (identitySig !== this._markerIdentitySig) {
+        this._markerIdentitySig = identitySig;
+        this.initiativeTracker?.refresh();
+      }
       this.host.broadcast({
         type: 'marker_update',
         payload: broadcastMarkers,

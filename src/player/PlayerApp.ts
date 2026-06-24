@@ -248,6 +248,9 @@ export class PlayerApp {
   /** v2.17.27 — screen-reader region for the active text-map (text + image alt
    *  sent by the GM). No visual presence; runs on mobile too (unlike video). */
   private _textMapAlt: TextMapAltText | null = null;
+  /** v2.17.34 — last marker name/icon/colour signature, so the initiative rail
+   *  only re-renders on a linked marker's identity change, not position drags. */
+  private _markerIdentitySig = '';
   private _initiativeRollModal = new PlayerInitiativeRollModal();
   /** Roster broadcast by the GM — used to list other players as message targets. */
   private roster: Array<{ id: string; playerName: string; characterName: string; color: string; connected: boolean }> = [];
@@ -1612,8 +1615,14 @@ export class PlayerApp {
           this._updateMarkerOverlay();
           this.renderer.markMarkersDirty();
           // v2.17.34 — a marker (or its image) may back a linked initiative
-          // card; re-render the rail so the name/image fills in once available.
-          this.initiativeRail?.refresh();
+          // card; re-render the rail when a marker's IDENTITY (name/icon/colour)
+          // changes so the card stays current — but not on position-only drags
+          // (the FLIP animation would churn).
+          const sig = this.currentMarkers.map((m) => `${m.id}:${m.label}:${m.icon}:${m.color}`).join('|');
+          if (sig !== this._markerIdentitySig) {
+            this._markerIdentitySig = sig;
+            this.initiativeRail?.refresh();
+          }
         })();
         break;
       }
