@@ -1123,6 +1123,9 @@ body.player-view #renderer-canvas {
   cursor: not-allowed;
   opacity: 0.6;
 }
+/* De-emphasised but fully clickable — a useful-but-rare fallback. */
+.gm-menu-item--subtle { opacity: 0.6; }
+.gm-menu-item--subtle:hover:not(:disabled) { opacity: 1; }
 .gm-menu-item--danger { color: var(--danger); }
 .gm-menu-item--danger:hover:not(:disabled) {
   background: rgba(224, 62, 62, 0.12);
@@ -7659,6 +7662,29 @@ option.select-option--add {
 }
 .textmap-video iframe { width: 100%; height: 100%; border: 0; display: block; }
 
+/* v2.17.31 — text-map accessibility overlay. A labelled region over the map
+   holding one focusable, invisible box per handout element (TextMapAltText.ts).
+   pointer-events:none so it never blocks panning; the only visible effect is a
+   focus outline when a keyboard/screen-reader user tabs onto a box. */
+.textmap-alt-text {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  z-index: 7;
+}
+.textmap-alt-box {
+  position: absolute;
+  pointer-events: none;
+}
+/* !important so the focus ring beats the app's global `outline: none` focus
+   resets — a focusable element must show a visible focus indicator (WCAG 2.4.7). */
+.textmap-alt-box:focus,
+.textmap-alt-box:focus-visible {
+  outline: 2px solid var(--accent, #5af07a) !important;
+  outline-offset: 2px;
+  border-radius: 2px;
+}
+
 /* Visually hidden but exposed to assistive tech (the standard a11y recipe). */
 .sr-only {
   position: absolute !important;
@@ -8301,6 +8327,60 @@ option.select-option--add {
    meant for the input. */
 .init-card--staging .init-card-portrait,
 .init-card--staging .init-card-disc { pointer-events: none; }
+
+/* v2.17.32 — per-card "associate with marker" link icon + picker. The icon
+   sits in the top-left corner of an enemy card; clicking reveals a dropdown of
+   the current map's markers. Dimmed until linked, brightens to the accent. */
+.init-card-marker-link {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  z-index: 6;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 0;
+  border-radius: 4px;
+  background: rgba(0, 0, 0, 0.45);
+  color: rgba(255, 255, 255, 0.65);
+  cursor: pointer;
+}
+.init-card-marker-link:hover { color: #fff; background: rgba(0, 0, 0, 0.7); }
+.init-card-marker-link.is-linked { color: var(--accent, #5af07a); }
+.init-card-marker-select {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  z-index: 21;
+  max-width: 150px;
+  padding: 2px 4px;
+  background: rgba(0, 0, 0, 0.9);
+  border: 1px solid var(--accent, #5af07a);
+  border-radius: 4px;
+  color: #fff;
+  font-family: var(--font-ui);
+  font-size: 0.78rem;
+}
+/* GM-side marker art — fills the card like the player's portrait, but darkened
+   and sat behind the roll value so the white number reads clearly on top. */
+.init-card-body--art { position: relative; }
+.init-card-portrait--gm {
+  position: absolute;
+  top: 50%;
+  left: 50%;
+  transform: translate(-50%, -50%);
+  filter: brightness(0.5);
+  z-index: 0;
+  pointer-events: none;
+}
+.init-card-body--art .init-card-big {
+  position: relative;
+  z-index: 1;
+  text-shadow: 0 1px 3px rgba(0, 0, 0, 0.95), 0 0 5px rgba(0, 0, 0, 0.8);
+}
 .init-zone-label {
   font-size: var(--font-size-sm);
   text-transform: uppercase;
@@ -8503,6 +8583,20 @@ option.select-option--add {
    reads outward (left strip reads bottom-up, right strip reads top-down). */
 .init-card-tab--left  .init-card-tab-text { writing-mode: vertical-rl; transform: rotate(180deg); max-height: 88px; }
 .init-card-tab--right .init-card-tab-text { writing-mode: vertical-rl;                            max-height: 88px; }
+/* v2.17.32 — a marker-LINKED enemy shows a NAME (e.g. "Griffin"), not a single
+   letter, so on a horizontal rail it must read sideways down the strip like a
+   player name — overriding the single-letter upright rule above. (More specific
+   so it wins.) Vertical-rail top/bottom tabs already read horizontally — fine. */
+.init-card--marker-named.init-card--enemy .init-card-tab--left  .init-card-tab-text,
+.init-card--marker-named.init-card--enemy .init-card-tab--right .init-card-tab-text {
+  writing-mode: vertical-rl;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  max-height: 88px;
+}
+.init-card--marker-named.init-card--enemy .init-card-tab--left  .init-card-tab-text { transform: rotate(180deg); }
+.init-card--marker-named.init-card--enemy .init-card-tab--right .init-card-tab-text { transform: none; }
 /* Horizontal strips read left-to-right, truncated by card width. */
 .init-card-tab--top    .init-card-tab-text,
 .init-card-tab--bottom .init-card-tab-text { max-width: calc(100% - 8px); }

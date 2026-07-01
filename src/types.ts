@@ -575,6 +575,11 @@ export interface InitiativeCard {
   /** Enemy cards: discrete tracking letter (A, B, C…) the GM sees on screen
    *  and references against physical scratch notes. */
   threatLetter?: string;
+  /** v2.17.32 — TRANSIENT association to a map marker (its id). When set, the
+   *  card adopts the marker's name (and, players-side, image) instead of the
+   *  generic threat letter / "!". Not persisted across a new initiative — the
+   *  decks are rebuilt on reset, so the link naturally clears each combat. */
+  associatedMarkerId?: string;
   /** Optional player id for player cards — lets the GM unallocate / re-place
    *  the same player without re-typing names. */
   playerId?: string;
@@ -1450,8 +1455,12 @@ export interface MsgTextMapVideos {
  *  position used to read the list in page order. The GM resolves image alt
  *  (authored, else the asset name) so viewers don't need the source assets. */
 export interface TextMapAltItem {
+  /** Geometry as PERCENTAGES of the page (0..100) — top-left + size. Used to
+   *  read in page order and to place the focusable a11y overlay over the box. */
   x:    number;
   y:    number;
+  w:    number;
+  h:    number;
   text: string;
 }
 

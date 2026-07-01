@@ -34,6 +34,7 @@ import { buildMessageThreadPanel } from './MessageThreadPanel.ts';
 import { PlayerRegistry } from '../players/PlayerRegistry.ts';
 import { assetToPlayerIcon } from '../players/playerIcon.ts';
 import { PingLayer } from '../rendering/PingLayer.ts';
+import { glyphToDataUrl } from '../rendering/glyphIcon.ts';
 import { PlayerMarkerLayer } from '../rendering/PlayerMarkerLayer.ts';
 import { MeasureTool, squaresBetweenNorm } from '../rendering/MeasureTool.ts';
 import { LLMClient } from '../ai/LLMClient.ts';
@@ -75,6 +76,7 @@ import { StagecraftPanel } from './StagecraftPanel.ts';
 import { SoundtracksPanel } from './SoundtracksPanel.ts';
 import { fireStagecraftForAsset } from '../stagecraft/stagecraftDispatcher.ts';
 import { BundleUrlPromptDialog } from './BundleUrlPromptDialog.ts';
+import { BundleUrlFallbackDialog } from './BundleUrlFallbackDialog.ts';
 import { saveBlob } from '../utils/saveBlob.ts';
 import { labelControl } from '../utils/controlLabel.ts';
 import { TextMapAltText, plainText } from '../rendering/TextMapAltText.ts';
@@ -424,6 +426,10 @@ export class GMApp {
   private _markerMoveOrigin = new Map<string, { x: number; y: number; facing?: number }>();
   /** Initiative tracker (fanned-deck rail, threat bench, unallocated tray). */
   private initiativeTracker: InitiativeTracker | null = null;
+  /** v2.17.34 — last seen marker name/icon/colour signature, so the initiative
+   *  tracker only re-renders when a LINKED marker's identity changes (not on
+   *  position drags). */
+  private _markerIdentitySig = '';
   /** v2.16.76 — per-map annotations (progress clocks + whiteboard). */
   private annotate: AnnotateController | null = null;
 
@@ -2656,6 +2662,14 @@ export class GMApp {
       this.markerEditor.update(state.markers, this.mapAspectRatio);
       this.updateMarkerPanel();
       this.interactions.notifyMarkersChanged(this._interactionCtx());
+      // v2.17.34 — refresh the initiative tracker only when a marker's IDENTITY
+      // (name / icon / colour) changes, so a linked threat card stays current
+      // without churning on every position drag.
+      const identitySig = state.markers.map((m) => `${m.id}:${m.label}:${m.icon}:${m.color}`).join('|');
+      if (identitySig !== this._markerIdentitySig) {
+        this._markerIdentitySig = identitySig;
+        this.initiativeTracker?.refresh();
+      }
       this.host.broadcast({
         type: 'marker_update',
         payload: broadcastMarkers,
@@ -3138,11 +3152,11 @@ export class GMApp {
     const altItems: TextMapAltItem[] = [];
     for (const e of (mapAssetForButton?.textMap?.elements ?? [])) {
       if (e.type === 'text') {
-        altItems.push({ x: e.x, y: e.y, text: plainText(e.html) });
+        altItems.push({ x: e.x, y: e.y, w: e.w, h: e.h, text: plainText(e.html) });
       } else if (e.type === 'image') {
         let alt = (e.alt ?? '').trim();
         if (!alt) alt = (await ImageAssetStore.get(e.assetId))?.name ?? '';
-        if (alt) altItems.push({ x: e.x, y: e.y, text: alt });
+        if (alt) altItems.push({ x: e.x, y: e.y, w: e.w, h: e.h, text: alt });
       }
     }
     this._currentAltItems = altItems;
@@ -3527,7 +3541,13 @@ export class GMApp {
     // invisible to AT). No visual presence; sighted users see no change.
     const canvasWrapper = document.getElementById('canvas-wrapper');
     if (canvasWrapper) {
-      this.textMapAltText = new TextMapAltText(canvasWrapper);
+      // project = map-norm → canvas-css, so the focusable a11y boxes sit over
+      // their handout elements and track pan/zoom; canvas gets role="img" too.
+      this.textMapAltText = new TextMapAltText(
+        canvasWrapper,
+        (x, y) => this.renderer.mapNormToCanvasCss(x, y),
+        canvas,
+      );
       this.textMapAltText.setItems(this._currentAltItems);
     }
 
@@ -6947,6 +6967,18 @@ export class GMApp {
         this.setStatus('Call for Initiative broadcast', 'ok');
       },
       getPlayers: () => this.playerRegistry.all(),
+      getMarkers: () => this.state.getState().markers,
+      resolveMarkerImage: (m) => {
+        // data: icons are self-contained; asset/libAsset resolve from the
+        // already-rendered icon cache (compound key for tintable libAssets).
+        if (m.icon.startsWith('data:')) return m.icon;
+        if (m.icon.startsWith('libAsset:')) {
+          return this.iconDataUrls.get(`${m.icon}#${m.color}`) ?? this.iconDataUrls.get(m.icon) ?? null;
+        }
+        if (m.icon.startsWith('asset:')) return this.iconDataUrls.get(m.icon) ?? null;
+        // Font/Unicode glyph (the default presets) — rasterise it like the map.
+        return glyphToDataUrl(m.icon, m.color);
+      },
     });
     // v2.16.65 — Initiative direction setting (Settings → Player Voice).
     // Apply on startup + whenever the GM changes it in the dialog.
@@ -7130,6 +7162,14 @@ export class GMApp {
         const input = document.querySelector<HTMLInputElement>('#bundle-import');
         input?.click();
       },
+    });
+    // De-emphasised fallback: reset this browser to the bundled Getting Started
+    // pack. Faded so it doesn't read as a usual pick, but handy to recover.
+    this.hamburger.addItem({
+      label: 'Open Onboarding Map',
+      icon: 'map',
+      subtle: true,
+      onSelect: () => { void this._openOnboardingMap(); },
     });
     this.hamburger.addItem({
       label: 'Save Map Pack…',
@@ -7471,12 +7511,23 @@ export class GMApp {
       }
     }
 
+    // Mixed content: an http:// pack can't be fetched from an https:// page —
+    // the browser blocks it before the request is even made. Catch it up front
+    // so the user gets a real explanation instead of a generic "failed to fetch".
+    if (location.protocol === 'https:' && bundleUrl.startsWith('http://')) {
+      this.setStatus(
+        'Pack URL blocked: it is http:// but this site is https://. Host the pack over https:// and try again.',
+        'error',
+      );
+      return true;
+    }
+
+    const filenameGuess = bundleUrl.split(/[\\/?#]/).filter(Boolean).pop() ?? 'bundle.mappadux';
     try {
       this.setStatus('Loading pack from URL…', 'ok');
       const res = await fetch(bundleUrl);
-      if (!res.ok) throw new Error(`HTTP ${res.status} fetching pack`);
+      if (!res.ok) throw new Error(`the server returned HTTP ${res.status}`);
       const blob = await res.blob();
-      const filenameGuess = bundleUrl.split(/[\\/?#]/).filter(Boolean).pop() ?? 'bundle.mappadux';
       const file = new File([blob], filenameGuess, { type: blob.type });
       // skipConfirm because the URL-load prompt already gathered consent.
       // For a fresh-IDB user no prompt was shown, but they did open a URL
@@ -7484,9 +7535,40 @@ export class GMApp {
       await this.loadBundleFromFile(file, { skipConfirm: true });
       return true;
     } catch (err) {
-      this.setStatus(`URL load failed: ${(err as Error).message}`, 'error');
+      // eslint-disable-next-line no-console
+      console.error('[bundle-url] load failed:', err);
+      // A failed cross-origin fetch surfaces as an opaque TypeError ("Failed to
+      // fetch") with no status — almost always CORS (the host didn't allow this
+      // origin). A plain DOWNLOAD isn't subject to CORS, so fall back to
+      // download-then-import instead of dead-ending.
+      if (err instanceof TypeError) {
+        this.setStatus('Direct load blocked (CORS) — download the pack, then load it.', 'warn');
+        await new BundleUrlFallbackDialog().open(bundleUrl, filenameGuess, () => {
+          document.querySelector<HTMLInputElement>('#bundle-import')?.click();
+        });
+      } else {
+        this.setStatus(`Pack URL load failed: ${(err as Error).message || String(err)}.`, 'error');
+      }
       return true; // we DID handle the URL — don't fall through to seeding
     }
+  }
+
+  /** Reset this browser to a fresh copy of the bundled Getting Started pack —
+   *  the de-emphasised "Open Onboarding Map" fallback. Destructive (wipes the
+   *  current workspace), so confirm first; reseedWelcomePack clears + re-imports
+   *  the bundle, then we reload so the app re-hydrates cleanly. */
+  private async _openOnboardingMap(): Promise<void> {
+    const ok = await confirmDialog({
+      title: 'Open the onboarding map?',
+      body: 'This replaces everything in this browser — all maps, sounds, custom icons, and settings — with a fresh copy of the bundled Getting Started pack. Save your current pack first if you want to keep it.',
+      confirmLabel: 'Open onboarding map',
+      cancelLabel:  'Cancel',
+      confirmTone:  'danger',
+    });
+    if (!ok) return;
+    this.setStatus('Loading the onboarding map…', 'ok');
+    await reseedWelcomePack();
+    location.reload();
   }
 
   /** Wipe the current workspace and start a fresh, empty pack with the
