@@ -158,6 +158,11 @@ export class MarkerSprites {
       const hasBmp = getMarkerBitmap(m, iconCache) ? 1 : 0;
       const digest = [
         m.icon, m.color, m.size.toFixed(3),
+        // v2.17.36 — rotation + flips are baked into the sprite canvas, so they
+        // MUST be in the digest or a rotate/flip with no other change leaves the
+        // stale canvas up (it only corrected on the next size change). This was
+        // the "player doesn't follow rotation until you resize" regression.
+        (m.rotation ?? 0).toFixed(1), m.flipH ? 1 : 0, m.flipV ? 1 : 0,
         m.label ?? '', m.showLabel ? 1 : 0,
         m.hidden ? 1 : 0, m.locked ? 1 : 0,
         m.audioMuted ? 1 : 0, m.motionMuted ? 1 : 0,
@@ -228,8 +233,12 @@ export class MarkerSprites {
     ctx.imageSmoothingQuality = 'high';
     ctx.clearRect(0, 0, pxW, pxH);
 
-    const shortSide = Math.min(pxW, pxH);
-    const r = shortSide / (2 * PAD_FACTOR);
+    // r is the icon's half-HEIGHT (drawMarkerShape derives width = r·aspect).
+    // The canvas is always sized pxW = pxH·aspect, so deriving r from the
+    // HEIGHT fills both axes for any aspect. (Was `min(pxW,pxH)` — correct only
+    // for landscape; for portrait the short side is the WIDTH, which shrank the
+    // icon by a factor of aspect and made it shorter than the GM's render.)
+    const r = pxH / (2 * PAD_FACTOR);
     // selection is always false here — selection rings only render on the
     // GM HTML canvas (MarkerLayer), never on the broadcast textures.
     drawMarkerShape(ctx, m, pxW / 2, pxH / 2, r, false, isGM, iconCache);

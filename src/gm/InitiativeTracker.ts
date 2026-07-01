@@ -1,9 +1,10 @@
-import type { InitiativeCard, InitiativeState, InitiativeEdge, PersistentPlayer } from '../types.ts';
+import type { InitiativeCard, InitiativeState, InitiativeEdge, PersistentPlayer, Marker } from '../types.ts';
 import {
   saveInitiativeState,
   sortActiveDeck,
   advanceTurn,
   patchCardValue,
+  setCardMarker,
   addCardToDeck,
   injectFromStagingAt,
   injectFromStagingWithValue,
@@ -26,6 +27,12 @@ export interface InitiativeTrackerCallbacks {
   onCallForInitiative: () => void;
   /** Provide the current persistent players for the unallocated tray. */
   getPlayers: () => PersistentPlayer[];
+  /** v2.17.32 — current map's markers, for the per-card "associate with
+   *  marker" dropdown. */
+  getMarkers: () => Marker[];
+  /** v2.17.34 — resolve a marker's icon to a dataUrl for the card thumbnail
+   *  (null for emoji markers / not-yet-cached). */
+  resolveMarkerImage: (marker: Marker) => string | null;
 }
 
 /**
@@ -99,6 +106,10 @@ export class InitiativeTracker {
   }
 
   getState(): InitiativeState { return this.state; }
+
+  /** v2.17.34 — re-render in place (no state change) so marker-linked cards
+   *  pick up a renamed / re-iconed marker. Called by GMApp on marker edits. */
+  refresh(): void { this._render(); }
 
   /** Open the tracker overlay. Seeds ROUND END if the deck was empty. */
   open(): void {
@@ -681,6 +692,8 @@ export class InitiativeTracker {
     el.style.setProperty('--stack-size', String(opts.stackSize));
     el.dataset['cardId'] = card.id;
     el.dataset['pile'] = pile;
+    // Linked enemy shows a NAME not a letter → sideways like player names.
+    if (this._linkedMarkerName(card)) el.classList.add('init-card--marker-named');
 
     // Drag source (v2.16.73 — pointer-based). Bench/unallocated cards are
     // always draggable; discard cards only while the pile is expanded
@@ -688,8 +701,9 @@ export class InitiativeTracker {
     const draggable = pile !== 'discard' || this._discardExpanded;
     if (draggable) this._makeCardDraggable(el, card.id, pile);
 
-    // Edge tabs (single-edge per orientation, per v2.16.57).
-    const edgeText = card.type === 'enemy' ? (card.threatLetter ?? '?') : card.name;
+    // Edge tabs (single-edge per orientation, per v2.16.57). A marker-linked
+    // enemy shows the marker's name instead of its threat letter.
+    const edgeText = card.type === 'enemy' ? (this._linkedMarkerName(card) ?? card.threatLetter ?? '?') : card.name;
     for (const side of ['left', 'right', 'top', 'bottom'] as const) {
       const tab = document.createElement('div');
       tab.className = `init-card-tab init-card-tab--${side}`;
@@ -723,6 +737,7 @@ export class InitiativeTracker {
       disc.textContent = (card.name.trim()[0] ?? '?').toUpperCase();
       body.appendChild(disc);
     }
+    this._appendMarkerArt(body, card);
     el.appendChild(body);
 
     // Value input — only on the TOP card of the bench (so the GM types
@@ -750,6 +765,7 @@ export class InitiativeTracker {
       el.appendChild(valInput);
     }
 
+    this._appendMarkerLink(el, card);
     return el;
   }
 
@@ -800,6 +816,9 @@ export class InitiativeTracker {
     }
     el.style.zIndex = String(100 - index);
     el.dataset['cardId'] = card.id;
+    // Linked enemy shows a NAME not a letter → write it sideways down the
+    // strip (like player names) in a horizontal rail. See CSS.
+    if (this._linkedMarkerName(card)) el.classList.add('init-card--marker-named');
 
     // v2.16.73 — pointer-based drag source. Round marker is not draggable.
     if (card.type !== 'round-marker') this._makeCardDraggable(el, card.id, 'rail');
@@ -832,7 +851,7 @@ export class InitiativeTracker {
     // fanned deck only ever exposes ONE edge of a mid-deck card, so a
     // single-edge label was unreadable for stacked cards. CSS hides the
     // edges that don't apply to the current rail orientation.
-    const edgeText = card.type === 'enemy' ? (card.threatLetter ?? '?') : card.name;
+    const edgeText = card.type === 'enemy' ? (this._linkedMarkerName(card) ?? card.threatLetter ?? '?') : card.name;
     for (const side of ['left', 'right', 'top', 'bottom'] as const) {
       const tab = document.createElement('div');
       tab.className = `init-card-tab init-card-tab--${side}`;
@@ -860,6 +879,7 @@ export class InitiativeTracker {
       big.textContent = card.value || '—';
       body.appendChild(big);
     }
+    this._appendMarkerArt(body, card);
     el.appendChild(body);
 
     // v2.16.60 — corner X removed. Discard pile is the only removal
@@ -897,9 +917,96 @@ export class InitiativeTracker {
       });
       input.addEventListener('blur', () => commit(true));
     });
+    this._appendMarkerLink(el, card);
     return el;
   }
+
+  // ─── Marker association (v2.17.32) ──────────────────────────────────────
+  //
+  // A link/chain icon on enemy cards opens a dropdown of the current map's
+  // markers; picking one makes the card adopt that marker's name (and, players-
+  // side in a later pass, its image). Transient — a new initiative rebuilds the
+  // decks, so the association clears itself. Lets the GM identify a threat from
+  // the tracker without hopping to the map.
+
+  /** The associated marker (if this enemy card is linked + the marker exists). */
+  private _linkedMarker(card: InitiativeCard): Marker | null {
+    if (card.type !== 'enemy' || !card.associatedMarkerId) return null;
+    return this.cb.getMarkers().find((mk) => mk.id === card.associatedMarkerId) ?? null;
+  }
+
+  /** The associated marker's display name, or null if unset / marker gone. */
+  private _linkedMarkerName(card: InitiativeCard): string | null {
+    const m = this._linkedMarker(card);
+    return m ? (m.label.trim() || '(unnamed marker)') : null;
+  }
+
+  /** Fill an associated enemy card's body with the marker image (same look as
+   *  the player card), darkened so the white roll value reads on top. No-op
+   *  when unlinked / emoji / image not cached. */
+  private _appendMarkerArt(body: HTMLElement, card: InitiativeCard): void {
+    const m = this._linkedMarker(card);
+    if (!m) return;
+    const url = this.cb.resolveMarkerImage(m);
+    if (!url) return;
+    body.classList.add('init-card-body--art');
+    const img = document.createElement('img');
+    img.className = 'init-card-portrait init-card-portrait--gm';
+    img.src = url;
+    img.alt = '';
+    img.draggable = false;
+    body.insertBefore(img, body.firstChild); // sits behind the value (z-index)
+  }
+
+  private _setCardMarker(cardId: string, markerId: string | null): void {
+    this._mutate((s) => setCardMarker(s, cardId, markerId));
+  }
+
+  /** Add the link-icon button to an enemy card (no-op for players / round
+   *  marker). Clicking opens the marker picker. */
+  private _appendMarkerLink(el: HTMLElement, card: InitiativeCard): void {
+    if (card.type !== 'enemy') return;
+    const name = this._linkedMarkerName(card);
+    const btn = document.createElement('button');
+    btn.type = 'button';
+    btn.className = 'init-card-marker-link' + (name ? ' is-linked' : '');
+    btn.title = name ? `Linked to ${name} — click to change or unlink` : 'Associate with a marker';
+    btn.setAttribute('aria-label', btn.title);
+    btn.innerHTML = LINK_ICON_SVG;
+    // Don't let the press start a card drag or fall through to the card.
+    btn.addEventListener('mousedown', (e) => e.stopPropagation());
+    btn.addEventListener('pointerdown', (e) => e.stopPropagation());
+    btn.addEventListener('click', (e) => { e.stopPropagation(); this._openMarkerPicker(el, card); });
+    el.appendChild(btn);
+  }
+
+  /** Reveal an inline <select> of markers (+ "no marker") over the card. */
+  private _openMarkerPicker(el: HTMLElement, card: InitiativeCard): void {
+    if (el.querySelector('.init-card-marker-select')) return;
+    const sel = document.createElement('select');
+    sel.className = 'init-card-marker-select';
+    sel.add(new Option('— No marker —', ''));
+    for (const m of this.cb.getMarkers()) {
+      sel.add(new Option(m.label.trim() || '(unnamed marker)', m.id));
+    }
+    sel.value = card.associatedMarkerId ?? '';
+    el.appendChild(sel);
+    sel.focus();
+    sel.addEventListener('mousedown', (e) => e.stopPropagation());
+    sel.addEventListener('pointerdown', (e) => e.stopPropagation());
+    // On pick, mutate (which re-renders + drops this transient <select>).
+    sel.addEventListener('change', () => this._setCardMarker(card.id, sel.value || null));
+    sel.addEventListener('keydown', (e) => { e.stopPropagation(); if (e.key === 'Escape') sel.remove(); });
+    sel.addEventListener('blur', () => { if (sel.isConnected) sel.remove(); });
+  }
 }
+
+/** Lucide-style "link" glyph — the card↔marker association control. */
+const LINK_ICON_SVG =
+  '<svg viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" '
+  + 'stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'
+  + '<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/>'
+  + '<path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>';
 
 function ensureMarkerIfActive(state: InitiativeState): InitiativeState {
   if (state.activeDeck.length === 0) return state;
