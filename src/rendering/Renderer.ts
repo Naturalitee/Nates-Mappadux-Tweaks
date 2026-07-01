@@ -1653,6 +1653,11 @@ export class Renderer {
     this.camera.position.x = offsetX;
     this.camera.position.y = offsetY;
     this.camera.updateProjectionMatrix();
+    // Update matrix world now so rects dont work with old positions.
+    // Originally, they would only be given the correct position on the 
+    // next renderer.render call.
+    // The fix is a bit stupid though maybe theres another way?
+    this.camera.updateMatrixWorld();   
     // GM mode: keep clip rect tracking the map plane on screen so the
     // backdrop continues to fill bars correctly through pan/zoom.
     if (!this.currentView) this._refreshGmClipRect();
