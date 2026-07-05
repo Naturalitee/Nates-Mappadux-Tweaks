@@ -6,6 +6,12 @@ and **Copy attributions** in the asset library generates a ready-to-paste
 credits block. The list below is the same output for the assets bundled
 with the default *Getting Started* pack — practising what we preach.
 
+## Contributors
+
+Community members who've contributed code, with thanks:
+
+- **[Naturalitee](https://github.com/Naturalitee)** — GM main-area UI fixes: input-styling consistency, projection-picker overflow, and settings-section scroll (v2.17.24); keeping the Player-view PiP on-screen when the viewport resizes, and syncing the player-view rect on zoom (v2.17.39).
+
 ## Default "Getting Started" Pack
 
 ### Audio assets
