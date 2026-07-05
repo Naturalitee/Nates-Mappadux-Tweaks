@@ -300,6 +300,12 @@ For more detail on caveats and workarounds, see [docs/KNOWN_ISSUES.md](./docs/KN
 
 ## Acknowledgements
 
+### Contributors
+
+Community code contributions — thank you!
+
+- **[Naturalitee](https://github.com/Naturalitee)** — GM editor UI fixes: input-styling consistency, projection-picker overflow, and settings-section scroll (v2.17.24); keeping the Player-view PiP on-screen when the viewport resizes, and syncing the player-view rect on zoom (v2.17.39).
+
 ### Map Images
 
 **Rons-Moto-1979** map used with permission.

@@ -1,5 +1,9 @@
 # Changelog
 
+## v2.17.39 — 2026-07-05
+
+Two GM-editor fixes from a community PR (thanks to Naturalitee on GitHub): the Player-view preview (PiP) no longer ends up stranded off-screen when you resize or zoom the window — it now keeps its spot proportionally; and the player-view crop rectangle updates the moment you zoom instead of lagging a frame. (Plus a follow-up so the remembered PiP position survives a page reload.)
+
 ## v2.17.38 — 2026-06-23
 
 Fixed: a taller-than-wide (portrait) image marker rendered shorter on the player/projector than on the GM. The per-marker sprite sized the icon off the canvas's shorter side, which is the *width* for a portrait image — so it was scaled down by its aspect ratio. It now sizes off the height (the axis the icon is locked to) for any shape. Wide and square markers are unchanged.

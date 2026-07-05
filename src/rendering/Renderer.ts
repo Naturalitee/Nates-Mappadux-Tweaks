@@ -1653,6 +1653,9 @@ export class Renderer {
     this.camera.position.x = offsetX;
     this.camera.position.y = offsetY;
     this.camera.updateProjectionMatrix();
+    // Flush matrixWorld now so rects projected before the next render() use the
+    // updated camera position rather than lagging one frame (e.g. on zoom).
+    this.camera.updateMatrixWorld();
     // GM mode: keep clip rect tracking the map plane on screen so the
     // backdrop continues to fill bars correctly through pan/zoom.
     if (!this.currentView) this._refreshGmClipRect();

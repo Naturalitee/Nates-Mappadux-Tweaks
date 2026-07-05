@@ -198,8 +198,10 @@ export class PlayerPip {
     // Position from persisted store, falling back to bottom-left.
     const pos = this._loadPosition();
     if (pos) {
-      frame.style.left = `${pos.x}px`;
-      frame.style.top  = `${pos.y}px`;
+      // Stored as container percentages (see the drag handler) so the PiP keeps
+      // its relative spot across viewport resizes / zoom.
+      frame.style.left = `${pos.x}%`;
+      frame.style.top  = `${pos.y}%`;
     } else {
       frame.style.left   = '12px';
       frame.style.bottom = '12px';
@@ -281,6 +283,7 @@ export class PlayerPip {
       frame.style.right  = '';
       e.preventDefault();
     });
+
     handle.addEventListener('pointermove', (e) => {
       if (!dragging) return;
       const dx = e.clientX - startMouseX;
@@ -292,9 +295,14 @@ export class PlayerPip {
       const maxTop  = wrapRect.height - frameRect.height;
       const nextLeft = Math.max(0, Math.min(maxLeft, startLeft + dx));
       const nextTop  = Math.max(0, Math.min(maxTop,  startTop  + dy));
-      frame.style.left = `${nextLeft}px`;
-      frame.style.top  = `${nextTop}px`;
+      // Store as a percentage of the container, not absolute pixels, so the PiP
+      // keeps its relative position (and stays on-screen) when the viewport is
+      // resized or zoomed — pixels could leave it outside the visible area.
+      frame.style.left = `${this._pxToContainerPercent(wrapRect.width, nextLeft)}%`;
+      frame.style.top  = `${this._pxToContainerPercent(wrapRect.height, nextTop)}%`;
     });
+
+
     handle.addEventListener('pointerup', (e) => {
       if (!dragging) return;
       dragging = false;
@@ -306,6 +314,14 @@ export class PlayerPip {
     handle.addEventListener('pointercancel', () => { dragging = false; });
   }
 
+  /** Express a pixel offset as a percentage of the container dimension.
+   *  Returns 0 for a zero/negative container so callers never emit an
+   *  invalid "undefined%" CSS value. */
+  private _pxToContainerPercent(trueMax: number, pxMeasure: number): number {
+    if (trueMax <= 0) return 0;
+    return (pxMeasure / trueMax) * 100;
+  }
+
   // ─── Storage ─────────────────────────────────────────────────────────────
 
   private _loadPosition(): PersistedPosition | null {
@@ -314,6 +330,11 @@ export class PlayerPip {
       if (!raw) return null;
       const parsed = JSON.parse(raw) as PersistedPosition;
       if (typeof parsed.x !== 'number' || typeof parsed.y !== 'number') return null;
+      // Positions are stored as container percentages (0–100). Reject anything
+      // out of range — including legacy pixel-based saves from before this
+      // format — so the PiP defaults to its corner instead of rendering
+      // off-screen.
+      if (parsed.x < 0 || parsed.x > 100 || parsed.y < 0 || parsed.y > 100) return null;
       return parsed;
     } catch { return null; }
   }
